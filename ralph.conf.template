@@ -1,0 +1,95 @@
+# ralph.conf — everything this batch does differently from the defaults.
+#
+# Sourced as bash by tools/ralph/ralph-config.sh. Delete any line you are happy with the
+# default for; the commented value shown is the default.
+#
+# Precedence: environment > this file > defaults. So a one-off
+#   RALPH_MAX_COST_USD=10 bash tools/ralph/ralph-loop.sh <batch>
+# overrides whatever is written here, without editing anything.
+
+# ---------------------------------------------------------------------------
+# What the agent runs, and where
+# ---------------------------------------------------------------------------
+# sandbox        `sbx` on a private clone; commits come back as a git bundle.  DEFAULT.
+#                The only mode that survives a host/container native-module split — a
+#                Windows host and a Linux container cannot share a node_modules with
+#                compiled bindings in it, and npm cannot install into a Windows bind
+#                mount because it needs symlinks for node_modules/.bin.
+# sandbox-mount  `sbx` bind-mounting the working tree; commits land directly. Fine when
+#                the project has no native modules and no install step in the sandbox.
+# local          `claude` in the working tree. No isolation, no sandbox needed.
+#RALPH_EXEC=sandbox
+
+# Name of the sandbox to create or reattach to. One per repo by default, shared by every
+# batch in it, which is what you want — the setup cost is paid once.
+#RALPH_SANDBOX=ralph-<repo-name>
+
+# A command that must succeed INSIDE the sandbox before any money is spent, and the
+# command that fixes it when it does not. Ignored when RALPH_EXEC=local.
+#
+# Worth setting: a clone starts with no gitignored dependency directories, so without
+# these the first iteration of a batch pays for the model's work and then fails its
+# verification step. Example for a Node project with a native module:
+#   RALPH_SANDBOX_PROBE='node -e "new (require(\"better-sqlite3\"))(\":memory:\")"'
+#   RALPH_SANDBOX_SETUP='npm ci'
+#RALPH_SANDBOX_PROBE=
+#RALPH_SANDBOX_SETUP=
+
+# ---------------------------------------------------------------------------
+# The agent
+# ---------------------------------------------------------------------------
+#RALPH_MODEL=claude-sonnet-5
+#RALPH_EFFORT=high
+#RALPH_PERMISSION_MODE=acceptEdits
+# Extra arguments passed through to `claude`, as a bash array:
+#RALPH_CLAUDE_ARGS=(--allowed-tools Bash Read Edit)
+
+# ---------------------------------------------------------------------------
+# Prompt slots — what "verify your work" means in this repo
+#
+# Each of these is dropped into the built-in prompt template. Left empty, the prompt
+# degrades to generic prose ("run whatever this repo uses to type-check and test") rather
+# than naming a command that does not exist — but a batch that fills them in gets a much
+# tighter loop.
+# ---------------------------------------------------------------------------
+#RALPH_CHECK_CMD="npm run check"
+#RALPH_TEST_CMD="npm test"
+#RALPH_FOCUSED_TEST_CMD="npx vitest run <file>"
+
+# Skills the agent should use for the test-first and review steps. Empty means "do it,
+# but without naming a skill".
+#RALPH_TDD_SKILL="mattpocock-skills:tdd"
+#RALPH_REVIEW_SKILL="mattpocock-skills:code-review"
+
+# Anything else that is specific to this batch goes in prompt-extra.md next to this file.
+# It is spliced into the prompt between Verify and Review, under its own heading. Leave
+# the file out entirely if there is nothing to add.
+#RALPH_PROMPT_EXTRA=prompt-extra.md
+
+# ---------------------------------------------------------------------------
+# Tickets
+# ---------------------------------------------------------------------------
+# How a done ticket is recognised: a grep BRE matched against the ticket file, and the
+# word the prompt tells the agent to write. Keep the two in step.
+#RALPH_DONE_PATTERN='^\*\*Status:\*\* *implemented'
+#RALPH_DONE_WORD=implemented
+#RALPH_STATUS_LINE='**Status:**'
+
+# The run order. If order.md exists, its <!-- ORDER:BEGIN --> block is the order and
+# RALPH_ISSUES_DIRS is ignored. Otherwise every *.md in these directories runs in
+# filename order — which is what the NN- prefixes are for.
+#RALPH_ORDER_FILE=order.md
+#RALPH_ISSUES_DIRS="issues"
+#RALPH_ISSUES_EXCLUDE="README.md spec.md order.md"
+
+# The agent's running notes. Appended each iteration; the tail is attached to the next
+# prompt. Per batch, never shared.
+#RALPH_PROGRESS_FILE=progress.txt
+#RALPH_PROGRESS_TAIL_BYTES=6000
+
+# ---------------------------------------------------------------------------
+# Budgets — 0 means no limit
+# ---------------------------------------------------------------------------
+#RALPH_MAX_COST_USD=0
+#RALPH_MAX_MINUTES=0
+#RALPH_TICKET_ATTEMPTS=2

@@ -1,0 +1,143 @@
+#!/bin/bash
+# The run order for one batch, resolved against what has actually landed.
+#
+#   ralph-next.sh <batch>            print the next ticket's path; exit 1 if all are done
+#   ralph-next.sh <batch> --list     print every remaining ticket, in order
+#   ralph-next.sh <batch> --count    print "<done> <total>"
+#   ralph-next.sh <batch> --all      print every ticket in order, done or not
+#
+# "Next" is the first ticket in the order whose file does not match the batch's
+# RALPH_DONE_PATTERN (by default a '**Status:** implemented' line).
+#
+# THE TICKET STATUS LINES ARE THE ONLY RESUME STATE. There is deliberately no state file:
+# an iteration commits its ticket's flipped Status line together with its code, so the
+# last commit and the resume point can never disagree. Stop the loop however you like —
+# budget, Ctrl-C, a crash, closing the laptop — and the next run picks up at the first
+# ticket that has not landed. Nothing to reconcile, nothing to clean up.
+#
+# WHERE THE ORDER COMES FROM
+#   1. <batch>/order.md, if it exists — the lines between <!-- ORDER:BEGIN --> and
+#      <!-- ORDER:END -->, one ticket path per line. This is the only way to express an
+#      order that filenames cannot: cross-directory sequencing, or a deliberate "do this
+#      one last".
+#   2. otherwise, every *.md under RALPH_ISSUES_DIRS, sorted by filename. Numeric
+#      prefixes (01-, 02-, …) are what make that meaningful.
+#
+# Exit codes: 0 fine · 1 nothing left to do (in `next` mode) · 2 the batch is malformed.
+set -uo pipefail
+
+RALPH_TOOL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+MODE=next
+case "${1:-}" in
+  --*) MODE="$1" ;;
+  '')  ;;
+  *)   export RALPH_BATCH="$1"; shift; MODE="${1:---next}" ;;
+esac
+[ "$MODE" = "--next" ] && MODE=next
+[ "$MODE" = "next" ] || case "$MODE" in
+  --list|--count|--all) ;;
+  *) echo "ralph-next.sh: unknown mode '$MODE' (expected --list, --count, --all, or nothing)" >&2; exit 2 ;;
+esac
+
+# shellcheck source=ralph-config.sh
+source "$RALPH_TOOL_DIR/ralph-config.sh" || exit 2
+
+# ---------------------------------------------------------------------------
+# Collect the ticket list
+# ---------------------------------------------------------------------------
+tickets=()
+
+# An order entry may be written repo-relative (".scratch/b/issues/01.md") or relative to
+# the batch ("issues/01.md"). Accept both; complain about neither-resolves.
+resolve_ticket() {
+  local entry="$1"
+  if [ -f "$entry" ]; then printf '%s' "$entry"; return 0; fi
+  if [ -f "$BATCH_DIR/$entry" ]; then printf '%s' "$BATCH_DIR/$entry"; return 0; fi
+  return 1
+}
+
+if [ -f "$ORDER_FILE" ]; then
+  saw_markers=0
+  in_block=0
+  while IFS= read -r line || [ -n "$line" ]; do
+    # Strip CR: a repo with `* text=auto` checks order.md out with CRLF on Windows.
+    line="${line%$'\r'}"
+    case "$line" in
+      '<!-- ORDER:BEGIN -->'*) in_block=1; saw_markers=1; continue ;;
+      '<!-- ORDER:END -->'*)   in_block=0; continue ;;
+    esac
+    [ "$in_block" = 1 ] || continue
+
+    entry="${line#"${line%%[![:space:]]*}"}"
+    entry="${entry%"${entry##*[![:space:]]}"}"
+    [ -n "$entry" ] || continue                 # blank lines inside the block
+    [ "${entry:0:3}" = '```' ] && continue      # the code fence around it
+    [ "${entry:0:1}" = '#' ] && continue        # a commented-out ticket
+
+    if ! resolved=$(resolve_ticket "$entry"); then
+      echo "ralph-next.sh: $ORDER_FILE lists a ticket that does not exist: $entry" >&2
+      exit 2
+    fi
+    tickets+=("$resolved")
+  done < "$ORDER_FILE"
+
+  if [ "$saw_markers" -eq 0 ]; then
+    echo "ralph-next.sh: $ORDER_FILE has no <!-- ORDER:BEGIN --> / <!-- ORDER:END --> block." >&2
+    echo "               Add one (see tools/ralph/README.md), or delete the file to fall" >&2
+    echo "               back to filename order over: $RALPH_ISSUES_DIRS" >&2
+    exit 2
+  fi
+else
+  # No order file: filename order across the issues directories, which is why tickets are
+  # numbered. `sort` is applied per directory so the directories stay in the order given.
+  for dir in $RALPH_ISSUES_DIRS; do
+    case "$dir" in /*|[A-Za-z]:[/\\]*) resolved_dir="$dir" ;; *)
+      if [ -d "$dir" ]; then resolved_dir="$dir"; else resolved_dir="$BATCH_DIR/$dir"; fi ;;
+    esac
+    [ -d "$resolved_dir" ] || continue
+    while IFS= read -r file; do
+      base="$(basename "$file")"
+      skip=0
+      for excluded in $RALPH_ISSUES_EXCLUDE; do
+        [ "$base" = "$excluded" ] && skip=1 && break
+      done
+      [ "$skip" -eq 1 ] || tickets+=("$file")
+    done < <(find "$resolved_dir" -maxdepth 1 -name '*.md' -type f | sort)
+  done
+fi
+
+if [ "${#tickets[@]}" -eq 0 ]; then
+  if [ -f "$ORDER_FILE" ]; then
+    echo "ralph-next.sh: the ORDER block in $ORDER_FILE is empty" >&2
+  else
+    echo "ralph-next.sh: no tickets found." >&2
+    echo "               There is no order file at $ORDER_FILE, and no *.md under: $RALPH_ISSUES_DIRS" >&2
+  fi
+  exit 2
+fi
+
+# ---------------------------------------------------------------------------
+# Split into done and remaining
+# ---------------------------------------------------------------------------
+remaining=()
+done_count=0
+for ticket in "${tickets[@]}"; do
+  if grep -q "$RALPH_DONE_PATTERN" "$ticket"; then
+    done_count=$((done_count + 1))
+  else
+    remaining+=("$ticket")
+  fi
+done
+
+case "$MODE" in
+  --count) printf '%s %s\n' "$done_count" "${#tickets[@]}" ;;
+  --all)   printf '%s\n' "${tickets[@]}" ;;
+  --list)  [ "${#remaining[@]}" -eq 0 ] || printf '%s\n' "${remaining[@]}" ;;
+  next)
+    [ "${#remaining[@]}" -eq 0 ] && exit 1
+    printf '%s\n' "${remaining[0]}"
+    ;;
+esac
+
+exit 0
