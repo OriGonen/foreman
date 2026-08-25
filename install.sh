@@ -34,7 +34,23 @@ while [ $# -gt 0 ]; do
 done
 
 # Prefer a personal bin directory that is already on PATH, so nothing has to be added to
-# the environment. ~/bin is the conventional one and Git Bash puts it on PATH for free.
+# the environment.
+#
+# On Windows, "already on PATH" has two answers. Git Bash adds ~/bin to its own PATH
+# whether or not Windows knows about it, so picking by $PATH alone can land on a directory
+# PowerShell cannot see. Check the persistent user PATH first, and only then this shell's.
+_ralph_win_path=""
+if command -v reg >/dev/null 2>&1 && command -v cygpath >/dev/null 2>&1; then
+  _ralph_win_path="$(reg query 'HKCU\Environment' /v PATH 2>/dev/null | sed -n 's/.*REG_[A-Z_]*[[:space:]]*//p')"
+fi
+
+if [ -z "$TARGET" ] && [ -n "$_ralph_win_path" ]; then
+  for candidate in "$HOME/bin" "$HOME/.local/bin"; do
+    case ";$_ralph_win_path;" in
+      *";$(cygpath -w "$candidate" 2>/dev/null);"*) TARGET="$candidate"; break ;;
+    esac
+  done
+fi
 if [ -z "$TARGET" ]; then
   for candidate in "$HOME/bin" "$HOME/.local/bin"; do
     case ":$PATH:" in *":$candidate:"*) TARGET="$candidate"; break ;; esac
@@ -77,13 +93,25 @@ exec bash "$RALPH_HOME/bin/ralph" "\$@"
 EOF
 chmod +x "$SHIM"
 
+# The Windows shim forwards to bin/ralph.cmd, which is where the "find Git Bash rather
+# than the WSL launcher" logic lives — so that logic stays in one place, in the repo.
+#
+# cmd.exe needs a Windows path, not the shell's own spelling: the shim may be run from
+# PowerShell, where nothing translates /c/x. `cygpath -w` ships with Git Bash; the sed is
+# for a shell that lacks it.
+if command -v cygpath >/dev/null 2>&1; then
+  RALPH_HOME_WIN="$(cygpath -w "$RALPH_HOME")"
+else
+  RALPH_HOME_WIN="$(printf '%s' "$RALPH_HOME" | sed -E 's|^/([A-Za-z])/|\1:/|' | tr '/' '\\')"
+fi
+
 # CRLF, deliberately: cmd.exe mis-parses a batch file whose last line has no CR.
+# `call`, deliberately: invoking a batch file without it transfers control and never comes
+# back, so the exit code would be lost.
 printf '%s\r\n' \
   '@echo off' \
   "rem ralph toolkit shim — written by $RALPH_HOME/install.sh. Re-run that to re-point it." \
-  'setlocal' \
-  'where bash >nul 2>nul || (echo ralph: bash is not on PATH. Install Git for Windows. 1>&2 & exit /b 1)' \
-  "bash \"$RALPH_HOME/bin/ralph\" %*" \
+  "call \"$RALPH_HOME_WIN\\bin\\ralph.cmd\" %*" \
   'exit /b %errorlevel%' \
   > "$SHIM_CMD"
 
@@ -92,6 +120,27 @@ echo "  $SHIM"
 echo "  $SHIM_CMD"
 echo "  -> $RALPH_HOME/bin/ralph"
 echo
+
+# Git Bash puts ~/bin on its own PATH whether or not Windows knows about it, so the shell
+# running this can find `ralph` while PowerShell and cmd.exe still cannot. Check the user's
+# persistent PATH in the registry, which is the one they actually inherit.
+if [ -n "$_ralph_win_path" ]; then
+  target_win="$(cygpath -w "$TARGET")"
+  case ";${_ralph_win_path};" in
+    *";${target_win};"*) ;;
+    *)
+      echo "note: $target_win is not on your Windows PATH, so PowerShell and cmd.exe will"
+      echo "      not find \`ralph\` (Git Bash will — it adds ~/bin itself). To fix it, once:"
+      echo
+      echo "        setx PATH \"%PATH%;$target_win\""
+      echo
+      echo "      then open a new PowerShell. Until then, PowerShell can use the full path:"
+      echo "        & \"$target_win\\ralph.cmd\" version"
+      echo
+      ;;
+  esac
+fi
+
 if command -v ralph >/dev/null 2>&1 && [ "$(command -v ralph)" = "$SHIM" ]; then
   echo "Ready. Try it:"
 else
