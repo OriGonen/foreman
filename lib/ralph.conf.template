@@ -1,10 +1,11 @@
 # ralph.conf — everything this batch does differently from the defaults.
 #
-# Sourced as bash by tools/ralph/ralph-config.sh. Delete any line you are happy with the
-# default for; the commented value shown is the default.
+# Sourced as bash by the ralph toolkit, which is installed outside this repository.
+# Delete any line you are happy with the default for; the commented value shown is the
+# default. `ralph doctor` reports where the toolkit is and what this repo still needs.
 #
 # Precedence: environment > this file > defaults. So a one-off
-#   RALPH_MAX_COST_USD=10 bash tools/ralph/ralph-loop.sh <batch>
+#   RALPH_MAX_COST_USD=10 ralph run <batch>
 # overrides whatever is written here, without editing anything.
 
 # ---------------------------------------------------------------------------

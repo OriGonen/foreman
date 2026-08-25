@@ -2,14 +2,15 @@
 #
 # Ralph: one ticket per iteration, until a batch is done or a budget stops it.
 #
-#   bash tools/ralph/ralph-loop.sh <batch>            # run until done or a budget stops it
-#   bash tools/ralph/ralph-loop.sh <batch> 5          # run at most 5 iterations
-#   bash tools/ralph/ralph-loop.sh <batch> --status   # what is left, what is next
-#   bash tools/ralph/ralph-loop.sh <batch> --dry-run  # print the plan and the next prompt
+#   ralph run     <batch>      # run until done or a budget stops it
+#   ralph run     <batch> 5    # run at most 5 iterations
+#   ralph status  <batch>      # what is left, what is next
+#   ralph dry-run <batch>      # print the plan and the next prompt
 #
-# <batch> is any directory holding tickets and a ralph.conf — see tools/ralph/README.md
-# and ralph-init.sh. Nothing about a batch is shared with any other batch: its order, its
-# progress notes and its run logs all live in its own directory. This toolkit is stateless.
+# <batch> is any directory IN THE CURRENT REPOSITORY holding tickets and a ralph.conf —
+# see the toolkit's README.md and ralph-init.sh. Nothing about a batch is shared with any
+# other batch: its order, its progress notes and its run logs all live in its own
+# directory. This toolkit is stateless and lives outside the repository it works on.
 # If exactly one directory in the repo has a ralph.conf, <batch> may be omitted.
 #
 # WHERE THE WORK HAPPENS  (RALPH_EXEC, set per batch in ralph.conf)
@@ -59,14 +60,16 @@ EXIT_NEEDS_HUMAN=20
 MODE=run
 MAX_ITERATIONS=0   # 0 = until the ticket list runs out or a budget stops us
 
-show_help() { sed -n '2,60p' "$0" | sed 's/^# \{0,1\}//'; }
+# The header comment above is the help text. Stop at the first non-comment line rather
+# than at a fixed line number, which drifts every time the header grows.
+show_help() { awk 'NR==1 { next } !/^#/ { exit } { sub(/^# ?/, ""); print }' "$0"; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --status)    MODE=status ;;
     --dry-run)   MODE=dry-run ;;
     --help|-h)   show_help; exit 0 ;;
-    -*)          echo "Usage: $0 [<batch>] [<iterations>|--status|--dry-run|--help]" >&2; exit 1 ;;
+    -*)          echo "Usage: ${RALPH_INVOKE:-ralph} run [<batch>] [<iterations>]" >&2; exit 1 ;;
     *)
       if [[ "$1" =~ ^[0-9]+$ ]]; then
         MAX_ITERATIONS="$1"
@@ -652,7 +655,7 @@ case "$FINAL_STATUS" in
     fi
     resume_args=""
     [ "$MAX_ITERATIONS" -gt 0 ] && resume_args=" $MAX_ITERATIONS"
-    say "Resume:   bash ${BASH_SOURCE[0]#"$REPO_ROOT/"} $BATCH_DIR$resume_args"
+    say "Resume:   $RALPH_INVOKE run $BATCH_DIR$resume_args"
     say "          (nothing to restore — the tickets' Status lines are the resume point)"
     ;;
   "$EXIT_NEEDS_HUMAN") log_append "# stopped: needs a human" ;;

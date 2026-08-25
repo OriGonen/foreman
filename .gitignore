@@ -1,0 +1,4 @@
+# The toolkit holds no state, so there is nothing here to ignore yet. This file exists so
+# that a stray editor or OS artifact has somewhere to be listed.
+Thumbs.db
+.DS_Store

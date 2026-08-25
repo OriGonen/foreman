@@ -1,13 +1,17 @@
 #!/bin/bash
 # Resolves one ralph batch into a fully-populated set of RALPH_* variables.
-# Sourced by ralph-loop.sh, ralph-next.sh and ralph-report's shell callers — never run.
+# Sourced by ralph-loop.sh, ralph-next.sh and ralph-doctor.sh — never run directly.
 #
 # THE TOOLKIT HOLDS NO STATE. Everything that differs between batches — the order, the
 # progress notes, the run logs, the config — lives in the batch directory. This file only
 # works out where that directory is and fills in defaults for whatever it did not set.
 #
+# The toolkit is installed once per machine and is NOT inside the repository it operates
+# on: RALPH_TOOL_DIR comes from BASH_SOURCE, REPO_ROOT from `git rev-parse` in the caller's
+# working directory. The two are unrelated paths, and nothing here may assume otherwise.
+#
 # Precedence, highest first:
-#   1. environment variables       RALPH_MAX_COST_USD=25 bash ralph-loop.sh <batch>
+#   1. environment variables       RALPH_MAX_COST_USD=25 ralph run <batch>
 #   2. the batch's ralph.conf      <batch>/ralph.conf
 #   3. the defaults below
 #
@@ -18,25 +22,39 @@
 #
 # Outputs (all repo-relative unless noted, because the agent's working directory is the
 # repo root and every path it is handed must resolve there):
-#   REPO_ROOT            absolute path to the repository
-#   RALPH_TOOL_DIR       absolute path to this toolkit directory
+#   REPO_ROOT            absolute path to the repository being worked on
+#   RALPH_TOOL_DIR       absolute path to this toolkit's lib directory
+#   RALPH_HOME           absolute path to the toolkit install (lib's parent)
+#   RALPH_INVOKE         how to spell the command in a message to the user
 #   BATCH_DIR            repo-relative path to the batch directory
 #   BATCH_NAME           its basename, unless ralph.conf overrides it
 #   ORDER_FILE PROGRESS_FILE RUN_JSONL RUN_LOG BUNDLE_FILE PROMPT_EXTRA_FILE
 #   plus every RALPH_* knob documented in ralph.conf.template
 
 RALPH_TOOL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RALPH_HOME="${RALPH_HOME:-$(cd "$RALPH_TOOL_DIR/.." && pwd)}"
 
-# `git rev-parse --show-toplevel` answers in the platform's own path syntax — on Windows
-# that is `C:/Projects/x` while `pwd` says `/c/Projects/x`. Round-tripping it through
-# cd+pwd puts both in the same form, without which every path comparison below quietly
-# decides the batch is not inside the repo.
-REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
+# How every "here is what to type next" message should name this toolkit. The `ralph`
+# dispatcher exports it; a direct `bash lib/ralph-loop.sh` call falls back to the install's
+# own path, which is still copy-pasteable.
+RALPH_INVOKE="${RALPH_INVOKE:-$RALPH_HOME/bin/ralph}"
+
+# Path resolution — repo root, and a batch's repo-relative path — lives in ralph-repo.sh,
+# because on Windows it is a minefield and ralph-init.sh and ralph-doctor.sh have to cross
+# it exactly the same way.
+# shellcheck source=ralph-repo.sh
+source "$RALPH_TOOL_DIR/ralph-repo.sh" || {
+  echo "ralph: cannot load $RALPH_TOOL_DIR/ralph-repo.sh" >&2
+  return 1 2>/dev/null || exit 1
+}
+
+REPO_ROOT="$(ralph_repo_root)" || {
   echo "ralph: not inside a git repository" >&2
   return 1 2>/dev/null || exit 1
 }
+# Every path this file produces is repo-relative, because the repo root is the agent's
+# working directory. Standing there is what makes that the natural spelling.
 cd "$REPO_ROOT" || { echo "ralph: cannot cd to $REPO_ROOT" >&2; return 1 2>/dev/null || exit 1; }
-REPO_ROOT="$(pwd)"
 
 # ---------------------------------------------------------------------------
 # Which batch?
@@ -58,8 +76,8 @@ if [ -z "${RALPH_BATCH:-}" ]; then
     RALPH_BATCH="$_ralph_candidates"
   elif [ "$_ralph_count" = "0" ]; then
     echo "ralph: no batch given and no ralph.conf found anywhere in $REPO_ROOT." >&2
-    echo "       Pass one:      bash ${BASH_SOURCE[1]:-ralph-loop.sh} <batch-dir>" >&2
-    echo "       Or create one: bash tools/ralph/ralph-init.sh <batch-dir>" >&2
+    echo "       Pass one:      $RALPH_INVOKE status <batch-dir>" >&2
+    echo "       Or create one: $RALPH_INVOKE init <batch-dir>" >&2
     return 1 2>/dev/null || exit 1
   else
     echo "ralph: no batch given, and $_ralph_count directories have a ralph.conf:" >&2
@@ -69,31 +87,17 @@ if [ -z "${RALPH_BATCH:-}" ]; then
   fi
 fi
 
-# Accept an absolute path, a Windows-style path, or a path relative to the repo root or
-# to the caller's own directory — and normalise all of them to repo-relative.
-_ralph_abs="$(cd "$RALPH_BATCH" 2>/dev/null && pwd)" || {
-  echo "ralph: no such directory: $RALPH_BATCH" >&2
-  return 1 2>/dev/null || exit 1
-}
-
-if command -v realpath >/dev/null 2>&1; then
-  BATCH_DIR="$(realpath --relative-to="$REPO_ROOT" "$_ralph_abs" 2>/dev/null)" || BATCH_DIR=""
-  # A realpath that could not relate the two paths hands back the absolute one rather
-  # than failing. Reject that and fall through to plain prefix stripping.
-  case "$BATCH_DIR" in /*|[A-Za-z]:[/\\]*) BATCH_DIR="" ;; esac
-fi
-if [ -z "${BATCH_DIR:-}" ]; then
-  case "$_ralph_abs" in
-    "$REPO_ROOT") BATCH_DIR="." ;;
-    "$REPO_ROOT"/*) BATCH_DIR="${_ralph_abs#"$REPO_ROOT"/}" ;;
-    *) BATCH_DIR="" ;;
-  esac
-fi
-
-case "$BATCH_DIR" in
-  ''|..|../*)
+# Accept an absolute path, a Windows-style path, or a path relative to the repo root or to
+# the caller's own directory — and let git normalise all of them to repo-relative.
+BATCH_DIR="$(ralph_batch_relpath "$RALPH_BATCH" "$REPO_ROOT")"
+case "$?" in
+  1)
+    echo "ralph: no such directory: $RALPH_BATCH" >&2
+    return 1 2>/dev/null || exit 1
+    ;;
+  2)
     echo "ralph: the batch directory must be inside the repository." >&2
-    echo "       batch: $_ralph_abs" >&2
+    echo "       batch: $RALPH_BATCH" >&2
     echo "       repo:  $REPO_ROOT" >&2
     echo "       The agent runs with the repo root as its working directory, so a batch" >&2
     echo "       outside it has no path the agent could open." >&2
@@ -138,7 +142,7 @@ fi
 for _ralph_name in "${!_RALPH_FROM_ENV[@]}"; do
   printf -v "$_ralph_name" '%s' "${_RALPH_FROM_ENV[$_ralph_name]}"
 done
-unset _RALPH_FROM_ENV _ralph_name _ralph_abs _ralph_candidates _ralph_count
+unset _RALPH_FROM_ENV _ralph_name _ralph_candidates _ralph_count
 
 # ---------------------------------------------------------------------------
 # Defaults for everything ralph.conf and the environment left unset

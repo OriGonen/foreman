@@ -5,10 +5,80 @@ This toolkit was generalised from two rounds of single-purpose scripts:
 Both were hard-wired to this repo — `npm run check`, `npm test`, `better-sqlite3`, a
 specific order file, a specific progress file.
 
-Below is everything that was a judgement call rather than a straight lift, and how to
-undo each one. Anything not listed here is unchanged behaviour from the round-3 scripts.
+It then moved out of that repo entirely and became a machine-wide install; see *Where the
+toolkit lives*, below.
+
+Below is everything that was a judgement call rather than a straight lift, and how to undo
+each one. Anything not listed here is unchanged behaviour from the round-3 scripts.
+
+Where this file says "this repo", it means the repo a batch lives in — never this toolkit.
 
 ---
+
+## Where the toolkit lives
+
+**Assumed:** the toolkit is cloned once per machine and put on PATH as `ralph`. It is not
+vendored into the repositories it works on.
+
+Nothing in the code ever required it to be inside the repo: `RALPH_TOOL_DIR` comes from
+`${BASH_SOURCE[0]}`, `REPO_ROOT` from `git rev-parse` in the caller's working directory, and
+every batch path is resolved against the latter. The only things that assumed otherwise were
+help text and error messages naming a literal `tools/ralph/…` path. Vendoring would mean a
+fix has to be made once per project, which is the thing this move exists to prevent.
+
+`RALPH_INVOKE` is how a message names the command: `ralph`, exported by `bin/ralph`, or the
+install's absolute path when a `lib/` script is called directly. Like `RALPH_TOOL_DIR` and
+`RALPH_BATCH` it is set before the environment snapshot in `ralph-config.sh`, so a batch's
+`ralph.conf` cannot override it.
+
+*To undo:* copy `lib/` into a repo and call the scripts directly. Everything works; the
+messages print the script's path instead of `ralph`, and that repo still needs the
+`.gitignore` / `.gitattributes` lines `ralph doctor` describes.
+
+## Path resolution belongs in one file
+
+**Assumed:** `ralph-repo.sh` is the only place that answers "where is the repo" and "where is
+this batch inside it". `ralph-config.sh`, `ralph-init.sh` and `ralph-doctor.sh` all go
+through it.
+
+Round 3 had this logic twice — in `ralph-config.sh` and `ralph-init.sh` — as a
+`realpath --relative-to` attempt with a prefix-strip fallback. Both copies compared two
+absolute paths normalised through `cd`+`pwd`, which is correct only when both spellings
+resolve the same way. They do not under a Git Bash mount alias: a repo reached as `/tmp/x`
+and as `/c/Users/…/Temp/x` is one directory, and `cd C:/Users/…` normalises to the second
+while the caller's `pwd` says the first. `ralph init` then refused a batch that was plainly
+inside the repo. A real bug, caught while testing the extracted toolkit in a second
+repository — the exact scenario this extraction exists to support.
+
+The fix is to stop doing arithmetic on paths. `git rev-parse --show-prefix`, run from inside
+the batch directory, *is* the repo-relative path, and git has already resolved the alias,
+the symlink and the drive-letter spelling. `--show-toplevel` from the same directory then
+confirms the batch is in the repository we mean rather than a different one.
+
+*To undo:* the two functions are self-contained and pure; reinstate the `realpath` block in
+each caller.
+
+## Repo setup is a command, not a paragraph of README
+
+**Assumed:** the two files a consuming repo must provide — three `.gitignore` patterns and
+one `.gitattributes` line — are worth a `ralph doctor --fix` rather than instructions.
+
+They are easy to get subtly wrong (an unanchored `ralph-runs.log` catches unrelated files;
+the `.gitattributes` line matters only where the repo normalises line endings at all), easy
+to forget entirely, and the failure from forgetting them is remote from its cause. `--fix`
+only ever appends, and never touches a batch or a ticket, so it cannot destroy an existing
+arrangement.
+
+`doctor` deliberately does not source `ralph-config.sh`: that resolves a batch and fails when
+there is none, and the point of `doctor` is to run *before* the first `ralph init`. It shares
+`ralph-repo.sh` instead, which is the part that has to agree.
+
+## Help text is the header comment, not a line range
+
+Three scripts print their own leading comment block as `--help`. They did it with
+`sed -n '2,60p'`, and the number had already drifted: `ralph-loop.sh --help` printed nine
+lines of its own source. They now stop at the first line that is not a comment, so the
+range cannot go stale again.
 
 ## What makes a directory a batch
 
@@ -133,9 +203,12 @@ and `exec_uses_clone`.
 
 `ralph.conf` is sourced as bash, so it would ordinarily clobber the environment. Instead
 every `RALPH_*` variable present before sourcing is snapshotted and restored afterwards, so
-`RALPH_MAX_COST_USD=10 bash ralph-loop.sh <batch>` works without editing a file. This
-relies on no ralph script setting a `RALPH_*` variable before sourcing `ralph-config.sh` —
-`RALPH_BATCH` and `RALPH_TOOL_DIR` are the deliberate exceptions and are handled.
+`RALPH_MAX_COST_USD=10 ralph run <batch>` works without editing a file. This relies on no
+ralph script setting a `RALPH_*` variable before sourcing `ralph-config.sh` — `RALPH_BATCH`,
+`RALPH_TOOL_DIR`, `RALPH_HOME` and `RALPH_INVOKE` are the deliberate exceptions. All four
+are set before the snapshot is taken, so they are snapshotted and restored like anything
+from the environment, which is exactly right: a batch's `ralph.conf` has no business
+redefining where the toolkit is or what it is called.
 
 ## Renamed artifacts
 
@@ -149,21 +222,32 @@ history moved.
 
 ## Windows path handling
 
-`git rev-parse --show-toplevel` answers `C:/Projects/x` while `pwd` answers `/c/Projects/x`,
-and `realpath --relative-to` hands back the absolute path rather than failing when it
-cannot relate two paths in different syntaxes. Both scripts that compute a repo-relative
-batch path round-trip the repo root through `cd`+`pwd` first and reject an absolute answer
-from `realpath`. This was a real bug caught in testing, not a precaution.
+Three spellings of one directory are all in play at once:
+
+- `git rev-parse --show-toplevel` answers `C:/Projects/x`, `pwd` answers `/c/Projects/x`;
+- a Git Bash mount alias makes `/tmp/x` and `/c/Users/…/Temp/x` the same directory;
+- `realpath --relative-to` hands back the absolute path rather than failing when it cannot
+  relate two paths written in different syntaxes.
+
+Every one of those has caused a real failure here, none of them hypothetically. All of it
+is now confined to `ralph-repo.sh`, which asks git for the answer instead of computing it —
+see *Path resolution belongs in one file*. Nothing else in the toolkit does path
+arithmetic, and nothing else should start.
 
 ## Requirements
 
 Bash 4+ (associative arrays, `compgen -v`), `git`, `node`, `awk`, plus `sbx` in the sandbox
-modes or `claude` on `PATH` in `local` mode. Preflight checks all of these and exits 1
-before spending anything.
+modes or `claude` on `PATH` in `local` mode. The loop's preflight checks all of these and
+exits 1 before spending anything; `ralph doctor` checks the same set ahead of time, and
+works out from the batches present which of `sbx` and `claude` actually matters here.
 
 ---
 
 ## What was deleted
+
+These were changes in the `excuse-me` repo, where the toolkit was born. They are recorded
+here because that is where the history is, not because this toolkit still has anything to
+do with that repo.
 
 Both rounds are complete (11/11 and 21/21), so nothing was mid-flight when this landed.
 

@@ -1,0 +1,101 @@
+#!/bin/bash
+# Puts `ralph` on your PATH, pointing at this checkout.
+#
+#   bash install.sh                 install into the first writable directory on PATH
+#   bash install.sh --to <dir>      install into <dir> instead
+#   bash install.sh --force         overwrite a `ralph` that is already there
+#   bash install.sh --uninstall     remove the shims this wrote
+#
+# It writes two small forwarding scripts, not symlinks — Windows symlinks need elevation
+# or developer mode, and a forwarder survives moving this checkout being the only thing
+# you have to redo (re-run install.sh).
+#
+#   <dir>/ralph       for bash / Git Bash / WSL
+#   <dir>/ralph.cmd   for PowerShell and cmd.exe
+#
+# Nothing else is installed and nothing is written outside <dir>. The toolkit itself stays
+# where you cloned it, and holds no state.
+set -uo pipefail
+
+RALPH_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+TARGET=""
+FORCE=0
+UNINSTALL=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --to)        TARGET="${2:-}"; shift ;;
+    --force)     FORCE=1 ;;
+    --uninstall) UNINSTALL=1 ;;
+    --help|-h)   awk 'NR==1 { next } !/^#/ { exit } { sub(/^# ?/, ""); print }' "$0"; exit 0 ;;
+    *)           echo "Usage: bash install.sh [--to <dir>] [--force] [--uninstall]" >&2; exit 1 ;;
+  esac
+  shift
+done
+
+# Prefer a personal bin directory that is already on PATH, so nothing has to be added to
+# the environment. ~/bin is the conventional one and Git Bash puts it on PATH for free.
+if [ -z "$TARGET" ]; then
+  for candidate in "$HOME/bin" "$HOME/.local/bin"; do
+    case ":$PATH:" in *":$candidate:"*) TARGET="$candidate"; break ;; esac
+  done
+fi
+if [ -z "$TARGET" ]; then
+  TARGET="$HOME/bin"
+  echo "note: $TARGET is not on your PATH yet. Installing there anyway — add it with:"
+  echo "        setx PATH \"%PATH%;%USERPROFILE%\\bin\"        (once, then reopen the shell)"
+  echo
+fi
+
+SHIM="$TARGET/ralph"
+SHIM_CMD="$TARGET/ralph.cmd"
+
+if [ "$UNINSTALL" -eq 1 ]; then
+  removed=0
+  for f in "$SHIM" "$SHIM_CMD"; do
+    if [ -e "$f" ]; then rm -f "$f" && echo "removed  $f" && removed=1; fi
+  done
+  [ "$removed" -eq 1 ] || echo "nothing to remove in $TARGET"
+  echo "The toolkit itself is untouched at $RALPH_HOME."
+  exit 0
+fi
+
+mkdir -p "$TARGET" || { echo "install: cannot create $TARGET" >&2; exit 1; }
+
+# Refuse to clobber someone else's `ralph`, but re-pointing our own shim at a moved
+# checkout is the normal case and should not need --force.
+if [ -e "$SHIM" ] && [ "$FORCE" -eq 0 ] && ! grep -q 'ralph toolkit shim' "$SHIM" 2>/dev/null; then
+  echo "install: $SHIM already exists and was not written by this installer." >&2
+  echo "         Move it aside, or re-run with --force." >&2
+  exit 1
+fi
+
+cat > "$SHIM" <<EOF
+#!/bin/bash
+# ralph toolkit shim — written by $RALPH_HOME/install.sh. Re-run that to re-point it.
+exec bash "$RALPH_HOME/bin/ralph" "\$@"
+EOF
+chmod +x "$SHIM"
+
+# CRLF, deliberately: cmd.exe mis-parses a batch file whose last line has no CR.
+printf '%s\r\n' \
+  '@echo off' \
+  "rem ralph toolkit shim — written by $RALPH_HOME/install.sh. Re-run that to re-point it." \
+  'setlocal' \
+  'where bash >nul 2>nul || (echo ralph: bash is not on PATH. Install Git for Windows. 1>&2 & exit /b 1)' \
+  "bash \"$RALPH_HOME/bin/ralph\" %*" \
+  'exit /b %errorlevel%' \
+  > "$SHIM_CMD"
+
+echo "installed"
+echo "  $SHIM"
+echo "  $SHIM_CMD"
+echo "  -> $RALPH_HOME/bin/ralph"
+echo
+if command -v ralph >/dev/null 2>&1 && [ "$(command -v ralph)" = "$SHIM" ]; then
+  echo "Ready. Try it:"
+else
+  echo "Open a new shell, then try it:"
+fi
+echo "  ralph version"
+echo "  cd <any git repo> && ralph doctor"

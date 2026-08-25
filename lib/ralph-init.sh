@@ -1,8 +1,11 @@
 #!/bin/bash
 # Scaffolds a ralph batch in a directory that already has tickets.
 #
-#   bash tools/ralph/ralph-init.sh <batch-dir>
-#   bash tools/ralph/ralph-init.sh <batch-dir> --force    overwrite what is already there
+#   ralph init <batch-dir>
+#   ralph init <batch-dir> --force    overwrite what is already there
+#
+# <batch-dir> is a directory in the CURRENT repository. The toolkit itself lives elsewhere
+# and nothing is copied into your repo except this batch's three files.
 #
 # Creates, if missing:
 #   <batch>/ralph.conf     from ralph.conf.template — every knob, all commented out
@@ -25,7 +28,7 @@ BATCH_INPUT=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --force) FORCE=1 ;;
-    --help|-h) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --help|-h) awk 'NR==1 { next } !/^#/ { exit } { sub(/^# ?/, ""); print }' "$0"; exit 0 ;;
     -*) echo "Usage: $0 <batch-dir> [--force]" >&2; exit 1 ;;
     *) BATCH_INPUT="$1" ;;
   esac
@@ -37,27 +40,25 @@ if [ -z "$BATCH_INPUT" ]; then
   exit 1
 fi
 
-REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
+# shellcheck source=ralph-repo.sh
+source "$RALPH_TOOL_DIR/ralph-repo.sh" || {
+  echo "ralph-init: cannot load $RALPH_TOOL_DIR/ralph-repo.sh" >&2; exit 1; }
+
+REPO_ROOT="$(ralph_repo_root)" || {
   echo "ralph-init: not inside a git repository" >&2; exit 1; }
 
+# The batch has to exist before git can tell us where it is, and creating it is this
+# script's job anyway.
 mkdir -p "$BATCH_INPUT" || exit 1
-BATCH_ABS="$(cd "$BATCH_INPUT" && pwd)"
-# Round-tripped through cd+pwd for the same reason as in ralph-config.sh: on Windows
-# `git rev-parse` says C:/… and `pwd` says /c/…, and the two never compare equal.
-cd "$REPO_ROOT" || exit 1
-REPO_ROOT="$(pwd)"
 
-if command -v realpath >/dev/null 2>&1; then
-  BATCH_DIR="$(realpath --relative-to="$REPO_ROOT" "$BATCH_ABS" 2>/dev/null)"
-  case "${BATCH_DIR:-}" in /*|[A-Za-z]:[/\\]*) BATCH_DIR="" ;; esac
-fi
-[ -n "${BATCH_DIR:-}" ] || BATCH_DIR="${BATCH_ABS#"$REPO_ROOT"/}"
-
-case "$BATCH_DIR" in
-  ''|/*|..|../*)
-    echo "ralph-init: the batch directory must be inside $REPO_ROOT" >&2
-    exit 1 ;;
+BATCH_DIR="$(ralph_batch_relpath "$BATCH_INPUT" "$REPO_ROOT")"
+case "$?" in
+  1) echo "ralph-init: $BATCH_INPUT is not a directory" >&2; exit 1 ;;
+  2) echo "ralph-init: the batch directory must be inside $REPO_ROOT" >&2; exit 1 ;;
 esac
+
+# Everything below writes repo-relative paths, so stand at the repo root.
+cd "$REPO_ROOT" || exit 1
 
 wrote_any=0
 
@@ -140,8 +141,8 @@ if [ "$wrote_any" -eq 1 ]; then
   echo "Next:"
   echo "  1. edit $BATCH_DIR/ralph.conf     — at minimum RALPH_CHECK_CMD and RALPH_TEST_CMD"
   echo "  2. re-order $BATCH_DIR/order.md"
-  echo "  3. bash tools/ralph/ralph-loop.sh $BATCH_DIR --dry-run   (free; prints the exact prompt)"
-  echo "  4. bash tools/ralph/ralph-loop.sh $BATCH_DIR 1           (one iteration, then look)"
+  echo "  3. $RALPH_INVOKE dry-run $BATCH_DIR   (free; prints the exact prompt)"
+  echo "  4. $RALPH_INVOKE run $BATCH_DIR 1     (one iteration, then look)"
 else
   echo "Nothing to do — this batch is already set up."
 fi

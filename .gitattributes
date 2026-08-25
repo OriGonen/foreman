@@ -1,0 +1,16 @@
+* text=auto
+
+# The scripts are executed by bash, on Windows as much as anywhere else. A CRLF checkout
+# breaks heredoc delimiters and shebangs, so these must stay LF whatever the platform.
+*.sh text eol=lf
+*.cjs text eol=lf
+bin/ralph text eol=lf
+
+# ralph.conf.template is copied verbatim into a batch and then sourced as bash;
+# prompt.template.md is inlined into a prompt verbatim. Both must stay LF.
+*.template.md text eol=lf
+*.conf.template text eol=lf
+
+# The Windows shim is the one file that must NOT be LF: cmd.exe mis-parses a CRLF-less
+# batch file's last line.
+*.cmd text eol=crlf

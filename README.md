@@ -1,21 +1,51 @@
 # ralph
 
 A loop that implements one ticket per iteration, until a batch of tickets is done or a
-budget stops it. Point it at any directory with tickets in it.
+budget stops it. Installed once per machine; point it at any directory of tickets, in any
+repository.
 
 ```bash
-bash tools/ralph/ralph-init.sh .scratch/my-batch          # scaffold a batch
-bash tools/ralph/ralph-loop.sh .scratch/my-batch --status  # what is left, what is next
-bash tools/ralph/ralph-loop.sh .scratch/my-batch --dry-run # the plan and the exact prompt
-bash tools/ralph/ralph-loop.sh .scratch/my-batch           # go
-bash tools/ralph/ralph-loop.sh .scratch/my-batch 5         # go, at most 5 iterations
+cd <any git repo>
+ralph doctor                    # is this repo ready?                  (free)
+ralph init .scratch/my-batch    # scaffold a batch
+ralph status .scratch/my-batch  # what is left, what is next           (free)
+ralph dry-run .scratch/my-batch # the plan and the exact prompt        (free)
+ralph run .scratch/my-batch     # go
+ralph run .scratch/my-batch 5   # go, at most 5 iterations
 ```
 
-`--status` and `--dry-run` make no model call and cost nothing.
+Everything marked *(free)* makes no model call and starts no sandbox.
 
-## The one rule: this directory is stateless
+## Install
 
-Everything that differs between batches lives in the **batch directory**, never here:
+```bash
+git clone <this repo> ~/tools/ralph   # or anywhere you like
+bash ~/tools/ralph/install.sh
+ralph version
+```
+
+`install.sh` writes two small forwarding scripts — `ralph` and `ralph.cmd` — into the first
+personal `bin` directory already on your PATH (`~/bin`, then `~/.local/bin`), so both Git
+Bash and PowerShell get the same command. It writes nothing else and nothing outside that
+directory. `bash install.sh --to <dir>` picks the directory yourself; `--uninstall` removes
+the two shims and leaves the checkout alone.
+
+Move the checkout later and just re-run `install.sh` to re-point the shims.
+
+### Requirements
+
+`git`, `node`, `awk`, and **bash 4+** (associative arrays and `compgen -v`). On Windows that
+means Git Bash — there is no separate Windows implementation, and `ralph.cmd` forwards to
+it.
+
+Plus, depending on the execution mode a batch asks for: `sbx` for the sandbox modes, or
+`claude` on PATH for `local`. `ralph doctor` checks all of this and tells you which one your
+batches actually need.
+
+## The one rule: the toolkit is stateless
+
+The install holds nothing. Everything that differs between batches lives in the **batch
+directory**, inside the repository being worked on:
 
 | in the batch | what it is |
 |---|---|
@@ -26,8 +56,28 @@ Everything that differs between batches lives in the **batch directory**, never 
 | `ralph-runs.jsonl` `ralph-runs.log` | append-only run telemetry, gitignored |
 | `.ralph-iter.bundle` | transient; exists only inside one iteration |
 
-Two batches never share any of it. Run one, pause it, run another, come back — each
-resumes exactly where it was. The scripts here read config and write nothing.
+Two batches never share any of it, and two *repositories* never share any of it either. Run
+one, pause it, switch repos, run another, come back — each resumes exactly where it was.
+Nothing accumulates in the install.
+
+## Setting up a repository
+
+Once per repo:
+
+```bash
+ralph doctor --fix
+```
+
+That appends the only two things a repo has to provide itself:
+
+- `.gitignore` — `**/.ralph-iter.bundle`, `**/ralph-runs.jsonl`, `**/ralph-runs.log`, so a
+  batch's run state stays untracked. The patterns match anywhere because a batch is any
+  directory with a `ralph.conf`.
+- `.gitattributes` — `ralph.conf text eol=lf`, but only if the repo normalises line
+  endings. `ralph.conf` is sourced as bash, and a CRLF checkout would make `RALPH_EXEC` read
+  as `sandbox<CR>` and fail validation with a message that looks like a lie.
+
+Review the diff and commit it. `--fix` only ever appends, and never touches a ticket.
 
 ## Setting up a batch
 
@@ -41,7 +91,7 @@ A batch is a directory containing tickets. A ticket is a markdown file with a st
 - [ ] the thing is done
 ```
 
-`ralph-init.sh <dir>` writes the three files a batch needs, generating `order.md` from
+`ralph init <dir>` writes the three files a batch needs, generating `order.md` from
 `<dir>/issues/*.md`. It never overwrites without `--force`, and it never touches a ticket.
 
 Then edit `<dir>/ralph.conf`. The two lines that matter most are what "verify your work"
@@ -52,7 +102,7 @@ RALPH_CHECK_CMD="npm run check"
 RALPH_TEST_CMD="npm test"
 ```
 
-Everything else has a default; `ralph.conf.template` documents the full set.
+Everything else has a default; `lib/ralph.conf.template` documents the full set.
 
 ### Ordering
 
@@ -61,23 +111,23 @@ markers are the order, one ticket path per line (repo-relative or batch-relative
 code fence or not, `#` to comment one out). If it does not exist, every `*.md` under
 `RALPH_ISSUES_DIRS` runs in filename order — which is what the `NN-` prefixes are for.
 
-Use an order file as soon as the order is not the filename order: tickets spread across
-two issue directories whose numbering collides, a foundation everything else reads, a
+Use an order file as soon as the order is not the filename order: tickets spread across two
+issue directories whose numbering collides, a foundation everything else reads, a
 sweep-every-surface ticket that has to go last. Put the *reasoning* in the prose above the
 block — that is where a constraint no ticket file can express belongs.
 
 ### The prompt
 
 One built-in five-step prompt — agree the seams, implement, verify, review, land — serves
-every batch. `prompt.template.md` is the text; `ralph.conf` fills in the slots (check
+every batch. `lib/prompt.template.md` is the text; `ralph.conf` fills in the slots (check
 command, test command, TDD skill, review skill); anything left empty degrades to generic
 prose rather than naming a command that does not exist.
 
 Anything that fits no slot goes in `<batch>/prompt-extra.md`, spliced in under its own
-heading between Verify and Review. `.scratch/qa-round-3/prompt-extra.md` is a worked
-example: a project-specific instruction to drive UI tickets through a real browser.
+heading between Verify and Review — a project-specific instruction to drive UI tickets
+through a real browser, say.
 
-`--dry-run` prints the exact assembled prompt and sends nothing. Read it once before the
+`ralph dry-run` prints the exact assembled prompt and sends nothing. Read it once before the
 first real run of any new batch.
 
 ## Where the agent runs — `RALPH_EXEC`
@@ -85,21 +135,29 @@ first real run of any new batch.
 | mode | what happens | when |
 |---|---|---|
 | `sandbox` (default) | `sbx` on a **private clone**; each iteration's commits come back as a git bundle and fast-forward your branch | the only mode that survives a host/container native-module split |
-| `sandbox-mount` | `sbx` bind-mounting this working tree; commits land here directly | isolation wanted, no install step needed in the container |
-| `local` | `claude` in this working tree, no sandbox | simplest; no isolation |
+| `sandbox-mount` | `sbx` bind-mounting your working tree; commits land there directly | isolation wanted, no install step needed in the container |
+| `local` | `claude` in your working tree, no sandbox | simplest; no isolation |
 
 The clone in `sandbox` mode is not a preference. A bind-mounted Windows workspace hands a
 Linux container the host's compiled native modules, which it cannot load, and the container
 cannot install its own because npm needs symlinks for `node_modules/.bin` and the Windows
 mount refuses them. A clone on the container's own filesystem has neither problem, and the
-host repo is mounted read-only so it cannot be clobbered. The cost is that commits no
-longer appear here by themselves, hence the sync-down / run / bundle-up dance in
-`ralph-loop.sh`.
+host repo is mounted read-only so it cannot be clobbered. The cost is that commits no longer
+appear in your tree by themselves, hence the sync-down / run / bundle-up dance in
+`lib/ralph-loop.sh`.
 
 In `sandbox` and `sandbox-mount`, set `RALPH_SANDBOX_PROBE` to a command that must succeed
 inside the sandbox before any money is spent, and `RALPH_SANDBOX_SETUP` to the command that
 fixes it. Without them the first iteration on a fresh clone pays for the model's work and
 then fails its verification step.
+
+The sandbox is named `ralph-<repo>` by default, so each repository gets its own and every
+batch in it shares that one — the setup cost is paid once per repo.
+
+**The sandbox modes need a primary checkout, not a linked worktree.** `sbx create` acts on
+the repository at the path you are standing in, and a worktree's `.git` is a file pointing
+elsewhere. Run from the primary checkout, on whichever branch the batch should land on, or
+set `RALPH_EXEC=local`. The loop refuses in preflight rather than discovering this later.
 
 ## Pausing and resuming
 
@@ -107,8 +165,8 @@ then fails its verification step.
 
 There is no state file and nothing to restore. Each iteration commits its ticket's flipped
 status line together with the code that ticket produced, so the last commit and the resume
-point cannot disagree. Whether the loop stopped on a budget, on a usage limit, on Ctrl-C,
-or because the machine lost power, the next run picks up at the first ticket that has not
+point cannot disagree. Whether the loop stopped on a budget, on a usage limit, on Ctrl-C, or
+because the machine lost power, the next run picks up at the first ticket that has not
 landed.
 
 The loop pauses itself, cleanly, when:
@@ -123,18 +181,17 @@ The loop pauses itself, cleanly, when:
 
 All of those exit **10** and print how to resume.
 
-It stops and asks for a human (exit **20**) when a ticket did not reach its done state
-after its attempts, or when an iteration left uncommitted changes behind. It never
-auto-commits that work — the point of the per-iteration review base is that nothing lands
-unreviewed.
+It stops and asks for a human (exit **20**) when a ticket did not reach its done state after
+its attempts, or when an iteration left uncommitted changes behind. It never auto-commits
+that work — the point of the per-iteration review base is that nothing lands unreviewed.
 
-Exit **0** means every ticket in the batch is done. Exit **1** is a preflight failure or
-bad usage; nothing has been spent.
+Exit **0** means every ticket in the batch is done. Exit **1** is a preflight failure or bad
+usage; nothing has been spent.
 
 ### Budgets
 
 ```bash
-RALPH_MAX_COST_USD=25 RALPH_MAX_MINUTES=180 bash tools/ralph/ralph-loop.sh .scratch/my-batch
+RALPH_MAX_COST_USD=25 RALPH_MAX_MINUTES=180 ralph run .scratch/my-batch
 ```
 
 The cost guard is the reliable brake and is checked *before* each iteration, so it never
@@ -160,9 +217,9 @@ or hand-edit them and the loop behaves identically — the tickets' status lines
 thing it treats as state. To read them:
 
 ```bash
-node tools/ralph/ralph-report.cjs .scratch/my-batch              # totals, then per run
-node tools/ralph/ralph-report.cjs .scratch/my-batch --by-ticket  # which tickets cost what
-node tools/ralph/ralph-report.cjs .scratch/my-batch --failures   # only what went wrong
+ralph report .scratch/my-batch              # totals, then per run
+ralph report .scratch/my-batch --by-ticket  # which tickets cost what
+ralph report .scratch/my-batch --failures   # only what went wrong
 ```
 
 That tool is manual and is never invoked by the loop.
@@ -171,28 +228,37 @@ That tool is manual and is never invoked by the loop.
 
 | file | what it is |
 |---|---|
-| `ralph-loop.sh` | the loop: preflight, budgets, iteration, pause/resume, footer |
-| `ralph-config.sh` | resolves a batch into RALPH_* — sourced, never run |
-| `ralph-next.sh` | resolves the order against what has landed — also `--list`, `--count`, `--all` |
-| `ralph-prompt.sh` | assembles one iteration's prompt — sourced, never run |
-| `prompt.template.md` | the five-step prompt, with slots |
-| `ralph-record.cjs` | appends one iteration to both logs; writes the verdict the loop acts on |
-| `ralph-report.cjs` | manual log reader |
-| `ralph-init.sh` | scaffolds a batch |
-| `ralph.conf.template` | every knob, commented, with its default |
+| `bin/ralph` | the dispatcher — resolves a subcommand to a script in `lib/` |
+| `bin/ralph.cmd` | the same, for PowerShell and cmd.exe |
+| `install.sh` | writes the PATH shims; `--uninstall` removes them |
+| `lib/ralph-loop.sh` | the loop: preflight, budgets, iteration, pause/resume, footer |
+| `lib/ralph-config.sh` | resolves a batch into RALPH_* — sourced, never run |
+| `lib/ralph-repo.sh` | repo root and batch-relative path: the one place that crosses Windows path syntax — sourced, never run |
+| `lib/ralph-next.sh` | resolves the order against what has landed — also `--list`, `--count`, `--all` |
+| `lib/ralph-prompt.sh` | assembles one iteration's prompt — sourced, never run |
+| `lib/prompt.template.md` | the five-step prompt, with slots |
+| `lib/ralph-record.cjs` | appends one iteration to both logs; writes the verdict the loop acts on |
+| `lib/ralph-report.cjs` | manual log reader |
+| `lib/ralph-init.sh` | scaffolds a batch |
+| `lib/ralph-doctor.sh` | checks the machine, the repo and the batches; `--fix` writes the repo's two files |
+| `lib/ralph.conf.template` | every knob, commented, with its default |
 | `assumptions.md` | the decisions taken while generalising this, and how to undo them |
 
-## Using it in another repo
+Each `lib/` script is still directly callable — `bash lib/ralph-loop.sh <batch> --status`
+does what `ralph status <batch>` does. The dispatcher exists for the typing, not because
+anything depends on it.
 
-Copy `tools/ralph/` across and run `ralph-init.sh`. The only repo-specific thing in here is
-the default model name; everything else comes from the batch's `ralph.conf`. Add to the new
-repo's `.gitignore`:
+## Using it in a new repository
 
-```gitignore
-**/.ralph-iter.bundle
-**/ralph-runs.jsonl
-**/ralph-runs.log
+There is nothing to copy.
+
+```bash
+cd <the repo>
+ralph doctor --fix     # its .gitignore / .gitattributes lines, once
+ralph init <batch-dir> # its first batch
 ```
 
-If the repo normalises line endings, keep `*.sh text eol=lf` in `.gitattributes` — CRLF
-breaks heredoc delimiters and shebangs.
+The toolkit is not inside the repository and never becomes part of it: `RALPH_TOOL_DIR`
+comes from the script's own location, the repository comes from `git rev-parse` where you
+are standing, and the two are unrelated paths. Upgrading the install upgrades every project
+at once.

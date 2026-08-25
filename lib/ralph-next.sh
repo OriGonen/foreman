@@ -1,10 +1,10 @@
 #!/bin/bash
 # The run order for one batch, resolved against what has actually landed.
 #
-#   ralph-next.sh <batch>            print the next ticket's path; exit 1 if all are done
-#   ralph-next.sh <batch> --list     print every remaining ticket, in order
-#   ralph-next.sh <batch> --count    print "<done> <total>"
-#   ralph-next.sh <batch> --all      print every ticket in order, done or not
+#   ralph next <batch>            print the next ticket's path; exit 1 if all are done
+#   ralph next <batch> --list     print every remaining ticket, in order
+#   ralph next <batch> --count    print "<done> <total>"
+#   ralph next <batch> --all      print every ticket in order, done or not
 #
 # "Next" is the first ticket in the order whose file does not match the batch's
 # RALPH_DONE_PATTERN (by default a '**Status:** implemented' line).
@@ -84,7 +84,7 @@ if [ -f "$ORDER_FILE" ]; then
 
   if [ "$saw_markers" -eq 0 ]; then
     echo "ralph-next.sh: $ORDER_FILE has no <!-- ORDER:BEGIN --> / <!-- ORDER:END --> block." >&2
-    echo "               Add one (see tools/ralph/README.md), or delete the file to fall" >&2
+    echo "               Add one (see $RALPH_HOME/README.md), or delete the file to fall" >&2
     echo "               back to filename order over: $RALPH_ISSUES_DIRS" >&2
     exit 2
   fi
