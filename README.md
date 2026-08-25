@@ -10,8 +10,9 @@ ralph doctor                    # is this repo ready?                  (free)
 ralph init .scratch/my-batch    # scaffold a batch
 ralph status .scratch/my-batch  # what is left, what is next           (free)
 ralph dry-run .scratch/my-batch # the plan and the exact prompt        (free)
-ralph run .scratch/my-batch     # go
-ralph run .scratch/my-batch 5   # go, at most 5 iterations
+ralph run .scratch/my-batch             # one iteration
+ralph run .scratch/my-batch 5           # at most 5 iterations
+ralph run .scratch/my-batch --unlimited # until done or a budget stops it
 ```
 
 Everything marked *(free)* makes no model call and starts no sandbox.
@@ -191,7 +192,7 @@ usage; nothing has been spent.
 ### Budgets
 
 ```bash
-RALPH_MAX_COST_USD=25 RALPH_MAX_MINUTES=180 ralph run .scratch/my-batch
+RALPH_MAX_COST_USD=25 RALPH_MAX_MINUTES=180 ralph run .scratch/my-batch --unlimited
 ```
 
 The cost guard is the reliable brake and is checked *before* each iteration, so it never

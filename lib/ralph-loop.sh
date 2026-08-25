@@ -1,11 +1,12 @@
 #!/bin/bash
 #
-# Ralph: one ticket per iteration, until a batch is done or a budget stops it.
+# Ralph: one ticket per iteration.
 #
-#   ralph run     <batch>      # run until done or a budget stops it
-#   ralph run     <batch> 5    # run at most 5 iterations
-#   ralph status  <batch>      # what is left, what is next
-#   ralph dry-run <batch>      # print the plan and the next prompt
+#   ralph run     <batch>              # run one iteration
+#   ralph run     <batch> 5            # run at most 5 iterations
+#   ralph run     <batch> --unlimited  # run until done or a budget stops it
+#   ralph status  <batch>              # what is left, what is next
+#   ralph dry-run <batch>              # print the plan and the next prompt
 #
 # <batch> is any directory IN THE CURRENT REPOSITORY holding tickets and a ralph.conf —
 # see the toolkit's README.md and ralph-init.sh. Nothing about a batch is shared with any
@@ -31,7 +32,8 @@
 # BUDGETS (all optional; 0 or unset means no limit)
 #   RALPH_MAX_COST_USD=25     pause before an iteration that would take the run over $25
 #   RALPH_MAX_MINUTES=180     pause before an iteration once 180 minutes have elapsed
-#   <iterations> argument     pause after this many iterations
+#   <iterations> argument     pause after this many iterations (default: 1)
+#   --unlimited               no iteration cap; only cost/time budgets stop it
 #
 # OTHER KNOBS (all settable in ralph.conf; the environment wins over it)
 #   RALPH_MODEL=claude-sonnet-5    RALPH_EFFORT=high
@@ -58,7 +60,7 @@ EXIT_NEEDS_HUMAN=20
 # Arguments: an optional batch path, then an optional mode or iteration count.
 # ---------------------------------------------------------------------------
 MODE=run
-MAX_ITERATIONS=0   # 0 = until the ticket list runs out or a budget stops us
+MAX_ITERATIONS=1   # default: one iteration. --unlimited sets this to 0 (no cap).
 
 # The header comment above is the help text. Stop at the first non-comment line rather
 # than at a fixed line number, which drifts every time the header grows.
@@ -68,8 +70,9 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --status)    MODE=status ;;
     --dry-run)   MODE=dry-run ;;
+    --unlimited) MAX_ITERATIONS=0 ;;
     --help|-h)   show_help; exit 0 ;;
-    -*)          echo "Usage: ${RALPH_INVOKE:-ralph} run [<batch>] [<iterations>]" >&2; exit 1 ;;
+    -*)          echo "Usage: ${RALPH_INVOKE:-ralph} run [<batch>] [<iterations>|--unlimited]" >&2; exit 1 ;;
     *)
       if [[ "$1" =~ ^[0-9]+$ ]]; then
         MAX_ITERATIONS="$1"
@@ -653,8 +656,11 @@ case "$FINAL_STATUS" in
       say "Next up:  $remaining"
       log_append "# next up: $remaining"
     fi
-    resume_args=""
-    [ "$MAX_ITERATIONS" -gt 0 ] && resume_args=" $MAX_ITERATIONS"
+    if [ "$MAX_ITERATIONS" -gt 0 ]; then
+      resume_args=" $MAX_ITERATIONS"
+    else
+      resume_args=" --unlimited"
+    fi
     say "Resume:   $RALPH_INVOKE run $BATCH_DIR$resume_args"
     say "          (nothing to restore — the tickets' Status lines are the resume point)"
     ;;
