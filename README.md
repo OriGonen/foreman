@@ -7,7 +7,7 @@ repository.
 ```bash
 cd <any git repo>
 ralph doctor                    # is this repo ready?                  (free)
-ralph init .scratch/my-batch    # scaffold a batch
+ralph init .scratch/my-batch    # scaffold a batch, then order its tickets
 ralph status .scratch/my-batch  # what is left, what is next           (free)
 ralph dry-run .scratch/my-batch # the plan and the exact prompt        (free)
 ralph run .scratch/my-batch             # one iteration
@@ -93,7 +93,8 @@ A batch is a directory containing tickets. A ticket is a markdown file with a st
 ```
 
 `ralph init <dir>` writes the three files a batch needs, generating `order.md` from
-`<dir>/issues/*.md`. It never overwrites without `--force`, and it never touches a ticket.
+`<dir>/issues/*.md`, then — unless `--no-order` is given — has an agent read the tickets and
+rewrite that order. It never overwrites without `--force`, and it never touches a ticket.
 
 Then edit `<dir>/ralph.conf`. The two lines that matter most are what "verify your work"
 means in your project:
@@ -112,10 +113,25 @@ markers are the order, one ticket path per line (repo-relative or batch-relative
 code fence or not, `#` to comment one out). If it does not exist, every `*.md` under
 `RALPH_ISSUES_DIRS` runs in filename order — which is what the `NN-` prefixes are for.
 
-Use an order file as soon as the order is not the filename order: tickets spread across two
-issue directories whose numbering collides, a foundation everything else reads, a
-sweep-every-surface ticket that has to go last. Put the *reasoning* in the prose above the
-block — that is where a constraint no ticket file can express belongs.
+`ralph init` doesn't leave that at filename order: right after scaffolding, it runs
+`ralph order <batch>`, which has an agent read every ticket and rewrite the order, weighing
+three things — dependencies (what has to land before what, and which tickets touch the same
+files closely enough to keep adjacent), importance (foundations first, polish and
+sweep-every-surface tickets last), and each ticket's apparent load, so a run isn't
+front-loaded with every large ticket back to back. It writes its reasoning into the prose
+above the block, naming tickets specifically.
+
+That is a first pass, not a guarantee — read it, and move things by hand where it missed a
+constraint that isn't in the ticket text (a human step that has to happen first, say).
+Re-run it any time the tickets change:
+
+```bash
+ralph order .scratch/my-batch
+```
+
+It costs one model call, touches only `order.md`, and runs locally — no sandbox, since it
+edits no code. `ralph init --no-order` skips it and leaves `order.md` in plain filename
+order, same as before this step existed.
 
 ### The prompt
 
@@ -240,7 +256,8 @@ That tool is manual and is never invoked by the loop.
 | `lib/prompt.template.md` | the five-step prompt, with slots |
 | `lib/ralph-record.cjs` | appends one iteration to both logs; writes the verdict the loop acts on |
 | `lib/ralph-report.cjs` | manual log reader |
-| `lib/ralph-init.sh` | scaffolds a batch |
+| `lib/ralph-init.sh` | scaffolds a batch, then runs `ralph-order.sh` unless told not to |
+| `lib/ralph-order.sh` | has an agent order the tickets by dependency, importance and load |
 | `lib/ralph-doctor.sh` | checks the machine, the repo and the batches; `--fix` writes the repo's two files |
 | `lib/ralph.conf.template` | every knob, commented, with its default |
 | `assumptions.md` | the decisions taken while generalising this, and how to undo them |

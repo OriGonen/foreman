@@ -128,6 +128,34 @@ the prompt still tells the agent to stop rather than implement a missing depende
 *To undo:* teach `ralph-next.sh` to parse the line before the `done_count` loop; the
 ticket list is already in memory at that point.
 
+## Ordering: `ralph init` has an agent order the tickets, by default
+
+**Assumed:** filename order is a poor default for anything but a trivial batch, so
+`ralph init` doesn't stop at generating `order.md` in filename order — it hands the batch to
+a second script, `ralph-order.sh`, which reads every ticket and rewrites the order and the
+reasoning above it, weighing dependencies, importance and each ticket's apparent load.
+`--no-order` opts out; `ralph order <batch>` re-runs it by hand later.
+
+This runs `claude` **locally, never in a sandbox**, regardless of the batch's `RALPH_EXEC`.
+It edits no code — only `order.md` — so none of the reasons `sandbox` mode exists (native
+modules, isolation from a real run) apply, and it should work in a repo that has no sandbox
+set up at all yet. It is also the one agent call in this toolkit that isn't gated by any of
+`RALPH_MAX_COST_USD` / `RALPH_MAX_MINUTES` — those budget a *run*, and ordering happens once,
+outside of one.
+
+It is a first pass, not a guarantee: nothing here verifies the order it picked is correct,
+only that it read every ticket in the directory and didn't invent or drop one. Ticket text
+is the only signal it has — a constraint that exists only in a person's head still has to go
+in `order.md`'s prose by hand.
+
+**Not done:** no cost cap on the ordering call itself, and no `--dry-run` for it (unlike
+`ralph run`, there is no code to preview — the prompt sent is deterministic from the ticket
+list, and printing it without sending would just be `cat`). If a batch is large enough that
+one ordering call is itself worth previewing, that is a sign of a batch worth splitting.
+
+*To undo:* pass `--no-order` at the call site, or delete the `ralph-order.sh` call in
+`ralph-init.sh` to make it opt-in via `ralph order <batch>` instead of automatic.
+
 ## Ordering: an order entry may be repo- or batch-relative
 
 **Assumed:** a line in the ORDER block resolves first against the repo root, then against
