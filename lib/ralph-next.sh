@@ -5,6 +5,12 @@
 #   ralph next <batch> --list     print every remaining ticket, in order
 #   ralph next <batch> --count    print "<done> <total>"
 #   ralph next <batch> --all      print every ticket in order, done or not
+#   ralph next <batch> --unordered  print every ticket the batch HAS, ignoring order.md
+#
+# `--unordered` is the question `ralph init` and `ralph order` ask: what tickets are in
+# this batch, before anyone has decided a run order for them. It is the only mode that
+# skips the order file, and the only one for which an empty answer is not an error — a
+# batch with no tickets yet is exactly what `ralph init` is there to scaffold.
 #
 # "Next" is the first ticket in the order whose file does not match the batch's
 # RALPH_DONE_PATTERN (by default a '**Status:** implemented' line).
@@ -36,8 +42,8 @@ case "${1:-}" in
 esac
 [ "$MODE" = "--next" ] && MODE=next
 [ "$MODE" = "next" ] || case "$MODE" in
-  --list|--count|--all) ;;
-  *) echo "ralph-next.sh: unknown mode '$MODE' (expected --list, --count, --all, or nothing)" >&2; exit 2 ;;
+  --list|--count|--all|--unordered) ;;
+  *) echo "ralph-next.sh: unknown mode '$MODE' (expected --list, --count, --all, --unordered, or nothing)" >&2; exit 2 ;;
 esac
 
 # shellcheck source=ralph-config.sh
@@ -57,7 +63,7 @@ resolve_ticket() {
   return 1
 }
 
-if [ -f "$ORDER_FILE" ]; then
+if [ "$MODE" != "--unordered" ] && [ -f "$ORDER_FILE" ]; then
   saw_markers=0
   in_block=0
   while IFS= read -r line || [ -n "$line" ]; do
@@ -89,8 +95,9 @@ if [ -f "$ORDER_FILE" ]; then
     exit 2
   fi
 else
-  # No order file: filename order across the issues directories, which is why tickets are
-  # numbered. `sort` is applied per directory so the directories stay in the order given.
+  # No order file (or `--unordered`, which ignores it): filename order across the issues
+  # directories, which is why tickets are numbered. `sort` is applied per directory so the
+  # directories stay in the order given.
   for dir in $RALPH_ISSUES_DIRS; do
     case "$dir" in /*|[A-Za-z]:[/\\]*) resolved_dir="$dir" ;; *)
       if [ -d "$dir" ]; then resolved_dir="$dir"; else resolved_dir="$BATCH_DIR/$dir"; fi ;;
@@ -108,7 +115,10 @@ else
 fi
 
 if [ "${#tickets[@]}" -eq 0 ]; then
-  if [ -f "$ORDER_FILE" ]; then
+  # An empty batch is a legitimate answer to "what tickets are here", and the only answer
+  # `ralph init` can get before any have been written.
+  [ "$MODE" = "--unordered" ] && exit 0
+  if [ "$MODE" != "--unordered" ] && [ -f "$ORDER_FILE" ]; then
     echo "ralph-next.sh: the ORDER block in $ORDER_FILE is empty" >&2
   else
     echo "ralph-next.sh: no tickets found." >&2
@@ -132,7 +142,7 @@ done
 
 case "$MODE" in
   --count) printf '%s %s\n' "$done_count" "${#tickets[@]}" ;;
-  --all)   printf '%s\n' "${tickets[@]}" ;;
+  --all|--unordered) printf '%s\n' "${tickets[@]}" ;;
   --list)  [ "${#remaining[@]}" -eq 0 ] || printf '%s\n' "${remaining[@]}" ;;
   next)
     [ "${#remaining[@]}" -eq 0 ] && exit 1

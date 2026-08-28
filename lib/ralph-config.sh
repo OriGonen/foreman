@@ -187,9 +187,9 @@ RUN_LOG="$(_ralph_path "${RALPH_RUN_LOG:-}" ralph-runs.log)"
 BUNDLE_FILE="$(_ralph_path "${RALPH_BUNDLE_FILE:-}" .ralph-iter.bundle)"
 
 # --- how the agent is executed --------------------------------------------
-#   sandbox        sbx on a private clone; commits come back as a git bundle  (default)
-#   sandbox-mount  sbx bind-mounting this working tree; commits land directly
-#   local          `claude` in this working tree; no sandbox at all
+# The name of an adapter in lib/exec/ — see ralph-exec.sh. sandbox (the default) runs the
+# agent on a private clone inside sbx; sandbox-mount bind-mounts this tree; local runs
+# `claude` here with no sandbox; fake runs no agent at all.
 RALPH_EXEC="${RALPH_EXEC:-sandbox}"
 RALPH_SANDBOX="${RALPH_SANDBOX:-ralph-$(basename "$REPO_ROOT")}"
 RALPH_SANDBOX_SETUP="${RALPH_SANDBOX_SETUP:-}"
@@ -216,13 +216,17 @@ RALPH_TICKET_ATTEMPTS="${RALPH_TICKET_ATTEMPTS:-2}"
 RALPH_ALLOW_DIRTY="${RALPH_ALLOW_DIRTY:-0}"
 
 # --- validation ------------------------------------------------------------
-case "$RALPH_EXEC" in
-  sandbox|sandbox-mount|local) ;;
-  *)
-    echo "ralph: RALPH_EXEC must be 'sandbox', 'sandbox-mount' or 'local' (got '$RALPH_EXEC')" >&2
-    return 1 2>/dev/null || exit 1
-    ;;
-esac
+# A valid RALPH_EXEC is one with an adapter file in lib/exec/. There is deliberately no
+# list of modes here: adding a mode is adding a file, and this check follows.
+# shellcheck source=ralph-exec.sh
+source "$RALPH_TOOL_DIR/ralph-exec.sh" || {
+  echo "ralph: cannot load $RALPH_TOOL_DIR/ralph-exec.sh" >&2
+  return 1 2>/dev/null || exit 1
+}
+if ! ralph_exec_is_mode "$RALPH_EXEC"; then
+  echo "ralph: RALPH_EXEC must be one of: $(ralph_exec_modes | tr '\n' ' ')(got '$RALPH_EXEC')" >&2
+  return 1 2>/dev/null || exit 1
+fi
 
 for _ralph_int in RALPH_TICKET_ATTEMPTS RALPH_MAX_MINUTES RALPH_PROGRESS_TAIL_BYTES; do
   if ! [[ "${!_ralph_int}" =~ ^[0-9]+$ ]]; then

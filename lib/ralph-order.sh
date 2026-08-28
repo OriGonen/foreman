@@ -54,16 +54,16 @@ if ! command -v claude >/dev/null 2>&1; then
   exit 0
 fi
 
+# The batch's own ticket list, from the one file that knows how a batch answers that —
+# including any RALPH_ISSUES_DIRS the conf sets. `--unordered` rather than `--all` because
+# re-ordering has to see tickets added since order.md was last written.
 tickets=()
-if [ -d "$BATCH_DIR/issues" ]; then
-  while IFS= read -r f; do
-    case "$(basename "$f")" in README.md|spec.md|order.md) continue ;; esac
-    tickets+=("$f")
-  done < <(find "$BATCH_DIR/issues" -maxdepth 1 -name '*.md' -type f | sort)
-fi
+while IFS= read -r f; do
+  [ -n "$f" ] && tickets+=("$f")
+done < <(bash "$RALPH_TOOL_DIR/ralph-next.sh" "$BATCH_DIR" --unordered)
 
 if [ "${#tickets[@]}" -eq 0 ]; then
-  echo "ralph order: no tickets under $BATCH_DIR/issues — nothing to order."
+  echo "ralph order: $BATCH_DIR has no tickets — nothing to order."
   exit 0
 fi
 
@@ -96,7 +96,7 @@ $BATCH_DIR/order.md in place, and change nothing else:
 4. Do not edit any ticket file. Do not invent a ticket that is not in the list below, and
    do not drop one that is.
 
-Tickets under $BATCH_DIR/issues/:
+Tickets in $BATCH_DIR:
 $(for t in "${tickets[@]}"; do printf -- '- %s\n' "$t"; done)
 PROMPT_EOF
 )

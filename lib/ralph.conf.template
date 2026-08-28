@@ -19,6 +19,11 @@
 # sandbox-mount  `sbx` bind-mounting the working tree; commits land directly. Fine when
 #                the project has no native modules and no install step in the sandbox.
 # local          `claude` in the working tree. No isolation, no sandbox needed.
+# fake           no agent at all — a scripted stand-in used to test ralph itself. It
+#                will not implement anything; see lib/exec/fake.sh.
+#
+# Each mode is a file in the toolkit's lib/exec/. `ralph run` lists the ones that exist
+# if this is set to something else.
 #RALPH_EXEC=sandbox
 
 # Name of the sandbox to create or reattach to. One per repo by default, shared by every

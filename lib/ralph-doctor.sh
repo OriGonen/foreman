@@ -37,6 +37,11 @@ done
 source "$RALPH_TOOL_DIR/ralph-repo.sh" || {
   echo "ralph doctor: cannot load $RALPH_TOOL_DIR/ralph-repo.sh" >&2; exit 1; }
 
+# Which command a batch's execution mode needs is the adapter's business, not doctor's.
+# shellcheck source=ralph-exec.sh
+source "$RALPH_TOOL_DIR/ralph-exec.sh" || {
+  echo "ralph doctor: cannot load $RALPH_TOOL_DIR/ralph-exec.sh" >&2; exit 1; }
+
 REPO_ROOT="$(ralph_repo_root)" || {
   echo "ralph doctor: not inside a git repository." >&2
   echo "              A batch lives in a repo, because each iteration commits its work." >&2
@@ -83,32 +88,42 @@ batches=$(find . \
   -o -name ralph.conf -print 2>/dev/null |
   sed 's|^\./||; s|/ralph\.conf$||' | sort)
 
-# The default is sandbox, so sbx is what matters unless every batch here opts out of it.
-wants_sbx=1
+# Ask each batch's adapter what it needs on PATH, and check the union. One line per tool,
+# "<tool> <the mode that asked for it>". A batch in a mode that needs nothing (fake)
+# contributes nothing; a repo with no batch at all is judged on the default mode.
+runners=""
+_want_runner() {
+  local mode="$1" tool
+  if ! tool=$(ralph_exec_required_tool "$mode"); then
+    bad "RALPH_EXEC=$mode in ${2:-this repo} — no such execution mode"
+    note "valid modes: $(ralph_exec_modes | tr '\n' ' ')"
+    return
+  fi
+  [ -n "$tool" ] || return
+  case $'\n'"$runners" in *$'\n'"$tool "*) return ;; esac
+  runners="$runners$tool $mode"$'\n'
+}
+
 if [ -n "$batches" ]; then
-  wants_sbx=0
   while IFS= read -r b; do
     [ -n "$b" ] || continue
     mode=$(grep -E '^[[:space:]]*RALPH_EXEC=' "$b/ralph.conf" 2>/dev/null |
            tail -1 | sed 's/.*=//' | tr -d '"'"'"'\r')
-    case "${mode:-sandbox}" in local) ;; *) wants_sbx=1 ;; esac
+    _want_runner "${mode:-sandbox}" "$b/ralph.conf"
   done <<< "$batches"
+else
+  _want_runner sandbox
 fi
 
-if [ "$wants_sbx" -eq 1 ]; then
-  if command -v sbx >/dev/null 2>&1; then
-    ok "sbx (a batch here uses a sandbox mode)"
+while IFS=' ' read -r tool mode; do
+  [ -n "$tool" ] || continue
+  if command -v "$tool" >/dev/null 2>&1; then
+    ok "$tool (required by RALPH_EXEC=$mode)"
   else
-    bad "sbx is not on PATH, and a batch here uses a sandbox mode"
-    note "set RALPH_EXEC=local in that batch's ralph.conf to run without one"
+    bad "$tool is not on PATH, and RALPH_EXEC=$mode needs it"
+    [ "$tool" = sbx ] && note "set RALPH_EXEC=local in that batch's ralph.conf to run without one"
   fi
-else
-  if command -v claude >/dev/null 2>&1; then
-    ok "claude (every batch here uses RALPH_EXEC=local)"
-  else
-    bad "claude is not on PATH, and every batch here uses RALPH_EXEC=local"
-  fi
-fi
+done <<< "$runners"
 echo
 
 # ---------------------------------------------------------------------------

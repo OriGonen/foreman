@@ -21,6 +21,10 @@
 #                  (e.g. a Windows host and a Linux container sharing node_modules).
 #   sandbox-mount  `sbx` bind-mounting this working tree; commits land here directly.
 #   local          `claude` in this working tree, no sandbox. Simplest; no isolation.
+#   fake           no agent at all — the loop, driven by a script. See lib/exec/fake.sh.
+#
+# This loop knows none of that. Each mode is an adapter in lib/exec/ satisfying the
+# interface in ralph-exec.sh, and every `exec_*` call below crosses that seam.
 #
 # RESUMING
 #   Just run it again. There is no state file and nothing to clean up: each iteration
@@ -91,9 +95,6 @@ unset RALPH_BATCH_FROM_ARG
 # shellcheck source=ralph-config.sh
 source "$RALPH_TOOL_DIR/ralph-config.sh" || exit 1
 
-MODEL="$RALPH_MODEL"
-EFFORT="$RALPH_EFFORT"
-SANDBOX_NAME="$RALPH_SANDBOX"
 MAX_COST="$RALPH_MAX_COST_USD"
 MAX_MINUTES="$RALPH_MAX_MINUTES"
 TICKET_ATTEMPTS="$RALPH_TICKET_ATTEMPTS"
@@ -139,98 +140,13 @@ ticket_is_done() { grep -q "$RALPH_DONE_PATTERN" "$1"; }
 
 next_sh() { bash "$RALPH_TOOL_DIR/ralph-next.sh" "$BATCH_DIR" "$@"; }
 
-# Which execution mode we are in, asked as a question rather than compared inline.
-exec_uses_sandbox() { [ "$RALPH_EXEC" = sandbox ] || [ "$RALPH_EXEC" = sandbox-mount ]; }
-exec_uses_clone()   { [ "$RALPH_EXEC" = sandbox ]; }
-
 # ---------------------------------------------------------------------------
-# The sandbox, and getting work in and out of it
-#
-# In `sandbox` mode the agent runs on a PRIVATE CLONE inside the sandbox, not on this
-# working tree (`sbx create --clone`). That is not a preference. A bind-mounted Windows
-# workspace hands a Linux container the host's native modules, which it cannot load, and
-# the container cannot install its own because npm needs symlinks for node_modules/.bin
-# and the Windows mount refuses them. A clone on the container's own filesystem has
-# neither problem, and the host repo is mounted read-only so it cannot be clobbered.
-#
-# The cost is that commits no longer appear here by themselves. Each iteration:
-#
-#   sync down   sandbox fetches this repo (read-only at /run/sandbox/source) and resets
-#               to our HEAD, so it starts from exactly what we have
-#   run         the agent works and commits, in the clone
-#   sync up     sandbox bundles BASE..HEAD, we copy the bundle out and fast-forward
-#
-# The transport is a git bundle over `sbx cp` rather than the `sandbox-<name>` git remote
-# `sbx` sets up. That remote is served by a daemon that only lives while the sandbox is
-# running, and `sbx` stops the sandbox after every command — so a fetch issued after a
-# run is a race. `sbx cp` starts the sandbox itself and finishes in one command.
-#
-# `sandbox-mount` and `local` skip all of this: the agent commits into the tree the loop
-# is already watching.
+# The exec adapter: everything about where the agent runs and how its commits get here.
+# Loaded once, after `say`/`warn` exist so the adapter can print through them.
 # ---------------------------------------------------------------------------
-
-sandbox_sh() { sbx exec "$SANDBOX_NAME" sh -c "$1"; }
-
-# The clone lives at the same path inside the container as the repo does on the host.
-sandbox_is_clone_mode() {
-  [ "$(sandbox_sh 'git remote get-url origin 2>/dev/null' 2>/dev/null | tr -d '\r')" = "/run/sandbox/source" ]
-}
-
-sync_down() {
-  local target="$1"
-  exec_uses_clone || return 0
-  # `git clean -fd` without -x deliberately: dependency directories are gitignored, and
-  # wiping them every iteration would mean a fresh install every iteration.
-  sandbox_sh "git fetch --quiet origin && git reset --quiet --hard $target && git clean -qfd" >/dev/null 2>&1
-}
-
-sandbox_head() { sandbox_sh 'git rev-parse HEAD 2>/dev/null' 2>/dev/null | tr -d '\r' | head -1; }
-
-sandbox_is_dirty() {
-  [ -n "$(sandbox_sh 'git status --porcelain 2>/dev/null' 2>/dev/null | tr -d '\r' | head -1)" ]
-}
-
-# Brings BASE..sandbox-HEAD onto the current branch. Returns 1 if anything went wrong, so
-# the caller can stop rather than silently losing an iteration's work.
-sync_up() {
-  local base="$1" sb_head="$2"
-
-  rm -f "$BUNDLE_FILE"
-  if ! sandbox_sh "rm -f /tmp/ralph-iter.bundle && git bundle create /tmp/ralph-iter.bundle ${base}..HEAD" >/dev/null 2>&1; then
-    warn "   could not bundle the sandbox's commits"
-    return 1
-  fi
-  if ! sbx cp "$SANDBOX_NAME:/tmp/ralph-iter.bundle" "$BUNDLE_FILE" >/dev/null 2>&1; then
-    warn "   could not copy the bundle out of the sandbox"
-    return 1
-  fi
-  if ! git fetch --quiet "$BUNDLE_FILE" "HEAD:refs/ralph/incoming" 2>/dev/null; then
-    warn "   bundle did not contain a fetchable ref"
-    return 1
-  fi
-  if ! git merge --quiet --ff-only refs/ralph/incoming >/dev/null 2>&1; then
-    warn "   could not fast-forward onto the sandbox's commits (diverged?)"
-    return 1
-  fi
-  git update-ref -d refs/ralph/incoming 2>/dev/null || true
-  rm -f "$BUNDLE_FILE"
-
-  [ "$(git rev-parse HEAD)" = "$sb_head" ]
-}
-
-run_agent() {
-  if exec_uses_sandbox; then
-    sbx run claude --name "$SANDBOX_NAME" -- \
-      --model "$MODEL" --effort "$EFFORT" --permission-mode "$RALPH_PERMISSION_MODE" \
-      ${RALPH_CLAUDE_ARGS+"${RALPH_CLAUDE_ARGS[@]}"} \
-      --print --output-format json -p "$RALPH_PROMPT"
-  else
-    claude \
-      --model "$MODEL" --effort "$EFFORT" --permission-mode "$RALPH_PERMISSION_MODE" \
-      ${RALPH_CLAUDE_ARGS+"${RALPH_CLAUDE_ARGS[@]}"} \
-      --print --output-format json -p "$RALPH_PROMPT"
-  fi
-}
+# shellcheck source=ralph-exec.sh
+source "$RALPH_TOOL_DIR/ralph-exec.sh" || exit 1
+ralph_exec_load "$RALPH_EXEC" || exit 1
 
 # ---------------------------------------------------------------------------
 # Status / dry-run modes exit before anything is spent
@@ -264,28 +180,19 @@ preflight_failed=0
 for tool in git node awk; do
   command -v "$tool" >/dev/null 2>&1 || { warn "preflight: '$tool' is not on PATH"; preflight_failed=1; }
 done
+# What this arrangement needs, asked of the adapter rather than decided here. Both are
+# cheap and start nothing: the expensive setup is exec_prepare, further down, after the
+# "nothing to do" check has had its say.
 if [ "$MODE" = "run" ]; then
-  if exec_uses_sandbox; then
-    command -v sbx >/dev/null 2>&1 || { warn "preflight: 'sbx' is not on PATH (RALPH_EXEC=$RALPH_EXEC)"; preflight_failed=1; }
-  else
-    command -v claude >/dev/null 2>&1 || { warn "preflight: 'claude' is not on PATH (RALPH_EXEC=local)"; preflight_failed=1; }
+  exec_tool="$(exec_required_tool)"
+  if [ -n "$exec_tool" ] && ! command -v "$exec_tool" >/dev/null 2>&1; then
+    warn "preflight: '$exec_tool' is not on PATH (RALPH_EXEC=$RALPH_EXEC)"
+    preflight_failed=1
   fi
+  exec_preflight || preflight_failed=1
 fi
 
 [ -d "$BATCH_DIR" ] || { warn "preflight: no batch directory at $BATCH_DIR"; preflight_failed=1; }
-
-# `sbx create` acts on the repository at REPO_ROOT. In a linked worktree that path has a
-# `.git` *file* pointing elsewhere rather than a repository, so neither the clone nor the
-# mount is the thing anyone means. `local` mode has no such constraint.
-if [ "$MODE" = "run" ] && exec_uses_sandbox &&
-   [ "$(git rev-parse --git-dir)" != "$(git rev-parse --git-common-dir)" ]; then
-  warn "preflight: this is a linked worktree ($REPO_ROOT)."
-  warn "           The sandbox acts on the repository at this path, and a worktree's .git"
-  warn "           is a file pointing outside it. Run the loop from the primary checkout,"
-  warn "           on whichever branch you want the batch to land on — or set"
-  warn "           RALPH_EXEC=local in $RALPH_CONF."
-  preflight_failed=1
-fi
 
 # Validates every ticket path and fails loudly on a typo.
 next_sh --count >/dev/null || preflight_failed=1
@@ -318,8 +225,8 @@ if [ "$MODE" = "dry-run" ]; then
   say "Would run, in this order:"
   next_sh --list | nl -w3 -s'  '
   say ""
-  say "Exec:    $RALPH_EXEC$(exec_uses_sandbox && printf ' (sandbox %s)' "$SANDBOX_NAME")"
-  say "Model:   $MODEL   Effort: $EFFORT"
+  say "Exec:    $(exec_describe)"
+  say "Model:   $RALPH_MODEL   Effort: $RALPH_EFFORT"
   say "Budgets: cost=$(budget_label "$MAX_COST" '$')  time=$(budget_label "$MAX_MINUTES" '' m)  iterations=$(budget_label "$MAX_ITERATIONS")"
   say "Logs:    $RUN_JSONL"
   say "         $RUN_LOG"
@@ -369,64 +276,19 @@ mkdir -p "$(dirname "$RUN_JSONL")" "$(dirname "$RUN_LOG")"
 log_append ""
 log_append "#############################################################################"
 log_append "# run $RUN_ID started $RUN_STARTED_AT"
-log_append "# batch=$BATCH_DIR exec=$RALPH_EXEC model=$MODEL effort=$EFFORT"
+log_append "# batch=$BATCH_DIR exec=$RALPH_EXEC model=$RALPH_MODEL effort=$RALPH_EFFORT"
 log_append "# budgets: cost=$(budget_label "$MAX_COST" '$') time=$(budget_label "$MAX_MINUTES" '' m) iterations=$(budget_label "$MAX_ITERATIONS")"
 log_append "# head at start: $(git rev-parse HEAD)"
 log_append "#############################################################################"
 
-say "run $RUN_ID  ·  $BATCH_DIR  ·  $RALPH_EXEC  ·  model $MODEL  ·  effort $EFFORT"
+say "run $RUN_ID  ·  $BATCH_DIR  ·  $RALPH_EXEC  ·  model $RALPH_MODEL  ·  effort $RALPH_EFFORT"
 progress_line
 say ""
 
-if exec_uses_sandbox; then
-  # Create the sandbox up front (idempotent — fine if a prior run left it) so every agent
-  # call below reattaches to it instead of creating it: a fresh-create prints a setup
-  # banner on stdout that would corrupt the --output-format json we parse for usage.
-  if exec_uses_clone; then
-    sbx create --clone --name "$SANDBOX_NAME" claude "$REPO_ROOT" >&2 || true
-  else
-    sbx create --name "$SANDBOX_NAME" claude "$REPO_ROOT" >&2 || true
-  fi
-
-  # A sandbox left over from the other arrangement is the single most expensive mistake
-  # available here: it looks fine and fails every iteration *after* paying for the work.
-  if exec_uses_clone && ! sandbox_is_clone_mode; then
-    warn "preflight: sandbox '$SANDBOX_NAME' exists but is not in clone mode."
-    warn "           It bind-mounts this working tree, which is what RALPH_EXEC=sandbox"
-    warn "           exists to avoid. Recreate it:"
-    warn "             sbx rm --force $SANDBOX_NAME"
-    warn "           (If \`sbx\` is signed out, run \`sbx login\` first.)"
-    exit 1
-  fi
-  if ! exec_uses_clone && sandbox_is_clone_mode; then
-    warn "preflight: sandbox '$SANDBOX_NAME' is a clone, but RALPH_EXEC=$RALPH_EXEC expects"
-    warn "           a bind mount — the agent's commits would never reach this tree."
-    warn "           Recreate it:  sbx rm --force $SANDBOX_NAME"
-    exit 1
-  fi
-
-  # The batch's readiness probe: one command that must succeed inside the sandbox before
-  # any money is spent. A clone starts with no gitignored dependency directories, so the
-  # first run of a batch is normally where RALPH_SANDBOX_SETUP earns its place.
-  if [ -n "$RALPH_SANDBOX_PROBE" ] && [ "$RALPH_SKIP_SANDBOX_PROBE" != "1" ]; then
-    if ! sandbox_sh "$RALPH_SANDBOX_PROBE" >/dev/null 2>&1; then
-      if [ -n "$RALPH_SANDBOX_SETUP" ]; then
-        say "Sandbox setup (the readiness probe failed — this is normal on a fresh clone)…"
-        sandbox_sh "$RALPH_SANDBOX_SETUP" >&2 || true
-      fi
-      if ! sandbox_sh "$RALPH_SANDBOX_PROBE" >/dev/null 2>&1; then
-        warn "preflight: the sandbox is not ready — this probe still fails:"
-        warn "             $RALPH_SANDBOX_PROBE"
-        warn "           Every iteration's verification step would fail the same way, so"
-        warn "           nothing has been spent. Diagnose with:"
-        [ -n "$RALPH_SANDBOX_SETUP" ] && warn "             sbx exec $SANDBOX_NAME sh -c '$RALPH_SANDBOX_SETUP'"
-        warn "             sbx exec $SANDBOX_NAME sh -c '$RALPH_SANDBOX_PROBE'"
-        warn "           Override with RALPH_SKIP_SANDBOX_PROBE=1 if you know better."
-        exit 1
-      fi
-    fi
-  fi
-fi
+# Whatever this arrangement has to stand up before any money is spent — creating and
+# checking the sandbox, running the batch's readiness probe — happens here, once, behind
+# the adapter's own interface. `local` and `fake` have nothing to do.
+exec_prepare || exit 1
 
 FINAL_STATUS="$EXIT_DONE"
 CURRENT_TICKET=""
@@ -489,9 +351,9 @@ while true; do
 
   # Start the agent from exactly what we have. Cheap when already in sync, and it is what
   # makes a retry after a failed iteration a genuinely clean second attempt rather than a
-  # second pass over the first one's leftovers. (A no-op outside clone mode.)
-  if ! sync_down "$BASE_REF"; then
-    warn "   could not sync the sandbox to $BASE_REF — stopping before spending anything."
+  # second pass over the first one's leftovers. (Only the clone arrangement has anything
+  # to do here; the adapter decides.)
+  if ! exec_sync_down "$BASE_REF"; then
     FINAL_STATUS="$EXIT_NEEDS_HUMAN"
     break
   fi
@@ -500,21 +362,15 @@ while true; do
   source "$RALPH_TOOL_DIR/ralph-prompt.sh"
 
   agent_status=0
-  result=$(run_agent) || agent_status=$?
+  result=$(exec_run "$RALPH_PROMPT" "$TICKET_FILE") || agent_status=$?
 
   # Bring the iteration's commits back before inspecting anything: the ticket's Status
-  # line, and every check below, lives in the work the agent just did.
+  # line, and every check below, lives in the work the agent just did. The adapter sets
+  # EXEC_DIRTY and EXEC_AGENT_HEAD, and returns 1 only when work it cannot move is
+  # stranded on the other side of the seam.
   sync_failed=0
-  if exec_uses_clone; then
-    sb_head=$(sandbox_head)
-    dirty=0; sandbox_is_dirty && dirty=1
-    if [ -n "$sb_head" ] && [ "$sb_head" != "$BASE_REF" ]; then
-      sync_up "$BASE_REF" "$sb_head" || sync_failed=1
-    fi
-  else
-    sb_head=$(git rev-parse HEAD)
-    dirty=0; tree_is_dirty && dirty=1
-  fi
+  exec_collect "$BASE_REF" || sync_failed=1
+  dirty="$EXEC_DIRTY"
 
   HEAD_REF=$(git rev-parse HEAD)
   flipped=0; ticket_is_done "$TICKET_FILE" && flipped=1
@@ -564,11 +420,7 @@ while true; do
   #    clone over it.
   if [ "$sync_failed" -eq 1 ]; then
     warn ""
-    warn "The sandbox committed $sb_head but it could not be brought back to this repo."
-    warn "That work exists ONLY in the sandbox. Do not rerun until it is recovered:"
-    warn "  sbx exec $SANDBOX_NAME git bundle create /tmp/recover.bundle $BASE_REF..HEAD"
-    warn "  sbx cp $SANDBOX_NAME:/tmp/recover.bundle ./recover.bundle"
-    warn "  git fetch ./recover.bundle HEAD:refs/ralph/recovered && git merge --ff-only refs/ralph/recovered"
+    exec_recovery_note "$BASE_REF"
     FINAL_STATUS="$EXIT_NEEDS_HUMAN"
     break
   fi
@@ -578,16 +430,7 @@ while true; do
   if [ "$dirty" -eq 1 ]; then
     warn ""
     warn "$TICKET_FILE left uncommitted changes behind. Stopping so you can look."
-    if exec_uses_clone; then
-      sandbox_sh 'git status --short' >&2
-      warn ""
-      warn "They are in the sandbox's clone, not in this repo, and rerunning would reset"
-      warn "the clone over them. Inspect with: sbx exec $SANDBOX_NAME git diff"
-    else
-      git status --short >&2
-      warn ""
-      warn "Inspect with: git diff"
-    fi
+    exec_show_dirty
     FINAL_STATUS="$EXIT_NEEDS_HUMAN"
     break
   fi

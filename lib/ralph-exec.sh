@@ -1,0 +1,77 @@
+#!/bin/bash
+# The seam between the loop and wherever the agent actually runs.
+# Sourced by ralph-loop.sh, ralph-prompt.sh, ralph-config.sh and ralph-doctor.sh —
+# never run directly.
+#
+# RALPH_EXEC names an adapter file in lib/exec/. ADDING AN EXECUTION MODE IS ADDING A
+# FILE THERE: nothing else in the toolkit holds a list of the modes that exist, and
+# nothing else asks which mode is in force. Before this file, that question was asked at
+# eleven points across four scripts, in three different spellings.
+#
+# Every adapter defines exactly these functions. Callers use nothing else. Adapters read
+# only RALPH_* variables (ralph-config.sh's outputs) and REPO_ROOT — never a caller's
+# locals, so an adapter can be loaded and asked a question without the loop present.
+#
+#   exec_required_tool      the command that must be on PATH, or nothing
+#   exec_preflight          cheap checks; 0 ready, 1 stop. Warns for itself.
+#   exec_prepare            expensive setup, once per run, before any money is spent
+#   exec_describe           one line naming the arrangement, for status and dry-run
+#   exec_commit_note        the prompt's paragraph about committing
+#   exec_sync_down BASE     put the agent's tree at BASE; 0 ok, 1 stop
+#   exec_run PROMPT TICKET  run the agent; payload on stdout, agent's status returned
+#   exec_collect BASE       set EXEC_AGENT_HEAD and EXEC_DIRTY, and bring any commits
+#                           back to this repo; 0 ok, 1 the work is stranded
+#   exec_show_dirty         say where the uncommitted changes are (stderr)
+#   exec_recovery_note BASE how to rescue work exec_collect could not bring back
+#
+# Files in lib/exec/ whose name starts with `_` are shared implementation, not modes.
+
+RALPH_EXEC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/exec" 2>/dev/null && pwd)"
+
+# The adapters print through these. ralph-loop.sh defines its own first; anything else
+# sourcing an adapter (ralph-prompt.sh, ralph-doctor.sh) gets these.
+if ! declare -F say >/dev/null 2>&1; then
+  say() { printf '%s\n' "$*"; }
+fi
+if ! declare -F warn >/dev/null 2>&1; then
+  warn() { printf '%s\n' "$*" >&2; }
+fi
+
+# Every mode that exists, one per line.
+ralph_exec_modes() {
+  local file name
+  for file in "$RALPH_EXEC_DIR"/*.sh; do
+    [ -e "$file" ] || continue
+    name="${file##*/}"
+    name="${name%.sh}"
+    case "$name" in _*) continue ;; esac
+    printf '%s\n' "$name"
+  done
+}
+
+ralph_exec_is_mode() {
+  [ -n "${1:-}" ] || return 1
+  case "$1" in _*|*/*) return 1 ;; esac
+  [ -f "$RALPH_EXEC_DIR/$1.sh" ]
+}
+
+# Load the adapter for $1 (default: $RALPH_EXEC). Returns 1 and warns if there is none.
+ralph_exec_load() {
+  local mode="${1:-${RALPH_EXEC:-}}"
+  if ! ralph_exec_is_mode "$mode"; then
+    warn "ralph: RALPH_EXEC must be one of: $(ralph_exec_modes | tr '\n' ' ')(got '${mode:-}')"
+    return 1
+  fi
+  # shellcheck source=/dev/null
+  source "$RALPH_EXEC_DIR/$mode.sh" || {
+    warn "ralph: cannot load the '$mode' exec adapter"
+    return 1
+  }
+}
+
+# Which command a mode needs on PATH, without disturbing the caller's own adapter. This
+# is how `ralph doctor` asks about a batch it is not running: it has several batches, each
+# possibly in a different mode, and no ralph-config.sh loaded.
+ralph_exec_required_tool() {
+  ( ralph_exec_load "$1" >/dev/null 2>&1 && exec_required_tool ) || return 1
+}
