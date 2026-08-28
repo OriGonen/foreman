@@ -60,17 +60,10 @@ cd "$REPO_ROOT" || { echo "ralph: cannot cd to $REPO_ROOT" >&2; return 1 2>/dev/
 # Which batch?
 # ---------------------------------------------------------------------------
 
-# Directories that are never worth searching: dependency trees, git internals, and the
-# worktrees Claude Code creates (each of which contains a full copy of every batch).
-_ralph_find_batches() {
-  find . \
-    \( -name node_modules -o -name .git -o -path './.claude/worktrees' -o -name .svelte-kit \) -prune \
-    -o -name ralph.conf -print 2>/dev/null |
-    sed 's|^\./||; s|/ralph\.conf$||' | sort
-}
-
 if [ -z "${RALPH_BATCH:-}" ]; then
-  _ralph_candidates=$(_ralph_find_batches)
+  # ralph_find_batches (ralph-repo.sh) is the one answer to "which directories are ralph
+  # batches" — ralph-report.cjs shells out to the same function rather than keeping its own.
+  _ralph_candidates=$(ralph_find_batches)
   _ralph_count=$(printf '%s' "$_ralph_candidates" | grep -c . || true)
   if [ "$_ralph_count" = "1" ]; then
     RALPH_BATCH="$_ralph_candidates"
@@ -150,11 +143,16 @@ unset _RALPH_FROM_ENV _ralph_name _ralph_candidates _ralph_count
 BATCH_NAME="${RALPH_BATCH_NAME:-$(basename "$BATCH_DIR")}"
 
 # --- tickets ---------------------------------------------------------------
-# A ticket counts as done when this grep pattern (a BRE) matches a line in its file.
-RALPH_DONE_PATTERN="${RALPH_DONE_PATTERN:-^\*\*Status:\*\* *implemented}"
-# The word the prompt tells the agent to write. Keep the two in step.
-RALPH_DONE_WORD="${RALPH_DONE_WORD:-implemented}"
 RALPH_STATUS_LINE="${RALPH_STATUS_LINE:-**Status:**}"
+# The word the prompt tells the agent to write.
+RALPH_DONE_WORD="${RALPH_DONE_WORD:-implemented}"
+# A ticket counts as done when this grep pattern (a BRE) matches a line in its file.
+# Derived from the two settings above by default, so they cannot drift out of sync — set
+# RALPH_DONE_PATTERN directly only if a ticket's status line isn't a simple
+# "$RALPH_STATUS_LINE $RALPH_DONE_WORD" prefix.
+if [ -z "${RALPH_DONE_PATTERN:-}" ]; then
+  RALPH_DONE_PATTERN="^$(printf '%s' "$RALPH_STATUS_LINE" | sed -e 's/\\/\\\\/g' -e 's/[.[*^$]/\\&/g') *$RALPH_DONE_WORD"
+fi
 
 # Every path knob accepts three spellings, so `order.md` in a conf means the batch's own
 # order file and `.scratch/shared/order.md` still means what it says:

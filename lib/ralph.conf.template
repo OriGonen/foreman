@@ -78,11 +78,13 @@
 # ---------------------------------------------------------------------------
 # Tickets
 # ---------------------------------------------------------------------------
-# How a done ticket is recognised: a grep BRE matched against the ticket file, and the
-# word the prompt tells the agent to write. Keep the two in step.
-#RALPH_DONE_PATTERN='^\*\*Status:\*\* *implemented'
-#RALPH_DONE_WORD=implemented
+# How a done ticket is recognised. RALPH_DONE_PATTERN is a grep BRE matched against the
+# ticket file; by default it's derived from the two settings below, so they can't drift out
+# of sync. Set RALPH_DONE_PATTERN directly only if a ticket's status line isn't a simple
+# "STATUS_LINE DONE_WORD" prefix.
 #RALPH_STATUS_LINE='**Status:**'
+#RALPH_DONE_WORD=implemented
+#RALPH_DONE_PATTERN='^\*\*Status:\*\* *implemented'
 
 # The run order. If order.md exists, its <!-- ORDER:BEGIN --> block is the order and
 # RALPH_ISSUES_DIRS is ignored. Otherwise every *.md in these directories runs in

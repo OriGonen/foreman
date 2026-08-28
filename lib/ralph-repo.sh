@@ -49,3 +49,21 @@ ralph_batch_relpath() {
   prefix="${prefix%/}"
   printf '%s' "${prefix:-.}"
 }
+
+# Every directory under $1 (default: the current directory) that has a ralph.conf in it,
+# one per line, relative to $1 and sorted. This is "which directories are ralph batches" —
+# the one answer both ralph-config.sh (bash) and ralph-report.cjs (shelling out to this
+# function) use, so an omitted batch means the same thing everywhere.
+#
+# Skips dependency trees, git internals, and the worktrees Claude Code creates (each of
+# which contains a full copy of every batch).
+ralph_find_batches() {
+  local root="${1:-.}"
+  (
+    cd "$root" 2>/dev/null || return 1
+    find . \
+      \( -name node_modules -o -name .git -o -path './.claude/worktrees' -o -name .svelte-kit \) -prune \
+      -o -name ralph.conf -print 2>/dev/null |
+      sed 's|^\./||; s|/ralph\.conf$||' | sort
+  )
+}
