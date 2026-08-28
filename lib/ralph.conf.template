@@ -47,6 +47,9 @@
 #RALPH_MODEL=claude-sonnet-5
 #RALPH_EFFORT=high
 #RALPH_PERMISSION_MODE=acceptEdits
+# The one-off `ralph order` pass (run automatically by `ralph init`) defaults to
+# RALPH_MODEL above. Point it at something cheaper without touching what tickets run on:
+#RALPH_ORDERING_MODEL=claude-sonnet-5
 # Extra arguments passed through to `claude`, as a bash array:
 #RALPH_CLAUDE_ARGS=(--allowed-tools Bash Read Edit)
 
