@@ -222,8 +222,9 @@ for. `RALPH_SANDBOX_PROBE` exists to catch exactly that before anything is spent
 `--permission-mode acceptEdits`.** That is what "no isolation" means; use it on a repo and
 a branch where that is acceptable.
 
-*To undo:* the modes are three branches in `ralph-loop.sh`, gated by `exec_uses_sandbox`
-and `exec_uses_clone`.
+*To undo:* each mode is one file in `lib/exec/` — delete the two sandbox adapters and
+`local` is all that is left. See *`RALPH_EXEC` is a seam, not a set of conditionals*,
+below, for how they stopped being three branches in `ralph-loop.sh`.
 
 ## Config precedence
 
@@ -268,6 +269,54 @@ Bash 4+ (associative arrays, `compgen -v`), `git`, `node`, `awk`, plus `sbx` in 
 modes or `claude` on `PATH` in `local` mode. The loop's preflight checks all of these and
 exits 1 before spending anything; `ralph doctor` checks the same set ahead of time, and
 works out from the batches present which of `sbx` and `claude` actually matters here.
+
+---
+
+## `RALPH_EXEC` is a seam, not a set of conditionals
+
+**Assumed:** where the agent runs is an adapter in `lib/exec/`, loaded once by
+`ralph-exec.sh`, and no caller ever asks which mode is in force.
+
+Before this, three arrangements existed — `sandbox`, `sandbox-mount`, `local` — with no
+interface between them and the loop. The mode was re-decided at eleven points across four
+files, in three spellings: `exec_uses_sandbox` / `exec_uses_clone` in `ralph-loop.sh`, a
+bare `[ "$RALPH_EXEC" = "sandbox" ]` in `ralph-prompt.sh` for the commit note, and a
+`grep RALPH_EXEC` over every batch's `ralph.conf` in `ralph-doctor.sh`. Three adapters
+existed; the interface did not.
+
+The interface is ten functions, documented at the top of `ralph-exec.sh`. Adapters read
+only `RALPH_*` and `REPO_ROOT`, never a caller's locals, which is what lets `doctor` load
+one and ask `exec_required_tool` without a batch resolved. `ralph-config.sh` no longer
+holds a list of valid modes either: a mode is valid when `lib/exec/<mode>.sh` exists.
+
+The point of it is the fourth adapter. `fake` answers the same interface with no model and
+no container, so the loop's budgets, attempt accounting, verdict handling and all five stop
+conditions can be exercised for nothing — see `test/smoke.sh`, which is the first test this
+toolkit has had. Every bug listed above this line was caught in the field, by running it.
+
+*To undo:* the adapters are self-contained; inline `lib/exec/sandbox.sh` and
+`lib/exec/local.sh` back into `ralph-loop.sh` and reinstate the two predicates.
+
+## One place answers "what tickets does this batch have"
+
+**Assumed:** `ralph-next.sh --unordered` is that place, and `ralph-init.sh` and
+`ralph-order.sh` call it.
+
+All three used to scan for tickets themselves, and the copies disagreed. `ralph-next.sh`
+honoured `RALPH_ISSUES_DIRS` and `RALPH_ISSUES_EXCLUDE`; the other two hard-coded
+`<batch>/issues` and a literal `README.md|spec.md|order.md`. A batch whose `ralph.conf`
+pointed its tickets anywhere else was therefore scaffolded from an empty directory, and
+then handed to the ordering agent as a list of nothing — while `ralph run` worked fine on
+the same batch.
+
+`--unordered` rather than the existing `--all` because both callers need the tickets the
+batch *has*, not the order someone already wrote: `init --force` regenerates `order.md`
+and must not read the file it is about to replace, and `ralph order` exists to be re-run
+after tickets change. It is also the one mode for which an empty answer is not an error —
+a batch with no tickets yet is exactly what `ralph init` is there to scaffold.
+
+*To undo:* reinstate the `find` block in each caller. `--all` had no callers before this
+and still has none; it is a user-facing mode.
 
 ---
 

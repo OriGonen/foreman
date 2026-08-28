@@ -2,7 +2,8 @@
 # Assembles one iteration's prompt. Sourced by ralph-loop.sh, not executed.
 #
 # Requires: TICKET_FILE, and the variables ralph-config.sh sets (BATCH_DIR, ORDER_FILE,
-# PROGRESS_FILE, PROMPT_EXTRA_FILE, RALPH_*). BASE_REF defaults to HEAD.
+# PROGRESS_FILE, PROMPT_EXTRA_FILE, RALPH_*). BASE_REF defaults to HEAD. The exec adapter
+# is loaded here if the caller has not already loaded one.
 # Produces:  RALPH_PROMPT
 #
 # The structure comes from prompt.template.md and the project-specific parts come from
@@ -73,15 +74,18 @@ else
 first, then whether it actually does what the ticket asked."
 fi
 
-# Only the clone arrangement makes an uncommitted change a *lost* change, so only it gets
-# the warning. The other two modes commit into the tree the loop is watching.
-if [ "$RALPH_EXEC" = "sandbox" ]; then
-  _ralph_commit="Commit everything. You are on a private clone of the repository; committing to the
-   current branch is how the work gets back to the host, so an uncommitted change is a
-   lost change. Do not push."
-else
-  _ralph_commit="Commit everything to the current branch. Do not push."
+# What "commit your work" means depends on where the work is happening — only the clone
+# arrangement makes an uncommitted change a *lost* change — so the adapter says it, not
+# this file. ralph-loop.sh has already loaded one; the guard is for anything that sources
+# this file on its own.
+if ! declare -F exec_commit_note >/dev/null 2>&1; then
+  # shellcheck source=ralph-exec.sh
+  source "$RALPH_TOOL_DIR/ralph-exec.sh" && ralph_exec_load "$RALPH_EXEC" || {
+    echo "ralph-prompt.sh: cannot load the '$RALPH_EXEC' exec adapter" >&2
+    return 1 2>/dev/null || exit 1
+  }
 fi
+_ralph_commit="$(exec_commit_note)"
 
 # ---------------------------------------------------------------------------
 # Substitution

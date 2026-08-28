@@ -10,8 +10,11 @@
 # Runs locally, never in a sandbox: it edits no code, so none of RALPH_EXEC's isolation
 # concerns apply, and it should work even in a repo that has no sandbox set up yet.
 #
-# Costs one model call. If `claude` is not on PATH, this prints a note and exits 0 rather
-# than failing whatever called it — order.md just keeps its filename order.
+# Costs one model call, on RALPH_MODEL by default — ordering rarely needs the same model
+# the tickets themselves run on, so set RALPH_ORDERING_MODEL in ralph.conf to point it at
+# something cheaper without touching RALPH_MODEL. If `claude` is not on PATH, this prints a
+# note and exits 0 rather than failing whatever called it — order.md just keeps its
+# filename order.
 set -uo pipefail
 
 RALPH_TOOL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -29,54 +32,53 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$BATCH_INPUT" ] || { echo "Usage: ralph order <batch>" >&2; exit 1; }
 
-# shellcheck source=ralph-repo.sh
-source "$RALPH_TOOL_DIR/ralph-repo.sh" || {
-  echo "ralph order: cannot load $RALPH_TOOL_DIR/ralph-repo.sh" >&2; exit 1; }
+# ralph-config.sh gives us BATCH_DIR, ORDER_FILE and RALPH_MODEL resolved the same way
+# every other ralph command resolves them — env, then this batch's ralph.conf, then
+# defaults — so RALPH_ORDERING_MODEL set there is honoured without this script knowing
+# anything about ralph.conf's format itself.
+export RALPH_BATCH="$BATCH_INPUT"
+# shellcheck source=ralph-config.sh
+source "$RALPH_TOOL_DIR/ralph-config.sh" || exit 1
 
-REPO_ROOT="$(ralph_repo_root)" || {
-  echo "ralph order: not inside a git repository." >&2; exit 1; }
-
-BATCH_DIR="$(ralph_batch_relpath "$BATCH_INPUT" "$REPO_ROOT")"
-case "$?" in
-  1) echo "ralph order: $BATCH_INPUT is not a directory" >&2; exit 1 ;;
-  2) echo "ralph order: the batch directory must be inside $REPO_ROOT" >&2; exit 1 ;;
-esac
-cd "$REPO_ROOT" || exit 1
-
-[ -f "$BATCH_DIR/order.md" ] || {
-  echo "ralph order: $BATCH_DIR/order.md does not exist — run: ralph init $BATCH_DIR" >&2
+[ -f "$ORDER_FILE" ] || {
+  echo "ralph order: $ORDER_FILE does not exist — run: ralph init $BATCH_DIR" >&2
   exit 1
 }
 
 if ! command -v claude >/dev/null 2>&1; then
   echo "ralph order: 'claude' is not on PATH — skipping." >&2
-  echo "              $BATCH_DIR/order.md keeps its filename order; re-run \`ralph order $BATCH_DIR\` once it is." >&2
+  echo "              $ORDER_FILE keeps its filename order; re-run \`ralph order $BATCH_DIR\` once it is." >&2
   exit 0
 fi
 
+# The batch's own ticket list, from the one file that knows how a batch answers that —
+# including any RALPH_ISSUES_DIRS the conf sets. `--unordered` rather than `--all` because
+# re-ordering has to see tickets added since order.md was last written.
 tickets=()
-if [ -d "$BATCH_DIR/issues" ]; then
-  while IFS= read -r f; do
-    case "$(basename "$f")" in README.md|spec.md|order.md) continue ;; esac
-    tickets+=("$f")
-  done < <(find "$BATCH_DIR/issues" -maxdepth 1 -name '*.md' -type f | sort)
-fi
+while IFS= read -r f; do
+  [ -n "$f" ] && tickets+=("$f")
+done < <(bash "$RALPH_TOOL_DIR/ralph-next.sh" "$BATCH_DIR" --unordered)
 
 if [ "${#tickets[@]}" -eq 0 ]; then
-  echo "ralph order: no tickets under $BATCH_DIR/issues — nothing to order."
+  echo "ralph order: $BATCH_DIR has no tickets — nothing to order."
   exit 0
 fi
 
-MODEL="${RALPH_MODEL:-claude-sonnet-5}"
-EFFORT="${RALPH_EFFORT:-high}"
+# Ordering is a much smaller job than implementing a ticket, so it defaults to RALPH_MODEL
+# rather than automatically riding whatever the tickets themselves run on — set
+# RALPH_ORDERING_MODEL in ralph.conf to point it at something cheaper. Effort stays fixed
+# at high regardless of RALPH_EFFORT: reading every ticket and weighing dependencies is the
+# one place in this toolkit where skimping on effort risks a bad order, even on a small model.
+MODEL="${RALPH_ORDERING_MODEL:-$RALPH_MODEL}"
+EFFORT=high
 
 PROMPT=$(cat <<PROMPT_EOF
 You are ordering the tickets in $BATCH_DIR for the ralph ticket loop, which implements
 exactly one ticket per iteration, in the order given, committing each before moving to the
 next.
 
-Read every ticket listed below and the current $BATCH_DIR/order.md. Then edit
-$BATCH_DIR/order.md in place, and change nothing else:
+Read every ticket listed below and the current $ORDER_FILE. Then edit
+$ORDER_FILE in place, and change nothing else:
 
 1. Decide a run order, weighing three things:
    - DEPENDENCIES. A ticket that reads or builds on something another ticket creates must
@@ -96,7 +98,7 @@ $BATCH_DIR/order.md in place, and change nothing else:
 4. Do not edit any ticket file. Do not invent a ticket that is not in the list below, and
    do not drop one that is.
 
-Tickets under $BATCH_DIR/issues/:
+Tickets in $BATCH_DIR:
 $(for t in "${tickets[@]}"; do printf -- '- %s\n' "$t"; done)
 PROMPT_EOF
 )
@@ -108,7 +110,7 @@ RESPONSE=$(claude --model "$MODEL" --effort "$EFFORT" --permission-mode acceptEd
 status=$?
 
 if [ "$status" -ne 0 ]; then
-  echo "ralph order: the agent call failed (exit $status) — $BATCH_DIR/order.md is unchanged." >&2
+  echo "ralph order: the agent call failed (exit $status) — $ORDER_FILE is unchanged." >&2
   exit 1
 fi
 
@@ -119,5 +121,5 @@ cost=$(node -e '
   } catch {}
 ' <<< "$RESPONSE")
 
-echo "ralph order: wrote $BATCH_DIR/order.md${cost:+ (cost \$$cost)}"
+echo "ralph order: wrote $ORDER_FILE${cost:+ (cost \$$cost)}"
 echo "             review it — this is a first pass, not a guarantee."

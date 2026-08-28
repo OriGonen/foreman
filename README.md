@@ -133,6 +133,17 @@ It costs one model call, touches only `order.md`, and runs locally — no sandbo
 edits no code. `ralph init --no-order` skips it and leaves `order.md` in plain filename
 order, same as before this step existed.
 
+It defaults to `RALPH_MODEL` — the same model that implements tickets — but sorting a list
+is a smaller job than writing code, so point it at something cheaper without touching what
+tickets run on:
+
+```bash
+RALPH_ORDERING_MODEL=claude-haiku-4-5 ralph order .scratch/my-batch
+```
+
+(or set `RALPH_ORDERING_MODEL` in the batch's `ralph.conf` to make that the default). Effort
+for this pass stays fixed at `high` regardless of `RALPH_EFFORT`.
+
 ### The prompt
 
 One built-in five-step prompt — agree the seams, implement, verify, review, land — serves
@@ -154,6 +165,11 @@ first real run of any new batch.
 | `sandbox` (default) | `sbx` on a **private clone**; each iteration's commits come back as a git bundle and fast-forward your branch | the only mode that survives a host/container native-module split |
 | `sandbox-mount` | `sbx` bind-mounting your working tree; commits land there directly | isolation wanted, no install step needed in the container |
 | `local` | `claude` in your working tree, no sandbox | simplest; no isolation |
+| `fake` | no agent at all — a scripted stand-in | testing ralph itself; see `test/smoke.sh` |
+
+Each mode is one file in `lib/exec/`, satisfying the interface documented in
+`lib/ralph-exec.sh`. Nothing outside those files asks which mode is in force, and nothing
+holds a list of the modes that exist — adding a mode is adding a file.
 
 The clone in `sandbox` mode is not a preference. A bind-mounted Windows workspace hands a
 Linux container the host's compiled native modules, which it cannot load, and the container
@@ -161,7 +177,7 @@ cannot install its own because npm needs symlinks for `node_modules/.bin` and th
 mount refuses them. A clone on the container's own filesystem has neither problem, and the
 host repo is mounted read-only so it cannot be clobbered. The cost is that commits no longer
 appear in your tree by themselves, hence the sync-down / run / bundle-up dance in
-`lib/ralph-loop.sh`.
+`lib/exec/sandbox.sh`.
 
 In `sandbox` and `sandbox-mount`, set `RALPH_SANDBOX_PROBE` to a command that must succeed
 inside the sandbox before any money is spent, and `RALPH_SANDBOX_SETUP` to the command that
@@ -250,8 +266,10 @@ That tool is manual and is never invoked by the loop.
 | `install.sh` | writes the PATH shims; `--uninstall` removes them |
 | `lib/ralph-loop.sh` | the loop: preflight, budgets, iteration, pause/resume, footer |
 | `lib/ralph-config.sh` | resolves a batch into RALPH_* — sourced, never run |
+| `lib/ralph-exec.sh` | the seam between the loop and where the agent runs — sourced, never run |
+| `lib/exec/*.sh` | one adapter per `RALPH_EXEC` mode; `_`-prefixed files are shared implementation |
 | `lib/ralph-repo.sh` | repo root and batch-relative path: the one place that crosses Windows path syntax — sourced, never run |
-| `lib/ralph-next.sh` | resolves the order against what has landed — also `--list`, `--count`, `--all` |
+| `lib/ralph-next.sh` | resolves the order against what has landed — also `--list`, `--count`, `--all`, `--unordered` |
 | `lib/ralph-prompt.sh` | assembles one iteration's prompt — sourced, never run |
 | `lib/prompt.template.md` | the five-step prompt, with slots |
 | `lib/ralph-record.cjs` | appends one iteration to both logs; writes the verdict the loop acts on |
@@ -260,6 +278,7 @@ That tool is manual and is never invoked by the loop.
 | `lib/ralph-order.sh` | has an agent order the tickets by dependency, importance and load |
 | `lib/ralph-doctor.sh` | checks the machine, the repo and the batches; `--fix` writes the repo's two files |
 | `lib/ralph.conf.template` | every knob, commented, with its default |
+| `test/smoke.sh` | end-to-end tests of the loop, run through the `fake` adapter — no sandbox, no model, no money |
 | `assumptions.md` | the decisions taken while generalising this, and how to undo them |
 
 Each `lib/` script is still directly callable — `bash lib/ralph-loop.sh <batch> --status`

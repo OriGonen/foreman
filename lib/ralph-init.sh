@@ -88,13 +88,15 @@ fi
 
 # --- order.md --------------------------------------------------------------
 if write_if_absent "$BATCH_DIR/order.md"; then
+  # What tickets this batch has is ralph-next.sh's question, not this file's: it is the
+  # one place that knows about RALPH_ISSUES_DIRS and RALPH_ISSUES_EXCLUDE, so a batch
+  # whose ralph.conf points somewhere other than `issues/` is scaffolded from the right
+  # directory. `--unordered` is what makes this safe under --force, too: it never reads
+  # the order.md we are about to overwrite.
   tickets=()
-  if [ -d "$BATCH_DIR/issues" ]; then
-    while IFS= read -r file; do
-      case "$(basename "$file")" in README.md|spec.md|order.md) continue ;; esac
-      tickets+=("$file")
-    done < <(find "$BATCH_DIR/issues" -maxdepth 1 -name '*.md' -type f | sort)
-  fi
+  while IFS= read -r file; do
+    [ -n "$file" ] && tickets+=("$file")
+  done < <(bash "$RALPH_TOOL_DIR/ralph-next.sh" "$BATCH_DIR" --unordered)
 
   {
     echo "# $(basename "$BATCH_DIR") — implementation order"
@@ -103,10 +105,10 @@ if write_if_absent "$BATCH_DIR/order.md"; then
     echo "whose Status line is not flipped, and runs exactly that one."
     echo
     if [ "${#tickets[@]}" -eq 0 ]; then
-      echo "**No tickets found under \`$BATCH_DIR/issues/\`.** Add them, then either fill in the"
+      echo "**No tickets found in \`$BATCH_DIR\`.** Add them, then either fill in the"
       echo "block below by hand or re-run \`ralph-init.sh $BATCH_DIR --force\`."
     else
-      echo "Generated from \`$BATCH_DIR/issues/\` in filename order. **Re-order it.** Filename"
+      echo "Generated from \`$BATCH_DIR\` in filename order. **Re-order it.** Filename"
       echo "order is a starting point, not a plan — put shared foundations first, put the"
       echo "sweep-everything tickets last, and keep two tickets that fight over the same file"
       echo "adjacent so the conflict is a sequential edit rather than a merge."
