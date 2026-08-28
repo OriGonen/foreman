@@ -133,6 +133,17 @@ It costs one model call, touches only `order.md`, and runs locally — no sandbo
 edits no code. `ralph init --no-order` skips it and leaves `order.md` in plain filename
 order, same as before this step existed.
 
+It defaults to `RALPH_MODEL` — the same model that implements tickets — but sorting a list
+is a smaller job than writing code, so point it at something cheaper without touching what
+tickets run on:
+
+```bash
+RALPH_ORDERING_MODEL=claude-haiku-4-5 ralph order .scratch/my-batch
+```
+
+(or set `RALPH_ORDERING_MODEL` in the batch's `ralph.conf` to make that the default). Effort
+for this pass stays fixed at `high` regardless of `RALPH_EFFORT`.
+
 ### The prompt
 
 One built-in five-step prompt — agree the seams, implement, verify, review, land — serves
