@@ -138,13 +138,61 @@ esac
 # works on its own clone, where a gitignored scratch file from the host does not exist —
 # an `@`-attachment would silently resolve to nothing. (That is not hypothetical: it is
 # what went wrong for a whole round before this was noticed.)
+#
+# Two caps, entries first and then bytes, so whichever of them cuts more is the one that
+# wins.
+#
+# The entry cap is opt-in (RALPH_PROGRESS_TAIL_ENTRIES=0 disables it) and keeps the last N
+# write-ups whole. Entries are delimited by the `--- <ticket>` line step 5.2 of the
+# template asks for, so a progress.txt written before that instruction existed has no
+# markers at all — in which case this does nothing and the byte cap alone applies, rather
+# than cutting the file somewhere that means nothing.
+#
+# The byte cap always runs, over whatever is left. `tail -c` cuts at a byte, so its first
+# line is normally the back half of a sentence — paid for and unusable. Drop it, but only
+# when the cut actually happened: a file under the cap would otherwise lose a real line.
 # ---------------------------------------------------------------------------
-PROGRESS_TAIL=$(tail -c "$RALPH_PROGRESS_TAIL_BYTES" "$PROGRESS_FILE" 2>/dev/null || true)
+_ralph_progress_src="$PROGRESS_FILE"
+_ralph_progress_tmp=""
+if [ "$RALPH_PROGRESS_TAIL_ENTRIES" -gt 0 ] && grep -q '^--- ' "$PROGRESS_FILE" 2>/dev/null; then
+  _ralph_progress_tmp="$(mktemp)" && awk -v keep="$RALPH_PROGRESS_TAIL_ENTRIES" '
+    /^--- / { n++; starts[n] = NR }
+    { line[NR] = $0 }
+    END {
+      first = (n > keep) ? starts[n - keep + 1] : 1
+      for (i = first; i <= NR; i++) print line[i]
+    }
+  ' "$PROGRESS_FILE" > "$_ralph_progress_tmp" && _ralph_progress_src="$_ralph_progress_tmp"
+fi
+
+_ralph_progress_size=$(wc -c < "$_ralph_progress_src" 2>/dev/null | tr -cd '0-9')
+[ -n "$_ralph_progress_size" ] || _ralph_progress_size=0
+if [ "$_ralph_progress_size" -gt "$RALPH_PROGRESS_TAIL_BYTES" ]; then
+  PROGRESS_TAIL=$(tail -c "$RALPH_PROGRESS_TAIL_BYTES" "$_ralph_progress_src" | sed 1d)
+else
+  PROGRESS_TAIL=$(cat "$_ralph_progress_src" 2>/dev/null || true)
+fi
 [ -n "$PROGRESS_TAIL" ] || PROGRESS_TAIL='(nothing recorded yet — this is the first iteration.)'
+[ -n "$_ralph_progress_tmp" ] && rm -f "$_ralph_progress_tmp"
 
-RALPH_PROMPT="@${TICKET_FILE}
+# ---------------------------------------------------------------------------
+# Assembly, invariant part first.
+#
+# Leading with the parts that do not change from iteration to iteration is what gives a
+# prompt cache a prefix to hit on. Here that prefix runs from the top of the template
+# through step 3 and prompt-extra.md; it ends at step 4, whose review instruction names
+# BASE_REF and so differs every time. That is most of the body, where before it was
+# nothing at all — the ticket path used to be the very first thing in the prompt.
+#
+# Worth being honest about the payoff: it only materialises when two iterations of a batch
+# land inside the cache's TTL, which a batch of long tickets will not, so it may be worth
+# nothing. It costs nothing either — an `@` reference resolves wherever it appears.
+# ---------------------------------------------------------------------------
+RALPH_PROMPT="${RALPH_PROMPT_BODY}
 
-${RALPH_PROMPT_BODY}
+## The ticket
+
+@${TICKET_FILE}
 
 ## Where the last few iterations got to
 
@@ -156,5 +204,19 @@ full history is not repeated here to keep prompts cheap). Each ticket's own
 ${PROGRESS_TAIL}
 </progress-excerpt>"
 
+# A previous attempt on this ticket ran out of context (ralph-loop.sh sets the flag). One
+# fixed sentence: what crosses from the failed attempt is the CATEGORY of constraint that
+# bit it, never anything it said or did. There is no narrative here to anchor the retry on
+# a wrong approach, and no self-report to have to trust. Appended last so it does not break
+# the cacheable prefix the assembly above is arranged around.
+if [ "${RALPH_CONTEXT_RETRY:-0}" = "1" ]; then
+  RALPH_PROMPT+="
+
+A previous attempt on this ticket ran out of context. Work more economically this time:
+read only what the ticket names, do not re-survey the repository, and work in smaller
+checkpointed steps, committing as you go."
+fi
+
 unset _ralph_template _ralph_order_sentence _ralph_tdd _ralph_iterative _ralph_verify
 unset _ralph_review _ralph_commit _ralph_body _ralph_extra
+unset _ralph_progress_size _ralph_progress_src _ralph_progress_tmp

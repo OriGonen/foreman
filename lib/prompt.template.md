@@ -1,13 +1,14 @@
-Implement the attached ticket, and only that ticket, to a high standard.
+Implement the ticket attached below, and only that ticket, to a high standard.
 
 __ORDER_SENTENCE__ Do not pick a different one, do not start the next one, and do not
 implement a dependency you think is missing — if the ticket genuinely cannot proceed
 because something it depends on has not landed, stop and say so in __PROGRESS_FILE__
 rather than widening the scope.
 
-If the ticket cross-references sibling tickets by path, read the ones it names — they
-often record a decision this ticket has to honour, or a surface it shares. Each ticket's
-own '__STATUS_LINE__' line is the source of truth for whether it has landed.
+If the ticket cross-references sibling tickets by path, read the ones it names directly —
+not their references in turn — because they often record a decision this ticket has to
+honour, or a surface it shares. Each ticket's own '__STATUS_LINE__' line is the source of
+truth for whether it has landed.
 
 ## 1. Agree the seams before writing code
 
@@ -50,10 +51,12 @@ __PROGRESS_FILE__.
 1. Set the ticket's '__STATUS_LINE__' line to '__DONE_WORD__' and check off its checklist
    items. The loop reads that line to decide what runs next, so a ticket left unflipped
    will be attempted again on the next iteration.
-2. Append to __PROGRESS_FILE__: a SHORT entry (aim for 5-10 lines, bullets not prose) —
-   the ticket, what you built, the seams you test-drove, review findings applied or
-   skipped, and anything the next iteration must know. This file is re-attached (as a
-   tail excerpt) to every future iteration's prompt, so verbosity here is a recurring
-   cost, not a one-off — skip detail that is already recoverable from the diff or the
-   ticket file itself.
+2. Append to __PROGRESS_FILE__: a SHORT entry, opening with a line of exactly
+   `--- <this ticket's path>` and then 3-8 bullets, not prose. Write only what the NEXT
+   iteration needs from you: a decision it has to honour, a surface it will build on, and
+   anything you deliberately did not do, with the reason — including review findings you
+   skipped. Do not narrate what you built: that is already recoverable from this ticket's
+   '__STATUS_LINE__' line and from the diff, and it is the bulk of what makes these
+   entries long. This file is re-attached (as a tail excerpt) to every future iteration's
+   prompt, so verbosity here is a recurring cost, not a one-off.
 3. __COMMIT_NOTE__

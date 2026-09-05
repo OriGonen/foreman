@@ -77,6 +77,22 @@ run_ralph() {
 
 done_count() { grep -l '^\*\*Status:\*\* implemented' "$1"/batch/issues/*.md 2>/dev/null | grep -c . ; }
 
+# $PATH with every directory that provides a `claude` removed, so a case can prove a code
+# path is reached without a runner installed — and, just as importantly, so a case that
+# touches `ralph order` can never reach a real (paid) model call by accident.
+path_without_claude() {
+  local dir out="" IFS=:
+  for dir in $PATH; do
+    [ -n "$dir" ] || continue
+    if [ -f "$dir/claude" ] || [ -f "$dir/claude.exe" ] ||
+       [ -f "$dir/claude.cmd" ] || [ -f "$dir/claude.bat" ]; then
+      continue
+    fi
+    out="${out:+$out:}$dir"
+  done
+  printf '%s' "$out"
+}
+
 case_is() {
   CASE="$1"
   case "$CASE" in *"$FILTER"*) printf '\n%s\n' "$CASE"; return 0 ;; esac
@@ -157,6 +173,58 @@ if case_is "attempts are capped per ticket"; then
   assert_eq "$ST" 20 "gives up rather than looping"
   assert_contains "$OUT" "after 3 attempt(s)" "stops at RALPH_TICKET_ATTEMPTS"
   assert_missing "$OUT" "(attempt 4)" "never makes a fourth attempt"
+fi
+
+if case_is "a crash with no signal at all is not retried"; then
+  # The narrowing that pays for itself: an unparseable failure carrying neither a transient
+  # nor a context signal is indistinguishable from a logic failure, and a blind second
+  # attempt at one of those costs a whole iteration to learn nothing.
+  repo="$(make_repo 2 crash-repo)"
+  RALPH_FAKE_BEHAVIOUR=crash run_ralph "$repo" run batch --unlimited
+
+  assert_eq "$ST" 20 "stops rather than retrying"
+  assert_missing "$OUT" "(attempt 2)" "makes no second attempt"
+  assert_eq "$(done_count "$repo")" "0" "nothing landed"
+fi
+
+if case_is "running out of context is retried even when no JSON came back"; then
+  repo="$(make_repo 2 ctx-retry-repo)"
+  log="$WORK/ctx-prompts.txt"
+  RALPH_FAKE_PROMPT_LOG="$log" RALPH_FAKE_BEHAVIOUR=context:land \
+    run_ralph "$repo" run batch --unlimited
+
+  assert_contains "$OUT" "(attempt 2)" "retried despite the unparseable payload"
+  assert_contains "$OUT" "out of context" "says what it saw"
+  assert_eq "$(done_count "$repo")" "2" "both tickets land in the end"
+
+  # And the retry is told, in one fixed sentence — the boolean crosses, the reply does not.
+  p1="$(awk '/^===== fake prompt 1 /{f=1;next} /^===== fake prompt /{f=0} f' "$log")"
+  p2="$(awk '/^===== fake prompt 2 /{f=1;next} /^===== fake prompt /{f=0} f' "$log")"
+  assert_missing "$p1" "ran out of context" "the first attempt is not told"
+  assert_contains "$p2" "ran out of context" "the second attempt is"
+  assert_contains "$p2" "do not re-survey the repository" "and is told what to do about it"
+fi
+
+if case_is "a ticket too big for one context is diagnosed, not just failed"; then
+  repo="$(make_repo 2 ctx-stuck-repo)"
+  RALPH_TICKET_ATTEMPTS=2 RALPH_FAKE_BEHAVIOUR=context run_ralph "$repo" run batch --unlimited
+
+  assert_eq "$ST" 20 "gives up after the attempts"
+  assert_contains "$OUT" "too large for one iteration" "says what is actually wrong"
+  assert_missing "$OUT" "is still not 'implemented'" "not the generic message"
+fi
+
+if case_is "a real context payload is not mistaken for a transient one"; then
+  # The real payload carries "api_error_status", whose field NAME contains the transient
+  # pattern 'api_error'. Classification order is the only thing keeping these apart.
+  repo="$(make_repo 2 ctx-json-repo)"
+  RALPH_TICKET_ATTEMPTS=1 RALPH_FAKE_BEHAVIOUR=context-json run_ralph "$repo" run batch --unlimited
+
+  assert_eq "$ST" 20 "stops for a human"
+  assert_contains "$OUT" "too large for one iteration" "diagnosed as a context failure"
+  runlog="$(cat "$repo/batch/ralph-runs.log")"
+  assert_contains "$runlog" "CONTEXT EXHAUSTED SIGNAL DETECTED" "recorded as context exhaustion"
+  assert_missing "$runlog" "TRANSIENT ERROR SIGNAL DETECTED" "and not as a transient error"
 fi
 
 if case_is "a dirty tree stops the run and is never auto-committed"; then
@@ -242,6 +310,32 @@ if case_is "init scaffolds a batch from its own ticket list"; then
   assert_contains "$order" "batch/issues/01-ticket.md" "the order block lists ticket 1"
   assert_contains "$order" "batch/issues/02-ticket.md" "the order block lists ticket 2"
   assert_contains "$OUT" "created  batch/progress.txt" "progress.txt is scaffolded"
+fi
+
+if case_is "a one-ticket batch is not sent to a model to be ordered"; then
+  repo="$(make_repo 1 order-one-repo)"
+  { echo '<!-- ORDER:BEGIN -->'
+    echo 'batch/issues/01-ticket.md'
+    echo '<!-- ORDER:END -->'; } > "$repo/batch/order.md"
+  before="$(cat "$repo/batch/order.md")"
+
+  # Everything here runs with `claude` off PATH: the skip has to happen BEFORE the runner
+  # check, and nothing in this suite may ever reach a real model call.
+  nopath="$(path_without_claude)"
+  assert_eq "$(PATH="$nopath" command -v claude)" "" "the fixture PATH really has no claude"
+
+  OUT="$(cd "$repo" && PATH="$nopath" "$RALPH" order batch 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "order exits 0"
+  assert_contains "$OUT" "the order is already decided" "it says why it skipped"
+  assert_missing "$OUT" "is not on PATH" "it skipped before looking for a runner"
+  assert_eq "$(cat "$repo/batch/order.md")" "$before" "order.md is byte-unchanged"
+
+  # A stale order.md is the thing `ralph order` exists to fix, so the ticket count alone
+  # must never be enough to skip: the one ticket here is missing from the order block.
+  printf '%s\n' '<!-- ORDER:BEGIN -->' '<!-- ORDER:END -->' > "$repo/batch/order.md"
+  OUT="$(cd "$repo" && PATH="$nopath" "$RALPH" order batch 2>&1)"; ST=$?
+  assert_missing "$OUT" "the order is already decided" "a stale order.md is not skipped"
+  assert_contains "$OUT" "is not on PATH" "it got as far as looking for a runner"
 fi
 
 if case_is "init and --unordered honour RALPH_ISSUES_DIRS"; then

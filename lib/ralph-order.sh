@@ -12,9 +12,13 @@
 #
 # Costs one model call, on RALPH_MODEL by default — ordering rarely needs the same model
 # the tickets themselves run on, so set RALPH_ORDERING_MODEL in ralph.conf to point it at
-# something cheaper without touching RALPH_MODEL. If `claude` is not on PATH, this prints a
-# note and exits 0 rather than failing whatever called it — order.md just keeps its
-# filename order.
+# something cheaper without touching RALPH_MODEL. Effort is RALPH_ORDERING_EFFORT, high by
+# default. If `claude` is not on PATH, this prints a note and exits 0 rather than failing
+# whatever called it — order.md just keeps its filename order.
+#
+# The call is skipped entirely for a batch of one ticket that order.md already lists: there
+# is no order left to decide. A stale order.md is still sent, since picking up tickets added
+# since it was written is half of what this command is for.
 set -uo pipefail
 
 RALPH_TOOL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -45,15 +49,12 @@ source "$RALPH_TOOL_DIR/ralph-config.sh" || exit 1
   exit 1
 }
 
-if ! command -v claude >/dev/null 2>&1; then
-  echo "ralph order: 'claude' is not on PATH — skipping." >&2
-  echo "              $ORDER_FILE keeps its filename order; re-run \`ralph order $BATCH_DIR\` once it is." >&2
-  exit 0
-fi
-
 # The batch's own ticket list, from the one file that knows how a batch answers that —
 # including any RALPH_ISSUES_DIRS the conf sets. `--unordered` rather than `--all` because
 # re-ordering has to see tickets added since order.md was last written.
+#
+# Gathered before the PATH check below, because the "nothing to decide" cases are answers
+# in their own right and should not depend on having a runner installed.
 tickets=()
 while IFS= read -r f; do
   [ -n "$f" ] && tickets+=("$f")
@@ -64,13 +65,39 @@ if [ "${#tickets[@]}" -eq 0 ]; then
   exit 0
 fi
 
+# One ticket, and order.md already lists exactly it: there is no order left to decide, so
+# a model call would only write back what is there. Both halves matter. The count alone is
+# not enough — `ralph order` also exists to pick up tickets added since order.md was last
+# written, and ralph-next.sh's `--all` reads only the ORDER block, so skipping on the count
+# would silently leave a new ticket out of the order and the loop would never run it.
+#
+# Deliberately not extended to two tickets: which of them goes first is exactly the
+# question, and getting it backwards costs more than the one small call it would save.
+if [ "${#tickets[@]}" -eq 1 ]; then
+  ordered=$(bash "$RALPH_TOOL_DIR/ralph-next.sh" "$BATCH_DIR" --all 2>/dev/null || true)
+  if [ "$ordered" = "${tickets[0]}" ]; then
+    echo "ralph order: $BATCH_DIR has one ticket — the order is already decided."
+    echo "             $ORDER_FILE is unchanged."
+    exit 0
+  fi
+fi
+
+if ! command -v claude >/dev/null 2>&1; then
+  echo "ralph order: 'claude' is not on PATH — skipping." >&2
+  echo "              $ORDER_FILE keeps its filename order; re-run \`ralph order $BATCH_DIR\` once it is." >&2
+  exit 0
+fi
+
 # Ordering is a much smaller job than implementing a ticket, so it defaults to RALPH_MODEL
 # rather than automatically riding whatever the tickets themselves run on — set
-# RALPH_ORDERING_MODEL in ralph.conf to point it at something cheaper. Effort stays fixed
-# at high regardless of RALPH_EFFORT: reading every ticket and weighing dependencies is the
-# one place in this toolkit where skimping on effort risks a bad order, even on a small model.
+# RALPH_ORDERING_MODEL in ralph.conf to point it at something cheaper.
+#
+# Effort defaults to high rather than following RALPH_EFFORT, because reading every ticket
+# and weighing dependencies is the one place in this toolkit where skimping risks a bad
+# order that then propagates through every iteration of the batch. RALPH_ORDERING_EFFORT is
+# there for anyone who has decided otherwise for their batch; nothing changes if it is unset.
 MODEL="${RALPH_ORDERING_MODEL:-$RALPH_MODEL}"
-EFFORT=high
+EFFORT="${RALPH_ORDERING_EFFORT:-high}"
 
 PROMPT=$(cat <<PROMPT_EOF
 You are ordering the tickets in $BATCH_DIR for the ralph ticket loop, which implements

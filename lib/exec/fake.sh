@@ -15,6 +15,13 @@
 #     error    exit non-zero with an error payload
 #     transient  exit non-zero with an overloaded_error payload (the loop should retry)
 #     limit    print a usage-limit string instead of JSON (the loop should pause)
+#     crash    exit non-zero with output that is not JSON and carries no signal at all —
+#              indistinguishable from a logic failure, so the loop should NOT retry it
+#     context  exit non-zero with an unparseable context-overflow string: the CLI died
+#              before it could emit JSON. The loop should retry anyway.
+#     context-json  the same failure as the CLI actually reports it — valid JSON with
+#              terminal_reason "prompt_too_long". Carries "api_error_status" too, which is
+#              why classifying context exhaustion before transient matters.
 #   RALPH_FAKE_PROMPT_LOG  file to append each prompt to, with a separator. Optional.
 #   RALPH_FAKE_COST        reported cost per iteration in USD. Default 0.01.
 #
@@ -117,6 +124,27 @@ exec_run() {
       ;;
     limit)
       printf 'Claude AI usage limit reached|%s\n' "$(( $(date +%s) + 3600 ))"
+      return 1
+      ;;
+    crash)
+      printf 'claude: unexpected failure, no output\n'
+      return 1
+      ;;
+    context)
+      printf 'prompt is too long: 250000 tokens > 200000 maximum\n'
+      return 1
+      ;;
+    context-json)
+      # Trimmed from a real payload: `claude --print --output-format json` fed a prompt of
+      # ~894k tokens. Note subtype "success" alongside is_error true — the subtype is no
+      # help here, terminal_reason is.
+      printf '{"type":"result","subtype":"success","is_error":true,'
+      printf '"terminal_reason":"prompt_too_long","api_error_status":400,'
+      printf '"session_id":"fake-session","num_turns":1,"duration_ms":900,'
+      printf '"duration_api_ms":0,"total_cost_usd":0,'
+      printf '"usage":{"input_tokens":0,"output_tokens":0,'
+      printf '"cache_read_input_tokens":0,"cache_creation_input_tokens":0},'
+      printf '"result":"Prompt is too long - the request is ~894261 tokens (limit 200000)."}\n'
       return 1
       ;;
     *)

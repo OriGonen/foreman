@@ -50,7 +50,23 @@
 # The one-off `ralph order` pass (run automatically by `ralph init`) defaults to
 # RALPH_MODEL above. Point it at something cheaper without touching what tickets run on:
 #RALPH_ORDERING_MODEL=claude-sonnet-5
-# Extra arguments passed through to `claude`, as a bash array:
+# Its effort defaults to high rather than following RALPH_EFFORT: reading every ticket and
+# weighing dependencies is the one pass where skimping risks a bad order, and a bad order
+# then propagates through every iteration of the batch. Lower it only deliberately.
+#RALPH_ORDERING_EFFORT=high
+# Extra arguments passed through to `claude`, as a bash array. Nothing is passed by
+# default: each of these trades capability for tokens, so they stay opt-in.
+#
+# Turning off tools the tickets do not need removes a class of expensive detour — a web
+# search that pulls a page of documentation into the context is paid for in full, in every
+# iteration it happens. (It also trims those tools out of the system prompt's schema,
+# though that part is small and is not measured here.) The cost runs the other way too: a
+# ticket that legitimately needs to look something up will fail with this set, which is why
+# it is shown commented rather than made the default.
+#RALPH_CLAUDE_ARGS=(--disallowed-tools WebSearch WebFetch)
+#
+# The mirror image — an allowlist — is tighter still, and correspondingly easier to get
+# wrong, since anything you forget to name is simply gone:
 #RALPH_CLAUDE_ARGS=(--allowed-tools Bash Read Edit)
 
 # ---------------------------------------------------------------------------
@@ -67,12 +83,25 @@
 
 # Skills the agent should use for the test-first and review steps. Empty means "do it,
 # but without naming a skill".
+#
+# RALPH_REVIEW_SKILL is plausibly the largest optional line item in a run. Pointing it at a
+# multi-agent review skill fans out sub-agents that each re-read the diff and this repo's
+# standards, once per iteration — worth it where a missed regression is expensive, and
+# worth knowing about where it is not. Left empty, step 4 is an in-context self-review by
+# the agent that just wrote the code: weaker, and a fraction of the price.
 #RALPH_TDD_SKILL="mattpocock-skills:tdd"
 #RALPH_REVIEW_SKILL="mattpocock-skills:code-review"
 
 # Anything else that is specific to this batch goes in prompt-extra.md next to this file.
 # It is spliced into the prompt between Verify and Review, under its own heading. Leave
 # the file out entirely if there is nothing to add.
+#
+# The highest-value thing to put there is a short map of the repository: where things live,
+# which directories are generated or vendored and should not be surveyed, where the tests
+# for a given area are. Every iteration starts on a fresh context, so an agent without that
+# map rediscovers the layout every time, at full price. Written down once, it is paid for
+# once per iteration and removes that exploration phase from all of them. Keep it short —
+# like progress.txt, it is a recurring cost.
 #RALPH_PROMPT_EXTRA=prompt-extra.md
 
 # ---------------------------------------------------------------------------
@@ -97,6 +126,13 @@
 # prompt. Per batch, never shared.
 #RALPH_PROGRESS_FILE=progress.txt
 #RALPH_PROGRESS_TAIL_BYTES=6000
+# On top of the byte cap, optionally keep only the last N entries, whole. 0 disables it,
+# which is the default: entries are delimited by the `--- <ticket>` line the prompt asks
+# each iteration to write, so a progress.txt started before that instruction existed has no
+# markers and quietly falls back to the byte tail. Worth turning on for a batch of short
+# entries, where it can cut the excerpt well below the byte cap. Both caps apply, and
+# whichever cuts more wins.
+#RALPH_PROGRESS_TAIL_ENTRIES=0
 
 # ---------------------------------------------------------------------------
 # Budgets — 0 means no limit

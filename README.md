@@ -142,7 +142,14 @@ RALPH_ORDERING_MODEL=claude-haiku-4-5 ralph order .scratch/my-batch
 ```
 
 (or set `RALPH_ORDERING_MODEL` in the batch's `ralph.conf` to make that the default). Effort
-for this pass stays fixed at `high` regardless of `RALPH_EFFORT`.
+for this pass defaults to `high` rather than following `RALPH_EFFORT`, because a bad order
+propagates through every iteration of the batch; `RALPH_ORDERING_EFFORT` overrides that for
+anyone who has weighed it and decided otherwise.
+
+A batch of exactly one ticket, already the only entry in `order.md`, skips the call
+entirely — there is no order left to decide. The second half of that condition is the point:
+a batch whose `order.md` is stale still gets ordered, because that is what picks up tickets
+added since it was written.
 
 ### The prompt
 
@@ -154,6 +161,13 @@ prose rather than naming a command that does not exist.
 Anything that fits no slot goes in `<batch>/prompt-extra.md`, spliced in under its own
 heading between Verify and Review — a project-specific instruction to drive UI tickets
 through a real browser, say.
+
+It is also the cheapest lever in the toolkit. Every iteration starts on a fresh context, so
+an agent with no map of the repository rediscovers the layout every time, at full price. A
+short map here — where things live, which directories are generated or vendored and should
+not be surveyed, where the tests for an area are — is paid for once per iteration and
+removes that exploration phase from all of them. Keep it short: like `progress.txt`, it is a
+recurring cost rather than a one-off.
 
 `ralph dry-run` prints the exact assembled prompt and sends nothing. Read it once before the
 first real run of any new batch.
@@ -218,6 +232,15 @@ It stops and asks for a human (exit **20**) when a ticket did not reach its done
 its attempts, or when an iteration left uncommitted changes behind. It never auto-commits
 that work — the point of the per-iteration review base is that nothing lands unreviewed.
 
+Within a run, a ticket is retried only when a second attempt could plausibly survive: the
+model was briefly unavailable, the iteration ran out of context, or the CLI got far enough
+to describe what went wrong. A crash that reports nothing at all is not retried — it looks
+exactly like a logic failure, and a blind second attempt costs a whole iteration to learn
+nothing. Running out of context is retried even when no JSON came back, since that is the
+case a fresh context might carry, and the retry is told to work smaller; if it still fails
+that way, the run stops saying the ticket is too large for one iteration rather than that it
+merely did not land. `ralph report <batch> --failures` flags those as `out-of-context`.
+
 Exit **0** means every ticket in the batch is done. Exit **1** is a preflight failure or bad
 usage; nothing has been spent.
 
@@ -227,8 +250,13 @@ usage; nothing has been spent.
 RALPH_MAX_COST_USD=25 RALPH_MAX_MINUTES=180 ralph run .scratch/my-batch --unlimited
 ```
 
-The cost guard is the reliable brake and is checked *before* each iteration, so it never
-overshoots. Detecting a limit in the response is best-effort pattern-matching on top of it,
+The cost guard is the reliable brake. It is checked *before* each iteration and never
+*starts* one once the budget is reached — so a run overshoots by at most the cost of a
+single iteration: $24 spent against a $25 budget still buys one more full iteration, and
+that one may cost $30. Stopping earlier would need an estimate of what the next iteration
+will cost, which the toolkit has no model for.
+
+Detecting a limit in the response is best-effort pattern-matching on top of it,
 there so that hitting a wall mid-run pauses instead of burning the remaining iterations on
 errors that would all fail identically.
 

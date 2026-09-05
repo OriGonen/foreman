@@ -177,6 +177,11 @@ RALPH_ISSUES_EXCLUDE="${RALPH_ISSUES_EXCLUDE:-README.md spec.md order.md}"
 # --- the agent's notes -----------------------------------------------------
 PROGRESS_FILE="$(_ralph_path "${RALPH_PROGRESS_FILE:-}" progress.txt)"
 RALPH_PROGRESS_TAIL_BYTES="${RALPH_PROGRESS_TAIL_BYTES:-6000}"
+# Optional entry cap on top of the byte cap; 0 disables it. Off by default because entry
+# boundaries are the `--- <ticket>` marker the prompt template asks for, which only exists
+# in entries written after that instruction did — so a default-on setting would behave one
+# way on a fresh batch and another on an existing one.
+RALPH_PROGRESS_TAIL_ENTRIES="${RALPH_PROGRESS_TAIL_ENTRIES:-0}"
 PROMPT_EXTRA_FILE="$(_ralph_path "${RALPH_PROMPT_EXTRA:-}" prompt-extra.md)"
 
 # --- telemetry (append-only, never read back by the loop) ------------------
@@ -226,7 +231,8 @@ if ! ralph_exec_is_mode "$RALPH_EXEC"; then
   return 1 2>/dev/null || exit 1
 fi
 
-for _ralph_int in RALPH_TICKET_ATTEMPTS RALPH_MAX_MINUTES RALPH_PROGRESS_TAIL_BYTES; do
+for _ralph_int in RALPH_TICKET_ATTEMPTS RALPH_MAX_MINUTES RALPH_PROGRESS_TAIL_BYTES \
+                  RALPH_PROGRESS_TAIL_ENTRIES; do
   if ! [[ "${!_ralph_int}" =~ ^[0-9]+$ ]]; then
     echo "ralph: $_ralph_int must be a whole number (got '${!_ralph_int}')" >&2
     return 1 2>/dev/null || exit 1
