@@ -156,5 +156,17 @@ full history is not repeated here to keep prompts cheap). Each ticket's own
 ${PROGRESS_TAIL}
 </progress-excerpt>"
 
+# A previous attempt on this ticket ran out of context (ralph-loop.sh sets the flag). One
+# fixed sentence: what crosses from the failed attempt is the CATEGORY of constraint that
+# bit it, never anything it said or did. There is no narrative here to anchor the retry on
+# a wrong approach, and no self-report to have to trust.
+if [ "${RALPH_CONTEXT_RETRY:-0}" = "1" ]; then
+  RALPH_PROMPT+="
+
+A previous attempt on this ticket ran out of context. Work more economically this time:
+read only what the ticket names, do not re-survey the repository, and work in smaller
+checkpointed steps, committing as you go."
+fi
+
 unset _ralph_template _ralph_order_sentence _ralph_tdd _ralph_iterative _ralph_verify
 unset _ralph_review _ralph_commit _ralph_body _ralph_extra

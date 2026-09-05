@@ -293,6 +293,11 @@ exec_prepare || exit 1
 FINAL_STATUS="$EXIT_DONE"
 CURRENT_TICKET=""
 ATTEMPTS_ON_CURRENT=0
+# Whether the PREVIOUS attempt on the current ticket ran out of context. A boolean, held
+# in memory beside the attempt count: the next attempt is told that it happened, never
+# what the failed one said. There is no narrative here to anchor a retry on a wrong
+# approach, and nothing self-reported to have to trust.
+PREV_CONTEXT_EXHAUSTED=0
 
 while true; do
   if [ "$PAUSE_REQUESTED" -eq 1 ]; then
@@ -323,6 +328,7 @@ while true; do
   if [ "$TICKET_FILE" != "$CURRENT_TICKET" ]; then
     CURRENT_TICKET="$TICKET_FILE"
     ATTEMPTS_ON_CURRENT=0
+    PREV_CONTEXT_EXHAUSTED=0
   fi
   ATTEMPTS_ON_CURRENT=$((ATTEMPTS_ON_CURRENT + 1))
 
@@ -357,6 +363,12 @@ while true; do
     FINAL_STATUS="$EXIT_NEEDS_HUMAN"
     break
   fi
+
+  # A previous attempt on THIS ticket ran out of context. Say so — working smaller is the
+  # one change that might make the difference on a second pass, and a fresh context on its
+  # own will not produce it.
+  RALPH_CONTEXT_RETRY=0
+  [ "$ATTEMPTS_ON_CURRENT" -gt 1 ] && [ "$PREV_CONTEXT_EXHAUSTED" = "1" ] && RALPH_CONTEXT_RETRY=1
 
   # shellcheck source=ralph-prompt.sh
   source "$RALPH_TOOL_DIR/ralph-prompt.sh"
@@ -399,6 +411,9 @@ while true; do
   limit_hit=$(verdict_get "$VERDICT_FILE" limit_hit)
   limit_reset=$(verdict_get "$VERDICT_FILE" limit_reset)
   transient=$(verdict_get "$VERDICT_FILE" transient)
+  parse_ok=$(verdict_get "$VERDICT_FILE" parse_ok)
+  context_exhausted=$(verdict_get "$VERDICT_FILE" context_exhausted)
+  PREV_CONTEXT_EXHAUSTED="${context_exhausted:-0}"
 
   # --- decide what happens next ---------------------------------------------
 
@@ -446,15 +461,36 @@ while true; do
   fi
 
   # 5. It did not land. Retry within the run only if there is an attempt left and the
-  #    failure looked transient; otherwise stop rather than spend the budget watching the
-  #    same ticket fail.
-  if [ "$ATTEMPTS_ON_CURRENT" -lt "$TICKET_ATTEMPTS" ] && { [ "$transient" = "1" ] || [ "$agent_status" -ne 0 ]; }; then
-    warn "   ✗ did not land (exit $agent_status). Retrying — attempt $((ATTEMPTS_ON_CURRENT + 1)) of $TICKET_ATTEMPTS."
+  #    failure is one a second attempt could plausibly survive; otherwise stop rather than
+  #    spend the budget watching the same ticket fail the same way.
+  #
+  #    Three cases qualify, and the distinctions matter:
+  #      - transient: the model was briefly unavailable. The classic retry.
+  #      - context exhausted: the conversation outgrew the window. Deliberately NOT gated
+  #        on parse_ok — an overflow often kills the CLI before it emits any JSON, and that
+  #        is exactly the case a fresh context might carry. The retry is told about it.
+  #      - a non-zero exit from a run that DID produce a parseable payload: the CLI got far
+  #        enough to report, so the failure is a described one rather than a crash.
+  #    A crash with no payload and neither signal is not retried: nothing distinguishes it
+  #    from a genuine logic failure, and blind second attempts at those cost a full
+  #    iteration to learn nothing.
+  if [ "$ATTEMPTS_ON_CURRENT" -lt "$TICKET_ATTEMPTS" ] &&
+     { [ "$transient" = "1" ] || [ "$context_exhausted" = "1" ] ||
+       { [ "$agent_status" -ne 0 ] && [ "$parse_ok" = "1" ]; }; }; then
+    warn "   ✗ did not land (exit $agent_status)$([ "$context_exhausted" = "1" ] && printf ', out of context')."
+    warn "     Retrying — attempt $((ATTEMPTS_ON_CURRENT + 1)) of $TICKET_ATTEMPTS."
     continue
   fi
 
   warn ""
-  warn "$TICKET_FILE is still not '$RALPH_DONE_WORD' after $ATTEMPTS_ON_CURRENT attempt(s)."
+  if [ "$context_exhausted" = "1" ]; then
+    # A second blind retry cannot fix a structural size mismatch, so say what it is rather
+    # than leaving it to be re-derived from the log.
+    warn "$TICKET_FILE ran out of context on its last attempt. That usually means the ticket is"
+    warn "too large for one iteration — split it into smaller tickets rather than rerunning as-is."
+  else
+    warn "$TICKET_FILE is still not '$RALPH_DONE_WORD' after $ATTEMPTS_ON_CURRENT attempt(s)."
+  fi
   warn "Read the tail of $RUN_LOG and of $PROGRESS_FILE, then either fix it by hand or"
   warn "adjust the ticket. Rerun to continue from here."
   FINAL_STATUS="$EXIT_NEEDS_HUMAN"

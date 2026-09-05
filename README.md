@@ -218,6 +218,15 @@ It stops and asks for a human (exit **20**) when a ticket did not reach its done
 its attempts, or when an iteration left uncommitted changes behind. It never auto-commits
 that work — the point of the per-iteration review base is that nothing lands unreviewed.
 
+Within a run, a ticket is retried only when a second attempt could plausibly survive: the
+model was briefly unavailable, the iteration ran out of context, or the CLI got far enough
+to describe what went wrong. A crash that reports nothing at all is not retried — it looks
+exactly like a logic failure, and a blind second attempt costs a whole iteration to learn
+nothing. Running out of context is retried even when no JSON came back, since that is the
+case a fresh context might carry, and the retry is told to work smaller; if it still fails
+that way, the run stops saying the ticket is too large for one iteration rather than that it
+merely did not land. `ralph report <batch> --failures` flags those as `out-of-context`.
+
 Exit **0** means every ticket in the batch is done. Exit **1** is a preflight failure or bad
 usage; nothing has been spent.
 
@@ -227,8 +236,13 @@ usage; nothing has been spent.
 RALPH_MAX_COST_USD=25 RALPH_MAX_MINUTES=180 ralph run .scratch/my-batch --unlimited
 ```
 
-The cost guard is the reliable brake and is checked *before* each iteration, so it never
-overshoots. Detecting a limit in the response is best-effort pattern-matching on top of it,
+The cost guard is the reliable brake. It is checked *before* each iteration and never
+*starts* one once the budget is reached — so a run overshoots by at most the cost of a
+single iteration: $24 spent against a $25 budget still buys one more full iteration, and
+that one may cost $30. Stopping earlier would need an estimate of what the next iteration
+will cost, which the toolkit has no model for.
+
+Detecting a limit in the response is best-effort pattern-matching on top of it,
 there so that hitting a wall mid-run pauses instead of burning the remaining iterations on
 errors that would all fail identically.
 

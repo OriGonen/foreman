@@ -159,6 +159,58 @@ if case_is "attempts are capped per ticket"; then
   assert_missing "$OUT" "(attempt 4)" "never makes a fourth attempt"
 fi
 
+if case_is "a crash with no signal at all is not retried"; then
+  # The narrowing that pays for itself: an unparseable failure carrying neither a transient
+  # nor a context signal is indistinguishable from a logic failure, and a blind second
+  # attempt at one of those costs a whole iteration to learn nothing.
+  repo="$(make_repo 2 crash-repo)"
+  RALPH_FAKE_BEHAVIOUR=crash run_ralph "$repo" run batch --unlimited
+
+  assert_eq "$ST" 20 "stops rather than retrying"
+  assert_missing "$OUT" "(attempt 2)" "makes no second attempt"
+  assert_eq "$(done_count "$repo")" "0" "nothing landed"
+fi
+
+if case_is "running out of context is retried even when no JSON came back"; then
+  repo="$(make_repo 2 ctx-retry-repo)"
+  log="$WORK/ctx-prompts.txt"
+  RALPH_FAKE_PROMPT_LOG="$log" RALPH_FAKE_BEHAVIOUR=context:land \
+    run_ralph "$repo" run batch --unlimited
+
+  assert_contains "$OUT" "(attempt 2)" "retried despite the unparseable payload"
+  assert_contains "$OUT" "out of context" "says what it saw"
+  assert_eq "$(done_count "$repo")" "2" "both tickets land in the end"
+
+  # And the retry is told, in one fixed sentence — the boolean crosses, the reply does not.
+  p1="$(awk '/^===== fake prompt 1 /{f=1;next} /^===== fake prompt /{f=0} f' "$log")"
+  p2="$(awk '/^===== fake prompt 2 /{f=1;next} /^===== fake prompt /{f=0} f' "$log")"
+  assert_missing "$p1" "ran out of context" "the first attempt is not told"
+  assert_contains "$p2" "ran out of context" "the second attempt is"
+  assert_contains "$p2" "do not re-survey the repository" "and is told what to do about it"
+fi
+
+if case_is "a ticket too big for one context is diagnosed, not just failed"; then
+  repo="$(make_repo 2 ctx-stuck-repo)"
+  RALPH_TICKET_ATTEMPTS=2 RALPH_FAKE_BEHAVIOUR=context run_ralph "$repo" run batch --unlimited
+
+  assert_eq "$ST" 20 "gives up after the attempts"
+  assert_contains "$OUT" "too large for one iteration" "says what is actually wrong"
+  assert_missing "$OUT" "is still not 'implemented'" "not the generic message"
+fi
+
+if case_is "a real context payload is not mistaken for a transient one"; then
+  # The real payload carries "api_error_status", whose field NAME contains the transient
+  # pattern 'api_error'. Classification order is the only thing keeping these apart.
+  repo="$(make_repo 2 ctx-json-repo)"
+  RALPH_TICKET_ATTEMPTS=1 RALPH_FAKE_BEHAVIOUR=context-json run_ralph "$repo" run batch --unlimited
+
+  assert_eq "$ST" 20 "stops for a human"
+  assert_contains "$OUT" "too large for one iteration" "diagnosed as a context failure"
+  runlog="$(cat "$repo/batch/ralph-runs.log")"
+  assert_contains "$runlog" "CONTEXT EXHAUSTED SIGNAL DETECTED" "recorded as context exhaustion"
+  assert_missing "$runlog" "TRANSIENT ERROR SIGNAL DETECTED" "and not as a transient error"
+fi
+
 if case_is "a dirty tree stops the run and is never auto-committed"; then
   repo="$(make_repo 2 dirty-repo)"
   RALPH_FAKE_BEHAVIOUR=dirty run_ralph "$repo" run batch --unlimited
