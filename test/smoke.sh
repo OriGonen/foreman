@@ -335,6 +335,54 @@ if case_is "--unordered ignores an existing order.md"; then
   assert_eq "$(printf '%s\n' "$OUT" | grep -c .)" "3" "and sees all of them"
 fi
 
+if case_is "a && in a check command survives into the prompt"; then
+  # Bash's ${var//pat/repl} treats & in the replacement as "the text that matched" — a
+  # RALPH_TEST_CMD containing && used to render as two copies of __VERIFY_BLOCK__'s own
+  # marker text instead of the command. dry-run exits before exec_prepare, so no sandbox
+  # is touched.
+  repo="$(make_repo 1 ampersand-repo)"
+  printf 'RALPH_TEST_CMD="node a.js && node b.js"\n' >> "$repo/batch/ralph.conf"
+  git -C "$repo" commit --quiet -am "add test cmd"
+
+  run_ralph "$repo" dry-run batch
+  assert_eq "$ST" 0 "dry-run exits 0"
+  assert_contains "$OUT" "node a.js && node b.js" "the command survives verbatim"
+  assert_missing "$OUT" "__VERIFY_BLOCK__" "the marker is not left behind"
+fi
+
+if case_is "RALPH_ISSUES_DIRS='.' means the batch directory, not the repo root"; then
+  # A relative RALPH_ISSUES_DIRS entry used to resolve against the repo root first, so "."
+  # meant the repo's own top level rather than the batch directory.
+  repo="$WORK/dot-issues-repo"
+  mkdir -p "$repo/batch"
+  git -C "$repo" init --quiet
+  git -C "$repo" config core.autocrlf false
+  printf '# decoy repo-root file\n' > "$repo/CLAUDE.md"
+  printf '# Ticket 1\n\n**Status:** todo\n' > "$repo/batch/01-ticket.md"
+  printf '# Ticket 2\n\n**Status:** todo\n' > "$repo/batch/02-ticket.md"
+  printf 'RALPH_EXEC=fake\nRALPH_ISSUES_DIRS="."\n' > "$repo/batch/ralph.conf"
+
+  run_ralph "$repo" next batch --unordered
+  assert_eq "$ST" 0 "--unordered exits 0"
+  assert_contains "$OUT" "01-ticket.md" "it lists the first ticket"
+  assert_contains "$OUT" "02-ticket.md" "and the second"
+  assert_missing "$OUT" "CLAUDE.md" "it does not pick up the repo-root decoy"
+fi
+
+if case_is "a batch whose tickets are not where RALPH_ISSUES_DIRS looks says where it looked"; then
+  repo="$WORK/misplaced-tickets-repo"
+  mkdir -p "$repo/batch"
+  git -C "$repo" init --quiet
+  git -C "$repo" config core.autocrlf false
+  printf '# Ticket 1\n\n**Status:** todo\n' > "$repo/batch/01-ticket.md"
+  printf 'RALPH_EXEC=fake\n' > "$repo/batch/ralph.conf"
+
+  run_ralph "$repo" status batch
+  assert_contains "$OUT" "batch/issues" "names the resolved (default) issues path"
+  assert_contains "$OUT" "(missing)" "and says it does not exist"
+  assert_contains "$OUT" 'RALPH_ISSUES_DIRS="."' "suggests the one-line fix"
+fi
+
 if case_is "--unordered is quiet about an empty batch, the other modes are not"; then
   repo="$WORK/empty-repo"
   mkdir -p "$repo/batch/issues"

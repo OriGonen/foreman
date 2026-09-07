@@ -174,6 +174,56 @@ ORDER_FILE="$(_ralph_path "${RALPH_ORDER_FILE:-}" order.md)"
 RALPH_ISSUES_DIRS="${RALPH_ISSUES_DIRS:-issues}"
 RALPH_ISSUES_EXCLUDE="${RALPH_ISSUES_EXCLUDE:-README.md spec.md order.md}"
 
+# Resolve RALPH_ISSUES_DIRS. Absolute paths are used as given; a relative entry is
+# BATCH-relative first, because every ralph command stands at the repo root and trying the
+# repo first made "." mean the repo root — quietly turning the repo's own top-level *.md
+# into this batch's tickets. A genuinely repo-relative entry ("docs/tickets") still
+# resolves, since nothing of that name exists under the batch.
+ralph_issues_dirs() {            # one resolved path per line, existing or not
+  local dir
+  for dir in $RALPH_ISSUES_DIRS; do
+    case "$dir" in
+      /*|[A-Za-z]:[/\\]*)                   printf '%s\n' "$dir" ;;
+      *) if [ -d "$BATCH_DIR/$dir" ]; then  printf '%s\n' "$BATCH_DIR/$dir"
+         else                               printf '%s\n' "$dir"; fi ;;
+    esac
+  done
+}
+
+# Explains a batch that looks empty: which directories RALPH_ISSUES_DIRS actually resolved
+# to, and — the thing that costs a whole debugging detour without it — whether the tickets
+# are sitting directly in the batch directory instead. The default RALPH_ISSUES_DIRS="issues"
+# looks in <batch>/issues, so a batch directory that is itself named issues/ looks in
+# issues/issues and quietly finds nothing.
+ralph_issues_hint() {
+  local dir shown base excluded n=0
+  for dir in $RALPH_ISSUES_DIRS; do
+    case "$dir" in
+      /*|[A-Za-z]:[/\\]*) shown="$dir" ;;
+      *)                  shown="$BATCH_DIR/$dir" ;;
+    esac
+    if [ -d "$shown" ]; then printf '  looked in: %s\n' "$shown"
+    else                     printf '  looked in: %s   (missing)\n' "$shown"
+    fi
+  done
+  printf '  from RALPH_ISSUES_DIRS="%s", resolved against the batch directory.\n' "$RALPH_ISSUES_DIRS"
+
+  for f in "$BATCH_DIR"/*.md; do
+    [ -f "$f" ] || continue
+    base="$(basename "$f")"
+    local skip=0
+    for excluded in $RALPH_ISSUES_EXCLUDE; do
+      [ "$base" = "$excluded" ] && skip=1 && break
+    done
+    [ "$skip" -eq 1 ] || n=$((n + 1))
+  done
+  if [ "$n" -gt 0 ]; then
+    printf '  But %s itself holds %s *.md file(s). If the tickets live\n' "$BATCH_DIR" "$n"
+    printf '  directly in the batch directory, set  RALPH_ISSUES_DIRS="."\n'
+    printf '  in %s\n' "$RALPH_CONF"
+  fi
+}
+
 # --- the agent's notes -----------------------------------------------------
 PROGRESS_FILE="$(_ralph_path "${RALPH_PROGRESS_FILE:-}" progress.txt)"
 RALPH_PROGRESS_TAIL_BYTES="${RALPH_PROGRESS_TAIL_BYTES:-6000}"

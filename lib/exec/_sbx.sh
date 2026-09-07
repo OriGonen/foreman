@@ -8,10 +8,25 @@
 
 _sbx_sh() { sbx exec "$RALPH_SANDBOX" sh -c "$1"; }
 
-# The clone lives at the same path inside the container as the repo does on the host, so
-# the origin URL is what distinguishes the two arrangements.
+_SBX_SOURCE_MOUNT=/run/sandbox/source
+
+# `--clone` mounts the host repo read-only at $_SBX_SOURCE_MOUNT and clones it. The MOUNT is
+# the invariant; origin is not — sbx only adds origin=$_SBX_SOURCE_MOUNT when the host repo
+# has no origin of its own, so a repo with a real GitHub remote keeps that URL in the clone
+# and this check used to reject a correctly-created clone sandbox.
 _sbx_is_clone_mode() {
-  [ "$(_sbx_sh 'git remote get-url origin 2>/dev/null' 2>/dev/null | tr -d '\r')" = "/run/sandbox/source" ]
+  [ "$(_sbx_sh "[ -d $_SBX_SOURCE_MOUNT ] && echo clone" 2>/dev/null | tr -d '\r' | head -1)" = clone ]
+}
+
+# Point the clone's origin at the read-only host mount. exec_sync_down fetches through
+# `origin` every iteration, and this is also what keeps a stray `git push` inside the sandbox
+# rather than on the real upstream. Idempotent; verified rather than assumed, because a
+# silent failure here would surface as an unexplained reset failure mid-iteration.
+_sbx_point_origin_at_source() {
+  _sbx_sh "git remote set-url origin $_SBX_SOURCE_MOUNT 2>/dev/null ||
+           git remote add origin $_SBX_SOURCE_MOUNT" >/dev/null 2>&1
+  [ "$(_sbx_sh 'git remote get-url origin 2>/dev/null' 2>/dev/null | tr -d '\r' | head -1)" \
+    = "$_SBX_SOURCE_MOUNT" ]
 }
 
 # `sbx create` acts on the repository at REPO_ROOT. In a linked worktree that path has a

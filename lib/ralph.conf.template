@@ -88,7 +88,8 @@
 
 # The run order. If order.md exists, its <!-- ORDER:BEGIN --> block is the order and
 # RALPH_ISSUES_DIRS is ignored. Otherwise every *.md in these directories runs in
-# filename order — which is what the NN- prefixes are for.
+# filename order — which is what the NN- prefixes are for. A relative entry is resolved
+# against the BATCH directory, not the repo root, so "." means the batch directory itself.
 #RALPH_ORDER_FILE=order.md
 #RALPH_ISSUES_DIRS="issues"
 #RALPH_ISSUES_EXCLUDE="README.md spec.md order.md"

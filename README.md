@@ -111,7 +111,9 @@ Everything else has a default; `lib/ralph.conf.template` documents the full set.
 If `order.md` exists, the lines between its `<!-- ORDER:BEGIN -->` and `<!-- ORDER:END -->`
 markers are the order, one ticket path per line (repo-relative or batch-relative, inside a
 code fence or not, `#` to comment one out). If it does not exist, every `*.md` under
-`RALPH_ISSUES_DIRS` runs in filename order — which is what the `NN-` prefixes are for.
+`RALPH_ISSUES_DIRS` runs in filename order — which is what the `NN-` prefixes are for. A
+relative entry there is resolved against the batch directory, not the repo root, so `.`
+means the batch directory itself.
 
 `ralph init` doesn't leave that at filename order: right after scaffolding, it runs
 `ralph order <batch>`, which has an agent read every ticket and rewrite the order, weighing
