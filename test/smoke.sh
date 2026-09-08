@@ -245,6 +245,22 @@ if case_is "--live draws what the agent is doing, and only that"; then
   assert_contains "$OUT" "Live:    on" "and that a --live one is"
 fi
 
+if case_is "a --live run that produces no result object still says what it saw"; then
+  # Verified against a real sandbox: when the agent fails to start, `sbx` prints its own
+  # banner and `ERROR: agent exited with code 1`, and claude's error text never appears.
+  # All of it is non-JSON, so the filter drops every line and the payload is empty — and the
+  # recorder only dumps a raw payload when there is one, leaving the human with "payload was
+  # not valid JSON" and nothing to read. The tail is what keeps that diagnosable.
+  repo="$(make_repo 1 live-noresult)"
+  RALPH_FAKE_BEHAVIOUR=stream-no-result run_ralph "$repo" run batch --live
+
+  runlog="$(cat "$repo/batch/ralph-runs.log")"
+  assert_contains "$runlog" "RAW PAYLOAD" "the log dumps what did arrive"
+  assert_contains "$runlog" "SANDBOX-ERROR-SENTINEL" "including the error the sandbox printed"
+  assert_contains "$OUT" "printed no result object" "and the run says so as it happens"
+  assert_eq "$(done_count "$repo")" "0" "nothing is claimed to have landed"
+fi
+
 if case_is "--live changes nothing about the verdict or the recorded usage"; then
   # The assertion that protects the payload path: the filter sits in the pipeline in both
   # modes, and in the plain one it is a pass-through.

@@ -86,6 +86,15 @@ exec_required_tool() { printf 'sbx'; }
 # for. Both sbx modes; an explicit RALPH_PERMISSION_MODE still wins.
 exec_default_permission_mode() { printf 'bypassPermissions'; }
 
+# Verified against a real sandbox, not assumed: `sbx run … -- <flags>` delivers them to
+# claude verbatim — omitting --verbose gets the CLI's own refusal of stream-json, which is a
+# rule only claude knows — and under stream-json sbx prefixes its OSC title sequence to the
+# FIRST JSON object rather than putting it on a line of its own. ralph-stream.cjs strips per
+# line before testing for `{`, so that line parses; the banner's other lines are dropped.
+#
+# What sbx does NOT forward is the agent's own error text: a claude that fails to start
+# yields sbx's banner and `ERROR: agent exited with code 1` and nothing else. That is why
+# the filter keeps a tail when no result object ever arrives.
 exec_run() {
   ralph_exec_format_args
   sbx run claude --name "$RALPH_SANDBOX" -- \

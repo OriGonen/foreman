@@ -165,6 +165,15 @@ exec_run() {
       _fake_land "$ticket"
       _fake_payload success false "streamed some events and landed it"
       ;;
+    stream-no-result)
+      # What a real sandbox prints when the agent never starts: sbx's own banner and error,
+      # no result object, and nothing from claude at all. Every line is non-JSON, so without
+      # the tail the payload is empty and the human log has nothing to show.
+      printf 'Attaching to existing sandbox "ralph-fake".\n'
+      printf 'Starting claude agent in sandbox...\n'
+      printf 'ERROR: agent exited with code 1 SANDBOX-ERROR-SENTINEL\n'
+      return 1
+      ;;
     partial-turn)
       # Appends rather than overwrites, so repeating this behaviour produces a genuinely new
       # commit each time and the continuation cap has something to count.
