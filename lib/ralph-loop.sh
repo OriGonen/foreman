@@ -227,6 +227,9 @@ if [ "$MODE" = "dry-run" ]; then
   say ""
   say "Exec:    $(exec_describe)"
   say "Model:   $RALPH_MODEL   Effort: $RALPH_EFFORT"
+  # The effective permission mode, which is a per-mode default unless the batch set one —
+  # and the only place outside a real `claude` call where you can see which one won.
+  say "Perms:   $RALPH_PERMISSION_MODE"
   say "Budgets: cost=$(budget_label "$MAX_COST" '$')  time=$(budget_label "$MAX_MINUTES" '' m)  iterations=$(budget_label "$MAX_ITERATIONS")"
   say "Logs:    $RUN_JSONL"
   say "         $RUN_LOG"
@@ -413,6 +416,7 @@ while true; do
   transient=$(verdict_get "$VERDICT_FILE" transient)
   parse_ok=$(verdict_get "$VERDICT_FILE" parse_ok)
   context_exhausted=$(verdict_get "$VERDICT_FILE" context_exhausted)
+  permission_denied=$(verdict_get "$VERDICT_FILE" permission_denied)
   PREV_CONTEXT_EXHAUSTED="${context_exhausted:-0}"
 
   # --- decide what happens next ---------------------------------------------
@@ -440,7 +444,27 @@ while true; do
     break
   fi
 
-  # 3. The tree was left dirty. Never auto-commit: that would be committing work no one
+  # 3. A tool call was denied for want of permission. This has to be decided ABOVE the
+  #    dirty-tree branch: the denial is usually `git commit` itself, so the tree is dirty as
+  #    a CONSEQUENCE, and letting that branch win means the terminal reports the symptom and
+  #    never names the cause. Retrying is pointless — the next iteration is configured
+  #    identically and will be denied identically — so stop and say what to change.
+  if [ "$permission_denied" = "1" ]; then
+    warn ""
+    warn "$TICKET_FILE was stopped by a permission denial, not by its own work."
+    warn "\`claude --print\` has no one to approve a tool call, so anything outside the"
+    warn "allowlist is denied outright — including the \`git commit\` this prompt asks for,"
+    warn "after the ticket's work has been done and paid for."
+    warn ""
+    warn "Add this line to $RALPH_CONF, then rerun:"
+    warn "  RALPH_CLAUDE_ARGS=(--allowed-tools \"Bash(git add:*)\" \"Bash(git commit:*)\")"
+    warn "(Or set RALPH_PERMISSION_MODE=bypassPermissions there if you want no gate at all.)"
+    exec_show_dirty
+    FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+    break
+  fi
+
+  # 4. The tree was left dirty. Never auto-commit: that would be committing work no one
   #    reviewed, under a ticket that may not have finished.
   if [ "$dirty" -eq 1 ]; then
     warn ""
@@ -450,7 +474,7 @@ while true; do
     break
   fi
 
-  # 4. The ticket landed.
+  # 5. The ticket landed.
   if [ "$flipped" -eq 1 ]; then
     LANDED=$((LANDED + 1))
     if [ "$HEAD_REF" = "$BASE_REF" ]; then
@@ -460,7 +484,7 @@ while true; do
     continue
   fi
 
-  # 5. It did not land. Retry within the run only if there is an attempt left and the
+  # 6. It did not land. Retry within the run only if there is an attempt left and the
   #    failure is one a second attempt could plausibly survive; otherwise stop rather than
   #    spend the budget watching the same ticket fail the same way.
   #

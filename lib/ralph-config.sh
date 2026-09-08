@@ -247,7 +247,8 @@ RALPH_SKIP_SANDBOX_PROBE="${RALPH_SKIP_SANDBOX_PROBE:-0}"
 # --- the agent -------------------------------------------------------------
 RALPH_MODEL="${RALPH_MODEL:-claude-sonnet-5}"
 RALPH_EFFORT="${RALPH_EFFORT:-high}"
-RALPH_PERMISSION_MODE="${RALPH_PERMISSION_MODE:-acceptEdits}"
+# RALPH_PERMISSION_MODE is deliberately NOT defaulted here: the default depends on where the
+# agent runs, and the adapter that knows is not loaded until the validation section below.
 declare -p RALPH_CLAUDE_ARGS >/dev/null 2>&1 || RALPH_CLAUDE_ARGS=()
 
 # --- prompt slots ----------------------------------------------------------
@@ -274,6 +275,15 @@ source "$RALPH_TOOL_DIR/ralph-exec.sh" || {
 if ! ralph_exec_is_mode "$RALPH_EXEC"; then
   echo "ralph: RALPH_EXEC must be one of: $(ralph_exec_modes | tr '\n' ' ')(got '$RALPH_EXEC')" >&2
   return 1 2>/dev/null || exit 1
+fi
+
+# The permission mode, now that there is an adapter to ask. This has to come after the block
+# above rather than beside RALPH_MODEL, because the default is a property of where the agent
+# runs — see exec_default_permission_mode in ralph-exec.sh. A value from the environment or
+# from ralph.conf always wins; the adapter is only consulted when there is none.
+if [ -z "${RALPH_PERMISSION_MODE:-}" ]; then
+  RALPH_PERMISSION_MODE="$(ralph_exec_default_permission_mode "$RALPH_EXEC")" ||
+    RALPH_PERMISSION_MODE=acceptEdits
 fi
 
 for _ralph_int in RALPH_TICKET_ATTEMPTS RALPH_MAX_MINUTES RALPH_PROGRESS_TAIL_BYTES; do

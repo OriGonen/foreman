@@ -7,6 +7,10 @@ source "$RALPH_EXEC_DIR/_common.sh"
 
 exec_required_tool() { printf 'claude'; }
 
+# No isolation here, so the permission gate is the only check left standing. Keep it — and
+# see ralph.conf.template's RALPH_CLAUDE_ARGS for why a git allowlist has to come with it.
+exec_default_permission_mode() { printf 'acceptEdits'; }
+
 exec_preflight() { return 0; }
 exec_prepare()   { return 0; }
 

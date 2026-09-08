@@ -80,6 +80,12 @@ _sbx_probe() {
 
 exec_required_tool() { printf 'sbx'; }
 
+# The container is the boundary, so the permission gate protects nothing that the sandbox
+# does not already protect — and under `claude --print` there is no approver, so a
+# non-allowlisted `git commit` is denied outright, after the ticket's work is done and paid
+# for. Both sbx modes; an explicit RALPH_PERMISSION_MODE still wins.
+exec_default_permission_mode() { printf 'bypassPermissions'; }
+
 exec_run() {
   sbx run claude --name "$RALPH_SANDBOX" -- \
     --model "$RALPH_MODEL" --effort "$RALPH_EFFORT" --permission-mode "$RALPH_PERMISSION_MODE" \

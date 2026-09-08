@@ -194,6 +194,36 @@ the repository at the path you are standing in, and a worktree's `.git` is a fil
 elsewhere. Run from the primary checkout, on whichever branch the batch should land on, or
 set `RALPH_EXEC=local`. The loop refuses in preflight rather than discovering this later.
 
+### Permissions — `RALPH_PERMISSION_MODE` and `RALPH_CLAUDE_ARGS`
+
+`claude --print` has **nobody to ask**. Anything that would raise a permission prompt is
+denied automatically, and there is no second turn in which to recover: the ticket's work
+still happens, and still costs, and only the landing fails — showing up as a dirty tree
+with no mention of permissions anywhere.
+
+That matters because `acceptEdits` covers `Edit` and `Write` but leaves `Bash` to the
+settings allowlist, and ralph's own prompt requires the agent to `git commit` its work.
+
+So `RALPH_PERMISSION_MODE` has **no single default** — it is asked of the execution mode:
+
+| `RALPH_EXEC` | default | why |
+|---|---|---|
+| `sandbox`, `sandbox-mount` | `bypassPermissions` | the container is the boundary; the gate protects nothing it does not, and costs a paid iteration each time it fires |
+| `local`, `fake` | `acceptEdits` | no container — "no isolation" and "no permission check at all" are different things on a machine with real repositories on it |
+
+Anything you set in `ralph.conf` or the environment wins over both. `ralph dry-run` prints
+the mode that actually won, which is the only place outside a real run where you can see it.
+
+`local` therefore needs the allowlist that lets its agent commit, and `ralph.conf.template`
+ships it uncommented for exactly that reason:
+
+```bash
+RALPH_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)")
+```
+
+`ralph doctor` flags a `local` batch that has neither this nor `bypassPermissions` — at $0,
+rather than after three tickets.
+
 ## Pausing and resuming
 
 **Rerun the same command. That is the whole procedure.**

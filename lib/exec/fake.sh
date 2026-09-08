@@ -18,6 +18,9 @@
 #     session-limit  the same event as the CLI words it today — valid JSON whose reply is
 #              "You've hit your session limit · resets 4:50pm (...)", with no epoch and no
 #              "usage limit reached" anywhere. The loop should pause on this too.
+#     permission-denied  the shape a denied Bash call actually has: the work is done and
+#              sitting in the tree, the commit was refused, and the turn ends exit 0 /
+#              subtype success with the refusal only mentioned in the reply
 #     crash    exit non-zero with output that is not JSON and carries no signal at all —
 #              indistinguishable from a logic failure, so the loop should NOT retry it
 #     context  exit non-zero with an unparseable context-overflow string: the CLI died
@@ -35,6 +38,10 @@
 source "$RALPH_EXEC_DIR/_common.sh"
 
 exec_required_tool() { printf ''; }
+
+# Nothing here reads it — no agent is run — but the seam says every adapter answers, and a
+# test asserting on the default of a non-sandbox mode needs a non-sandbox mode to ask.
+exec_default_permission_mode() { printf 'acceptEdits'; }
 
 exec_preflight() { return 0; }
 exec_prepare()   { return 0; }
@@ -139,6 +146,14 @@ exec_run() {
       printf '"cache_read_input_tokens":0,"cache_creation_input_tokens":0},'
       printf '"result":"You'"'"'ve hit your session limit \\u00b7 resets 4:50pm (Europe/Ljubljana)"}\n'
       return 1
+      ;;
+    permission-denied)
+      # Nothing about this says "failure" except the reply text: exit 0, is_error false. The
+      # tree is dirty because the commit was the thing denied, which is why the loop has to
+      # decide this above the dirty-tree branch or it reports the symptom instead.
+      printf 'work the fake adapter could not commit\n' > .ralph-fake-uncommitted
+      _fake_payload success false \
+        "I implemented the ticket, but Bash(git commit) requires approval and I could not obtain it, so the work is uncommitted."
       ;;
     crash)
       printf 'claude: unexpected failure, no output\n'

@@ -221,6 +221,68 @@ if case_is "a dirty tree stops the run and is never auto-committed"; then
   assert_eq "$(git -C "$repo" log --oneline | wc -l)" "1" "committed nothing"
 fi
 
+if case_is "a denied tool call names permissions, not the dirty tree it caused"; then
+  # `acceptEdits` does not cover Bash, and `claude --print` has no one to approve one, so a
+  # batch with no git allowlist gets the ticket's work done and then cannot commit it. The
+  # tree is dirty as a CONSEQUENCE; before this the dirty branch won and the terminal never
+  # mentioned permissions at all.
+  repo="$(make_repo 2 permdenied-repo)"
+  RALPH_FAKE_BEHAVIOUR=permission-denied run_ralph "$repo" run batch --unlimited
+
+  assert_eq "$ST" 20 "exits needs-a-human"
+  assert_contains "$OUT" "stopped by a permission denial" "names the real cause"
+  assert_contains "$OUT" 'Bash(git commit:*)' "and the exact ralph.conf line that fixes it"
+  assert_missing "$OUT" "left uncommitted changes behind" "not reported as a plain dirty tree"
+  assert_eq "$(git -C "$repo" log --oneline | wc -l)" "1" "committed nothing"
+
+  runlog="$(cat "$repo/batch/ralph-runs.log")"
+  assert_contains "$runlog" "PERMISSION DENIED SIGNAL DETECTED" "recorded as its own signal"
+fi
+
+if case_is "the permission mode defaults to what the execution mode needs"; then
+  # Not reachable through `fake`, which never invokes `claude` — which is exactly why
+  # dry-run reports the effective mode. Inside a sandbox the container is the boundary and
+  # the gate only costs a paid iteration; on a real machine `local` keeps its gate.
+  repo="$(make_repo 1 perms-repo)"
+
+  printf 'RALPH_EXEC=local\n' >> "$repo/batch/ralph.conf"
+  git -C "$repo" commit --quiet -am "local mode"
+  run_ralph "$repo" dry-run batch
+  assert_eq "$ST" 0 "dry-run exits 0"
+  assert_contains "$OUT" "Perms:   acceptEdits" "local keeps the permission gate"
+
+  printf 'RALPH_EXEC=sandbox\n' >> "$repo/batch/ralph.conf"
+  git -C "$repo" commit --quiet -am "sandbox mode"
+  run_ralph "$repo" dry-run batch
+  assert_contains "$OUT" "Perms:   bypassPermissions" "a sandbox mode does not"
+
+  printf 'RALPH_PERMISSION_MODE=plan\n' >> "$repo/batch/ralph.conf"
+  git -C "$repo" commit --quiet -am "explicit mode"
+  run_ralph "$repo" dry-run batch
+  assert_contains "$OUT" "Perms:   plan" "an explicit setting beats the default"
+
+  RALPH_PERMISSION_MODE=manual run_ralph "$repo" dry-run batch
+  assert_contains "$OUT" "Perms:   manual" "and the environment beats ralph.conf"
+fi
+
+if case_is "doctor flags a local batch whose agent could never commit"; then
+  repo="$WORK/perm-doctor-repo"
+  mkdir -p "$repo/batch/issues"
+  git -C "$repo" init --quiet
+  printf '# Ticket 1\n\n**Status:** todo\n' > "$repo/batch/issues/01-ticket.md"
+  printf 'RALPH_EXEC=local\n' > "$repo/batch/ralph.conf"
+
+  run_ralph "$repo" doctor
+  assert_eq "$ST" 1 "doctor reports something to fix"
+  assert_contains "$OUT" "no way for the agent to commit" "says what is wrong"
+  assert_contains "$OUT" 'Bash(git add:*)' "and the line to add"
+
+  printf 'RALPH_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)")\n' \
+    >> "$repo/batch/ralph.conf"
+  run_ralph "$repo" doctor
+  assert_missing "$OUT" "no way for the agent to commit" "and is satisfied once it is there"
+fi
+
 if case_is "a usage limit pauses the run"; then
   repo="$(make_repo 3 limit-repo)"
   RALPH_FAKE_BEHAVIOUR=limit run_ralph "$repo" run batch --unlimited

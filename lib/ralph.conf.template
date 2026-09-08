@@ -46,12 +46,22 @@
 # ---------------------------------------------------------------------------
 #RALPH_MODEL=claude-sonnet-5
 #RALPH_EFFORT=high
-#RALPH_PERMISSION_MODE=acceptEdits
+# The default depends on RALPH_EXEC: bypassPermissions in the sandbox modes, where the
+# container is the boundary and the gate protects nothing it does not, and acceptEdits in
+# `local`, where there is no container. Set it here to override either.
+#RALPH_PERMISSION_MODE=
 # The one-off `ralph order` pass (run automatically by `ralph init`) defaults to
 # RALPH_MODEL above. Point it at something cheaper without touching what tickets run on:
 #RALPH_ORDERING_MODEL=claude-sonnet-5
-# Extra arguments passed through to `claude`, as a bash array:
-#RALPH_CLAUDE_ARGS=(--allowed-tools Bash Read Edit)
+
+# Extra arguments passed through to `claude`, as a bash array.
+#
+# The default is not empty, and this is why: `acceptEdits` covers Edit and Write but leaves
+# Bash to the settings allowlist, and ralph's own prompt requires the agent to `git commit`
+# its work. Under `claude --print` there is nobody to approve a Bash call, so a
+# non-allowlisted one is denied outright — the ticket's work gets done and paid for, and
+# then cannot land. These two entries are the narrowest thing that lets it.
+RALPH_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)")
 
 # ---------------------------------------------------------------------------
 # Prompt slots — what "verify your work" means in this repo

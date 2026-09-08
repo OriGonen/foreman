@@ -13,6 +13,7 @@
 # locals, so an adapter can be loaded and asked a question without the loop present.
 #
 #   exec_required_tool      the command that must be on PATH, or nothing
+#   exec_default_permission_mode  the --permission-mode to use when the user named none
 #   exec_preflight          cheap checks; 0 ready, 1 stop. Warns for itself.
 #   exec_prepare            expensive setup, once per run, before any money is spent
 #   exec_describe           one line naming the arrangement, for status and dry-run
@@ -74,4 +75,17 @@ ralph_exec_load() {
 # possibly in a different mode, and no ralph-config.sh loaded.
 ralph_exec_required_tool() {
   ( ralph_exec_load "$1" >/dev/null 2>&1 && exec_required_tool ) || return 1
+}
+
+# Which --permission-mode a mode wants when the user has not chosen one. Same subshell
+# pattern as ralph_exec_required_tool, and for the same reason: ralph-config.sh has to ask
+# this before it has loaded an adapter, and must not acquire one by asking.
+#
+# The answer differs because the thing a permission gate protects differs. Inside a sandbox
+# the container IS the boundary, so the gate buys nothing — and it costs a paid iteration
+# every time it fires, because `claude --print` has nobody to approve a denied Bash call and
+# denies it outright. On a machine with real repositories on it that is not true, so `local`
+# keeps its gate: "no isolation" and "no permission check at all" are different things.
+ralph_exec_default_permission_mode() {
+  ( ralph_exec_load "$1" >/dev/null 2>&1 && exec_default_permission_mode ) || return 1
 }
