@@ -221,6 +221,47 @@ if case_is "a dirty tree stops the run and is never auto-committed"; then
   assert_eq "$(git -C "$repo" log --oneline | wc -l)" "1" "committed nothing"
 fi
 
+if case_is "--live draws what the agent is doing, and only that"; then
+  # Once exec_run is invoked the terminal is silent until it returns. Writes and shell
+  # commands are the two signals worth drawing; reads, greps and globs are the majority of
+  # the traffic and say nothing about progress.
+  # Two tickets, one iteration: the second is what the dry-run below has left to plan for.
+  repo="$(make_repo 2 live-repo)"
+  RALPH_FAKE_BEHAVIOUR=stream run_ralph "$repo" run batch --live
+
+  assert_contains "$OUT" "Write src/foo.js" "a file write is drawn"
+  assert_contains "$OUT" "Bash npm test" "and a shell command"
+  assert_missing "$OUT" "src/quiet-read.js" "a read is not"
+  # A tool_use event carries the WHOLE input — a Write carries the entire file body.
+  assert_missing "$OUT" "SECRET-BODY-CONTENT" "the input object never reaches the terminal"
+  assert_missing "$OUT" "TAIL-SENTINEL" "and a long argument is truncated"
+  assert_eq "$(done_count "$repo")" "1" "the ticket still lands"
+
+  # Which --output-format the adapter would ask for is the other decision `fake` cannot
+  # exercise, so dry-run reports the state that decides it.
+  run_ralph "$repo" dry-run batch
+  assert_contains "$OUT" "Live:    off" "dry-run says a plain run is not watched"
+  run_ralph "$repo" dry-run batch --live
+  assert_contains "$OUT" "Live:    on" "and that a --live one is"
+fi
+
+if case_is "--live changes nothing about the verdict or the recorded usage"; then
+  # The assertion that protects the payload path: the filter sits in the pipeline in both
+  # modes, and in the plain one it is a pass-through.
+  plain="$(make_repo 2 live-equiv-plain)"
+  lively="$(make_repo 2 live-equiv-live)"
+
+  RALPH_FAKE_COST=0.25 run_ralph "$plain" run batch --unlimited
+  plain_out="$OUT"; plain_st="$ST"
+  RALPH_FAKE_COST=0.25 run_ralph "$lively" run batch --unlimited --live
+  assert_eq "$ST" "$plain_st" "the same exit status"
+  assert_eq "$(done_count "$lively")" "$(done_count "$plain")" "the same tickets land"
+
+  # The footer is the run's whole verdict and every usage figure in one block.
+  footer() { printf '%s' "$1" | sed -n '/^== run /,$p' | grep -v '^== run '; }
+  assert_eq "$(footer "$OUT")" "$(footer "$plain_out")" "and identical usage figures"
+fi
+
 if case_is "a ticket that hands off part-finished is continued, not failed"; then
   # `claude --print` is one turn. A ticket whose work exceeds that turn's output budget ends
   # exit 0, subtype success, no error anywhere, with the deliverable half-written — and used

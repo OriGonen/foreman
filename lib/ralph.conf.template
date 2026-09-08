@@ -80,6 +80,11 @@ RALPH_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)")
 #RALPH_TDD_SKILL="mattpocock-skills:tdd"
 #RALPH_REVIEW_SKILL="mattpocock-skills:code-review"
 
+# Watch the iteration as it happens: a wall clock and one line per file write and shell
+# command, drawn to stderr. `ralph run --live` turns it on for a single run. Off by default,
+# so the default path is exactly what it always was.
+#RALPH_STREAM=0
+
 # Anything else that is specific to this batch goes in prompt-extra.md next to this file.
 # It is spliced into the prompt between Verify and Review, under its own heading. Leave
 # the file out entirely if there is nothing to add.

@@ -87,10 +87,11 @@ exec_required_tool() { printf 'sbx'; }
 exec_default_permission_mode() { printf 'bypassPermissions'; }
 
 exec_run() {
+  ralph_exec_format_args
   sbx run claude --name "$RALPH_SANDBOX" -- \
     --model "$RALPH_MODEL" --effort "$RALPH_EFFORT" --permission-mode "$RALPH_PERMISSION_MODE" \
     ${RALPH_CLAUDE_ARGS+"${RALPH_CLAUDE_ARGS[@]}"} \
-    --print --output-format json -p "$1"
+    --print "${RALPH_EXEC_FORMAT_ARGS[@]}" -p "$1"
 }
 
 exec_preflight() { _sbx_preflight; }

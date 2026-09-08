@@ -263,6 +263,9 @@ RALPH_MAX_COST_USD="${RALPH_MAX_COST_USD:-0}"
 RALPH_MAX_MINUTES="${RALPH_MAX_MINUTES:-0}"
 RALPH_TICKET_ATTEMPTS="${RALPH_TICKET_ATTEMPTS:-2}"
 RALPH_ALLOW_DIRTY="${RALPH_ALLOW_DIRTY:-0}"
+# Watch the iteration as it happens (`ralph run --live` sets this). Off by default, so the
+# default path — the agent's own --output-format included — stays exactly as it was.
+RALPH_STREAM="${RALPH_STREAM:-0}"
 # How much context a ticket is expected to fit well inside. A prompt slot, not a limit
 # anything enforces — the CLI has no such flag, and --autocompact is the real backstop. It
 # lives here rather than as a literal in the shared template because it is model- and

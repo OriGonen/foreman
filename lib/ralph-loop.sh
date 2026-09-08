@@ -5,6 +5,7 @@
 #   ralph run     <batch>              # run one iteration
 #   ralph run     <batch> 5            # run at most 5 iterations
 #   ralph run     <batch> --unlimited  # run until done or a budget stops it
+#   ralph run     <batch> --live       # show what the agent is doing, as it does it
 #   ralph status  <batch>              # what is left, what is next
 #   ralph dry-run <batch>              # print the plan and the next prompt
 #
@@ -78,8 +79,12 @@ while [ $# -gt 0 ]; do
     --status)    MODE=status ;;
     --dry-run)   MODE=dry-run ;;
     --unlimited) MAX_ITERATIONS=0 ;;
+    # Exported rather than set, so it lands in ralph-config.sh's environment snapshot and
+    # beats a RALPH_STREAM in the batch's ralph.conf — the same precedence every other knob
+    # has. It has to be a real flag: the parser below rejects any unknown `-*`.
+    --live)      export RALPH_STREAM=1 ;;
     --help|-h)   show_help; exit 0 ;;
-    -*)          echo "Usage: ${RALPH_INVOKE:-ralph} run [<batch>] [<iterations>|--unlimited]" >&2; exit 1 ;;
+    -*)          echo "Usage: ${RALPH_INVOKE:-ralph} run [<batch>] [<iterations>|--unlimited] [--live]" >&2; exit 1 ;;
     *)
       if [[ "$1" =~ ^[0-9]+$ ]]; then
         MAX_ITERATIONS="$1"
@@ -234,6 +239,13 @@ if [ "$MODE" = "dry-run" ]; then
   # The effective permission mode, which is a per-mode default unless the batch set one —
   # and the only place outside a real `claude` call where you can see which one won.
   say "Perms:   $RALPH_PERMISSION_MODE"
+  # The other decision `fake` cannot exercise, for the same reason: it never invokes `claude`
+  # and so never chooses an --output-format.
+  if [ "$RALPH_STREAM" = "1" ]; then
+    say "Live:    on (stream-json; file writes and shell commands drawn to stderr)"
+  else
+    say "Live:    off (json; add --live to watch the iteration)"
+  fi
   say "Budgets: cost=$(budget_label "$MAX_COST" '$')  time=$(budget_label "$MAX_MINUTES" '' m)  iterations=$(budget_label "$MAX_ITERATIONS")"
   say "Logs:    $RUN_JSONL"
   say "         $RUN_LOG"
@@ -263,7 +275,17 @@ LANDED=0
 SECONDS=0
 
 VERDICT_FILE="$(mktemp)"
-trap 'rm -f "$VERDICT_FILE"' EXIT
+# The agent's payload, on its way from exec_run to the recorder. It goes through a file
+# because exec_run is now the head of a pipeline rather than a command substitution — see
+# the call site for why that matters.
+PAYLOAD_FILE="$(mktemp)"
+trap 'rm -f "$VERDICT_FILE" "$PAYLOAD_FILE"' EXIT
+
+# The one thing that differs between a plain run and a watched one, on this side of the
+# seam. ralph-stream.cjs is in the pipeline either way — in plain mode it is a pass-through
+# — so there is one code path here rather than two.
+STREAM_ARGS=()
+[ "$RALPH_STREAM" = "1" ] && STREAM_ARGS=(--live)
 
 # Ctrl-C should end the run between iterations rather than half-way through one. The trap
 # only raises a flag; the agent is a foreground child, so an interrupt during an iteration
@@ -395,8 +417,14 @@ while true; do
   # shellcheck source=ralph-prompt.sh
   source "$RALPH_TOOL_DIR/ralph-prompt.sh"
 
-  agent_status=0
-  result=$(exec_run "$RALPH_PROMPT" "$TICKET_FILE") || agent_status=$?
+  # `${PIPESTATUS[0]}` is load-bearing: `set -o pipefail` is on, so a plain `$?` here would
+  # conflate the filter's status with the agent's, and every branch below turns on the
+  # agent's. Everything after these three lines — the recorder call, the verdict, the branch
+  # order — is untouched by whether the run is being watched.
+  exec_run "$RALPH_PROMPT" "$TICKET_FILE" |
+    node "$RALPH_TOOL_DIR/ralph-stream.cjs" ${STREAM_ARGS+"${STREAM_ARGS[@]}"} > "$PAYLOAD_FILE"
+  agent_status=${PIPESTATUS[0]}
+  result=$(cat "$PAYLOAD_FILE")
 
   # Bring the iteration's commits back before inspecting anything: the ticket's Status
   # line, and every check below, lives in the work the agent just did. The adapter sets

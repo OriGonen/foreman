@@ -194,6 +194,35 @@ the repository at the path you are standing in, and a worktree's `.git` is a fil
 elsewhere. Run from the primary checkout, on whichever branch the batch should land on, or
 set `RALPH_EXEC=local`. The loop refuses in preflight rather than discovering this later.
 
+### Watching a run — `ralph run --live`
+
+Without it, the terminal is silent from the moment the agent starts until it returns —
+seven minutes, forty-five minutes, however long — with no way to tell whether the iteration
+is alive or what it is doing.
+
+```bash
+ralph run .scratch/my-batch --live      # or RALPH_STREAM=1 in ralph.conf
+```
+
+A wall clock and one line per **file write and shell command**, drawn to stderr:
+
+```
+   03:12 · Edit lib/foo.js
+```
+
+Reads, greps and globs are skipped — they are the bulk of the traffic and say nothing about
+progress. Writes and commands are the two signals that show a ticket actually moving.
+
+Only the tool name and its first path or command argument are ever printed, truncated: a
+`tool_use` event carries the *whole* input, and a `Write` carries the entire file body. The
+input object is never rendered, no transcript is dumped, and no raw stream is kept on disk.
+
+**Off by default**, and the default path is unchanged — `lib/ralph-stream.cjs` sits in the
+pipeline either way and is a pass-through when the run is not being watched, so there is one
+code path rather than two. `--live` also switches the agent to `--output-format stream-json`
+(which the CLI requires `--verbose` alongside); the recorder still receives exactly the one
+result object it always did. `ralph dry-run` reports which state a run would use.
+
 ### Tickets bigger than one turn
 
 `claude --print --output-format json` is **one turn**. It prints a single JSON object and
@@ -352,6 +381,8 @@ That tool is manual and is never invoked by the loop.
 | `lib/prompt.template.md` | the five-step prompt, with slots |
 | `lib/ralph-record.cjs` | appends one iteration to both logs; writes the verdict the loop acts on |
 | `lib/ralph-report.cjs` | manual log reader |
+| `lib/ralph-stream.cjs` | sits between the agent and the recorder; draws the run when `--live`, a pass-through otherwise |
+| `lib/ralph-strip-ansi.cjs` | removes `sbx`'s banner control codes — shared by the two above |
 | `lib/ralph-init.sh` | scaffolds a batch, then runs `ralph-order.sh` unless told not to |
 | `lib/ralph-order.sh` | has an agent order the tickets by dependency, importance and load |
 | `lib/ralph-doctor.sh` | checks the machine, the repo and the batches; `--fix` writes the repo's two files |

@@ -18,6 +18,9 @@
 #     session-limit  the same event as the CLI words it today — valid JSON whose reply is
 #              "You've hit your session limit · resets 4:50pm (...)", with no epoch and no
 #              "usage limit reached" anywhere. The loop should pause on this too.
+#     stream   what `--output-format stream-json` looks like: one JSON object per line,
+#              tool_use events as they happen, the result object last. Used to test what
+#              `ralph run --live` draws — and, just as much, what it must not draw.
 #     partial-turn  a ticket that outgrew one turn: the agent commits what it has as a
 #              `wip:` checkpoint and hands off, leaving the status line unflipped. exit 0,
 #              subtype success, no error anywhere — the loop should continue the SAME ticket
@@ -149,6 +152,18 @@ exec_run() {
       printf '"cache_read_input_tokens":0,"cache_creation_input_tokens":0},'
       printf '"result":"You'"'"'ve hit your session limit \\u00b7 resets 4:50pm (Europe/Ljubljana)"}\n'
       return 1
+      ;;
+    stream)
+      # A read, which must be skipped; a Write whose body is large and carries a sentinel,
+      # because a tool_use event ships the WHOLE input and none of it may reach the
+      # terminal; and a Bash command long enough to be truncated.
+      printf '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"src/quiet-read.js"}}]}}\n'
+      printf '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"src/foo.js","content":"SECRET-BODY-CONTENT %s"}}]}}\n' \
+        "$(printf 'x%.0s' $(seq 1 400))"
+      printf '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"npm test -- %s TAIL-SENTINEL"}}]}}\n' \
+        "$(printf 'y%.0s' $(seq 1 120))"
+      _fake_land "$ticket"
+      _fake_payload success false "streamed some events and landed it"
       ;;
     partial-turn)
       # Appends rather than overwrites, so repeating this behaviour produces a genuinely new

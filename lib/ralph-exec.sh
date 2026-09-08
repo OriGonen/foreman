@@ -26,6 +26,10 @@
 #   exec_recovery_note BASE how to rescue work exec_collect could not bring back
 #
 # Files in lib/exec/ whose name starts with `_` are shared implementation, not modes.
+#
+# The adapters that really invoke `claude` also splice in RALPH_EXEC_FORMAT_ARGS (below).
+# That is the ONLY thing that differs between a plain run and a watched one: there is one
+# exec_run per adapter, never a second code path per mode.
 
 RALPH_EXEC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/exec" 2>/dev/null && pwd)"
 
@@ -88,4 +92,18 @@ ralph_exec_required_tool() {
 # keeps its gate: "no isolation" and "no permission check at all" are different things.
 ralph_exec_default_permission_mode() {
   ( ralph_exec_load "$1" >/dev/null 2>&1 && exec_default_permission_mode ) || return 1
+}
+
+# How the agent is asked to report, into RALPH_EXEC_FORMAT_ARGS for an adapter to splice in.
+#
+# `json` normally: one object, printed when the turn ends. `stream-json` when the run is
+# being watched, so ralph-stream.cjs has events to draw as they happen. --verbose is not
+# optional there — `claude --print --output-format=stream-json` refuses to start without it,
+# and says so.
+ralph_exec_format_args() {
+  if [ "${RALPH_STREAM:-0}" = "1" ]; then
+    RALPH_EXEC_FORMAT_ARGS=(--output-format stream-json --verbose)
+  else
+    RALPH_EXEC_FORMAT_ARGS=(--output-format json)
+  fi
 }
