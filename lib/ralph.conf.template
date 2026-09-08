@@ -114,4 +114,16 @@ RALPH_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)")
 # ---------------------------------------------------------------------------
 #RALPH_MAX_COST_USD=0
 #RALPH_MAX_MINUTES=0
+# Unproductive tries per ticket within one run. An iteration that committed progress is not
+# one of them — see RALPH_MAX_CONTINUATIONS.
 #RALPH_TICKET_ATTEMPTS=2
+
+# A ticket bigger than one turn is committed in chunks: the agent checkpoints what it has,
+# leaves the status line unflipped, and the next iteration continues it. This caps how many
+# times in a row that may happen on one ticket before the loop stops for a human — past it,
+# the ticket is mis-sized and splitting it is a decision only you can make.
+#RALPH_MAX_CONTINUATIONS=5
+
+# What the prompt tells the agent to work well inside. Not enforced anywhere — the CLI has
+# no such flag — it is the number the agent is asked to judge itself against.
+#RALPH_CONTEXT_BUDGET_TOKENS=200000

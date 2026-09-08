@@ -221,6 +221,68 @@ if case_is "a dirty tree stops the run and is never auto-committed"; then
   assert_eq "$(git -C "$repo" log --oneline | wc -l)" "1" "committed nothing"
 fi
 
+if case_is "a ticket that hands off part-finished is continued, not failed"; then
+  # `claude --print` is one turn. A ticket whose work exceeds that turn's output budget ends
+  # exit 0, subtype success, no error anywhere, with the deliverable half-written — and used
+  # to stop the run as "still not implemented", so the next run redid the work from scratch.
+  repo="$(make_repo 2 partial-repo)"
+  log="$WORK/partial-prompts.txt"
+  base="$(git -C "$repo" rev-parse HEAD)"
+  RALPH_FAKE_PROMPT_LOG="$log" RALPH_FAKE_BEHAVIOUR=partial-turn:land \
+    run_ralph "$repo" run batch --unlimited
+
+  assert_contains "$OUT" "⋯ progressed" "the checkpoint reads as progress"
+  assert_missing "$OUT" "is still not 'implemented'" "and not as a failure"
+  assert_missing "$OUT" "(attempt 2)" "progress does not spend an attempt"
+  assert_eq "$(done_count "$repo")" "2" "the ticket lands on the continuation"
+
+  # The continuation is told, and is reviewed against the ticket's FIRST base rather than
+  # its own last chunk — otherwise chunking silently produces unreviewed code.
+  p1="$(awk '/^===== fake prompt 1 /{f=1;next} /^===== fake prompt /{f=0} f' "$log")"
+  p2="$(awk '/^===== fake prompt 2 /{f=1;next} /^===== fake prompt /{f=0} f' "$log")"
+  assert_missing "$p1" "You are CONTINUING" "the first attempt is not told"
+  assert_contains "$p2" "You are CONTINUING" "the second one is"
+  assert_contains "$p2" "$base" "and reviews against the ticket's first base"
+
+  run_ralph "$repo" report batch
+  assert_contains "$OUT" "progressed 1" "the report counts it as its own outcome"
+  run_ralph "$repo" report batch --failures
+  assert_contains "$OUT" "every recorded iteration landed" "and does not flag it as a problem"
+fi
+
+if case_is "a ticket that never stops chunking is called mis-sized"; then
+  repo="$(make_repo 2 continuation-cap-repo)"
+  RALPH_MAX_CONTINUATIONS=3 RALPH_FAKE_BEHAVIOUR=partial-turn \
+    run_ralph "$repo" run batch --unlimited
+
+  assert_eq "$ST" 20 "stops for a human rather than chunking forever"
+  assert_contains "$OUT" "has progressed 3 times without landing" "counts the continuations"
+  assert_contains "$OUT" "split it into smaller tickets" "says what to do about it"
+  assert_eq "$(done_count "$repo")" "0" "nothing landed"
+fi
+
+if case_is "a progressed iteration does not consume a ticket's attempts"; then
+  repo="$(make_repo 2 progress-attempts-repo)"
+  RALPH_TICKET_ATTEMPTS=2 RALPH_FAKE_BEHAVIOUR=partial-turn:noop \
+    run_ralph "$repo" run batch --unlimited
+
+  assert_eq "$ST" 20 "the unproductive iteration stops the run"
+  assert_contains "$OUT" "after 1 attempt(s)" "only the unproductive one was counted"
+fi
+
+if case_is "the prompt tells the agent how to hand a ticket off"; then
+  repo="$(make_repo 1 handoff-prompt-repo)"
+  printf 'RALPH_CONTEXT_BUDGET_TOKENS=123456\n' >> "$repo/batch/ralph.conf"
+  git -C "$repo" commit --quiet -am "context budget"
+
+  run_ralph "$repo" dry-run batch
+  assert_eq "$ST" 0 "dry-run exits 0"
+  assert_contains "$OUT" "123456 tokens of context" "the budget comes from ralph.conf"
+  assert_contains "$OUT" "wip: <ticket>" "the handoff names the commit shape"
+  assert_contains "$OUT" "Remaining:" "and the note it has to leave"
+  assert_missing "$OUT" "__CONTEXT_BUDGET__" "the marker is not left behind"
+fi
+
 if case_is "a denied tool call names permissions, not the dirty tree it caused"; then
   # `acceptEdits` does not cover Bash, and `claude --print` has no one to approve one, so a
   # batch with no git allowlist gets the ticket's work done and then cannot commit it. The

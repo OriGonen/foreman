@@ -194,6 +194,38 @@ the repository at the path you are standing in, and a worktree's `.git` is a fil
 elsewhere. Run from the primary checkout, on whichever branch the batch should land on, or
 set `RALPH_EXEC=local`. The loop refuses in preflight rather than discovering this later.
 
+### Tickets bigger than one turn
+
+`claude --print --output-format json` is **one turn**. It prints a single JSON object and
+exits; there is no second turn, for any batch, and no setting that buys one. A ticket whose
+work exceeds that turn's output budget therefore ends with the deliverable half-written,
+`exit 0`, `subtype success` and no error anywhere — and used to stop the run as "still not
+implemented", so the next run started the same work again from nothing.
+
+The agent handles this itself. The prompt asks it, before starting any substantial piece of
+work, whether it can finish *that* and still land the ticket in what is left of the turn;
+if not, it commits what it has as `wip: <ticket> — <what remains>`, **leaves the status line
+unflipped**, and writes a `Remaining:` list in `progress.txt`.
+
+The loop then treats that as what it is:
+
+- HEAD moved, status unflipped, nothing errored → `⋯ progressed`, and the **same** ticket
+  gets the next iteration, told it is continuing and pointed at the handoff note;
+- the continuation is reviewed against the commit the ticket was **first** attempted from,
+  not its own last chunk, so a ticket that took three passes is still reviewed as one diff;
+- progress does not spend a `RALPH_TICKET_ATTEMPTS` retry — that counter counts unproductive
+  attempts, which is what it was always for;
+- `RALPH_MAX_CONTINUATIONS` (default 5) stops the run if one ticket keeps chunking without
+  landing. That is a mis-sized ticket, not a retry problem, and splitting it is your call.
+
+**The loop still never auto-commits.** The *author* commits its own work; the machinery only
+stops calling that a failure. WIP commits stay in history — `wip: profile script —
+remaining: run at N=96` is better history than a squash that hides the three passes.
+
+`RALPH_CONTEXT_BUDGET_TOKENS` (default 200000) is the number the prompt asks the agent to
+judge itself against. Nothing enforces it; the CLI has no such flag, and `--autocompact` is
+the real backstop.
+
 ### Permissions — `RALPH_PERMISSION_MODE` and `RALPH_CLAUDE_ARGS`
 
 `claude --print` has **nobody to ask**. Anything that would raise a permission prompt is

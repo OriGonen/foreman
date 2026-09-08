@@ -41,7 +41,10 @@
 #
 # OTHER KNOBS (all settable in ralph.conf; the environment wins over it)
 #   RALPH_MODEL=claude-sonnet-5    RALPH_EFFORT=high
-#   RALPH_TICKET_ATTEMPTS=2        tries per ticket within one run before stopping
+#   RALPH_TICKET_ATTEMPTS=2        unproductive tries per ticket in one run before stopping
+#   RALPH_MAX_CONTINUATIONS=5      consecutive iterations that may commit progress on one
+#                                  ticket without landing it before stopping for a human
+#   RALPH_CONTEXT_BUDGET_TOKENS=200000   what the prompt tells the agent to work inside
 #   RALPH_ALLOW_DIRTY=1            skip the clean-tree preflight
 #   RALPH_SANDBOX=<name>           sandbox to create/reattach to
 #   RALPH_SKIP_SANDBOX_PROBE=1     skip the batch's sandbox readiness probe and its setup
@@ -98,6 +101,7 @@ source "$RALPH_TOOL_DIR/ralph-config.sh" || exit 1
 MAX_COST="$RALPH_MAX_COST_USD"
 MAX_MINUTES="$RALPH_MAX_MINUTES"
 TICKET_ATTEMPTS="$RALPH_TICKET_ATTEMPTS"
+MAX_CONTINUATIONS="$RALPH_MAX_CONTINUATIONS"
 
 # ---------------------------------------------------------------------------
 # Small helpers
@@ -301,6 +305,12 @@ ATTEMPTS_ON_CURRENT=0
 # what the failed one said. There is no narrative here to anchor a retry on a wrong
 # approach, and nothing self-reported to have to trust.
 PREV_CONTEXT_EXHAUSTED=0
+# How many consecutive iterations have committed progress on the current ticket without
+# landing it, and the HEAD this ticket was FIRST attempted from. The second is what the
+# landing iteration is asked to review against, so a ticket that took three passes is
+# reviewed as one diff rather than three unrelated slices.
+CONTINUATIONS_ON_CURRENT=0
+TICKET_BASE_REF=""
 
 while true; do
   if [ "$PAUSE_REQUESTED" -eq 1 ]; then
@@ -332,6 +342,8 @@ while true; do
     CURRENT_TICKET="$TICKET_FILE"
     ATTEMPTS_ON_CURRENT=0
     PREV_CONTEXT_EXHAUSTED=0
+    CONTINUATIONS_ON_CURRENT=0
+    TICKET_BASE_REF=""
   fi
   ATTEMPTS_ON_CURRENT=$((ATTEMPTS_ON_CURRENT + 1))
 
@@ -354,6 +366,7 @@ while true; do
 
   ITERATIONS_RUN=$((ITERATIONS_RUN + 1))
   BASE_REF=$(git rev-parse HEAD)
+  [ -n "$TICKET_BASE_REF" ] || TICKET_BASE_REF="$BASE_REF"
   STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
   say "── iteration $ITERATIONS_RUN  ·  $TICKET_FILE$([ "$ATTEMPTS_ON_CURRENT" -gt 1 ] && printf ' (attempt %s)' "$ATTEMPTS_ON_CURRENT")"
@@ -372,6 +385,12 @@ while true; do
   # own will not produce it.
   RALPH_CONTEXT_RETRY=0
   [ "$ATTEMPTS_ON_CURRENT" -gt 1 ] && [ "$PREV_CONTEXT_EXHAUSTED" = "1" ] && RALPH_CONTEXT_RETRY=1
+
+  # A previous iteration handed this ticket off part-finished. Tell the prompt, and give it
+  # the ticket's own first base to review against rather than this iteration's.
+  RALPH_CONTINUATION=0
+  [ "$CONTINUATIONS_ON_CURRENT" -gt 0 ] && RALPH_CONTINUATION=1
+  RALPH_REVIEW_BASE="$TICKET_BASE_REF"
 
   # shellcheck source=ralph-prompt.sh
   source "$RALPH_TOOL_DIR/ralph-prompt.sh"
@@ -417,6 +436,7 @@ while true; do
   parse_ok=$(verdict_get "$VERDICT_FILE" parse_ok)
   context_exhausted=$(verdict_get "$VERDICT_FILE" context_exhausted)
   permission_denied=$(verdict_get "$VERDICT_FILE" permission_denied)
+  is_error=$(verdict_get "$VERDICT_FILE" is_error)
   PREV_CONTEXT_EXHAUSTED="${context_exhausted:-0}"
 
   # --- decide what happens next ---------------------------------------------
@@ -470,6 +490,18 @@ while true; do
     warn ""
     warn "$TICKET_FILE left uncommitted changes behind. Stopping so you can look."
     exec_show_dirty
+    # The signature of a turn that simply ran out of room: it ended cleanly, nothing
+    # reported an error, the ticket is unflipped, and the work is still in the tree. The
+    # agent should have checkpointed it itself (prompt step 5); prompt fixes are never 100%,
+    # so say what to type. TEXT ONLY — nothing is committed for you here or anywhere else.
+    if [ "$agent_status" -eq 0 ] && [ "$is_error" != "1" ] && [ "$flipped" -eq 0 ]; then
+      warn ""
+      warn "This looks like a turn that ran out of room rather than one that failed: it ended"
+      warn "cleanly, with the ticket unflipped and its work uncommitted. If the changes look"
+      warn "sound, keep them as a checkpoint and rerun to continue the same ticket:"
+      warn "  git add -A && git commit -m 'wip: $TICKET_FILE — remaining: <what is left>'"
+      warn "  $RALPH_INVOKE run $BATCH_DIR"
+    fi
     FINAL_STATUS="$EXIT_NEEDS_HUMAN"
     break
   fi
@@ -484,7 +516,34 @@ while true; do
     continue
   fi
 
-  # 6. It did not land. Retry within the run only if there is an attempt left and the
+  # 6. It did not land, but HEAD moved and nothing reported an error: the agent committed a
+  #    checkpoint and handed the rest off (prompt step 5). `claude --print` is ONE turn, and
+  #    a ticket whose work exceeds that turn's output budget ends exactly like this — exit
+  #    0, subtype success, no error anywhere, the deliverable half-written. That is progress,
+  #    not a failure, so continue on the SAME ticket instead of falling through to the stop
+  #    below and making the next run start the work from scratch.
+  #
+  #    The attempt counter is RESET rather than spent: it counts unproductive attempts, which
+  #    is what it was always for, and burning a ticket's retry budget for making progress is
+  #    backwards. The continuation cap is what keeps this from looping forever.
+  if [ "$HEAD_REF" != "$BASE_REF" ] && [ "$agent_status" -eq 0 ] && [ "$is_error" != "1" ]; then
+    CONTINUATIONS_ON_CURRENT=$((CONTINUATIONS_ON_CURRENT + 1))
+    ATTEMPTS_ON_CURRENT=0
+    say "   ⋯ progressed  ·  $(git log -1 --format=%h "$HEAD_REF")"
+
+    if [ "$MAX_CONTINUATIONS" -gt 0 ] && [ "$CONTINUATIONS_ON_CURRENT" -ge "$MAX_CONTINUATIONS" ]; then
+      warn ""
+      warn "$TICKET_FILE has progressed $CONTINUATIONS_ON_CURRENT times without landing. Like running"
+      warn "out of context, that is a size problem rather than something a further attempt fixes —"
+      warn "split it into smaller tickets rather than rerunning as-is. Every chunk is committed;"
+      warn "nothing has been lost, and $PROGRESS_FILE says where it got to."
+      FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+      break
+    fi
+    continue
+  fi
+
+  # 7. It did not land. Retry within the run only if there is an attempt left and the
   #    failure is one a second attempt could plausibly survive; otherwise stop rather than
   #    spend the budget watching the same ticket fail the same way.
   #

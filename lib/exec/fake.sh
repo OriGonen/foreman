@@ -18,6 +18,9 @@
 #     session-limit  the same event as the CLI words it today — valid JSON whose reply is
 #              "You've hit your session limit · resets 4:50pm (...)", with no epoch and no
 #              "usage limit reached" anywhere. The loop should pause on this too.
+#     partial-turn  a ticket that outgrew one turn: the agent commits what it has as a
+#              `wip:` checkpoint and hands off, leaving the status line unflipped. exit 0,
+#              subtype success, no error anywhere — the loop should continue the SAME ticket
 #     permission-denied  the shape a denied Bash call actually has: the work is done and
 #              sitting in the tree, the commit was refused, and the turn ends exit 0 /
 #              subtype success with the refusal only mentioned in the reply
@@ -146,6 +149,15 @@ exec_run() {
       printf '"cache_read_input_tokens":0,"cache_creation_input_tokens":0},'
       printf '"result":"You'"'"'ve hit your session limit \\u00b7 resets 4:50pm (Europe/Ljubljana)"}\n'
       return 1
+      ;;
+    partial-turn)
+      # Appends rather than overwrites, so repeating this behaviour produces a genuinely new
+      # commit each time and the continuation cap has something to count.
+      printf 'chunk %s\n' "$call" >> .ralph-fake-partial
+      git add -A >/dev/null 2>&1
+      git -c user.name=ralph-fake -c user.email=fake@ralph.invalid \
+        commit --quiet -m "wip: $ticket — remaining: the rest" >/dev/null 2>&1
+      _fake_payload success false "committed a checkpoint and handed off; the ticket is not done"
       ;;
     permission-denied)
       # Nothing about this says "failure" except the reply text: exit 0, is_error false. The

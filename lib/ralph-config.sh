@@ -263,6 +263,15 @@ RALPH_MAX_COST_USD="${RALPH_MAX_COST_USD:-0}"
 RALPH_MAX_MINUTES="${RALPH_MAX_MINUTES:-0}"
 RALPH_TICKET_ATTEMPTS="${RALPH_TICKET_ATTEMPTS:-2}"
 RALPH_ALLOW_DIRTY="${RALPH_ALLOW_DIRTY:-0}"
+# How much context a ticket is expected to fit well inside. A prompt slot, not a limit
+# anything enforces — the CLI has no such flag, and --autocompact is the real backstop. It
+# lives here rather than as a literal in the shared template because it is model- and
+# version-specific, and a number written into the template would age badly there.
+RALPH_CONTEXT_BUDGET_TOKENS="${RALPH_CONTEXT_BUDGET_TOKENS:-200000}"
+# Consecutive iterations that may commit progress on one ticket without landing it before
+# the loop stops for a human. Five chunks is not a retry problem; it is a mis-sized ticket,
+# and splitting it is a decision only a human can make.
+RALPH_MAX_CONTINUATIONS="${RALPH_MAX_CONTINUATIONS:-5}"
 
 # --- validation ------------------------------------------------------------
 # A valid RALPH_EXEC is one with an adapter file in lib/exec/. There is deliberately no
@@ -286,7 +295,8 @@ if [ -z "${RALPH_PERMISSION_MODE:-}" ]; then
     RALPH_PERMISSION_MODE=acceptEdits
 fi
 
-for _ralph_int in RALPH_TICKET_ATTEMPTS RALPH_MAX_MINUTES RALPH_PROGRESS_TAIL_BYTES; do
+for _ralph_int in RALPH_TICKET_ATTEMPTS RALPH_MAX_MINUTES RALPH_PROGRESS_TAIL_BYTES \
+                  RALPH_CONTEXT_BUDGET_TOKENS RALPH_MAX_CONTINUATIONS; do
   if ! [[ "${!_ralph_int}" =~ ^[0-9]+$ ]]; then
     echo "ralph: $_ralph_int must be a whole number (got '${!_ralph_int}')" >&2
     return 1 2>/dev/null || exit 1
