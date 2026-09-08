@@ -35,6 +35,11 @@ __PROGRESS_FILE__ rather than fixing it.
 Once the ticket is done, run the project's full checks:
 __VERIFY_BLOCK__
 
+Run every one of them in the foreground and wait for it to finish, however long it takes.
+This session is a single non-interactive turn — there is no later turn for a backgrounded
+command to deliver its result into, so a check you background is a check whose outcome you
+will never see, and the turn ends with the ticket neither verified nor landed.
+
 They must pass. Fix real failures. Never delete a test, weaken an assertion, or skip a
 test to get green — if a test looks wrong, say so in __PROGRESS_FILE__ and leave it
 failing.
@@ -46,6 +51,10 @@ afterwards, and record any finding you deliberately did not act on, with the rea
 __PROGRESS_FILE__.
 
 ## 5. Land it
+
+All three steps below happen in this turn. Nothing you defer to "after the run finishes"
+ever happens: the turn is the run, and a ticket left unflipped or uncommitted stops the loop
+for a human instead of moving on.
 
 1. Set the ticket's '__STATUS_LINE__' line to '__DONE_WORD__' and check off its checklist
    items. The loop reads that line to decide what runs next, so a ticket left unflipped

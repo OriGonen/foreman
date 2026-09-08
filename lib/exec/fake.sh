@@ -15,6 +15,9 @@
 #     error    exit non-zero with an error payload
 #     transient  exit non-zero with an overloaded_error payload (the loop should retry)
 #     limit    print a usage-limit string instead of JSON (the loop should pause)
+#     session-limit  the same event as the CLI words it today — valid JSON whose reply is
+#              "You've hit your session limit · resets 4:50pm (...)", with no epoch and no
+#              "usage limit reached" anywhere. The loop should pause on this too.
 #     crash    exit non-zero with output that is not JSON and carries no signal at all —
 #              indistinguishable from a logic failure, so the loop should NOT retry it
 #     context  exit non-zero with an unparseable context-overflow string: the CLI died
@@ -124,6 +127,17 @@ exec_run() {
       ;;
     limit)
       printf 'Claude AI usage limit reached|%s\n' "$(( $(date +%s) + 3600 ))"
+      return 1
+      ;;
+    session-limit)
+      # The same 5-hour window, as the current CLI actually words it under --print: no epoch
+      # anywhere, a local time instead, and the phrase "usage limit reached" nowhere in it.
+      printf '{"type":"result","subtype":"success","is_error":true,'
+      printf '"session_id":"fake-session","num_turns":1,"duration_ms":900,'
+      printf '"duration_api_ms":0,"total_cost_usd":0,'
+      printf '"usage":{"input_tokens":0,"output_tokens":0,'
+      printf '"cache_read_input_tokens":0,"cache_creation_input_tokens":0},'
+      printf '"result":"You'"'"'ve hit your session limit \\u00b7 resets 4:50pm (Europe/Ljubljana)"}\n'
       return 1
       ;;
     crash)

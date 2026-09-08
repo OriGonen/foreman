@@ -230,6 +230,20 @@ if case_is "a usage limit pauses the run"; then
   assert_contains "$OUT" "Resume:" "tells you how to resume"
 fi
 
+if case_is "a session limit pauses the run and says when it resets"; then
+  # The same 5-hour window, worded the way the CLI words it now. Matching only the older
+  # "usage limit reached" phrasing sent this down the generic paths, where a dirty tree wins
+  # the branch order and the run stopped as "left uncommitted changes" — the real cause, and
+  # the reset time, appearing nowhere in the terminal.
+  repo="$(make_repo 3 session-limit-repo)"
+  RALPH_FAKE_BEHAVIOUR=session-limit run_ralph "$repo" run batch --unlimited
+
+  assert_eq "$ST" 10 "exits paused, not stopped"
+  assert_contains "$OUT" "usage limit reached" "reads as a limit, not a mystery stop"
+  assert_contains "$OUT" "4:50pm" "carries the reset time through to the pause message"
+  assert_contains "$OUT" "Resume:" "tells you how to resume"
+fi
+
 if case_is "the cost budget stops the run before spending over it"; then
   repo="$(make_repo 5 cost-repo)"
   RALPH_FAKE_COST=0.50 RALPH_MAX_COST_USD=1 run_ralph "$repo" run batch --unlimited
@@ -264,6 +278,10 @@ if case_is "the prompt carries the ticket, the order file and the progress tail"
   assert_contains "$prompts" "batch/progress.txt" "the progress file is named"
   assert_contains "$prompts" "nothing recorded yet" "the first prompt says so"
   assert_contains "$prompts" "'**Status:**' line to 'implemented'" "it says what to write when done"
+  # The one thing the agent cannot discover for itself: --print gives it no second turn, so
+  # a backgrounded verify command ends the iteration waiting for a result that never comes.
+  assert_contains "$prompts" "single non-interactive turn" "it says the session is one-shot"
+  assert_contains "$prompts" "in the foreground" "and that checks must be waited on"
 fi
 
 if case_is "an unknown exec mode is rejected before anything runs"; then
