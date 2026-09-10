@@ -61,6 +61,7 @@ done < <(bash "$RALPH_TOOL_DIR/ralph-next.sh" "$BATCH_DIR" --unordered)
 
 if [ "${#tickets[@]}" -eq 0 ]; then
   echo "ralph order: $BATCH_DIR has no tickets — nothing to order."
+  ralph_issues_hint
   exit 0
 fi
 

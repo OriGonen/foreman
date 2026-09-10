@@ -174,6 +174,56 @@ ORDER_FILE="$(_ralph_path "${RALPH_ORDER_FILE:-}" order.md)"
 RALPH_ISSUES_DIRS="${RALPH_ISSUES_DIRS:-issues}"
 RALPH_ISSUES_EXCLUDE="${RALPH_ISSUES_EXCLUDE:-README.md spec.md order.md}"
 
+# Resolve RALPH_ISSUES_DIRS. Absolute paths are used as given; a relative entry is
+# BATCH-relative first, because every ralph command stands at the repo root and trying the
+# repo first made "." mean the repo root — quietly turning the repo's own top-level *.md
+# into this batch's tickets. A genuinely repo-relative entry ("docs/tickets") still
+# resolves, since nothing of that name exists under the batch.
+ralph_issues_dirs() {            # one resolved path per line, existing or not
+  local dir
+  for dir in $RALPH_ISSUES_DIRS; do
+    case "$dir" in
+      /*|[A-Za-z]:[/\\]*)                   printf '%s\n' "$dir" ;;
+      *) if [ -d "$BATCH_DIR/$dir" ]; then  printf '%s\n' "$BATCH_DIR/$dir"
+         else                               printf '%s\n' "$dir"; fi ;;
+    esac
+  done
+}
+
+# Explains a batch that looks empty: which directories RALPH_ISSUES_DIRS actually resolved
+# to, and — the thing that costs a whole debugging detour without it — whether the tickets
+# are sitting directly in the batch directory instead. The default RALPH_ISSUES_DIRS="issues"
+# looks in <batch>/issues, so a batch directory that is itself named issues/ looks in
+# issues/issues and quietly finds nothing.
+ralph_issues_hint() {
+  local dir shown base excluded n=0
+  for dir in $RALPH_ISSUES_DIRS; do
+    case "$dir" in
+      /*|[A-Za-z]:[/\\]*) shown="$dir" ;;
+      *)                  shown="$BATCH_DIR/$dir" ;;
+    esac
+    if [ -d "$shown" ]; then printf '  looked in: %s\n' "$shown"
+    else                     printf '  looked in: %s   (missing)\n' "$shown"
+    fi
+  done
+  printf '  from RALPH_ISSUES_DIRS="%s", resolved against the batch directory.\n' "$RALPH_ISSUES_DIRS"
+
+  for f in "$BATCH_DIR"/*.md; do
+    [ -f "$f" ] || continue
+    base="$(basename "$f")"
+    local skip=0
+    for excluded in $RALPH_ISSUES_EXCLUDE; do
+      [ "$base" = "$excluded" ] && skip=1 && break
+    done
+    [ "$skip" -eq 1 ] || n=$((n + 1))
+  done
+  if [ "$n" -gt 0 ]; then
+    printf '  But %s itself holds %s *.md file(s). If the tickets live\n' "$BATCH_DIR" "$n"
+    printf '  directly in the batch directory, set  RALPH_ISSUES_DIRS="."\n'
+    printf '  in %s\n' "$RALPH_CONF"
+  fi
+}
+
 # --- the agent's notes -----------------------------------------------------
 PROGRESS_FILE="$(_ralph_path "${RALPH_PROGRESS_FILE:-}" progress.txt)"
 RALPH_PROGRESS_TAIL_BYTES="${RALPH_PROGRESS_TAIL_BYTES:-6000}"
@@ -197,7 +247,8 @@ RALPH_SKIP_SANDBOX_PROBE="${RALPH_SKIP_SANDBOX_PROBE:-0}"
 # --- the agent -------------------------------------------------------------
 RALPH_MODEL="${RALPH_MODEL:-claude-sonnet-5}"
 RALPH_EFFORT="${RALPH_EFFORT:-high}"
-RALPH_PERMISSION_MODE="${RALPH_PERMISSION_MODE:-acceptEdits}"
+# RALPH_PERMISSION_MODE is deliberately NOT defaulted here: the default depends on where the
+# agent runs, and the adapter that knows is not loaded until the validation section below.
 declare -p RALPH_CLAUDE_ARGS >/dev/null 2>&1 || RALPH_CLAUDE_ARGS=()
 
 # --- prompt slots ----------------------------------------------------------
@@ -212,6 +263,18 @@ RALPH_MAX_COST_USD="${RALPH_MAX_COST_USD:-0}"
 RALPH_MAX_MINUTES="${RALPH_MAX_MINUTES:-0}"
 RALPH_TICKET_ATTEMPTS="${RALPH_TICKET_ATTEMPTS:-2}"
 RALPH_ALLOW_DIRTY="${RALPH_ALLOW_DIRTY:-0}"
+# Watch the iteration as it happens (`ralph run --live` sets this). Off by default, so the
+# default path — the agent's own --output-format included — stays exactly as it was.
+RALPH_STREAM="${RALPH_STREAM:-0}"
+# How much context a ticket is expected to fit well inside. A prompt slot, not a limit
+# anything enforces — the CLI has no such flag, and --autocompact is the real backstop. It
+# lives here rather than as a literal in the shared template because it is model- and
+# version-specific, and a number written into the template would age badly there.
+RALPH_CONTEXT_BUDGET_TOKENS="${RALPH_CONTEXT_BUDGET_TOKENS:-200000}"
+# Consecutive iterations that may commit progress on one ticket without landing it before
+# the loop stops for a human. Five chunks is not a retry problem; it is a mis-sized ticket,
+# and splitting it is a decision only a human can make.
+RALPH_MAX_CONTINUATIONS="${RALPH_MAX_CONTINUATIONS:-5}"
 
 # --- validation ------------------------------------------------------------
 # A valid RALPH_EXEC is one with an adapter file in lib/exec/. There is deliberately no
@@ -226,7 +289,17 @@ if ! ralph_exec_is_mode "$RALPH_EXEC"; then
   return 1 2>/dev/null || exit 1
 fi
 
-for _ralph_int in RALPH_TICKET_ATTEMPTS RALPH_MAX_MINUTES RALPH_PROGRESS_TAIL_BYTES; do
+# The permission mode, now that there is an adapter to ask. This has to come after the block
+# above rather than beside RALPH_MODEL, because the default is a property of where the agent
+# runs — see exec_default_permission_mode in ralph-exec.sh. A value from the environment or
+# from ralph.conf always wins; the adapter is only consulted when there is none.
+if [ -z "${RALPH_PERMISSION_MODE:-}" ]; then
+  RALPH_PERMISSION_MODE="$(ralph_exec_default_permission_mode "$RALPH_EXEC")" ||
+    RALPH_PERMISSION_MODE=acceptEdits
+fi
+
+for _ralph_int in RALPH_TICKET_ATTEMPTS RALPH_MAX_MINUTES RALPH_PROGRESS_TAIL_BYTES \
+                  RALPH_CONTEXT_BUDGET_TOKENS RALPH_MAX_CONTINUATIONS; do
   if ! [[ "${!_ralph_int}" =~ ^[0-9]+$ ]]; then
     echo "ralph: $_ralph_int must be a whole number (got '${!_ralph_int}')" >&2
     return 1 2>/dev/null || exit 1

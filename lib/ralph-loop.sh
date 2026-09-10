@@ -5,6 +5,7 @@
 #   ralph run     <batch>              # run one iteration
 #   ralph run     <batch> 5            # run at most 5 iterations
 #   ralph run     <batch> --unlimited  # run until done or a budget stops it
+#   ralph run     <batch> --live       # show what the agent is doing, as it does it
 #   ralph status  <batch>              # what is left, what is next
 #   ralph dry-run <batch>              # print the plan and the next prompt
 #
@@ -41,7 +42,10 @@
 #
 # OTHER KNOBS (all settable in ralph.conf; the environment wins over it)
 #   RALPH_MODEL=claude-sonnet-5    RALPH_EFFORT=high
-#   RALPH_TICKET_ATTEMPTS=2        tries per ticket within one run before stopping
+#   RALPH_TICKET_ATTEMPTS=2        unproductive tries per ticket in one run before stopping
+#   RALPH_MAX_CONTINUATIONS=5      consecutive iterations that may commit progress on one
+#                                  ticket without landing it before stopping for a human
+#   RALPH_CONTEXT_BUDGET_TOKENS=200000   what the prompt tells the agent to work inside
 #   RALPH_ALLOW_DIRTY=1            skip the clean-tree preflight
 #   RALPH_SANDBOX=<name>           sandbox to create/reattach to
 #   RALPH_SKIP_SANDBOX_PROBE=1     skip the batch's sandbox readiness probe and its setup
@@ -75,8 +79,12 @@ while [ $# -gt 0 ]; do
     --status)    MODE=status ;;
     --dry-run)   MODE=dry-run ;;
     --unlimited) MAX_ITERATIONS=0 ;;
+    # Exported rather than set, so it lands in ralph-config.sh's environment snapshot and
+    # beats a RALPH_STREAM in the batch's ralph.conf — the same precedence every other knob
+    # has. It has to be a real flag: the parser below rejects any unknown `-*`.
+    --live)      export RALPH_STREAM=1 ;;
     --help|-h)   show_help; exit 0 ;;
-    -*)          echo "Usage: ${RALPH_INVOKE:-ralph} run [<batch>] [<iterations>|--unlimited]" >&2; exit 1 ;;
+    -*)          echo "Usage: ${RALPH_INVOKE:-ralph} run [<batch>] [<iterations>|--unlimited] [--live]" >&2; exit 1 ;;
     *)
       if [[ "$1" =~ ^[0-9]+$ ]]; then
         MAX_ITERATIONS="$1"
@@ -98,6 +106,7 @@ source "$RALPH_TOOL_DIR/ralph-config.sh" || exit 1
 MAX_COST="$RALPH_MAX_COST_USD"
 MAX_MINUTES="$RALPH_MAX_MINUTES"
 TICKET_ATTEMPTS="$RALPH_TICKET_ATTEMPTS"
+MAX_CONTINUATIONS="$RALPH_MAX_CONTINUATIONS"
 
 # ---------------------------------------------------------------------------
 # Small helpers
@@ -227,6 +236,16 @@ if [ "$MODE" = "dry-run" ]; then
   say ""
   say "Exec:    $(exec_describe)"
   say "Model:   $RALPH_MODEL   Effort: $RALPH_EFFORT"
+  # The effective permission mode, which is a per-mode default unless the batch set one —
+  # and the only place outside a real `claude` call where you can see which one won.
+  say "Perms:   $RALPH_PERMISSION_MODE"
+  # The other decision `fake` cannot exercise, for the same reason: it never invokes `claude`
+  # and so never chooses an --output-format.
+  if [ "$RALPH_STREAM" = "1" ]; then
+    say "Live:    on (stream-json; file writes and shell commands drawn to stderr)"
+  else
+    say "Live:    off (json; add --live to watch the iteration)"
+  fi
   say "Budgets: cost=$(budget_label "$MAX_COST" '$')  time=$(budget_label "$MAX_MINUTES" '' m)  iterations=$(budget_label "$MAX_ITERATIONS")"
   say "Logs:    $RUN_JSONL"
   say "         $RUN_LOG"
@@ -256,7 +275,17 @@ LANDED=0
 SECONDS=0
 
 VERDICT_FILE="$(mktemp)"
-trap 'rm -f "$VERDICT_FILE"' EXIT
+# The agent's payload, on its way from exec_run to the recorder. It goes through a file
+# because exec_run is now the head of a pipeline rather than a command substitution — see
+# the call site for why that matters.
+PAYLOAD_FILE="$(mktemp)"
+trap 'rm -f "$VERDICT_FILE" "$PAYLOAD_FILE"' EXIT
+
+# The one thing that differs between a plain run and a watched one, on this side of the
+# seam. ralph-stream.cjs is in the pipeline either way — in plain mode it is a pass-through
+# — so there is one code path here rather than two.
+STREAM_ARGS=()
+[ "$RALPH_STREAM" = "1" ] && STREAM_ARGS=(--live)
 
 # Ctrl-C should end the run between iterations rather than half-way through one. The trap
 # only raises a flag; the agent is a foreground child, so an interrupt during an iteration
@@ -298,6 +327,12 @@ ATTEMPTS_ON_CURRENT=0
 # what the failed one said. There is no narrative here to anchor a retry on a wrong
 # approach, and nothing self-reported to have to trust.
 PREV_CONTEXT_EXHAUSTED=0
+# How many consecutive iterations have committed progress on the current ticket without
+# landing it, and the HEAD this ticket was FIRST attempted from. The second is what the
+# landing iteration is asked to review against, so a ticket that took three passes is
+# reviewed as one diff rather than three unrelated slices.
+CONTINUATIONS_ON_CURRENT=0
+TICKET_BASE_REF=""
 
 while true; do
   if [ "$PAUSE_REQUESTED" -eq 1 ]; then
@@ -329,6 +364,8 @@ while true; do
     CURRENT_TICKET="$TICKET_FILE"
     ATTEMPTS_ON_CURRENT=0
     PREV_CONTEXT_EXHAUSTED=0
+    CONTINUATIONS_ON_CURRENT=0
+    TICKET_BASE_REF=""
   fi
   ATTEMPTS_ON_CURRENT=$((ATTEMPTS_ON_CURRENT + 1))
 
@@ -351,6 +388,7 @@ while true; do
 
   ITERATIONS_RUN=$((ITERATIONS_RUN + 1))
   BASE_REF=$(git rev-parse HEAD)
+  [ -n "$TICKET_BASE_REF" ] || TICKET_BASE_REF="$BASE_REF"
   STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
   say "── iteration $ITERATIONS_RUN  ·  $TICKET_FILE$([ "$ATTEMPTS_ON_CURRENT" -gt 1 ] && printf ' (attempt %s)' "$ATTEMPTS_ON_CURRENT")"
@@ -370,11 +408,23 @@ while true; do
   RALPH_CONTEXT_RETRY=0
   [ "$ATTEMPTS_ON_CURRENT" -gt 1 ] && [ "$PREV_CONTEXT_EXHAUSTED" = "1" ] && RALPH_CONTEXT_RETRY=1
 
+  # A previous iteration handed this ticket off part-finished. Tell the prompt, and give it
+  # the ticket's own first base to review against rather than this iteration's.
+  RALPH_CONTINUATION=0
+  [ "$CONTINUATIONS_ON_CURRENT" -gt 0 ] && RALPH_CONTINUATION=1
+  RALPH_REVIEW_BASE="$TICKET_BASE_REF"
+
   # shellcheck source=ralph-prompt.sh
   source "$RALPH_TOOL_DIR/ralph-prompt.sh"
 
-  agent_status=0
-  result=$(exec_run "$RALPH_PROMPT" "$TICKET_FILE") || agent_status=$?
+  # `${PIPESTATUS[0]}` is load-bearing: `set -o pipefail` is on, so a plain `$?` here would
+  # conflate the filter's status with the agent's, and every branch below turns on the
+  # agent's. Everything after these three lines — the recorder call, the verdict, the branch
+  # order — is untouched by whether the run is being watched.
+  exec_run "$RALPH_PROMPT" "$TICKET_FILE" |
+    node "$RALPH_TOOL_DIR/ralph-stream.cjs" ${STREAM_ARGS+"${STREAM_ARGS[@]}"} > "$PAYLOAD_FILE"
+  agent_status=${PIPESTATUS[0]}
+  result=$(cat "$PAYLOAD_FILE")
 
   # Bring the iteration's commits back before inspecting anything: the ticket's Status
   # line, and every check below, lives in the work the agent just did. The adapter sets
@@ -413,6 +463,8 @@ while true; do
   transient=$(verdict_get "$VERDICT_FILE" transient)
   parse_ok=$(verdict_get "$VERDICT_FILE" parse_ok)
   context_exhausted=$(verdict_get "$VERDICT_FILE" context_exhausted)
+  permission_denied=$(verdict_get "$VERDICT_FILE" permission_denied)
+  is_error=$(verdict_get "$VERDICT_FILE" is_error)
   PREV_CONTEXT_EXHAUSTED="${context_exhausted:-0}"
 
   # --- decide what happens next ---------------------------------------------
@@ -440,17 +492,49 @@ while true; do
     break
   fi
 
-  # 3. The tree was left dirty. Never auto-commit: that would be committing work no one
-  #    reviewed, under a ticket that may not have finished.
-  if [ "$dirty" -eq 1 ]; then
+  # 3. A tool call was denied for want of permission. This has to be decided ABOVE the
+  #    dirty-tree branch: the denial is usually `git commit` itself, so the tree is dirty as
+  #    a CONSEQUENCE, and letting that branch win means the terminal reports the symptom and
+  #    never names the cause. Retrying is pointless — the next iteration is configured
+  #    identically and will be denied identically — so stop and say what to change.
+  if [ "$permission_denied" = "1" ]; then
     warn ""
-    warn "$TICKET_FILE left uncommitted changes behind. Stopping so you can look."
+    warn "$TICKET_FILE was stopped by a permission denial, not by its own work."
+    warn "\`claude --print\` has no one to approve a tool call, so anything outside the"
+    warn "allowlist is denied outright — including the \`git commit\` this prompt asks for,"
+    warn "after the ticket's work has been done and paid for."
+    warn ""
+    warn "Add this line to $RALPH_CONF, then rerun:"
+    warn "  RALPH_CLAUDE_ARGS=(--allowed-tools \"Bash(git add:*)\" \"Bash(git commit:*)\")"
+    warn "(Or set RALPH_PERMISSION_MODE=bypassPermissions there if you want no gate at all.)"
     exec_show_dirty
     FINAL_STATUS="$EXIT_NEEDS_HUMAN"
     break
   fi
 
-  # 4. The ticket landed.
+  # 4. The tree was left dirty. Never auto-commit: that would be committing work no one
+  #    reviewed, under a ticket that may not have finished.
+  if [ "$dirty" -eq 1 ]; then
+    warn ""
+    warn "$TICKET_FILE left uncommitted changes behind. Stopping so you can look."
+    exec_show_dirty
+    # The signature of a turn that simply ran out of room: it ended cleanly, nothing
+    # reported an error, the ticket is unflipped, and the work is still in the tree. The
+    # agent should have checkpointed it itself (prompt step 5); prompt fixes are never 100%,
+    # so say what to type. TEXT ONLY — nothing is committed for you here or anywhere else.
+    if [ "$agent_status" -eq 0 ] && [ "$is_error" != "1" ] && [ "$flipped" -eq 0 ]; then
+      warn ""
+      warn "This looks like a turn that ran out of room rather than one that failed: it ended"
+      warn "cleanly, with the ticket unflipped and its work uncommitted. If the changes look"
+      warn "sound, keep them as a checkpoint and rerun to continue the same ticket:"
+      warn "  git add -A && git commit -m 'wip: $TICKET_FILE — remaining: <what is left>'"
+      warn "  $RALPH_INVOKE run $BATCH_DIR"
+    fi
+    FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+    break
+  fi
+
+  # 5. The ticket landed.
   if [ "$flipped" -eq 1 ]; then
     LANDED=$((LANDED + 1))
     if [ "$HEAD_REF" = "$BASE_REF" ]; then
@@ -460,7 +544,34 @@ while true; do
     continue
   fi
 
-  # 5. It did not land. Retry within the run only if there is an attempt left and the
+  # 6. It did not land, but HEAD moved and nothing reported an error: the agent committed a
+  #    checkpoint and handed the rest off (prompt step 5). `claude --print` is ONE turn, and
+  #    a ticket whose work exceeds that turn's output budget ends exactly like this — exit
+  #    0, subtype success, no error anywhere, the deliverable half-written. That is progress,
+  #    not a failure, so continue on the SAME ticket instead of falling through to the stop
+  #    below and making the next run start the work from scratch.
+  #
+  #    The attempt counter is RESET rather than spent: it counts unproductive attempts, which
+  #    is what it was always for, and burning a ticket's retry budget for making progress is
+  #    backwards. The continuation cap is what keeps this from looping forever.
+  if [ "$HEAD_REF" != "$BASE_REF" ] && [ "$agent_status" -eq 0 ] && [ "$is_error" != "1" ]; then
+    CONTINUATIONS_ON_CURRENT=$((CONTINUATIONS_ON_CURRENT + 1))
+    ATTEMPTS_ON_CURRENT=0
+    say "   ⋯ progressed  ·  $(git log -1 --format=%h "$HEAD_REF")"
+
+    if [ "$MAX_CONTINUATIONS" -gt 0 ] && [ "$CONTINUATIONS_ON_CURRENT" -ge "$MAX_CONTINUATIONS" ]; then
+      warn ""
+      warn "$TICKET_FILE has progressed $CONTINUATIONS_ON_CURRENT times without landing. Like running"
+      warn "out of context, that is a size problem rather than something a further attempt fixes —"
+      warn "split it into smaller tickets rather than rerunning as-is. Every chunk is committed;"
+      warn "nothing has been lost, and $PROGRESS_FILE says where it got to."
+      FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+      break
+    fi
+    continue
+  fi
+
+  # 7. It did not land. Retry within the run only if there is an attempt left and the
   #    failure is one a second attempt could plausibly survive; otherwise stop rather than
   #    spend the budget watching the same ticket fail the same way.
   #

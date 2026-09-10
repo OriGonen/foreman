@@ -8,10 +8,25 @@
 
 _sbx_sh() { sbx exec "$RALPH_SANDBOX" sh -c "$1"; }
 
-# The clone lives at the same path inside the container as the repo does on the host, so
-# the origin URL is what distinguishes the two arrangements.
+_SBX_SOURCE_MOUNT=/run/sandbox/source
+
+# `--clone` mounts the host repo read-only at $_SBX_SOURCE_MOUNT and clones it. The MOUNT is
+# the invariant; origin is not — sbx only adds origin=$_SBX_SOURCE_MOUNT when the host repo
+# has no origin of its own, so a repo with a real GitHub remote keeps that URL in the clone
+# and this check used to reject a correctly-created clone sandbox.
 _sbx_is_clone_mode() {
-  [ "$(_sbx_sh 'git remote get-url origin 2>/dev/null' 2>/dev/null | tr -d '\r')" = "/run/sandbox/source" ]
+  [ "$(_sbx_sh "[ -d $_SBX_SOURCE_MOUNT ] && echo clone" 2>/dev/null | tr -d '\r' | head -1)" = clone ]
+}
+
+# Point the clone's origin at the read-only host mount. exec_sync_down fetches through
+# `origin` every iteration, and this is also what keeps a stray `git push` inside the sandbox
+# rather than on the real upstream. Idempotent; verified rather than assumed, because a
+# silent failure here would surface as an unexplained reset failure mid-iteration.
+_sbx_point_origin_at_source() {
+  _sbx_sh "git remote set-url origin $_SBX_SOURCE_MOUNT 2>/dev/null ||
+           git remote add origin $_SBX_SOURCE_MOUNT" >/dev/null 2>&1
+  [ "$(_sbx_sh 'git remote get-url origin 2>/dev/null' 2>/dev/null | tr -d '\r' | head -1)" \
+    = "$_SBX_SOURCE_MOUNT" ]
 }
 
 # `sbx create` acts on the repository at REPO_ROOT. In a linked worktree that path has a
@@ -65,11 +80,27 @@ _sbx_probe() {
 
 exec_required_tool() { printf 'sbx'; }
 
+# The container is the boundary, so the permission gate protects nothing that the sandbox
+# does not already protect — and under `claude --print` there is no approver, so a
+# non-allowlisted `git commit` is denied outright, after the ticket's work is done and paid
+# for. Both sbx modes; an explicit RALPH_PERMISSION_MODE still wins.
+exec_default_permission_mode() { printf 'bypassPermissions'; }
+
+# Verified against a real sandbox, not assumed: `sbx run … -- <flags>` delivers them to
+# claude verbatim — omitting --verbose gets the CLI's own refusal of stream-json, which is a
+# rule only claude knows — and under stream-json sbx prefixes its OSC title sequence to the
+# FIRST JSON object rather than putting it on a line of its own. ralph-stream.cjs strips per
+# line before testing for `{`, so that line parses; the banner's other lines are dropped.
+#
+# What sbx does NOT forward is the agent's own error text: a claude that fails to start
+# yields sbx's banner and `ERROR: agent exited with code 1` and nothing else. That is why
+# the filter keeps a tail when no result object ever arrives.
 exec_run() {
+  ralph_exec_format_args
   sbx run claude --name "$RALPH_SANDBOX" -- \
     --model "$RALPH_MODEL" --effort "$RALPH_EFFORT" --permission-mode "$RALPH_PERMISSION_MODE" \
     ${RALPH_CLAUDE_ARGS+"${RALPH_CLAUDE_ARGS[@]}"} \
-    --print --output-format json -p "$1"
+    --print "${RALPH_EXEC_FORMAT_ARGS[@]}" -p "$1"
 }
 
 exec_preflight() { _sbx_preflight; }

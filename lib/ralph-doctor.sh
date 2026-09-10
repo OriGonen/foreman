@@ -88,6 +88,14 @@ batches=$(find . \
   -o -name ralph.conf -print 2>/dev/null |
   sed 's|^\./||; s|/ralph\.conf$||' | sort)
 
+# The last assignment of a scalar RALPH_* in a conf, unquoted. doctor deliberately does not
+# source ralph-config.sh (it has to work in a repo with no batch at all), and it must not
+# source a batch's ralph.conf either — that file is arbitrary bash. Reading it as text is
+# the compromise: enough to spot a misconfiguration, never enough to be affected by one.
+_conf_value() {
+  grep -E "^[[:space:]]*$2=" "$1" 2>/dev/null | tail -1 | sed 's/[^=]*=//' | tr -d '"'"'"'\r'
+}
+
 # Ask each batch's adapter what it needs on PATH, and check the union. One line per tool,
 # "<tool> <the mode that asked for it>". A batch in a mode that needs nothing (fake)
 # contributes nothing; a repo with no batch at all is judged on the default mode.
@@ -107,8 +115,7 @@ _want_runner() {
 if [ -n "$batches" ]; then
   while IFS= read -r b; do
     [ -n "$b" ] || continue
-    mode=$(grep -E '^[[:space:]]*RALPH_EXEC=' "$b/ralph.conf" 2>/dev/null |
-           tail -1 | sed 's/.*=//' | tr -d '"'"'"'\r')
+    mode=$(_conf_value "$b/ralph.conf" RALPH_EXEC)
     _want_runner "${mode:-sandbox}" "$b/ralph.conf"
   done <<< "$batches"
 else
@@ -207,6 +214,30 @@ echo
 # ---------------------------------------------------------------------------
 # The batches
 # ---------------------------------------------------------------------------
+# Can this batch's agent commit at all?
+#
+# Only `local` is asked. The sandbox modes default to bypassPermissions, where the question
+# does not arise, and `fake` runs no agent. In `local` the default is acceptEdits, which
+# covers Edit and Write but leaves Bash to the settings allowlist — and `claude --print` has
+# no approver, so a `git commit` that is not allowlisted is denied outright. The ticket's
+# work still happens, and still costs; only the landing fails. This check is the difference
+# between finding that out here at $0 and finding it out after three tickets.
+_check_can_commit() {
+  local conf="$1" mode="$2" perm args
+  [ "$mode" = local ] || return 0
+
+  perm="$(_conf_value "$conf" RALPH_PERMISSION_MODE)"
+  case "$perm" in bypassPermissions|dontAsk|auto) return 0 ;; esac
+
+  args="$(grep -E '^[[:space:]]*RALPH_CLAUDE_ARGS=' "$conf" 2>/dev/null | tail -1)"
+  case "$args" in *"git commit"*|*"--dangerously-skip-permissions"*) return 0 ;; esac
+
+  bad "$conf — RALPH_EXEC=local with no way for the agent to commit"
+  note "acceptEdits does not cover Bash, and \`claude --print\` cannot ask anyone."
+  note "Add to that file:"
+  note "  RALPH_CLAUDE_ARGS=(--allowed-tools \"Bash(git add:*)\" \"Bash(git commit:*)\")"
+}
+
 echo "Batches"
 if [ -z "$batches" ]; then
   echo "  none — no directory here has a ralph.conf."
@@ -219,6 +250,7 @@ else
     else
       printf '  %-40s (order unreadable — run: %s status %s)\n' "$b" "$RALPH_INVOKE" "$b"
     fi
+    _check_can_commit "$b/ralph.conf" "$(_conf_value "$b/ralph.conf" RALPH_EXEC)"
   done <<< "$batches"
 fi
 echo

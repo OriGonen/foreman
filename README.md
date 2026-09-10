@@ -111,7 +111,9 @@ Everything else has a default; `lib/ralph.conf.template` documents the full set.
 If `order.md` exists, the lines between its `<!-- ORDER:BEGIN -->` and `<!-- ORDER:END -->`
 markers are the order, one ticket path per line (repo-relative or batch-relative, inside a
 code fence or not, `#` to comment one out). If it does not exist, every `*.md` under
-`RALPH_ISSUES_DIRS` runs in filename order — which is what the `NN-` prefixes are for.
+`RALPH_ISSUES_DIRS` runs in filename order — which is what the `NN-` prefixes are for. A
+relative entry there is resolved against the batch directory, not the repo root, so `.`
+means the batch directory itself.
 
 `ralph init` doesn't leave that at filename order: right after scaffolding, it runs
 `ralph order <batch>`, which has an agent read every ticket and rewrite the order, weighing
@@ -191,6 +193,97 @@ batch in it shares that one — the setup cost is paid once per repo.
 the repository at the path you are standing in, and a worktree's `.git` is a file pointing
 elsewhere. Run from the primary checkout, on whichever branch the batch should land on, or
 set `RALPH_EXEC=local`. The loop refuses in preflight rather than discovering this later.
+
+### Watching a run — `ralph run --live`
+
+Without it, the terminal is silent from the moment the agent starts until it returns —
+seven minutes, forty-five minutes, however long — with no way to tell whether the iteration
+is alive or what it is doing.
+
+```bash
+ralph run .scratch/my-batch --live      # or RALPH_STREAM=1 in ralph.conf
+```
+
+A wall clock and one line per **file write and shell command**, drawn to stderr:
+
+```
+   03:12 · Edit lib/foo.js
+```
+
+Reads, greps and globs are skipped — they are the bulk of the traffic and say nothing about
+progress. Writes and commands are the two signals that show a ticket actually moving.
+
+Only the tool name and its first path or command argument are ever printed, truncated: a
+`tool_use` event carries the *whole* input, and a `Write` carries the entire file body. The
+input object is never rendered, no transcript is dumped, and no raw stream is kept on disk.
+
+**Off by default**, and the default path is unchanged — `lib/ralph-stream.cjs` sits in the
+pipeline either way and is a pass-through when the run is not being watched, so there is one
+code path rather than two. `--live` also switches the agent to `--output-format stream-json`
+(which the CLI requires `--verbose` alongside); the recorder still receives exactly the one
+result object it always did. `ralph dry-run` reports which state a run would use.
+
+### Tickets bigger than one turn
+
+`claude --print --output-format json` is **one turn**. It prints a single JSON object and
+exits; there is no second turn, for any batch, and no setting that buys one. A ticket whose
+work exceeds that turn's output budget therefore ends with the deliverable half-written,
+`exit 0`, `subtype success` and no error anywhere — and used to stop the run as "still not
+implemented", so the next run started the same work again from nothing.
+
+The agent handles this itself. The prompt asks it, before starting any substantial piece of
+work, whether it can finish *that* and still land the ticket in what is left of the turn;
+if not, it commits what it has as `wip: <ticket> — <what remains>`, **leaves the status line
+unflipped**, and writes a `Remaining:` list in `progress.txt`.
+
+The loop then treats that as what it is:
+
+- HEAD moved, status unflipped, nothing errored → `⋯ progressed`, and the **same** ticket
+  gets the next iteration, told it is continuing and pointed at the handoff note;
+- the continuation is reviewed against the commit the ticket was **first** attempted from,
+  not its own last chunk, so a ticket that took three passes is still reviewed as one diff;
+- progress does not spend a `RALPH_TICKET_ATTEMPTS` retry — that counter counts unproductive
+  attempts, which is what it was always for;
+- `RALPH_MAX_CONTINUATIONS` (default 5) stops the run if one ticket keeps chunking without
+  landing. That is a mis-sized ticket, not a retry problem, and splitting it is your call.
+
+**The loop still never auto-commits.** The *author* commits its own work; the machinery only
+stops calling that a failure. WIP commits stay in history — `wip: profile script —
+remaining: run at N=96` is better history than a squash that hides the three passes.
+
+`RALPH_CONTEXT_BUDGET_TOKENS` (default 200000) is the number the prompt asks the agent to
+judge itself against. Nothing enforces it; the CLI has no such flag, and `--autocompact` is
+the real backstop.
+
+### Permissions — `RALPH_PERMISSION_MODE` and `RALPH_CLAUDE_ARGS`
+
+`claude --print` has **nobody to ask**. Anything that would raise a permission prompt is
+denied automatically, and there is no second turn in which to recover: the ticket's work
+still happens, and still costs, and only the landing fails — showing up as a dirty tree
+with no mention of permissions anywhere.
+
+That matters because `acceptEdits` covers `Edit` and `Write` but leaves `Bash` to the
+settings allowlist, and ralph's own prompt requires the agent to `git commit` its work.
+
+So `RALPH_PERMISSION_MODE` has **no single default** — it is asked of the execution mode:
+
+| `RALPH_EXEC` | default | why |
+|---|---|---|
+| `sandbox`, `sandbox-mount` | `bypassPermissions` | the container is the boundary; the gate protects nothing it does not, and costs a paid iteration each time it fires |
+| `local`, `fake` | `acceptEdits` | no container — "no isolation" and "no permission check at all" are different things on a machine with real repositories on it |
+
+Anything you set in `ralph.conf` or the environment wins over both. `ralph dry-run` prints
+the mode that actually won, which is the only place outside a real run where you can see it.
+
+`local` therefore needs the allowlist that lets its agent commit, and `ralph.conf.template`
+ships it uncommented for exactly that reason:
+
+```bash
+RALPH_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)")
+```
+
+`ralph doctor` flags a `local` batch that has neither this nor `bypassPermissions` — at $0,
+rather than after three tickets.
 
 ## Pausing and resuming
 
@@ -288,6 +381,8 @@ That tool is manual and is never invoked by the loop.
 | `lib/prompt.template.md` | the five-step prompt, with slots |
 | `lib/ralph-record.cjs` | appends one iteration to both logs; writes the verdict the loop acts on |
 | `lib/ralph-report.cjs` | manual log reader |
+| `lib/ralph-stream.cjs` | sits between the agent and the recorder; draws the run when `--live`, a pass-through otherwise |
+| `lib/ralph-strip-ansi.cjs` | removes `sbx`'s banner control codes — shared by the two above |
 | `lib/ralph-init.sh` | scaffolds a batch, then runs `ralph-order.sh` unless told not to |
 | `lib/ralph-order.sh` | has an agent order the tickets by dependency, importance and load |
 | `lib/ralph-doctor.sh` | checks the machine, the repo and the batches; `--fix` writes the repo's two files |

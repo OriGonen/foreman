@@ -30,10 +30,27 @@ __ITERATIVE_CHECK_BLOCK__
 Stay inside the ticket's scope. If you find an unrelated problem, note it in
 __PROGRESS_FILE__ rather than fixing it.
 
+Before you start any substantial piece of work — a large file, a long-running command, a
+wide read of the repository — ask whether you can finish *that* and still land the whole
+ticket in what is left of this turn. If you cannot, checkpoint what you already have first,
+using the handoff at the end of step 5, and let the next iteration continue from it.
+
+Ask it explicitly rather than waiting to notice. This turn has an output budget as well as
+a context window, and the output budget is invisible to you: when it runs out the turn
+simply ends, with the deliverable half-written, nothing committed, and no error anywhere to
+tell you that is what happened. You are expected to land this ticket well inside
+__CONTEXT_BUDGET__ tokens of context; past that with substantial work still remaining, stop
+adding to it and hand off.
+
 ## 3. Verify
 
 Once the ticket is done, run the project's full checks:
 __VERIFY_BLOCK__
+
+Run every one of them in the foreground and wait for it to finish, however long it takes.
+This session is a single non-interactive turn — there is no later turn for a backgrounded
+command to deliver its result into, so a check you background is a check whose outcome you
+will never see, and the turn ends with the ticket neither verified nor landed.
 
 They must pass. Fix real failures. Never delete a test, weaken an assertion, or skip a
 test to get green — if a test looks wrong, say so in __PROGRESS_FILE__ and leave it
@@ -47,6 +64,10 @@ __PROGRESS_FILE__.
 
 ## 5. Land it
 
+All three steps below happen in this turn. Nothing you defer to "after the run finishes"
+ever happens: the turn is the run, and a ticket left unflipped or uncommitted stops the loop
+for a human instead of moving on.
+
 1. Set the ticket's '__STATUS_LINE__' line to '__DONE_WORD__' and check off its checklist
    items. The loop reads that line to decide what runs next, so a ticket left unflipped
    will be attempted again on the next iteration.
@@ -57,3 +78,14 @@ __PROGRESS_FILE__.
    cost, not a one-off — skip detail that is already recoverable from the diff or the
    ticket file itself.
 3. __COMMIT_NOTE__
+
+If you reach this point without having finished the ticket, you have not done what was
+asked — but do not compound it by leaving the work uncommitted, and do not flip the status
+line to hide it. Hand off instead:
+
+- commit what you have as `wip: <ticket> — <what remains>`;
+- leave the '__STATUS_LINE__' line exactly as it is, so the loop knows the ticket has not
+  landed and gives it another iteration;
+- write a `Remaining:` list in __PROGRESS_FILE__ — what is left, and where you got to.
+
+The next iteration starts from that commit and reads that list.

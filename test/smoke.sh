@@ -221,12 +221,207 @@ if case_is "a dirty tree stops the run and is never auto-committed"; then
   assert_eq "$(git -C "$repo" log --oneline | wc -l)" "1" "committed nothing"
 fi
 
+if case_is "--live draws what the agent is doing, and only that"; then
+  # Once exec_run is invoked the terminal is silent until it returns. Writes and shell
+  # commands are the two signals worth drawing; reads, greps and globs are the majority of
+  # the traffic and say nothing about progress.
+  # Two tickets, one iteration: the second is what the dry-run below has left to plan for.
+  repo="$(make_repo 2 live-repo)"
+  RALPH_FAKE_BEHAVIOUR=stream run_ralph "$repo" run batch --live
+
+  assert_contains "$OUT" "Write src/foo.js" "a file write is drawn"
+  assert_contains "$OUT" "Bash npm test" "and a shell command"
+  assert_missing "$OUT" "src/quiet-read.js" "a read is not"
+  # A tool_use event carries the WHOLE input — a Write carries the entire file body.
+  assert_missing "$OUT" "SECRET-BODY-CONTENT" "the input object never reaches the terminal"
+  assert_missing "$OUT" "TAIL-SENTINEL" "and a long argument is truncated"
+  assert_eq "$(done_count "$repo")" "1" "the ticket still lands"
+
+  # Which --output-format the adapter would ask for is the other decision `fake` cannot
+  # exercise, so dry-run reports the state that decides it.
+  run_ralph "$repo" dry-run batch
+  assert_contains "$OUT" "Live:    off" "dry-run says a plain run is not watched"
+  run_ralph "$repo" dry-run batch --live
+  assert_contains "$OUT" "Live:    on" "and that a --live one is"
+fi
+
+if case_is "a --live run that produces no result object still says what it saw"; then
+  # Verified against a real sandbox: when the agent fails to start, `sbx` prints its own
+  # banner and `ERROR: agent exited with code 1`, and claude's error text never appears.
+  # All of it is non-JSON, so the filter drops every line and the payload is empty — and the
+  # recorder only dumps a raw payload when there is one, leaving the human with "payload was
+  # not valid JSON" and nothing to read. The tail is what keeps that diagnosable.
+  repo="$(make_repo 1 live-noresult)"
+  RALPH_FAKE_BEHAVIOUR=stream-no-result run_ralph "$repo" run batch --live
+
+  runlog="$(cat "$repo/batch/ralph-runs.log")"
+  assert_contains "$runlog" "RAW PAYLOAD" "the log dumps what did arrive"
+  assert_contains "$runlog" "SANDBOX-ERROR-SENTINEL" "including the error the sandbox printed"
+  assert_contains "$OUT" "printed no result object" "and the run says so as it happens"
+  assert_eq "$(done_count "$repo")" "0" "nothing is claimed to have landed"
+fi
+
+if case_is "--live changes nothing about the verdict or the recorded usage"; then
+  # The assertion that protects the payload path: the filter sits in the pipeline in both
+  # modes, and in the plain one it is a pass-through.
+  plain="$(make_repo 2 live-equiv-plain)"
+  lively="$(make_repo 2 live-equiv-live)"
+
+  RALPH_FAKE_COST=0.25 run_ralph "$plain" run batch --unlimited
+  plain_out="$OUT"; plain_st="$ST"
+  RALPH_FAKE_COST=0.25 run_ralph "$lively" run batch --unlimited --live
+  assert_eq "$ST" "$plain_st" "the same exit status"
+  assert_eq "$(done_count "$lively")" "$(done_count "$plain")" "the same tickets land"
+
+  # The footer is the run's whole verdict and every usage figure in one block.
+  footer() { printf '%s' "$1" | sed -n '/^== run /,$p' | grep -v '^== run '; }
+  assert_eq "$(footer "$OUT")" "$(footer "$plain_out")" "and identical usage figures"
+fi
+
+if case_is "a ticket that hands off part-finished is continued, not failed"; then
+  # `claude --print` is one turn. A ticket whose work exceeds that turn's output budget ends
+  # exit 0, subtype success, no error anywhere, with the deliverable half-written — and used
+  # to stop the run as "still not implemented", so the next run redid the work from scratch.
+  repo="$(make_repo 2 partial-repo)"
+  log="$WORK/partial-prompts.txt"
+  base="$(git -C "$repo" rev-parse HEAD)"
+  RALPH_FAKE_PROMPT_LOG="$log" RALPH_FAKE_BEHAVIOUR=partial-turn:land \
+    run_ralph "$repo" run batch --unlimited
+
+  assert_contains "$OUT" "⋯ progressed" "the checkpoint reads as progress"
+  assert_missing "$OUT" "is still not 'implemented'" "and not as a failure"
+  assert_missing "$OUT" "(attempt 2)" "progress does not spend an attempt"
+  assert_eq "$(done_count "$repo")" "2" "the ticket lands on the continuation"
+
+  # The continuation is told, and is reviewed against the ticket's FIRST base rather than
+  # its own last chunk — otherwise chunking silently produces unreviewed code.
+  p1="$(awk '/^===== fake prompt 1 /{f=1;next} /^===== fake prompt /{f=0} f' "$log")"
+  p2="$(awk '/^===== fake prompt 2 /{f=1;next} /^===== fake prompt /{f=0} f' "$log")"
+  assert_missing "$p1" "You are CONTINUING" "the first attempt is not told"
+  assert_contains "$p2" "You are CONTINUING" "the second one is"
+  assert_contains "$p2" "$base" "and reviews against the ticket's first base"
+
+  run_ralph "$repo" report batch
+  assert_contains "$OUT" "progressed 1" "the report counts it as its own outcome"
+  run_ralph "$repo" report batch --failures
+  assert_contains "$OUT" "every recorded iteration landed" "and does not flag it as a problem"
+fi
+
+if case_is "a ticket that never stops chunking is called mis-sized"; then
+  repo="$(make_repo 2 continuation-cap-repo)"
+  RALPH_MAX_CONTINUATIONS=3 RALPH_FAKE_BEHAVIOUR=partial-turn \
+    run_ralph "$repo" run batch --unlimited
+
+  assert_eq "$ST" 20 "stops for a human rather than chunking forever"
+  assert_contains "$OUT" "has progressed 3 times without landing" "counts the continuations"
+  assert_contains "$OUT" "split it into smaller tickets" "says what to do about it"
+  assert_eq "$(done_count "$repo")" "0" "nothing landed"
+fi
+
+if case_is "a progressed iteration does not consume a ticket's attempts"; then
+  repo="$(make_repo 2 progress-attempts-repo)"
+  RALPH_TICKET_ATTEMPTS=2 RALPH_FAKE_BEHAVIOUR=partial-turn:noop \
+    run_ralph "$repo" run batch --unlimited
+
+  assert_eq "$ST" 20 "the unproductive iteration stops the run"
+  assert_contains "$OUT" "after 1 attempt(s)" "only the unproductive one was counted"
+fi
+
+if case_is "the prompt tells the agent how to hand a ticket off"; then
+  repo="$(make_repo 1 handoff-prompt-repo)"
+  printf 'RALPH_CONTEXT_BUDGET_TOKENS=123456\n' >> "$repo/batch/ralph.conf"
+  git -C "$repo" commit --quiet -am "context budget"
+
+  run_ralph "$repo" dry-run batch
+  assert_eq "$ST" 0 "dry-run exits 0"
+  assert_contains "$OUT" "123456 tokens of context" "the budget comes from ralph.conf"
+  assert_contains "$OUT" "wip: <ticket>" "the handoff names the commit shape"
+  assert_contains "$OUT" "Remaining:" "and the note it has to leave"
+  assert_missing "$OUT" "__CONTEXT_BUDGET__" "the marker is not left behind"
+fi
+
+if case_is "a denied tool call names permissions, not the dirty tree it caused"; then
+  # `acceptEdits` does not cover Bash, and `claude --print` has no one to approve one, so a
+  # batch with no git allowlist gets the ticket's work done and then cannot commit it. The
+  # tree is dirty as a CONSEQUENCE; before this the dirty branch won and the terminal never
+  # mentioned permissions at all.
+  repo="$(make_repo 2 permdenied-repo)"
+  RALPH_FAKE_BEHAVIOUR=permission-denied run_ralph "$repo" run batch --unlimited
+
+  assert_eq "$ST" 20 "exits needs-a-human"
+  assert_contains "$OUT" "stopped by a permission denial" "names the real cause"
+  assert_contains "$OUT" 'Bash(git commit:*)' "and the exact ralph.conf line that fixes it"
+  assert_missing "$OUT" "left uncommitted changes behind" "not reported as a plain dirty tree"
+  assert_eq "$(git -C "$repo" log --oneline | wc -l)" "1" "committed nothing"
+
+  runlog="$(cat "$repo/batch/ralph-runs.log")"
+  assert_contains "$runlog" "PERMISSION DENIED SIGNAL DETECTED" "recorded as its own signal"
+fi
+
+if case_is "the permission mode defaults to what the execution mode needs"; then
+  # Not reachable through `fake`, which never invokes `claude` — which is exactly why
+  # dry-run reports the effective mode. Inside a sandbox the container is the boundary and
+  # the gate only costs a paid iteration; on a real machine `local` keeps its gate.
+  repo="$(make_repo 1 perms-repo)"
+
+  printf 'RALPH_EXEC=local\n' >> "$repo/batch/ralph.conf"
+  git -C "$repo" commit --quiet -am "local mode"
+  run_ralph "$repo" dry-run batch
+  assert_eq "$ST" 0 "dry-run exits 0"
+  assert_contains "$OUT" "Perms:   acceptEdits" "local keeps the permission gate"
+
+  printf 'RALPH_EXEC=sandbox\n' >> "$repo/batch/ralph.conf"
+  git -C "$repo" commit --quiet -am "sandbox mode"
+  run_ralph "$repo" dry-run batch
+  assert_contains "$OUT" "Perms:   bypassPermissions" "a sandbox mode does not"
+
+  printf 'RALPH_PERMISSION_MODE=plan\n' >> "$repo/batch/ralph.conf"
+  git -C "$repo" commit --quiet -am "explicit mode"
+  run_ralph "$repo" dry-run batch
+  assert_contains "$OUT" "Perms:   plan" "an explicit setting beats the default"
+
+  RALPH_PERMISSION_MODE=manual run_ralph "$repo" dry-run batch
+  assert_contains "$OUT" "Perms:   manual" "and the environment beats ralph.conf"
+fi
+
+if case_is "doctor flags a local batch whose agent could never commit"; then
+  repo="$WORK/perm-doctor-repo"
+  mkdir -p "$repo/batch/issues"
+  git -C "$repo" init --quiet
+  printf '# Ticket 1\n\n**Status:** todo\n' > "$repo/batch/issues/01-ticket.md"
+  printf 'RALPH_EXEC=local\n' > "$repo/batch/ralph.conf"
+
+  run_ralph "$repo" doctor
+  assert_eq "$ST" 1 "doctor reports something to fix"
+  assert_contains "$OUT" "no way for the agent to commit" "says what is wrong"
+  assert_contains "$OUT" 'Bash(git add:*)' "and the line to add"
+
+  printf 'RALPH_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)")\n' \
+    >> "$repo/batch/ralph.conf"
+  run_ralph "$repo" doctor
+  assert_missing "$OUT" "no way for the agent to commit" "and is satisfied once it is there"
+fi
+
 if case_is "a usage limit pauses the run"; then
   repo="$(make_repo 3 limit-repo)"
   RALPH_FAKE_BEHAVIOUR=limit run_ralph "$repo" run batch --unlimited
 
   assert_eq "$ST" 10 "exits paused, not stopped"
   assert_contains "$OUT" "usage limit reached" "says why"
+  assert_contains "$OUT" "Resume:" "tells you how to resume"
+fi
+
+if case_is "a session limit pauses the run and says when it resets"; then
+  # The same 5-hour window, worded the way the CLI words it now. Matching only the older
+  # "usage limit reached" phrasing sent this down the generic paths, where a dirty tree wins
+  # the branch order and the run stopped as "left uncommitted changes" — the real cause, and
+  # the reset time, appearing nowhere in the terminal.
+  repo="$(make_repo 3 session-limit-repo)"
+  RALPH_FAKE_BEHAVIOUR=session-limit run_ralph "$repo" run batch --unlimited
+
+  assert_eq "$ST" 10 "exits paused, not stopped"
+  assert_contains "$OUT" "usage limit reached" "reads as a limit, not a mystery stop"
+  assert_contains "$OUT" "4:50pm" "carries the reset time through to the pause message"
   assert_contains "$OUT" "Resume:" "tells you how to resume"
 fi
 
@@ -264,6 +459,10 @@ if case_is "the prompt carries the ticket, the order file and the progress tail"
   assert_contains "$prompts" "batch/progress.txt" "the progress file is named"
   assert_contains "$prompts" "nothing recorded yet" "the first prompt says so"
   assert_contains "$prompts" "'**Status:**' line to 'implemented'" "it says what to write when done"
+  # The one thing the agent cannot discover for itself: --print gives it no second turn, so
+  # a backgrounded verify command ends the iteration waiting for a result that never comes.
+  assert_contains "$prompts" "single non-interactive turn" "it says the session is one-shot"
+  assert_contains "$prompts" "in the foreground" "and that checks must be waited on"
 fi
 
 if case_is "an unknown exec mode is rejected before anything runs"; then
@@ -333,6 +532,54 @@ if case_is "--unordered ignores an existing order.md"; then
   run_ralph "$repo" next batch --unordered
   assert_contains "$OUT" "batch/issues/01-ticket.md" "--unordered sees tickets the order file omits"
   assert_eq "$(printf '%s\n' "$OUT" | grep -c .)" "3" "and sees all of them"
+fi
+
+if case_is "a && in a check command survives into the prompt"; then
+  # Bash's ${var//pat/repl} treats & in the replacement as "the text that matched" — a
+  # RALPH_TEST_CMD containing && used to render as two copies of __VERIFY_BLOCK__'s own
+  # marker text instead of the command. dry-run exits before exec_prepare, so no sandbox
+  # is touched.
+  repo="$(make_repo 1 ampersand-repo)"
+  printf 'RALPH_TEST_CMD="node a.js && node b.js"\n' >> "$repo/batch/ralph.conf"
+  git -C "$repo" commit --quiet -am "add test cmd"
+
+  run_ralph "$repo" dry-run batch
+  assert_eq "$ST" 0 "dry-run exits 0"
+  assert_contains "$OUT" "node a.js && node b.js" "the command survives verbatim"
+  assert_missing "$OUT" "__VERIFY_BLOCK__" "the marker is not left behind"
+fi
+
+if case_is "RALPH_ISSUES_DIRS='.' means the batch directory, not the repo root"; then
+  # A relative RALPH_ISSUES_DIRS entry used to resolve against the repo root first, so "."
+  # meant the repo's own top level rather than the batch directory.
+  repo="$WORK/dot-issues-repo"
+  mkdir -p "$repo/batch"
+  git -C "$repo" init --quiet
+  git -C "$repo" config core.autocrlf false
+  printf '# decoy repo-root file\n' > "$repo/CLAUDE.md"
+  printf '# Ticket 1\n\n**Status:** todo\n' > "$repo/batch/01-ticket.md"
+  printf '# Ticket 2\n\n**Status:** todo\n' > "$repo/batch/02-ticket.md"
+  printf 'RALPH_EXEC=fake\nRALPH_ISSUES_DIRS="."\n' > "$repo/batch/ralph.conf"
+
+  run_ralph "$repo" next batch --unordered
+  assert_eq "$ST" 0 "--unordered exits 0"
+  assert_contains "$OUT" "01-ticket.md" "it lists the first ticket"
+  assert_contains "$OUT" "02-ticket.md" "and the second"
+  assert_missing "$OUT" "CLAUDE.md" "it does not pick up the repo-root decoy"
+fi
+
+if case_is "a batch whose tickets are not where RALPH_ISSUES_DIRS looks says where it looked"; then
+  repo="$WORK/misplaced-tickets-repo"
+  mkdir -p "$repo/batch"
+  git -C "$repo" init --quiet
+  git -C "$repo" config core.autocrlf false
+  printf '# Ticket 1\n\n**Status:** todo\n' > "$repo/batch/01-ticket.md"
+  printf 'RALPH_EXEC=fake\n' > "$repo/batch/ralph.conf"
+
+  run_ralph "$repo" status batch
+  assert_contains "$OUT" "batch/issues" "names the resolved (default) issues path"
+  assert_contains "$OUT" "(missing)" "and says it does not exist"
+  assert_contains "$OUT" 'RALPH_ISSUES_DIRS="."' "suggests the one-line fix"
 fi
 
 if case_is "--unordered is quiet about an empty batch, the other modes are not"; then

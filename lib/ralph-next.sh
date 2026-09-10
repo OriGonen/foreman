@@ -97,11 +97,10 @@ if [ "$MODE" != "--unordered" ] && [ -f "$ORDER_FILE" ]; then
 else
   # No order file (or `--unordered`, which ignores it): filename order across the issues
   # directories, which is why tickets are numbered. `sort` is applied per directory so the
-  # directories stay in the order given.
-  for dir in $RALPH_ISSUES_DIRS; do
-    case "$dir" in /*|[A-Za-z]:[/\\]*) resolved_dir="$dir" ;; *)
-      if [ -d "$dir" ]; then resolved_dir="$dir"; else resolved_dir="$BATCH_DIR/$dir"; fi ;;
-    esac
+  # directories stay in the order given. ralph_issues_dirs (ralph-config.sh) is the one
+  # place that decides what a RALPH_ISSUES_DIRS entry resolves to, so this and `ralph order`
+  # cannot disagree.
+  while IFS= read -r resolved_dir; do
     [ -d "$resolved_dir" ] || continue
     while IFS= read -r file; do
       base="$(basename "$file")"
@@ -111,7 +110,7 @@ else
       done
       [ "$skip" -eq 1 ] || tickets+=("$file")
     done < <(find "$resolved_dir" -maxdepth 1 -name '*.md' -type f | sort)
-  done
+  done < <(ralph_issues_dirs)
 fi
 
 if [ "${#tickets[@]}" -eq 0 ]; then
@@ -120,9 +119,11 @@ if [ "${#tickets[@]}" -eq 0 ]; then
   [ "$MODE" = "--unordered" ] && exit 0
   if [ "$MODE" != "--unordered" ] && [ -f "$ORDER_FILE" ]; then
     echo "ralph-next.sh: the ORDER block in $ORDER_FILE is empty" >&2
+    ralph_issues_hint >&2
   else
     echo "ralph-next.sh: no tickets found." >&2
     echo "               There is no order file at $ORDER_FILE, and no *.md under: $RALPH_ISSUES_DIRS" >&2
+    ralph_issues_hint >&2
   fi
   exit 2
 fi

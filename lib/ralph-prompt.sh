@@ -21,6 +21,17 @@ fi
 
 BASE_REF="${BASE_REF:-$(git rev-parse HEAD)}"
 
+# The commit the agent's work is REVIEWED against. Normally this iteration's BASE_REF, and
+# the two are the same for every ticket that lands in one go. On a continuation the loop
+# passes the ticket's FIRST base instead, so the landing iteration reviews the ticket's
+# whole diff rather than only its last chunk — chunking that silently produced unreviewed
+# code would be worse than the bug it exists to fix.
+#
+# Only the review base moves. exec_sync_down and exec_collect keep using BASE_REF: a
+# continuation that synced down to the ticket's original base would reset the sandbox clone
+# over its own committed chunk.
+REVIEW_BASE="${RALPH_REVIEW_BASE:-$BASE_REF}"
+
 _ralph_template="$RALPH_TOOL_DIR/prompt.template.md"
 if [ ! -f "$_ralph_template" ]; then
   echo "ralph-prompt.sh: no prompt template at $_ralph_template" >&2
@@ -68,9 +79,9 @@ _ralph_verify=""
   the contributing docs — and say in $PROGRESS_FILE what you settled on)."
 
 if [ -n "$RALPH_REVIEW_SKILL" ]; then
-  _ralph_review="Use the \`$RALPH_REVIEW_SKILL\` skill to review the work since $BASE_REF against the ticket."
+  _ralph_review="Use the \`$RALPH_REVIEW_SKILL\` skill to review the work since $REVIEW_BASE against the ticket."
 else
-  _ralph_review="Review your own work since $BASE_REF against the ticket, as a reviewer would: correctness
+  _ralph_review="Review your own work since $REVIEW_BASE against the ticket, as a reviewer would: correctness
 first, then whether it actually does what the ticket asked."
 fi
 
@@ -90,25 +101,37 @@ _ralph_commit="$(exec_commit_note)"
 # ---------------------------------------------------------------------------
 # Substitution
 #
-# The short slots go through ${var//…}. The two free-text blocks — the batch's
-# prompt-extra.md and the agent's own progress notes — are CONCATENATED instead: they are
-# arbitrary prose, and bash's pattern substitution treats backslashes in a replacement as
-# escapes, which would quietly mangle any Windows path or regex someone wrote there.
+# All slots go through _ralph_fill rather than bash's ${var//pat/repl}: in a replacement,
+# `&` means "the text that matched" and `\` escapes the next character, so a RALPH_TEST_CMD
+# containing either (a shell `&&`, a Windows path, a regex) would come out mangled — and
+# there is no way to escape those in the replacement text either, since the escaping is
+# itself subject to the same rule. _ralph_fill does a literal split-and-concat instead, the
+# same strategy already used for the free-text blocks below.
 # ---------------------------------------------------------------------------
 # A CRLF checkout of the template would put a stray carriage return at the end of every
 # line of the prompt. Strip them for the same reason ralph-config.sh strips its conf.
 _ralph_body="$(tr -d $'\r' < "$_ralph_template")"
 
-_ralph_body="${_ralph_body//__ORDER_SENTENCE__/$_ralph_order_sentence}"
-_ralph_body="${_ralph_body//__PROGRESS_FILE__/$PROGRESS_FILE}"
-_ralph_body="${_ralph_body//__BASE_REF__/$BASE_REF}"
-_ralph_body="${_ralph_body//__TDD_INSTRUCTION__/$_ralph_tdd}"
-_ralph_body="${_ralph_body//__ITERATIVE_CHECK_BLOCK__/$_ralph_iterative}"
-_ralph_body="${_ralph_body//__VERIFY_BLOCK__/$_ralph_verify}"
-_ralph_body="${_ralph_body//__REVIEW_INSTRUCTION__/$_ralph_review}"
-_ralph_body="${_ralph_body//__COMMIT_NOTE__/$_ralph_commit}"
-_ralph_body="${_ralph_body//__STATUS_LINE__/$RALPH_STATUS_LINE}"
-_ralph_body="${_ralph_body//__DONE_WORD__/$RALPH_DONE_WORD}"
+_ralph_fill() {                    # _ralph_fill <marker> <value> — rewrites _ralph_body
+  local marker="$1" value="$2" out=""
+  while [ "${_ralph_body#*"$marker"}" != "$_ralph_body" ]; do
+    out+="${_ralph_body%%"$marker"*}$value"
+    _ralph_body="${_ralph_body#*"$marker"}"
+  done
+  _ralph_body="$out$_ralph_body"
+}
+
+_ralph_fill __ORDER_SENTENCE__ "$_ralph_order_sentence"
+_ralph_fill __PROGRESS_FILE__ "$PROGRESS_FILE"
+_ralph_fill __BASE_REF__ "$REVIEW_BASE"
+_ralph_fill __CONTEXT_BUDGET__ "$RALPH_CONTEXT_BUDGET_TOKENS"
+_ralph_fill __TDD_INSTRUCTION__ "$_ralph_tdd"
+_ralph_fill __ITERATIVE_CHECK_BLOCK__ "$_ralph_iterative"
+_ralph_fill __VERIFY_BLOCK__ "$_ralph_verify"
+_ralph_fill __REVIEW_INSTRUCTION__ "$_ralph_review"
+_ralph_fill __COMMIT_NOTE__ "$_ralph_commit"
+_ralph_fill __STATUS_LINE__ "$RALPH_STATUS_LINE"
+_ralph_fill __DONE_WORD__ "$RALPH_DONE_WORD"
 
 _ralph_extra=""
 if [ -f "$PROMPT_EXTRA_FILE" ] && [ -s "$PROMPT_EXTRA_FILE" ]; then
@@ -142,9 +165,23 @@ esac
 PROGRESS_TAIL=$(tail -c "$RALPH_PROGRESS_TAIL_BYTES" "$PROGRESS_FILE" 2>/dev/null || true)
 [ -n "$PROGRESS_TAIL" ] || PROGRESS_TAIL='(nothing recorded yet — this is the first iteration.)'
 
+# A previous iteration committed progress on this ticket without landing it, and the loop
+# is continuing it rather than counting it as a failure (ralph-loop.sh sets the flag). This
+# goes at the TOP, ahead of the instructions: an agent that reads "implement the attached
+# ticket" and starts from nothing has already wasted the handoff the last one wrote.
+_ralph_continuation=""
+if [ "${RALPH_CONTINUATION:-0}" = "1" ]; then
+  _ralph_continuation="You are CONTINUING this ticket, not starting it. A previous iteration did part of the work
+and committed it; the ticket has not landed yet. Before doing anything else, read the most
+recent ${PROGRESS_FILE} entry — it ends with a 'Remaining:' list — and the commits since
+${REVIEW_BASE}, and pick up from there rather than starting over.
+
+"
+fi
+
 RALPH_PROMPT="@${TICKET_FILE}
 
-${RALPH_PROMPT_BODY}
+${_ralph_continuation}${RALPH_PROMPT_BODY}
 
 ## Where the last few iterations got to
 
@@ -169,4 +206,5 @@ checkpointed steps, committing as you go."
 fi
 
 unset _ralph_template _ralph_order_sentence _ralph_tdd _ralph_iterative _ralph_verify
-unset _ralph_review _ralph_commit _ralph_body _ralph_extra
+unset _ralph_review _ralph_commit _ralph_body _ralph_extra _ralph_continuation
+unset -f _ralph_fill

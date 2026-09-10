@@ -7,7 +7,7 @@
 #   ralph order   <batch>                have an agent (re-)order the tickets
 #   ralph status  [batch]                what is left, what is next            (free)
 #   ralph dry-run [batch]                the plan and the exact prompt         (free)
-#   ralph run     [batch] [<n>|--unlimited]   one iteration by default
+#   ralph run     [batch] [<n>|--unlimited] [--live]  one iteration by default
 #   ralph next    [batch] [--list|--count|--all|--unordered]  the run order    (free)
 #   ralph report  [batch] [--by-ticket|--failures] what it cost               (free)
 #   ralph doctor  [--fix]                is this repo (and this machine) ready (free)

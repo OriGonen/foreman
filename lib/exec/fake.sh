@@ -15,6 +15,18 @@
 #     error    exit non-zero with an error payload
 #     transient  exit non-zero with an overloaded_error payload (the loop should retry)
 #     limit    print a usage-limit string instead of JSON (the loop should pause)
+#     session-limit  the same event as the CLI words it today — valid JSON whose reply is
+#              "You've hit your session limit · resets 4:50pm (...)", with no epoch and no
+#              "usage limit reached" anywhere. The loop should pause on this too.
+#     stream   what `--output-format stream-json` looks like: one JSON object per line,
+#              tool_use events as they happen, the result object last. Used to test what
+#              `ralph run --live` draws — and, just as much, what it must not draw.
+#     partial-turn  a ticket that outgrew one turn: the agent commits what it has as a
+#              `wip:` checkpoint and hands off, leaving the status line unflipped. exit 0,
+#              subtype success, no error anywhere — the loop should continue the SAME ticket
+#     permission-denied  the shape a denied Bash call actually has: the work is done and
+#              sitting in the tree, the commit was refused, and the turn ends exit 0 /
+#              subtype success with the refusal only mentioned in the reply
 #     crash    exit non-zero with output that is not JSON and carries no signal at all —
 #              indistinguishable from a logic failure, so the loop should NOT retry it
 #     context  exit non-zero with an unparseable context-overflow string: the CLI died
@@ -32,6 +44,10 @@
 source "$RALPH_EXEC_DIR/_common.sh"
 
 exec_required_tool() { printf ''; }
+
+# Nothing here reads it — no agent is run — but the seam says every adapter answers, and a
+# test asserting on the default of a non-sandbox mode needs a non-sandbox mode to ask.
+exec_default_permission_mode() { printf 'acceptEdits'; }
 
 exec_preflight() { return 0; }
 exec_prepare()   { return 0; }
@@ -125,6 +141,55 @@ exec_run() {
     limit)
       printf 'Claude AI usage limit reached|%s\n' "$(( $(date +%s) + 3600 ))"
       return 1
+      ;;
+    session-limit)
+      # The same 5-hour window, as the current CLI actually words it under --print: no epoch
+      # anywhere, a local time instead, and the phrase "usage limit reached" nowhere in it.
+      printf '{"type":"result","subtype":"success","is_error":true,'
+      printf '"session_id":"fake-session","num_turns":1,"duration_ms":900,'
+      printf '"duration_api_ms":0,"total_cost_usd":0,'
+      printf '"usage":{"input_tokens":0,"output_tokens":0,'
+      printf '"cache_read_input_tokens":0,"cache_creation_input_tokens":0},'
+      printf '"result":"You'"'"'ve hit your session limit \\u00b7 resets 4:50pm (Europe/Ljubljana)"}\n'
+      return 1
+      ;;
+    stream)
+      # A read, which must be skipped; a Write whose body is large and carries a sentinel,
+      # because a tool_use event ships the WHOLE input and none of it may reach the
+      # terminal; and a Bash command long enough to be truncated.
+      printf '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"src/quiet-read.js"}}]}}\n'
+      printf '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"src/foo.js","content":"SECRET-BODY-CONTENT %s"}}]}}\n' \
+        "$(printf 'x%.0s' $(seq 1 400))"
+      printf '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"npm test -- %s TAIL-SENTINEL"}}]}}\n' \
+        "$(printf 'y%.0s' $(seq 1 120))"
+      _fake_land "$ticket"
+      _fake_payload success false "streamed some events and landed it"
+      ;;
+    stream-no-result)
+      # What a real sandbox prints when the agent never starts: sbx's own banner and error,
+      # no result object, and nothing from claude at all. Every line is non-JSON, so without
+      # the tail the payload is empty and the human log has nothing to show.
+      printf 'Attaching to existing sandbox "ralph-fake".\n'
+      printf 'Starting claude agent in sandbox...\n'
+      printf 'ERROR: agent exited with code 1 SANDBOX-ERROR-SENTINEL\n'
+      return 1
+      ;;
+    partial-turn)
+      # Appends rather than overwrites, so repeating this behaviour produces a genuinely new
+      # commit each time and the continuation cap has something to count.
+      printf 'chunk %s\n' "$call" >> .ralph-fake-partial
+      git add -A >/dev/null 2>&1
+      git -c user.name=ralph-fake -c user.email=fake@ralph.invalid \
+        commit --quiet -m "wip: $ticket — remaining: the rest" >/dev/null 2>&1
+      _fake_payload success false "committed a checkpoint and handed off; the ticket is not done"
+      ;;
+    permission-denied)
+      # Nothing about this says "failure" except the reply text: exit 0, is_error false. The
+      # tree is dirty because the commit was the thing denied, which is why the loop has to
+      # decide this above the dirty-tree branch or it reports the symptom instead.
+      printf 'work the fake adapter could not commit\n' > .ralph-fake-uncommitted
+      _fake_payload success false \
+        "I implemented the ticket, but Bash(git commit) requires approval and I could not obtain it, so the work is uncommitted."
       ;;
     crash)
       printf 'claude: unexpected failure, no output\n'
