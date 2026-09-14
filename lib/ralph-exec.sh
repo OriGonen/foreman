@@ -24,6 +24,11 @@
 #                           back to this repo; 0 ok, 1 the work is stranded
 #   exec_show_dirty         say where the uncommitted changes are (stderr)
 #   exec_recovery_note BASE how to rescue work exec_collect could not bring back
+#   exec_dirty_recovery_note BASE TICKET BATCH
+#                           how to rescue work a stop found still uncommitted. Distinct
+#                           from exec_recovery_note: that one covers work that WAS
+#                           committed but could not be brought back — two different
+#                           failures, never printed for one another.
 #
 # Files in lib/exec/ whose name starts with `_` are shared implementation, not modes.
 #
@@ -92,6 +97,14 @@ ralph_exec_required_tool() {
 # keeps its gate: "no isolation" and "no permission check at all" are different things.
 ralph_exec_default_permission_mode() {
   ( ralph_exec_load "$1" >/dev/null 2>&1 && exec_default_permission_mode ) || return 1
+}
+
+# The dirty-tree recovery note for mode $1, without running it — same subshell pattern, so
+# each adapter's wording can be asserted directly rather than only by triggering a real
+# stall under that mode.
+ralph_exec_dirty_recovery_note() {
+  local mode="$1"; shift
+  ( ralph_exec_load "$mode" >/dev/null 2>&1 && exec_dirty_recovery_note "$@" ) || return 1
 }
 
 # How the agent is asked to report, into RALPH_EXEC_FORMAT_ARGS for an adapter to splice in.

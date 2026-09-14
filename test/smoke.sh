@@ -219,6 +219,42 @@ if case_is "a dirty tree stops the run and is never auto-committed"; then
   assert_contains "$OUT" "left uncommitted changes behind" "says what happened"
   assert_contains "$OUT" "Inspect with: git diff" "the adapter says where to look"
   assert_eq "$(git -C "$repo" log --oneline | wc -l)" "1" "committed nothing"
+
+  # `fake` is a working-tree mode: the recovery advice is commit-and-rerun, printed once —
+  # never alongside the sandbox's commit-inside-and-transport wording.
+  assert_contains "$OUT" "git add -A && git commit -m 'wip:" "and how to recover it"
+  assert_contains "$OUT" "run batch" "with the exact rerun command"
+  assert_missing "$OUT" "sbx exec" "never the sandbox's advice"
+fi
+
+if case_is "the dirty-tree recovery note matches the mode actually in force"; then
+  # Askable of a mode without running it, the same way ralph_exec_required_tool already is —
+  # so this asserts each adapter's wording directly rather than only by triggering a real
+  # stall under that mode (expensive or impossible for the two that need a real sandbox).
+  note_for() {
+    bash -c '
+      source "$1/lib/ralph-exec.sh"
+      RALPH_SANDBOX="ralph-note-test"
+      RALPH_INVOKE="ralph"
+      ralph_exec_dirty_recovery_note "$2" deadbeef batch/issues/01-ticket.md batch
+    ' _ "$RALPH_HOME" "$1"
+  }
+
+  # sandbox-mount bind-mounts this working tree — the same filesystem, not a copy — so an
+  # uncommitted change is already sitting right here; it needs the plain advice too, not a
+  # bundle transport for something that never left.
+  for mode in local fake sandbox-mount; do
+    note="$(note_for "$mode")"
+    assert_contains "$note" "git add -A && git commit -m 'wip:" "$mode: commit-and-rerun advice"
+    assert_contains "$note" "run batch" "$mode: and the rerun command"
+    assert_missing "$note" "sbx exec" "$mode: never mentions the sandbox"
+  done
+
+  note="$(note_for sandbox)"
+  assert_contains "$note" "sbx exec ralph-note-test git commit" "sandbox: commit inside the sandbox"
+  assert_contains "$note" "sbx cp ralph-note-test:" "sandbox: and transport the commit back out"
+  assert_contains "$note" "run batch" "sandbox: then rerun"
+  assert_missing "$note" "git add -A && git commit -m 'wip:" "sandbox: never the host-commit line"
 fi
 
 if case_is "--live draws what the agent is doing, and only that"; then

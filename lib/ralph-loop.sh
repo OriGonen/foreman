@@ -522,13 +522,14 @@ while true; do
     # reported an error, the ticket is unflipped, and the work is still in the tree. The
     # agent should have checkpointed it itself (prompt step 5); prompt fixes are never 100%,
     # so say what to type. TEXT ONLY — nothing is committed for you here or anywhere else.
+    # Where "the tree" actually is — this repo, or the sandbox's clone of it — depends on
+    # the execution mode, so the adapter answers rather than this file guessing.
     if [ "$agent_status" -eq 0 ] && [ "$is_error" != "1" ] && [ "$flipped" -eq 0 ]; then
       warn ""
       warn "This looks like a turn that ran out of room rather than one that failed: it ended"
       warn "cleanly, with the ticket unflipped and its work uncommitted. If the changes look"
       warn "sound, keep them as a checkpoint and rerun to continue the same ticket:"
-      warn "  git add -A && git commit -m 'wip: $TICKET_FILE — remaining: <what is left>'"
-      warn "  $RALPH_INVOKE run $BATCH_DIR"
+      exec_dirty_recovery_note "$BASE_REF" "$TICKET_FILE" "$BATCH_DIR" >&2
     fi
     FINAL_STATUS="$EXIT_NEEDS_HUMAN"
     break

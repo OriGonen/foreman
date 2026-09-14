@@ -104,3 +104,15 @@ exec_run() {
 }
 
 exec_preflight() { _sbx_preflight; }
+
+# The commands that get a range of commits out of the sandbox's clone and onto this
+# branch — one source of truth for the two recovery notes that both need it (stranded
+# commits in sandbox.sh's exec_recovery_note, and an uncommitted stall in its
+# exec_dirty_recovery_note), so the transport steps cannot drift apart between them.
+_sbx_recover_bundle_lines() {
+  local base="$1"
+  printf '%s\n' \
+    "  sbx exec $RALPH_SANDBOX git bundle create /tmp/recover.bundle $base..HEAD" \
+    "  sbx cp $RALPH_SANDBOX:/tmp/recover.bundle ./recover.bundle" \
+    "  git fetch ./recover.bundle HEAD:refs/ralph/recovered && git merge --ff-only refs/ralph/recovered"
+}

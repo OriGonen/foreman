@@ -118,9 +118,19 @@ exec_show_dirty() {
 exec_recovery_note() {
   warn "The sandbox committed $EXEC_AGENT_HEAD but it could not be brought back to this repo."
   warn "That work exists ONLY in the sandbox. Do not rerun until it is recovered:"
-  warn "  sbx exec $RALPH_SANDBOX git bundle create /tmp/recover.bundle $1..HEAD"
-  warn "  sbx cp $RALPH_SANDBOX:/tmp/recover.bundle ./recover.bundle"
-  warn "  git fetch ./recover.bundle HEAD:refs/ralph/recovered && git merge --ff-only refs/ralph/recovered"
+  _sbx_recover_bundle_lines "$1" >&2
+}
+
+# A different failure from exec_recovery_note above: here nothing was ever committed, so
+# there is nothing yet for the bundle transport to move. Commit it in the sandbox first,
+# then bring it out the same way _sbx_sync_up does for commits the agent made itself.
+exec_dirty_recovery_note() {
+  local base="$1" ticket="$2" batch="$3"
+  printf '%s\n' \
+    "  sbx exec $RALPH_SANDBOX git add -A" \
+    "  sbx exec $RALPH_SANDBOX git commit -m 'wip: $ticket — remaining: <what is left>'"
+  _sbx_recover_bundle_lines "$base"
+  printf '  %s run %s\n' "$RALPH_INVOKE" "$batch"
 }
 
 # Only this arrangement makes an uncommitted change a *lost* change.

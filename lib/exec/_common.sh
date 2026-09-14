@@ -23,6 +23,15 @@ exec_show_dirty() {
 
 exec_recovery_note() { :; }
 
+# The dirty tree a stop finds IS this repo (or, for sandbox-mount, bind-mounted onto it),
+# so getting it committed is exactly the two lines it always was.
+exec_dirty_recovery_note() {
+  local ticket="$2" batch="$3"
+  printf '%s\n' \
+    "  git add -A && git commit -m 'wip: $ticket — remaining: <what is left>'" \
+    "  $RALPH_INVOKE run $batch"
+}
+
 exec_commit_note() {
   printf '%s' "Commit everything to the current branch. Do not push."
 }
