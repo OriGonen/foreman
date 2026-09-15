@@ -349,6 +349,14 @@ Detecting a limit in the response is best-effort pattern-matching on top of it,
 there so that hitting a wall mid-run pauses instead of burning the remaining iterations on
 errors that would all fail identically.
 
+A stall's checkpoint turn (see "Pausing and resuming" above) is the one deliberate
+exception to the cost and time guards: it runs even when the turn that just stalled already
+pushed the run past its budget, because a budget limits what to *commission*, not whether to
+keep work already paid for — stopping instead would stop the checkpoint turn from committing
+work the run has already spent money on. When that happens, the run's closing summary says
+so explicitly — a budget was overshot to salvage stalled work, and by how much — rather than
+letting the figures in the summary silently disagree with the budget that was set.
+
 Any `RALPH_*` set in the environment beats the batch's `ralph.conf`, so a one-off run needs
 no edit.
 

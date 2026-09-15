@@ -118,6 +118,7 @@ warn() { printf '%s\n' "$*" >&2; }
 
 # Bash has no floats. Every cost comparison and accumulation goes through awk.
 fadd() { awk -v a="$1" -v b="$2" 'BEGIN { printf "%.6f", a + b }'; }
+fsub() { awk -v a="$1" -v b="$2" 'BEGIN { printf "%.6f", a - b }'; }
 fge()  { awk -v a="$1" -v b="$2" 'BEGIN { exit !(a + 0 >= b + 0) }'; }
 fgt()  { awk -v a="$1" -v b="$2" 'BEGIN { exit !(a + 0 >  b + 0) }'; }
 
@@ -315,6 +316,15 @@ RUN_CACHE_WRITE=0
 ITERATIONS_RUN=0
 LANDED=0
 SECONDS=0
+# Whether this run commissioned a checkpoint turn while the cost or time budget had
+# ALREADY been reached — a budget is checked before an iteration starts, but a stall is
+# only discovered after one, so the stalled turn itself can be what pushes the run past
+# the budget the checkpoint turn then runs anyway (see ticket 06 /
+# docs/adr/0001-checkpoint-turn-over-session-resume.md: a budget limits what to commission,
+# not whether to keep work already paid for). Run-level, not per-ticket: the closing
+# message reports it regardless of which ticket triggered it.
+SALVAGED_OVER_COST=0
+SALVAGED_OVER_TIME=0
 
 VERDICT_FILE="$(mktemp)"
 # The agent's payload, on its way from exec_run to the recorder. It goes through a file
@@ -592,6 +602,16 @@ while true; do
     # knows how to continue. See docs/adr/0001-checkpoint-turn-over-session-resume.md.
     if [ "$agent_status" -eq 0 ] && [ "$is_error" != "1" ] && [ "$flipped" -eq 0 ] &&
        [ "$HEAD_REF" = "$BASE_REF" ]; then
+      # The stalled turn just run is itself what may have pushed the run past a budget —
+      # discovering a stall is only possible AFTER the turn that stalled, so the budget
+      # check that gated its start could not have known. Note it (using the same tests as
+      # the top-of-loop check) before committing to the checkpoint turn anyway: the budget
+      # limits what to commission, not whether to keep work already paid for.
+      if fgt "$MAX_COST" 0 && fge "$RUN_COST" "$MAX_COST"; then SALVAGED_OVER_COST=1; fi
+      if [ "$MAX_MINUTES" -gt 0 ] && [ "$SECONDS" -ge $((MAX_MINUTES * 60)) ]; then
+        SALVAGED_OVER_TIME=1
+      fi
+
       warn ""
       warn "$TICKET_FILE stalled: the turn ended cleanly with its work uncommitted, as though"
       warn "it ran out of room before reaching its own checkpoint step. Running a checkpoint"
@@ -789,6 +809,31 @@ say "$summary"
 log_append ""
 log_append "# ---- run $RUN_ID finished $(date -u +%Y-%m-%dT%H:%M:%SZ) ----"
 while IFS= read -r line; do log_append "# $line"; done <<< "$summary"
+
+# Reported unconditionally on FINAL_STATUS: a budget reached mid-salvage can still end the
+# run EXIT_DONE (the ticket that stalled was the batch's last) rather than EXIT_PAUSED, and
+# the overshoot happened either way. Staying silent here is exactly the promise-breaking
+# silence ticket 06 exists to close.
+if [ "$SALVAGED_OVER_COST" -eq 1 ] || [ "$SALVAGED_OVER_TIME" -eq 1 ]; then
+  overshoot_note="Note: a budget was overshot to salvage stalled work — a checkpoint turn ran"
+  overshoot_note2="anyway rather than leave already-paid-for work stranded uncommitted."
+  say ""
+  say "$overshoot_note"
+  say "$overshoot_note2"
+  log_append "# $overshoot_note"
+  log_append "# $overshoot_note2"
+  if [ "$SALVAGED_OVER_COST" -eq 1 ]; then
+    cost_over=$(fsub "$RUN_COST" "$MAX_COST")
+    line="  cost: \$$RUN_COST of \$$MAX_COST budget (over by \$$cost_over)"
+    say "$line"
+    log_append "# $line"
+  fi
+  if [ "$SALVAGED_OVER_TIME" -eq 1 ]; then
+    line="  time: ${elapsed_min}m of ${MAX_MINUTES}m budget (over by $((elapsed_min - MAX_MINUTES))m)"
+    say "$line"
+    log_append "# $line"
+  fi
+fi
 
 case "$FINAL_STATUS" in
   "$EXIT_PAUSED")

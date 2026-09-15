@@ -121,6 +121,7 @@ if case_is "--unlimited runs the batch to completion"; then
   assert_contains "$OUT" "Every ticket in batch is done." "says the batch is finished"
   assert_eq "$(done_count "$repo")" "3" "all three landed"
   assert_contains "$OUT" "tickets landed:        3" "the footer counts them"
+  assert_missing "$OUT" "overshot to salvage" "nothing stalled, so no such note"
 fi
 
 if case_is "resuming picks up at the first ticket that has not landed"; then
@@ -264,6 +265,29 @@ if case_is "a stall is salvaged by a checkpoint turn and the ticket continues"; 
   assert_contains "$p2" "ran out of room" "and that the previous turn ran out of room"
   assert_missing "$p2" "A previous iteration did part of the work" \
     "not the deliberate-handoff wording"
+fi
+
+if case_is "a stall discovered after the cost budget was reached still gets salvaged, loudly"; then
+  # Budget checks happen BEFORE an iteration starts; a stall is only discovered after one,
+  # so the stalled turn's own cost is what pushes the run past its budget here — the
+  # preflight check for this very iteration passed with $0 spent. The checkpoint turn runs
+  # anyway (ticket 06): a budget limits what to commission, not whether to keep work already
+  # paid for. --unlimited, so nothing but the budget stops the run.
+  repo="$(make_repo 2 salvage-cost-repo)"
+  RALPH_FAKE_COST=0.02 RALPH_MAX_COST_USD=0.01 RALPH_FAKE_BEHAVIOUR=dirty \
+    run_ralph "$repo" run batch --unlimited
+
+  assert_eq "$ST" 10 "still pauses — on the cost budget, not stopped for a human"
+  assert_contains "$OUT" "stalled" "the stall is still named as such"
+  assert_contains "$OUT" "salvaged by a checkpoint turn" "and still salvaged despite the budget"
+  assert_contains "$OUT" "cost budget reached" "the eventual pause is still the cost budget"
+  assert_eq "$(done_count "$repo")" "0" "the overshoot buys the checkpoint and nothing more"
+  assert_contains "$OUT" "iterations run:        1" "no further iteration was commissioned"
+
+  assert_contains "$OUT" "Note: a budget was overshot to salvage stalled work" \
+    "the closing message owns the broken promise rather than staying silent"
+  assert_contains "$OUT" "cost: \$0.040000 of \$0.01 budget (over by \$0.030000)" \
+    "and says by how much"
 fi
 
 if case_is "a checkpoint turn that discards the diff is not mistaken for one that left it alone"; then
@@ -619,6 +643,7 @@ if case_is "the cost budget stops the run before spending over it"; then
   assert_eq "$ST" 10 "pauses on the cost budget"
   assert_contains "$OUT" "cost budget reached" "says why"
   assert_eq "$(done_count "$repo")" "2" "stops once the budget is reached, not after"
+  assert_missing "$OUT" "overshot to salvage" "nothing stalled here, so no salvage note"
 fi
 
 if case_is "the run is recorded for ralph report"; then
