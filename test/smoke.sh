@@ -212,11 +212,17 @@ if case_is "a real context payload is not mistaken for a transient one"; then
 fi
 
 if case_is "a dirty tree stops the run and is never auto-committed"; then
+  # `dirty` is the loop's exact stall signature (see the "stall is salvaged" case below), so
+  # a bare stall is normally rescued by a checkpoint turn rather than stopping here. Forcing
+  # the checkpoint to fail too is what still exercises this stop — and the failure path is
+  # the one an untested stop let rot before (ticket 01's wrong recovery text).
   repo="$(make_repo 2 dirty-repo)"
-  RALPH_FAKE_BEHAVIOUR=dirty run_ralph "$repo" run batch --unlimited
+  RALPH_FAKE_BEHAVIOUR=dirty RALPH_FAKE_CHECKPOINT_BEHAVIOUR=fail \
+    run_ralph "$repo" run batch --unlimited
 
   assert_eq "$ST" 20 "exits needs-a-human"
-  assert_contains "$OUT" "left uncommitted changes behind" "says what happened"
+  assert_contains "$OUT" "stalled" "the stall is named as such"
+  assert_contains "$OUT" "checkpoint turn could not" "and so is the failed salvage attempt"
   assert_contains "$OUT" "Inspect with: git diff" "the adapter says where to look"
   assert_eq "$(git -C "$repo" log --oneline | wc -l)" "1" "committed nothing"
 
@@ -225,6 +231,50 @@ if case_is "a dirty tree stops the run and is never auto-committed"; then
   assert_contains "$OUT" "git add -A && git commit -m 'wip:" "and how to recover it"
   assert_contains "$OUT" "run batch" "with the exact rerun command"
   assert_missing "$OUT" "sbx exec" "never the sandbox's advice"
+fi
+
+if case_is "a stall is salvaged by a checkpoint turn and the ticket continues"; then
+  repo="$(make_repo 2 stall-repo)"
+  log="$WORK/stall-prompts.txt"
+  base="$(git -C "$repo" rev-parse HEAD)"
+  RALPH_FAKE_PROMPT_LOG="$log" RALPH_FAKE_BEHAVIOUR=dirty:land \
+    run_ralph "$repo" run batch --unlimited
+
+  assert_eq "$ST" 0 "the batch still finishes"
+  assert_contains "$OUT" "stalled" "the stall is named as such"
+  assert_contains "$OUT" "salvaged by a checkpoint turn" "and so is the salvage"
+  assert_eq "$(done_count "$repo")" "2" "both tickets land"
+  assert_contains "$(git -C "$repo" log --format=%s)" "wip: batch/issues/01-ticket.md" \
+    "the checkpoint's own commit is in the history"
+
+  # The real checkpoint prompt is what the fake adapter saw — a sentinel phrase, not a side
+  # channel — and it never consumed a slot of RALPH_FAKE_BEHAVIOUR's list.
+  cp="$(awk '/^===== fake prompt checkpoint /{f=1;next} /^===== fake prompt /{f=0} f' "$log")"
+  assert_contains "$cp" "CHECKPOINT TURN" "the checkpoint prompt is recognisable"
+  assert_contains "$cp" "$base" "and diffs against the stalled turn's own base"
+  assert_contains "$cp" "Remaining:" "and asks for the handoff note"
+  assert_contains "$cp" "do not write, edit, or plan any more" "and not to continue the work"
+
+  # The next real turn on this ticket is told it is continuing, same as a deliberate handoff.
+  p2="$(awk '/^===== fake prompt 2 /{f=1;next} /^===== fake prompt /{f=0} f' "$log")"
+  assert_contains "$p2" "You are CONTINUING" "the following turn is told it is continuing"
+fi
+
+if case_is "a checkpoint turn that discards the diff is not mistaken for one that left it alone"; then
+  # A clean tree with HEAD unmoved is ambiguous on its own — it is also what "did nothing"
+  # looks like — but the tree WAS dirty going into this turn (that is how the stall was
+  # detected), so coming back clean can only mean something discarded it. That is a worse
+  # outcome than leaving it dirty, and deserves a message that does not imply the work is
+  # still there to inspect.
+  repo="$(make_repo 2 stall-discard-repo)"
+  RALPH_FAKE_BEHAVIOUR=dirty RALPH_FAKE_CHECKPOINT_BEHAVIOUR=discard \
+    run_ralph "$repo" run batch --unlimited
+
+  assert_eq "$ST" 20 "stops for a human"
+  assert_contains "$OUT" "is gone" "says plainly that the work is gone"
+  assert_missing "$OUT" "left uncommitted changes behind, and the checkpoint" \
+    "not conflated with the still-dirty failure, which has something to inspect"
+  assert_eq "$(git -C "$repo" log --oneline | wc -l)" "1" "nothing new was committed"
 fi
 
 if case_is "the dirty-tree recovery note matches the mode actually in force"; then
@@ -266,9 +316,13 @@ if case_is "syncing refuses over a dirty tree rather than resetting it"; then
   assert_eq "$(done_count "$repo")" "1" "clean tree: the ticket landed"
   assert_missing "$OUT" "Refusing to sync" "clean tree: no refusal text"
 
-  # Leave the second ticket's tree dirty, as a stall would.
-  RALPH_FAKE_BEHAVIOUR=dirty run_ralph "$repo" run batch --unlimited
-  assert_eq "$ST" 20 "the stall stops for a human"
+  # Leave the second ticket's tree dirty, as a stall would — and force the checkpoint turn
+  # that would normally salvage a stall to fail too, so the tree is still dirty for the
+  # rerun below to find. (The salvage path itself is covered by "a stall is salvaged by a
+  # checkpoint turn and the ticket continues".)
+  RALPH_FAKE_BEHAVIOUR=dirty RALPH_FAKE_CHECKPOINT_BEHAVIOUR=fail \
+    run_ralph "$repo" run batch --unlimited
+  assert_eq "$ST" 20 "the unsalvaged stall stops for a human"
   head_after_stall="$(git -C "$repo" rev-parse HEAD)"
   commits_after_stall="$(git -C "$repo" log --oneline | wc -l)"
 
@@ -379,7 +433,7 @@ if case_is "a ticket that never stops chunking is called mis-sized"; then
     run_ralph "$repo" run batch --unlimited
 
   assert_eq "$ST" 20 "stops for a human rather than chunking forever"
-  assert_contains "$OUT" "has progressed 3 times without landing" "counts the continuations"
+  assert_contains "$OUT" "has needed 3 extra turns without landing" "counts the continuations"
   assert_contains "$OUT" "split it into smaller tickets" "says what to do about it"
   assert_eq "$(done_count "$repo")" "0" "nothing landed"
 fi
@@ -418,6 +472,10 @@ if case_is "a denied tool call names permissions, not the dirty tree it caused";
   assert_contains "$OUT" "stopped by a permission denial" "names the real cause"
   assert_contains "$OUT" 'Bash(git commit:*)' "and the exact ralph.conf line that fixes it"
   assert_missing "$OUT" "left uncommitted changes behind" "not reported as a plain dirty tree"
+  # The stall branch sits BELOW this one: a denied `git commit` dirties the tree as a
+  # consequence, and a checkpoint turn salvaging it would report the symptom, never the
+  # cause.
+  assert_missing "$OUT" "stalled" "and no checkpoint turn is attempted either"
   assert_eq "$(git -C "$repo" log --oneline | wc -l)" "1" "committed nothing"
 
   runlog="$(cat "$repo/batch/ralph-runs.log")"

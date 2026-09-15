@@ -19,6 +19,38 @@ if [ -z "${TICKET_FILE:-}" ]; then
   return 1 2>/dev/null || exit 1
 fi
 
+# ---------------------------------------------------------------------------
+# The checkpoint prompt — the short, single-purpose turn the loop runs when an iteration's
+# own turn stalled: it ended cleanly, with its work still sitting uncommitted. Not a second
+# template: with only four variable parts (the ticket, the base to diff against, the
+# adapter's own commit note, and the progress file) a template would be more machinery than
+# the prompt it holds, so it is built directly here, beside the main prompt assembly.
+#
+# A function, not top-level code like the rest of this file: ralph-loop.sh calls it only
+# when a turn has actually stalled, never every iteration. It diffs against THIS turn's own
+# base, never REVIEW_BASE above — a checkpoint turn does not review the ticket, it only
+# preserves whatever this one turn left behind.
+# ---------------------------------------------------------------------------
+ralph_checkpoint_prompt() {    # ralph_checkpoint_prompt TICKET BASE
+  local ticket="$1" base="$2"
+  cat <<EOF
+This is a CHECKPOINT TURN, not a continuation of ${ticket}. A previous turn on this ticket
+ran out of room and ended with its work sitting uncommitted in the tree. Your only job is to
+preserve that work — do not write, edit, or plan any more of the ticket's own implementation,
+and do not investigate whether it is correct.
+
+1. Run \`git diff ${base}\` (or \`git status\` for a per-file view) to see what is there.
+2. Commit it as-is: \`git commit -m 'wip: ${ticket} — remaining: <short summary of what is
+   left>'\`. $(exec_commit_note)
+3. Append an entry to ${PROGRESS_FILE} describing what the diff contains, ending in a
+   'Remaining:' list of what is left. You did not do this work and were not told why it was
+   done this way — write only what the diff shows, never what you guess was intended.
+4. Do not touch the '${RALPH_STATUS_LINE}' line — this ticket has not landed.
+
+Stop as soon as the commit and the progress entry exist. Do nothing else.
+EOF
+}
+
 BASE_REF="${BASE_REF:-$(git rev-parse HEAD)}"
 
 # The commit the agent's work is REVIEWED against. Normally this iteration's BASE_REF, and

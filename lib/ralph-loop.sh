@@ -140,6 +140,31 @@ verdict_num() {
 
 log_append() { printf '%s\n' "$*" >> "$RUN_LOG"; }
 
+# Shared by a deliberate handoff and a stall a checkpoint turn salvaged: both feed the one
+# continuation cap (RALPH_MAX_CONTINUATIONS), because a ticket that alternates between the
+# two shapes of "committed but not landed" must still be bounded by a single number. Prints
+# the stop and returns 0 once the cap is reached; returns 1 (nothing printed) otherwise.
+#
+# The message says "needed N extra turns" rather than "has progressed N times": a ticket
+# that stalls repeatedly reaches this cap without ever progressing deliberately, and a
+# breakdown of how many of the two is a display-only counter this ticket does not add.
+continuation_cap_reached() {
+  [ "$MAX_CONTINUATIONS" -gt 0 ] && [ "$CONTINUATIONS_ON_CURRENT" -ge "$MAX_CONTINUATIONS" ] || return 1
+  warn ""
+  warn "$TICKET_FILE has needed $CONTINUATIONS_ON_CURRENT extra turns without landing. Like running"
+  warn "out of context, that is a size problem rather than something a further attempt fixes —"
+  warn "split it into smaller tickets rather than rerunning as-is. Every chunk is committed;"
+  warn "nothing has been lost, and $PROGRESS_FILE says where it got to."
+  return 0
+}
+
+# A checkpoint turn is a short salvage, not a second attempt at the ticket, so it is kept
+# narrow by its prompt plus this low turn limit rather than by a tool allowlist — both sbx
+# adapters default to a permission mode that bypasses the gate, where an allowlist plausibly
+# does not bite at all. Not a ralph.conf knob on purpose: see
+# docs/adr/0001-checkpoint-turn-over-session-resume.md.
+CHECKPOINT_MAX_TURNS=6
+
 # 0 means "no limit" for every budget, which reads badly printed bare.
 budget_label() {
   local value="$1" prefix="${2:-}" suffix="${3:-}"
@@ -531,22 +556,88 @@ while true; do
   # 4. The tree was left dirty. Never auto-commit: that would be committing work no one
   #    reviewed, under a ticket that may not have finished.
   if [ "$dirty" -eq 1 ]; then
+    # A STALL: the turn ended cleanly, nothing reported an error, the ticket is unflipped,
+    # and HEAD never moved — the exact signature of a turn that ran out of room before
+    # reaching its own checkpoint step (prompt step 5), rather than one that failed.
+    # Salvage it with a checkpoint turn: a short, single-purpose turn that commits the diff
+    # as `wip:` and hands off, converting the stall into a progression the loop already
+    # knows how to continue. See docs/adr/0001-checkpoint-turn-over-session-resume.md.
+    if [ "$agent_status" -eq 0 ] && [ "$is_error" != "1" ] && [ "$flipped" -eq 0 ] &&
+       [ "$HEAD_REF" = "$BASE_REF" ]; then
+      warn ""
+      warn "$TICKET_FILE stalled: the turn ended cleanly with its work uncommitted, as though"
+      warn "it ran out of room before reaching its own checkpoint step. Running a checkpoint"
+      warn "turn to commit what is there, rather than stopping."
+      exec_show_dirty
+
+      # Deliberately NOT preceded by exec_sync_down. exec_run and exec_sync_down are already
+      # separate calls in this seam, so "run the agent without syncing first" needs no new
+      # adapter function — three of the four adapters have a no-op exec_sync_down anyway.
+      checkpoint_prompt="$(ralph_checkpoint_prompt "$TICKET_FILE" "$BASE_REF")"
+      # Guarded expansion, same as RALPH_CLAUDE_ARGS's other two call sites (local.sh,
+      # _sbx.sh): under bash < 4.4 and `set -u`, expanding an array that is declared but
+      # empty still raises "unbound variable" without the `+` guard.
+      checkpoint_args_saved=(${RALPH_CLAUDE_ARGS+"${RALPH_CLAUDE_ARGS[@]}"})
+      RALPH_CLAUDE_ARGS+=(--max-turns "$CHECKPOINT_MAX_TURNS")
+      exec_run "$checkpoint_prompt" "$TICKET_FILE" |
+        node "$RALPH_TOOL_DIR/ralph-stream.cjs" ${STREAM_ARGS+"${STREAM_ARGS[@]}"} > /dev/null
+      RALPH_CLAUDE_ARGS=(${checkpoint_args_saved+"${checkpoint_args_saved[@]}"})
+
+      # Bring back whatever the checkpoint turn committed (only the clone-based sandbox has
+      # any transporting to do here) and see whether it actually rescued the work.
+      checkpoint_sync_failed=0
+      exec_collect "$BASE_REF" || checkpoint_sync_failed=1
+      HEAD_REF=$(git rev-parse HEAD)
+
+      if [ "$checkpoint_sync_failed" -eq 1 ]; then
+        warn ""
+        exec_recovery_note "$BASE_REF"
+        FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+        break
+      fi
+
+      if [ "$EXEC_DIRTY" -eq 0 ] && [ "$HEAD_REF" != "$BASE_REF" ]; then
+        say "   ⋯ stalled, salvaged by a checkpoint turn  ·  $(git log -1 --format=%h "$HEAD_REF")"
+        CONTINUATIONS_ON_CURRENT=$((CONTINUATIONS_ON_CURRENT + 1))
+        ATTEMPTS_ON_CURRENT=0
+        if continuation_cap_reached; then
+          FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+          break
+        fi
+        continue
+      fi
+
+      if [ "$EXEC_DIRTY" -eq 0 ]; then
+        # The tree WAS dirty going into this turn — that is how the stall was detected —
+        # and came back clean with HEAD still unmoved. Doing nothing would have left it
+        # exactly as dirty as before, so something discarded the diff instead of committing
+        # it. There is nothing left to point a recovery note at.
+        warn ""
+        warn "$TICKET_FILE's uncommitted work is gone: the checkpoint turn left the tree clean"
+        warn "without ever committing anything. There is nothing to recover — the work will"
+        warn "need to be redone, not salvaged."
+        FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+        break
+      fi
+
+      # The checkpoint turn could not commit it either. This leaves the run exactly where
+      # it would have been without the attempt: stopped for a human, with the same
+      # adapter-correct recovery note the original stall would have printed.
+      warn ""
+      warn "$TICKET_FILE left uncommitted changes behind, and the checkpoint turn could not"
+      warn "commit them either. Stopping so you can look."
+      exec_show_dirty
+      exec_dirty_recovery_note "$BASE_REF" "$TICKET_FILE" "$BATCH_DIR" >&2
+      FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+      break
+    fi
+
+    # Dirty for some other reason — not the stall's exact signature (an error was reported,
+    # the ticket flipped anyway, or HEAD moved but something was still left uncommitted). No
+    # checkpoint turn: it exists only for the stall it was built for. Stop, as always.
     warn ""
     warn "$TICKET_FILE left uncommitted changes behind. Stopping so you can look."
     exec_show_dirty
-    # The signature of a turn that simply ran out of room: it ended cleanly, nothing
-    # reported an error, the ticket is unflipped, and the work is still in the tree. The
-    # agent should have checkpointed it itself (prompt step 5); prompt fixes are never 100%,
-    # so say what to type. TEXT ONLY — nothing is committed for you here or anywhere else.
-    # Where "the tree" actually is — this repo, or the sandbox's clone of it — depends on
-    # the execution mode, so the adapter answers rather than this file guessing.
-    if [ "$agent_status" -eq 0 ] && [ "$is_error" != "1" ] && [ "$flipped" -eq 0 ]; then
-      warn ""
-      warn "This looks like a turn that ran out of room rather than one that failed: it ended"
-      warn "cleanly, with the ticket unflipped and its work uncommitted. If the changes look"
-      warn "sound, keep them as a checkpoint and rerun to continue the same ticket:"
-      exec_dirty_recovery_note "$BASE_REF" "$TICKET_FILE" "$BATCH_DIR" >&2
-    fi
     FINAL_STATUS="$EXIT_NEEDS_HUMAN"
     break
   fi
@@ -576,12 +667,7 @@ while true; do
     ATTEMPTS_ON_CURRENT=0
     say "   ⋯ progressed  ·  $(git log -1 --format=%h "$HEAD_REF")"
 
-    if [ "$MAX_CONTINUATIONS" -gt 0 ] && [ "$CONTINUATIONS_ON_CURRENT" -ge "$MAX_CONTINUATIONS" ]; then
-      warn ""
-      warn "$TICKET_FILE has progressed $CONTINUATIONS_ON_CURRENT times without landing. Like running"
-      warn "out of context, that is a size problem rather than something a further attempt fixes —"
-      warn "split it into smaller tickets rather than rerunning as-is. Every chunk is committed;"
-      warn "nothing has been lost, and $PROGRESS_FILE says where it got to."
+    if continuation_cap_reached; then
       FINAL_STATUS="$EXIT_NEEDS_HUMAN"
       break
     fi

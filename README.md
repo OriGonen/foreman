@@ -308,8 +308,18 @@ The loop pauses itself, cleanly, when:
 All of those exit **10** and print how to resume.
 
 It stops and asks for a human (exit **20**) when a ticket did not reach its done state after
-its attempts, or when an iteration left uncommitted changes behind. It never auto-commits
-that work — the point of the per-iteration review base is that nothing lands unreviewed.
+its attempts, or when an iteration left uncommitted changes behind that nothing could
+salvage. It never auto-commits that work itself — the point of the per-iteration review base
+is that nothing lands unreviewed.
+
+A turn that ends cleanly and uncommitted, with the ticket unflipped and HEAD exactly where it
+started, is a **stall** — the shape of a turn that simply ran out of room before reaching its
+own checkpoint step. Rather than stopping, the loop runs a short **checkpoint turn**: a
+single-purpose agent turn that reads the diff, commits it as `wip:`, and writes a
+`Remaining:` note, without continuing the ticket's own work. That converts the stall into a
+progression, and the same ticket continues on the next iteration. Only when the checkpoint
+turn *also* cannot commit does the run stop, for the same reason it always did. See
+`docs/adr/0001-checkpoint-turn-over-session-resume.md`.
 
 Within a run, a ticket is retried only when a second attempt could plausibly survive: the
 model was briefly unavailable, the iteration ran out of context, or the CLI got far enough

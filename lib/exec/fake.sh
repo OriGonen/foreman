@@ -39,6 +39,17 @@
 #
 # The behaviour may also be a `:`-separated list — `noop:land` lands on the second
 # attempt — which is how retry accounting gets a test.
+#
+# A checkpoint turn (ralph-loop.sh, run when `dirty` above leaves the loop's stall
+# signature) is a SECOND, separate turn within the same iteration, recognised here by a
+# sentinel phrase in the prompt itself — the real prompt-assembly path, not a side channel.
+# It never consumes a slot of RALPH_FAKE_BEHAVIOUR's list; its own scripted outcome is:
+#   RALPH_FAKE_CHECKPOINT_BEHAVIOUR   commit (default), fail, or discard
+#     commit   stage and commit whatever is dirty, as `wip: <ticket> — remaining: the rest`
+#     fail     leave the tree exactly as it was — still dirty, nothing committed
+#     discard  clean the tree WITHOUT committing — simulates a checkpoint turn that
+#              mishandles the diff instead of preserving it; the loop must tell this apart
+#              from `fail` (work still there) rather than reporting both as "uncommitted"
 
 # shellcheck source=_common.sh
 source "$RALPH_EXEC_DIR/_common.sh"
@@ -108,14 +119,48 @@ _fake_land() {
     commit --quiet -m "fake: land $ticket" >/dev/null 2>&1
 }
 
+# The checkpoint turn's own scripted outcome — separate from RALPH_FAKE_BEHAVIOUR because it
+# is a distinct turn, not another entry in that turn-by-turn list.
+_fake_checkpoint() {
+  local ticket="$1"
+  case "${RALPH_FAKE_CHECKPOINT_BEHAVIOUR:-commit}" in
+    fail)
+      _fake_payload success false "could not commit the checkpoint"
+      ;;
+    discard)
+      git checkout -q -- . >/dev/null 2>&1
+      git clean -qfd >/dev/null 2>&1
+      _fake_payload success false "discarded the diff instead of committing it"
+      ;;
+    *)
+      if [ -n "${PROGRESS_FILE:-}" ]; then
+        { printf '\n%s — checkpoint turn\n' "$ticket"
+          printf 'Remaining: the rest\n'; } >> "$PROGRESS_FILE" 2>/dev/null
+      fi
+      git add -A >/dev/null 2>&1
+      git -c user.name=ralph-fake -c user.email=fake@ralph.invalid \
+        commit --quiet -m "wip: $ticket — remaining: the rest" >/dev/null 2>&1
+      _fake_payload success false "committed the checkpoint"
+      ;;
+  esac
+}
+
 exec_run() {
-  local prompt="$1" ticket="$2" call behaviour
-  call="$(_fake_bump)"
-  behaviour="$(_fake_behaviour "$call")"
+  local prompt="$1" ticket="$2" call behaviour label=checkpoint
+
+  case "$prompt" in
+    *"CHECKPOINT TURN"*) : ;;
+    *) call="$(_fake_bump)"; behaviour="$(_fake_behaviour "$call")"; label="$call" ;;
+  esac
 
   if [ -n "${RALPH_FAKE_PROMPT_LOG:-}" ]; then
-    { printf '===== fake prompt %s (%s) =====\n' "$call" "$ticket"
+    { printf '===== fake prompt %s (%s) =====\n' "$label" "$ticket"
       printf '%s\n' "$prompt"; } >> "$RALPH_FAKE_PROMPT_LOG"
+  fi
+
+  if [ "$label" = checkpoint ]; then
+    _fake_checkpoint "$ticket"
+    return
   fi
 
   case "$behaviour" in
