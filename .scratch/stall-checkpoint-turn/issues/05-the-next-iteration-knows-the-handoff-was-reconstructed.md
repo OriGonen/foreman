@@ -1,6 +1,6 @@
 # 05: The iteration after a stall is told what kind of handoff it inherited
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Blocked by:** 03
 
@@ -29,10 +29,10 @@ reviewed as one diff.
 
 **Acceptance criteria:**
 
-- [ ] The iteration after a stall is told it is continuing, not starting
-- [ ] Its notice says the handoff was reconstructed from the diff
-- [ ] Its notice says the previous turn ran out of room
-- [ ] The notice after a deliberate handoff is unchanged
-- [ ] The continuation is reviewed against the ticket's first base, as it already is for a
+- [x] The iteration after a stall is told it is continuing, not starting
+- [x] Its notice says the handoff was reconstructed from the diff
+- [x] Its notice says the previous turn ran out of room
+- [x] The notice after a deliberate handoff is unchanged
+- [x] The continuation is reviewed against the ticket's first base, as it already is for a
       deliberate handoff
-- [ ] Asserted by capturing the prompts of a run driven through the no-model test mode
+- [x] Asserted by capturing the prompts of a run driven through the no-model test mode
