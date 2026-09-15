@@ -201,8 +201,24 @@ PROGRESS_TAIL=$(tail -c "$RALPH_PROGRESS_TAIL_BYTES" "$PROGRESS_FILE" 2>/dev/nul
 # is continuing it rather than counting it as a failure (ralph-loop.sh sets the flag). This
 # goes at the TOP, ahead of the instructions: an agent that reads "implement the attached
 # ticket" and starts from nothing has already wasted the handoff the last one wrote.
+#
+# Two variants, because the two handoffs are not equally trustworthy. A deliberate handoff
+# was written by the same turn that did the work, so its 'Remaining:' list reflects intent.
+# A stall's handoff was reconstructed from the diff by a checkpoint turn that never saw the
+# reasoning (ralph-loop.sh sets RALPH_STALL_CONTINUATION for exactly this case) — it
+# describes what is there, not what was planned, and may be missing intent entirely.
 _ralph_continuation=""
-if [ "${RALPH_CONTINUATION:-0}" = "1" ]; then
+if [ "${RALPH_STALL_CONTINUATION:-0}" = "1" ]; then
+  _ralph_continuation="You are CONTINUING this ticket, not starting it. The previous turn on it ran out of room
+before it could commit its own work or explain it; a checkpoint turn salvaged the uncommitted
+diff and reconstructed the most recent ${PROGRESS_FILE} entry from that diff alone. Treat its
+'Remaining:' list as a description of what the diff contains, not of what was planned — it may
+be missing intent entirely. Before doing anything else, read that entry and the commits since
+${REVIEW_BASE}, and pick up from there rather than starting over. Work in smaller pieces and
+commit sooner than the previous turn did.
+
+"
+elif [ "${RALPH_CONTINUATION:-0}" = "1" ]; then
   _ralph_continuation="You are CONTINUING this ticket, not starting it. A previous iteration did part of the work
 and committed it; the ticket has not landed yet. Before doing anything else, read the most
 recent ${PROGRESS_FILE} entry — it ends with a 'Remaining:' list — and the commits since

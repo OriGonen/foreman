@@ -255,9 +255,15 @@ if case_is "a stall is salvaged by a checkpoint turn and the ticket continues"; 
   assert_contains "$cp" "Remaining:" "and asks for the handoff note"
   assert_contains "$cp" "do not write, edit, or plan any more" "and not to continue the work"
 
-  # The next real turn on this ticket is told it is continuing, same as a deliberate handoff.
+  # The next real turn on this ticket is told it is continuing, same as a deliberate handoff
+  # — but with the stall variant of the notice, not the deliberate one.
   p2="$(awk '/^===== fake prompt 2 /{f=1;next} /^===== fake prompt /{f=0} f' "$log")"
   assert_contains "$p2" "You are CONTINUING" "the following turn is told it is continuing"
+  assert_contains "$p2" "reconstructed" "and that the handoff was reconstructed from the diff"
+  assert_contains "$p2" "not of what was planned" "the Remaining: list is a description of what exists"
+  assert_contains "$p2" "ran out of room" "and that the previous turn ran out of room"
+  assert_missing "$p2" "A previous iteration did part of the work" \
+    "not the deliberate-handoff wording"
 fi
 
 if case_is "a checkpoint turn that discards the diff is not mistaken for one that left it alone"; then
@@ -420,6 +426,11 @@ if case_is "a ticket that hands off part-finished is continued, not failed"; the
   assert_missing "$p1" "You are CONTINUING" "the first attempt is not told"
   assert_contains "$p2" "You are CONTINUING" "the second one is"
   assert_contains "$p2" "$base" "and reviews against the ticket's first base"
+
+  # A deliberate handoff is not told its notice was reconstructed from a stall — that
+  # variant is only for a continuation that followed a checkpoint turn's salvage.
+  assert_missing "$p2" "reconstructed" "the deliberate-handoff notice is unchanged"
+  assert_missing "$p2" "ran out of room" "and does not carry the stall's context-retry framing"
 
   run_ralph "$repo" report batch
   assert_contains "$OUT" "progressed 1" "the report counts it as its own outcome"

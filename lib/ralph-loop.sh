@@ -379,6 +379,11 @@ TICKET_BASE_REF=""
 # than a deliberate handoff. Display and telemetry only (CONTEXT.md's "Stall count") — it
 # has no budget of its own; both shapes are bounded by CONTINUATIONS_ON_CURRENT alone.
 STALLS_ON_CURRENT=0
+# Whether the MOST RECENT continuation on the current ticket was a stall a checkpoint turn
+# salvaged, rather than a deliberate handoff. Unlike STALLS_ON_CURRENT (a running count),
+# this only ever describes the last one — a ticket that stalled once and then handed off
+# deliberately is not told the second time that its handoff was reconstructed.
+LAST_CONTINUATION_STALLED=0
 
 while true; do
   if [ "$PAUSE_REQUESTED" -eq 1 ]; then
@@ -413,6 +418,7 @@ while true; do
     CONTINUATIONS_ON_CURRENT=0
     TICKET_BASE_REF=""
     STALLS_ON_CURRENT=0
+    LAST_CONTINUATION_STALLED=0
   fi
   ATTEMPTS_ON_CURRENT=$((ATTEMPTS_ON_CURRENT + 1))
 
@@ -473,6 +479,13 @@ while true; do
   # the ticket's own first base to review against rather than this iteration's.
   RALPH_CONTINUATION=0
   [ "$CONTINUATIONS_ON_CURRENT" -gt 0 ] && RALPH_CONTINUATION=1
+
+  # That handoff was a checkpoint turn salvaging a stall, not a deliberate one: the
+  # `Remaining:` list it wrote was reconstructed from the diff by a turn that never saw the
+  # reasoning behind it, and the turn that produced the diff ran out of room. Say both.
+  RALPH_STALL_CONTINUATION=0
+  [ "$RALPH_CONTINUATION" = "1" ] && [ "$LAST_CONTINUATION_STALLED" = "1" ] && RALPH_STALL_CONTINUATION=1
+
   RALPH_REVIEW_BASE="$TICKET_BASE_REF"
 
   # shellcheck source=ralph-prompt.sh
@@ -634,6 +647,7 @@ while true; do
         say "   ⋯ stalled, salvaged by a checkpoint turn  ·  $(git log -1 --format=%h "$HEAD_REF")"
         CONTINUATIONS_ON_CURRENT=$((CONTINUATIONS_ON_CURRENT + 1))
         STALLS_ON_CURRENT=$((STALLS_ON_CURRENT + 1))
+        LAST_CONTINUATION_STALLED=1
         ATTEMPTS_ON_CURRENT=0
         if continuation_cap_reached; then
           FINAL_STATUS="$EXIT_NEEDS_HUMAN"
@@ -699,6 +713,7 @@ while true; do
   #    backwards. The continuation cap is what keeps this from looping forever.
   if [ "$HEAD_REF" != "$BASE_REF" ] && [ "$agent_status" -eq 0 ] && [ "$is_error" != "1" ]; then
     CONTINUATIONS_ON_CURRENT=$((CONTINUATIONS_ON_CURRENT + 1))
+    LAST_CONTINUATION_STALLED=0
     ATTEMPTS_ON_CURRENT=0
     say "   ⋯ progressed  ·  $(git log -1 --format=%h "$HEAD_REF")"
 
