@@ -434,7 +434,23 @@ if case_is "a ticket that never stops chunking is called mis-sized"; then
 
   assert_eq "$ST" 20 "stops for a human rather than chunking forever"
   assert_contains "$OUT" "has needed 3 extra turns without landing" "counts the continuations"
+  assert_contains "$OUT" "(3 progressed, 0 stalled)" "and breaks down how many were which"
   assert_contains "$OUT" "split it into smaller tickets" "says what to do about it"
+  assert_eq "$(done_count "$repo")" "0" "nothing landed"
+fi
+
+if case_is "a ticket that never stops stalling hits the same cap, broken down as stalls"; then
+  # Stalls and deliberate handoffs feed the SAME continuation cap — there is no separate
+  # stall budget — but the message must not call a ticket that only ever stalled
+  # "progressed".
+  repo="$(make_repo 2 stall-cap-repo)"
+  RALPH_MAX_CONTINUATIONS=2 RALPH_FAKE_BEHAVIOUR=dirty \
+    run_ralph "$repo" run batch --unlimited
+
+  assert_eq "$ST" 20 "stops for a human rather than salvaging forever"
+  assert_contains "$OUT" "has needed 2 extra turns without landing" "counts the stalls as continuations too"
+  assert_contains "$OUT" "(0 progressed, 2 stalled)" "and says they were all stalls"
+  assert_contains "$OUT" "split it into smaller tickets" "still advises splitting the ticket"
   assert_eq "$(done_count "$repo")" "0" "nothing landed"
 fi
 
@@ -445,6 +461,42 @@ if case_is "a progressed iteration does not consume a ticket's attempts"; then
 
   assert_eq "$ST" 20 "the unproductive iteration stops the run"
   assert_contains "$OUT" "after 1 attempt(s)" "only the unproductive one was counted"
+fi
+
+if case_is "a stalled iteration does not consume a ticket's attempts"; then
+  repo="$(make_repo 2 stall-attempts-repo)"
+  RALPH_FAKE_BEHAVIOUR=dirty:noop run_ralph "$repo" run batch --unlimited
+
+  assert_eq "$ST" 20 "the unproductive iteration after the salvage stops the run"
+  assert_contains "$OUT" "salvaged by a checkpoint turn" "the stall itself was salvaged, not attempted"
+  # If the stall had spent an attempt, this would read "after 2 attempt(s)" instead.
+  assert_contains "$OUT" "after 1 attempt(s)" "only the unproductive attempt after it was counted"
+fi
+
+if case_is "a checkpoint turn is recorded as its own row and its cost is in the run total"; then
+  repo="$(make_repo 2 checkpoint-cost-repo)"
+  RALPH_FAKE_COST=0.10 RALPH_FAKE_BEHAVIOUR=dirty:land \
+    run_ralph "$repo" run batch --unlimited
+
+  assert_eq "$ST" 0 "the batch still finishes"
+  assert_eq "$(done_count "$repo")" "2" "both tickets land"
+
+  # 4 turns actually ran (stall, its checkpoint, and one landing turn per ticket), but the
+  # checkpoint is not one of the 3 iterations the operator commissioned.
+  assert_contains "$OUT" "iterations run:        3" "the checkpoint turn does not advance the iteration count"
+  assert_contains "$OUT" "cost (USD, reported):  \$0.400000" "but its cost is folded into the run total"
+
+  jsonl="$repo/batch/ralph-runs.jsonl"
+  assert_eq "$(grep -c . "$jsonl")" "4" "all 4 turns are recorded"
+  assert_eq "$(grep -c '"kind":"checkpoint"' "$jsonl")" "1" "one of them is its own, distinguishable row"
+
+  run_ralph "$repo" report batch
+  assert_contains "$OUT" "stalled 1" "the report counts the stall as its own outcome"
+  assert_contains "$OUT" "checkpoint turns 1" "and the checkpoint as its own bucket"
+  assert_contains "$OUT" '$0.4000' "totalling all 4 turns' cost"
+
+  run_ralph "$repo" report batch --failures
+  assert_contains "$OUT" "every recorded iteration landed" "a salvaged stall is not flagged as a failure"
 fi
 
 if case_is "the prompt tells the agent how to hand a ticket off"; then

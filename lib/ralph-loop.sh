@@ -140,21 +140,36 @@ verdict_num() {
 
 log_append() { printf '%s\n' "$*" >> "$RUN_LOG"; }
 
+# Adds one verdict file's cost and token figures into the run's running totals. Shared by
+# the main turn and a checkpoint turn salvaging a stall — both spend real money, and the
+# totals must never track only one of them.
+accumulate_usage() {
+  local verdict_file="$1" cost
+  cost=$(verdict_get "$verdict_file" cost_usd)
+  RUN_COST=$(fadd "$RUN_COST" "${cost:-0}")
+  RUN_INPUT=$((RUN_INPUT + $(verdict_num "$verdict_file" input_tokens)))
+  RUN_OUTPUT=$((RUN_OUTPUT + $(verdict_num "$verdict_file" output_tokens)))
+  RUN_CACHE_READ=$((RUN_CACHE_READ + $(verdict_num "$verdict_file" cache_read_tokens)))
+  RUN_CACHE_WRITE=$((RUN_CACHE_WRITE + $(verdict_num "$verdict_file" cache_creation_tokens)))
+}
+
 # Shared by a deliberate handoff and a stall a checkpoint turn salvaged: both feed the one
 # continuation cap (RALPH_MAX_CONTINUATIONS), because a ticket that alternates between the
 # two shapes of "committed but not landed" must still be bounded by a single number. Prints
 # the stop and returns 0 once the cap is reached; returns 1 (nothing printed) otherwise.
 #
 # The message says "needed N extra turns" rather than "has progressed N times": a ticket
-# that stalls repeatedly reaches this cap without ever progressing deliberately, and a
-# breakdown of how many of the two is a display-only counter this ticket does not add.
+# that stalls repeatedly reaches this cap without ever progressing deliberately. The
+# breakdown of how many were which comes from STALLS_ON_CURRENT — display and telemetry
+# only, never a budget of its own (CONTEXT.md's "Stall count").
 continuation_cap_reached() {
   [ "$MAX_CONTINUATIONS" -gt 0 ] && [ "$CONTINUATIONS_ON_CURRENT" -ge "$MAX_CONTINUATIONS" ] || return 1
+  local progressed_count=$((CONTINUATIONS_ON_CURRENT - STALLS_ON_CURRENT))
   warn ""
-  warn "$TICKET_FILE has needed $CONTINUATIONS_ON_CURRENT extra turns without landing. Like running"
-  warn "out of context, that is a size problem rather than something a further attempt fixes —"
-  warn "split it into smaller tickets rather than rerunning as-is. Every chunk is committed;"
-  warn "nothing has been lost, and $PROGRESS_FILE says where it got to."
+  warn "$TICKET_FILE has needed $CONTINUATIONS_ON_CURRENT extra turns without landing ($progressed_count progressed, $STALLS_ON_CURRENT stalled)."
+  warn "Like running out of context, that is a size problem rather than something a further"
+  warn "attempt fixes — split it into smaller tickets rather than rerunning as-is. Every chunk"
+  warn "is committed; nothing has been lost, and $PROGRESS_FILE says where it got to."
   return 0
 }
 
@@ -360,6 +375,10 @@ PREV_CONTEXT_EXHAUSTED=0
 # reviewed as one diff rather than three unrelated slices.
 CONTINUATIONS_ON_CURRENT=0
 TICKET_BASE_REF=""
+# How many of THIS ticket's continuations were stalls a checkpoint turn salvaged, rather
+# than a deliberate handoff. Display and telemetry only (CONTEXT.md's "Stall count") — it
+# has no budget of its own; both shapes are bounded by CONTINUATIONS_ON_CURRENT alone.
+STALLS_ON_CURRENT=0
 
 while true; do
   if [ "$PAUSE_REQUESTED" -eq 1 ]; then
@@ -393,6 +412,7 @@ while true; do
     PREV_CONTEXT_EXHAUSTED=0
     CONTINUATIONS_ON_CURRENT=0
     TICKET_BASE_REF=""
+    STALLS_ON_CURRENT=0
   fi
   ATTEMPTS_ON_CURRENT=$((ATTEMPTS_ON_CURRENT + 1))
 
@@ -492,12 +512,7 @@ while true; do
     --exit-status "$agent_status" --tree-dirty "$dirty" --status-flipped "$flipped" \
     || warn "   note: could not record iteration $ITERATIONS_RUN (usage figures will read as zero)"
 
-  iter_cost=$(verdict_get "$VERDICT_FILE" cost_usd)
-  RUN_COST=$(fadd "$RUN_COST" "${iter_cost:-0}")
-  RUN_INPUT=$((RUN_INPUT + $(verdict_num "$VERDICT_FILE" input_tokens)))
-  RUN_OUTPUT=$((RUN_OUTPUT + $(verdict_num "$VERDICT_FILE" output_tokens)))
-  RUN_CACHE_READ=$((RUN_CACHE_READ + $(verdict_num "$VERDICT_FILE" cache_read_tokens)))
-  RUN_CACHE_WRITE=$((RUN_CACHE_WRITE + $(verdict_num "$VERDICT_FILE" cache_creation_tokens)))
+  accumulate_usage "$VERDICT_FILE"
 
   limit_hit=$(verdict_get "$VERDICT_FILE" limit_hit)
   limit_reset=$(verdict_get "$VERDICT_FILE" limit_reset)
@@ -574,13 +589,16 @@ while true; do
       # separate calls in this seam, so "run the agent without syncing first" needs no new
       # adapter function — three of the four adapters have a no-op exec_sync_down anyway.
       checkpoint_prompt="$(ralph_checkpoint_prompt "$TICKET_FILE" "$BASE_REF")"
+      CHECKPOINT_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
       # Guarded expansion, same as RALPH_CLAUDE_ARGS's other two call sites (local.sh,
       # _sbx.sh): under bash < 4.4 and `set -u`, expanding an array that is declared but
       # empty still raises "unbound variable" without the `+` guard.
       checkpoint_args_saved=(${RALPH_CLAUDE_ARGS+"${RALPH_CLAUDE_ARGS[@]}"})
       RALPH_CLAUDE_ARGS+=(--max-turns "$CHECKPOINT_MAX_TURNS")
       exec_run "$checkpoint_prompt" "$TICKET_FILE" |
-        node "$RALPH_TOOL_DIR/ralph-stream.cjs" ${STREAM_ARGS+"${STREAM_ARGS[@]}"} > /dev/null
+        node "$RALPH_TOOL_DIR/ralph-stream.cjs" ${STREAM_ARGS+"${STREAM_ARGS[@]}"} > "$PAYLOAD_FILE"
+      checkpoint_agent_status=${PIPESTATUS[0]}
+      checkpoint_result=$(cat "$PAYLOAD_FILE")
       RALPH_CLAUDE_ARGS=(${checkpoint_args_saved+"${checkpoint_args_saved[@]}"})
 
       # Bring back whatever the checkpoint turn committed (only the clone-based sandbox has
@@ -588,6 +606,22 @@ while true; do
       checkpoint_sync_failed=0
       exec_collect "$BASE_REF" || checkpoint_sync_failed=1
       HEAD_REF=$(git rev-parse HEAD)
+
+      # Recorded as its OWN row (kind=checkpoint), never folded into the iteration it
+      # salvaged — so per-iteration cost/duration figures are not distorted by a second turn
+      # hidden inside them, and a human reading the log can tell the two apart. Its cost is
+      # added to the run total regardless of how the salvage turns out: the money was spent
+      # either way, and the total must never quietly understate it.
+      : > "$VERDICT_FILE"
+      printf '%s' "$checkpoint_result" | node "$RALPH_TOOL_DIR/ralph-record.cjs" \
+        --jsonl "$RUN_JSONL" --log "$RUN_LOG" --verdict "$VERDICT_FILE" \
+        --run-id "$RUN_ID" --iteration "$ITERATIONS_RUN" --ticket "$TICKET_FILE" \
+        --batch "$BATCH_DIR" --kind checkpoint \
+        --base-ref "$BASE_REF" --head-ref "$HEAD_REF" --started-at "$CHECKPOINT_STARTED_AT" \
+        --exit-status "$checkpoint_agent_status" --tree-dirty "$EXEC_DIRTY" --status-flipped 0 \
+        || warn "   note: could not record the checkpoint turn (usage figures will read as zero)"
+
+      accumulate_usage "$VERDICT_FILE"
 
       if [ "$checkpoint_sync_failed" -eq 1 ]; then
         warn ""
@@ -599,6 +633,7 @@ while true; do
       if [ "$EXEC_DIRTY" -eq 0 ] && [ "$HEAD_REF" != "$BASE_REF" ]; then
         say "   ⋯ stalled, salvaged by a checkpoint turn  ·  $(git log -1 --format=%h "$HEAD_REF")"
         CONTINUATIONS_ON_CURRENT=$((CONTINUATIONS_ON_CURRENT + 1))
+        STALLS_ON_CURRENT=$((STALLS_ON_CURRENT + 1))
         ATTEMPTS_ON_CURRENT=0
         if continuation_cap_reached; then
           FINAL_STATUS="$EXIT_NEEDS_HUMAN"

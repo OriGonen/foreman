@@ -172,7 +172,11 @@ exec_run() {
       _fake_payload success false "did nothing"
       ;;
     dirty)
-      printf 'left behind by the fake adapter\n' > .ralph-fake-leftover
+      # Appends rather than overwrites (same reasoning as partial-turn below): once a
+      # checkpoint turn commits this file, a second `dirty` call must still produce a real,
+      # uncommitted diff rather than rewriting identical content over an identical commit —
+      # which git sees as no change at all, and the loop as nothing to stall on.
+      printf 'left behind by the fake adapter (call %s)\n' "$call" >> .ralph-fake-leftover
       _fake_payload success false "left the tree dirty"
       ;;
     error)
