@@ -67,6 +67,13 @@ exec_sync_down() {
   fi
 }
 
+# Read-only: is the sandbox's clone dirty right now? No side effects — unlike exec_collect,
+# it never bundles or brings commits back. What the loop asks before every exec_sync_down,
+# so a hard reset never runs over work nobody has looked at yet.
+exec_tree_dirty() {
+  [ -n "$(_sbx_sh 'git status --porcelain 2>/dev/null' 2>/dev/null | tr -d '\r')" ]
+}
+
 exec_collect() {
   local base="$1"
 

@@ -257,6 +257,36 @@ if case_is "the dirty-tree recovery note matches the mode actually in force"; th
   assert_missing "$note" "git add -A && git commit -m 'wip:" "sandbox: never the host-commit line"
 fi
 
+if case_is "syncing refuses over a dirty tree rather than resetting it"; then
+  repo="$(make_repo 2 refuse-sync-repo)"
+
+  # A clean tree syncs exactly as before, with no extra output.
+  run_ralph "$repo" run batch 1
+  assert_eq "$ST" 10 "clean tree: the iteration runs and pauses on the iteration budget"
+  assert_eq "$(done_count "$repo")" "1" "clean tree: the ticket landed"
+  assert_missing "$OUT" "Refusing to sync" "clean tree: no refusal text"
+
+  # Leave the second ticket's tree dirty, as a stall would.
+  RALPH_FAKE_BEHAVIOUR=dirty run_ralph "$repo" run batch --unlimited
+  assert_eq "$ST" 20 "the stall stops for a human"
+  head_after_stall="$(git -C "$repo" rev-parse HEAD)"
+  commits_after_stall="$(git -C "$repo" log --oneline | wc -l)"
+
+  # Rerunning is the natural response to any stop. RALPH_ALLOW_DIRTY=1 only waives the
+  # PREFLIGHT gate on the review base (a different concern); it must not waive this
+  # refusal, which exists so that "just rerun it" can never destroy the tree.
+  log="$WORK/refuse-sync-prompts.txt"
+  RALPH_ALLOW_DIRTY=1 RALPH_FAKE_PROMPT_LOG="$log" RALPH_FAKE_BEHAVIOUR=land \
+    run_ralph "$repo" run batch --unlimited
+  assert_eq "$ST" 20 "rerun over a dirty tree refuses rather than resetting"
+  assert_contains "$OUT" "Refusing to sync" "says why it refused"
+  assert_contains "$OUT" "git add -A && git commit -m 'wip:" "prints the mode's recovery note"
+  assert_missing "$OUT" "sbx exec" "never the sandbox's advice"
+  assert_eq "$(git -C "$repo" rev-parse HEAD)" "$head_after_stall" "HEAD did not move"
+  assert_eq "$(git -C "$repo" log --oneline | wc -l)" "$commits_after_stall" "nothing new was committed"
+  [ -f "$log" ] && fail "the agent should never have been run" || pass
+fi
+
 if case_is "--live draws what the agent is doing, and only that"; then
   # Once exec_run is invoked the terminal is silent until it returns. Writes and shell
   # commands are the two signals worth drawing; reads, greps and globs are the majority of

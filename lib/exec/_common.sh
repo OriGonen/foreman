@@ -8,6 +8,10 @@
 
 exec_sync_down() { return 0; }
 
+# Read-only: is the tree dirty right now? The same predicate exec_collect uses to set
+# EXEC_DIRTY, asked on its own — no side effects, no commits moved.
+exec_tree_dirty() { [ -n "$(git status --porcelain)" ]; }
+
 exec_collect() {
   EXEC_AGENT_HEAD="$(git rev-parse HEAD)"
   EXEC_DIRTY=0

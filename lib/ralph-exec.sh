@@ -18,6 +18,8 @@
 #   exec_prepare            expensive setup, once per run, before any money is spent
 #   exec_describe           one line naming the arrangement, for status and dry-run
 #   exec_commit_note        the prompt's paragraph about committing
+#   exec_tree_dirty         is the agent's tree dirty right now? 0 no, 1 yes. Read-only —
+#                           unlike exec_collect, it never moves commits.
 #   exec_sync_down BASE     put the agent's tree at BASE; 0 ok, 1 stop
 #   exec_run PROMPT TICKET  run the agent; payload on stdout, agent's status returned
 #   exec_collect BASE       set EXEC_AGENT_HEAD and EXEC_DIRTY, and bring any commits

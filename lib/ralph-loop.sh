@@ -46,7 +46,9 @@
 #   RALPH_MAX_CONTINUATIONS=5      consecutive iterations that may commit progress on one
 #                                  ticket without landing it before stopping for a human
 #   RALPH_CONTEXT_BUDGET_TOKENS=200000   what the prompt tells the agent to work inside
-#   RALPH_ALLOW_DIRTY=1            skip the clean-tree preflight
+#   RALPH_ALLOW_DIRTY=1            skip the clean-tree preflight (not the per-iteration
+#                                  refusal to sync over a dirty tree — that one has no
+#                                  override, on purpose: it is what makes a rerun safe)
 #   RALPH_SANDBOX=<name>           sandbox to create/reattach to
 #   RALPH_SKIP_SANDBOX_PROBE=1     skip the batch's sandbox readiness probe and its setup
 #
@@ -392,6 +394,20 @@ while true; do
   STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
   say "── iteration $ITERATIONS_RUN  ·  $TICKET_FILE$([ "$ATTEMPTS_ON_CURRENT" -gt 1 ] && printf ' (attempt %s)' "$ATTEMPTS_ON_CURRENT")"
+
+  # Ask before touching anything: on the clone-based sandbox, syncing is a hard reset plus
+  # a wipe of untracked files, and rerunning is the most natural response to any stop there
+  # is. Refuse rather than destroy work nobody has looked at yet.
+  if exec_tree_dirty; then
+    warn ""
+    warn "The agent's tree already has uncommitted changes in it. Refusing to sync over them."
+    exec_show_dirty
+    warn ""
+    warn "If the changes look sound, keep them as a checkpoint and rerun to continue:"
+    exec_dirty_recovery_note "$BASE_REF" "$TICKET_FILE" "$BATCH_DIR" >&2
+    FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+    break
+  fi
 
   # Start the agent from exactly what we have. Cheap when already in sync, and it is what
   # makes a retry after a failed iteration a genuinely clean second attempt rather than a
