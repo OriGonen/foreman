@@ -1,6 +1,6 @@
 # 06: Salvaging work is worth overshooting a budget, and the run says so
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Blocked by:** 04
 
@@ -22,11 +22,11 @@ stalled work, so a final figure above the limit is explained rather than mysteri
 
 **Acceptance criteria:**
 
-- [ ] A stall discovered after the cost budget was reached still gets its checkpoint turn
-- [ ] The same holds for the time budget
-- [ ] The closing message says a budget was overshot to salvage stalled work, and by how
+- [x] A stall discovered after the cost budget was reached still gets its checkpoint turn
+- [x] The same holds for the time budget
+- [x] The closing message says a budget was overshot to salvage stalled work, and by how
       much
-- [ ] The run still stops after salvaging; the overshoot buys the checkpoint turn and
+- [x] The run still stops after salvaging; the overshoot buys the checkpoint turn and
       nothing more
-- [ ] Budgets are otherwise unchanged: a run not salvaging anything still stops exactly
+- [x] Budgets are otherwise unchanged: a run not salvaging anything still stops exactly
       where it does today
