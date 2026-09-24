@@ -110,7 +110,7 @@ if case_is "one iteration is the default, and it lands one ticket"; then
   assert_eq "$ST" 10 "stops paused on the iteration budget"
   assert_contains "$OUT" "iteration budget reached (1)" "says why it paused"
   assert_eq "$(done_count "$repo")" "1" "exactly one ticket landed"
-  assert_eq "$(git -C "$repo" log --oneline | wc -l)" "2" "exactly one new commit"
+  assert_eq "$(git -C "$repo" log --oneline | wc -l)" "3" "the landing commit, plus the rename marking it done"
 fi
 
 if case_is "--unlimited runs the batch to completion"; then
@@ -947,6 +947,85 @@ if case_is "--unordered is quiet about an empty batch, the other modes are not";
 
   run_ralph "$repo" next batch --count
   assert_eq "$ST" 2 "--count still calls an empty batch malformed"
+fi
+
+if case_is "a landed ticket with every box ticked is renamed DONE_"; then
+  repo="$(make_repo 2 done-rename-repo)"
+  run_ralph "$repo" run batch --unlimited
+  assert_eq "$ST" 0 "the batch finishes"
+  d="$repo/batch/issues"
+  [ -f "$d/DONE_01-ticket.md" ] && [ -f "$d/DONE_02-ticket.md" ] && pass || fail "both tickets carry the prefix"
+  [ -e "$d/01-ticket.md" ] && fail "the old name is gone" || pass
+  assert_contains "$OUT" "marked done" "the rename is announced"
+  assert_eq "$(git -C "$repo" status --porcelain)" "" "the rename was committed, tree is clean"
+  assert_contains "$(git -C "$repo" log --format=%s)" "chore: mark 01-ticket.md done" "as its own commit"
+  assert_eq "$(done_count "$repo")" "2" "renamed tickets still count as done"
+
+  run_ralph "$repo" next batch --count
+  assert_eq "$OUT" "2 2" "--count agrees"
+  run_ralph "$repo" run batch
+  assert_eq "$ST" 0 "a rerun has nothing left to do and renames nothing further"
+fi
+
+if case_is "a ticket with an unticked box, or not yet done, keeps its name"; then
+  repo="$(make_repo 2 done-rename-boxes-repo)"
+  printf '# Ticket 1\n\n**Status:** todo\n\n- [x] one\n  - [ ] two\n' > "$repo/batch/issues/01-ticket.md"
+  printf '# Ticket 2\n\n**Status:** todo\n\n- [x] one\n* [X] two\n' > "$repo/batch/issues/02-ticket.md"
+  git -C "$repo" commit --quiet -am "boxes"
+
+  run_ralph "$repo" run batch --unlimited
+  d="$repo/batch/issues"
+  [ -f "$d/01-ticket.md" ] && pass || fail "unticked box: the name is kept"
+  assert_contains "$OUT" "unchecked boxes" "and says why"
+  [ -f "$d/DONE_02-ticket.md" ] && pass || fail "every box ticked: renamed"
+  assert_eq "$(git -C "$repo" status --porcelain)" "" "tree clean"
+
+  repo="$(make_repo 1 done-rename-noop-repo)"
+  RALPH_FAKE_BEHAVIOUR=noop run_ralph "$repo" run batch 1
+  [ -f "$repo/batch/issues/01-ticket.md" ] && pass || fail "a ticket that did not land is never renamed"
+fi
+
+if case_is "an order.md written before the rename still finds the renamed ticket"; then
+  repo="$(make_repo 3 done-rename-order-repo)"
+  { echo '<!-- ORDER:BEGIN -->'
+    echo 'batch/issues/03-ticket.md'
+    echo 'batch/issues/01-ticket.md'
+    echo 'batch/issues/02-ticket.md'
+    echo '<!-- ORDER:END -->'; } > "$repo/batch/order.md"
+  git -C "$repo" add -A; git -C "$repo" commit --quiet -m order
+
+  run_ralph "$repo" run batch 1
+  [ -f "$repo/batch/issues/DONE_03-ticket.md" ] && pass || fail "ticket 3 ran first and was renamed"
+  run_ralph "$repo" next batch --all
+  assert_eq "$(printf '%s\n' "$OUT" | head -1)" "batch/issues/DONE_03-ticket.md" "order.md resolves the renamed file"
+  run_ralph "$repo" next batch
+  assert_eq "$OUT" "batch/issues/01-ticket.md" "and the next ticket is still 01"
+fi
+
+if case_is "renamed tickets keep their place in filename order"; then
+  repo="$(make_repo 3 done-rename-sort-repo)"
+  git -C "$repo" mv batch/issues/01-ticket.md batch/issues/DONE_01-ticket.md
+  run_ralph "$repo" next batch --all
+  assert_eq "$(printf '%s\n' "$OUT" | head -1)" "batch/issues/DONE_01-ticket.md" "DONE_01 sorts as 01"
+  assert_eq "$(printf '%s\n' "$OUT" | tail -1)" "batch/issues/03-ticket.md" "and 03 is still last"
+fi
+
+if case_is "RALPH_DONE_PREFIX empty leaves ticket files alone"; then
+  repo="$(make_repo 1 done-rename-off-repo)"
+  RALPH_DONE_PREFIX= run_ralph "$repo" run batch --unlimited
+  assert_eq "$ST" 0 "the batch finishes"
+  [ -f "$repo/batch/issues/01-ticket.md" ] && pass || fail "the ticket kept its name"
+fi
+
+if case_is "a ticket marked done counts as done, like an implemented one"; then
+  repo="$(make_repo 2 done-word-repo)"
+  printf '# Ticket 1\n\n**Status:** done\n\n- [x] one\n' > "$repo/batch/issues/01-ticket.md"
+  git -C "$repo" commit --quiet -am "01 done by hand"
+
+  run_ralph "$repo" next batch --count
+  assert_eq "$OUT" "1 2" "done is counted like implemented"
+  run_ralph "$repo" next batch
+  assert_eq "$OUT" "batch/issues/02-ticket.md" "and skipped when picking the next ticket"
 fi
 
 # ---------------------------------------------------------------------------

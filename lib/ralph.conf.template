@@ -101,6 +101,11 @@ RALPH_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)")
 #RALPH_DONE_WORD=implemented
 #RALPH_DONE_PATTERN='^\*\*Status:\*\* *implemented'
 
+# When a ticket lands with its status flipped AND every checklist box ticked, the loop
+# renames the file to DONE_<name> and commits the rename. Tickets are still found by their
+# original name (order.md need not change). Set empty to never rename.
+#RALPH_DONE_PREFIX=DONE_
+
 # The run order. If order.md exists, its <!-- ORDER:BEGIN --> block is the order and
 # RALPH_ISSUES_DIRS is ignored. Otherwise every *.md in these directories runs in
 # filename order — which is what the NN- prefixes are for. A relative entry is resolved

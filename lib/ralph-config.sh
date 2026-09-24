@@ -152,8 +152,17 @@ RALPH_DONE_WORD="${RALPH_DONE_WORD:-implemented}"
 # RALPH_DONE_PATTERN directly only if a ticket's status line isn't a simple
 # "$RALPH_STATUS_LINE $RALPH_DONE_WORD" prefix.
 if [ -z "${RALPH_DONE_PATTERN:-}" ]; then
-  RALPH_DONE_PATTERN="^$(printf '%s' "$RALPH_STATUS_LINE" | sed -e 's/\\/\\\\/g' -e 's/[.[*^$]/\\&/g') *$RALPH_DONE_WORD"
+  # The tracker convention in docs/agents/issue-tracker.md marks a finished ticket `done`,
+  # while the prompt asks the agent for `implemented`; with the default word, accept both.
+  _ralph_done_words="$RALPH_DONE_WORD"
+  [ "$RALPH_DONE_WORD" = implemented ] && _ralph_done_words='\(implemented\|done\)'
+  RALPH_DONE_PATTERN="^$(printf '%s' "$RALPH_STATUS_LINE" | sed -e 's/\\/\\\\/g' -e 's/[.[*^$]/\\&/g') *$_ralph_done_words"
 fi
+
+# A ticket that has landed with every checklist box ticked is renamed to ${prefix}<name> by
+# the loop (see mark_ticket_done_on_disk), so a directory listing shows what is finished.
+# Set it empty to leave ticket files alone. `${VAR-default}`, not `:-`, so empty sticks.
+RALPH_DONE_PREFIX="${RALPH_DONE_PREFIX-DONE_}"
 
 # Every path knob accepts three spellings, so `order.md` in a conf means the batch's own
 # order file and `.scratch/shared/order.md` still means what it says:

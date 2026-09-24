@@ -195,6 +195,54 @@ budget_label() {
 tree_is_dirty() { [ -n "$(git status --porcelain)" ]; }
 ticket_is_done() { grep -q "$RALPH_DONE_PATTERN" "$1"; }
 
+# ---------------------------------------------------------------------------
+# Marking a finished ticket's file
+#
+# A landed ticket whose checklist is fully ticked is renamed to ${RALPH_DONE_PREFIX}<name>
+# and the rename committed, so a directory listing shows what is finished. Both halves of
+# "complete" are required: the status line says the agent believes it is done, the boxes say
+# what it actually checked off. A ticket with the one and not the other keeps its name.
+# A ticket with no checkboxes has none unticked. Renamed by the LOOP rather than asked of
+# the agent: the loop is about to re-read the ticket by its path, and a rename is exactly
+# the sort of thing that goes wrong quietly inside a turn.
+#
+# Never fatal. The ticket has landed either way; a failed rename only costs the prefix, and
+# a failed commit is undone so the tree is not left dirty for the next iteration to trip on.
+# ---------------------------------------------------------------------------
+ticket_has_unchecked_boxes() { grep -q '^[[:space:]]*[-*+][[:space:]][[:space:]]*\[ \]' "$1"; }
+
+mark_ticket_done_on_disk() {    # mark_ticket_done_on_disk TICKET
+  local ticket="$1" base renamed
+  [ -n "$RALPH_DONE_PREFIX" ] || return 0
+  base="$(basename "$ticket")"
+  case "$base" in "$RALPH_DONE_PREFIX"*) return 0 ;; esac
+  [ -f "$ticket" ] && ticket_is_done "$ticket" || return 0
+
+  if ticket_has_unchecked_boxes "$ticket"; then
+    warn "   note: $ticket is '$RALPH_DONE_WORD' but has unchecked boxes — leaving its name alone"
+    return 0
+  fi
+
+  renamed="$(dirname "$ticket")/$RALPH_DONE_PREFIX$base"
+  if [ -e "$renamed" ]; then
+    warn "   note: $renamed already exists — not renaming $ticket"
+    return 0
+  fi
+
+  if ! git mv -- "$ticket" "$renamed" 2>/dev/null; then
+    warn "   note: could not rename $ticket (is it tracked?) — leaving it as is"
+    return 0
+  fi
+  # Only the two paths: a bare `git commit` would sweep up anything else staged, which
+  # RALPH_ALLOW_DIRTY makes possible.
+  if ! git commit --quiet -m "chore: mark $base done" -- "$ticket" "$renamed" >/dev/null 2>&1; then
+    git mv -- "$renamed" "$ticket" >/dev/null 2>&1
+    warn "   note: could not commit the rename of $ticket — left it as is"
+    return 0
+  fi
+  say "   ✓ marked done  ·  $renamed"
+}
+
 next_sh() { bash "$RALPH_TOOL_DIR/ralph-next.sh" "$BATCH_DIR" "$@"; }
 
 # ---------------------------------------------------------------------------
@@ -892,6 +940,7 @@ while true; do
       warn "   note: status flipped but HEAD did not move — check $TICKET_FILE was committed"
     fi
     say "   ✓ landed  ·  $(git log -1 --format=%h "$HEAD_REF")"
+    mark_ticket_done_on_disk "$TICKET_FILE"
     continue
   fi
 

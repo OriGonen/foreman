@@ -60,6 +60,16 @@ resolve_ticket() {
   local entry="$1"
   if [ -f "$entry" ]; then printf '%s' "$entry"; return 0; fi
   if [ -f "$BATCH_DIR/$entry" ]; then printf '%s' "$BATCH_DIR/$entry"; return 0; fi
+  # Not there under that name: the loop may have renamed it to DONE_<name> since the order
+  # was written (RALPH_DONE_PREFIX), so a finished ticket stays findable.
+  if [ -n "$RALPH_DONE_PREFIX" ]; then
+    local dir base
+    dir="$(dirname "$entry")"; base="$(basename "$entry")"
+    if [ -f "$dir/$RALPH_DONE_PREFIX$base" ]; then printf '%s' "$dir/$RALPH_DONE_PREFIX$base"; return 0; fi
+    if [ -f "$BATCH_DIR/$dir/$RALPH_DONE_PREFIX$base" ]; then
+      printf '%s' "$BATCH_DIR/$dir/$RALPH_DONE_PREFIX$base"; return 0
+    fi
+  fi
   return 1
 }
 
@@ -100,6 +110,9 @@ else
   # directories stay in the order given. ralph_issues_dirs (ralph-config.sh) is the one
   # place that decides what a RALPH_ISSUES_DIRS entry resolves to, so this and `ralph order`
   # cannot disagree.
+  #
+  # Sorted on the name WITHOUT the done prefix, so a renamed ticket keeps its place in the
+  # numbering instead of sinking below every unrenamed one.
   while IFS= read -r resolved_dir; do
     [ -d "$resolved_dir" ] || continue
     while IFS= read -r file; do
@@ -109,7 +122,12 @@ else
         [ "$base" = "$excluded" ] && skip=1 && break
       done
       [ "$skip" -eq 1 ] || tickets+=("$file")
-    done < <(find "$resolved_dir" -maxdepth 1 -name '*.md' -type f | sort)
+    done < <(find "$resolved_dir" -maxdepth 1 -name '*.md' -type f |
+             while IFS= read -r f; do
+               key="$(basename "$f")"
+               [ -z "$RALPH_DONE_PREFIX" ] || key="${key#"$RALPH_DONE_PREFIX"}"
+               printf '%s\t%s\n' "$key" "$f"
+             done | sort -t $'\t' -k1,1 | cut -f2-)
   done < <(ralph_issues_dirs)
 fi
 
