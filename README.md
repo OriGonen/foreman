@@ -56,6 +56,7 @@ directory**, inside the repository being worked on:
 | `prompt-extra.md` | project-specific prompt text (optional) |
 | `ralph-runs.jsonl` `ralph-runs.log` | append-only run telemetry, gitignored |
 | `.ralph-iter.bundle` | transient; exists only inside one iteration |
+| `.ralph-stall-marker` | disposable; left only when a stall could not be salvaged, so a rerun may rescue it — see "Pausing and resuming" |
 
 Two batches never share any of it, and two *repositories* never share any of it either. Run
 one, pause it, switch repos, run another, come back — each resumes exactly where it was.
@@ -71,7 +72,8 @@ ralph doctor --fix
 
 That appends the only two things a repo has to provide itself:
 
-- `.gitignore` — `**/.ralph-iter.bundle`, `**/ralph-runs.jsonl`, `**/ralph-runs.log`, so a
+- `.gitignore` — `**/.ralph-iter.bundle`, `**/.ralph-stall-marker`, `**/ralph-runs.jsonl`,
+  `**/ralph-runs.log`, so a
   batch's run state stays untracked. The patterns match anywhere because a batch is any
   directory with a `ralph.conf`.
 - `.gitattributes` — `ralph.conf text eol=lf`, but only if the repo normalises line
@@ -320,6 +322,19 @@ single-purpose agent turn that reads the diff, commits it as `wip:`, and writes 
 progression, and the same ticket continues on the next iteration. Only when the checkpoint
 turn *also* cannot commit does the run stop, for the same reason it always did. See
 `docs/adr/0001-checkpoint-turn-over-session-resume.md`.
+
+**Rerunning a stop like that salvages it.** When a run ends on a stall it could not salvage,
+it leaves a small marker, `.ralph-stall-marker`, in the batch directory naming the ticket, the
+base commit and the sandbox. The next run checks for it before its first sync: if the tree is
+dirty and the marker matches — same sandbox, same base commit, same ticket — it runs the
+checkpoint turn first and then carries on with the batch. The marker is what proves the
+uncommitted work is the loop's own. The sandbox is per *repository*, so a dirty clone may be
+another batch's stall or your own session inside it, and committing that blind, under
+whichever ticket this run picked first, is exactly the unreviewed commit the loop refuses to
+make. With no marker, or one that does not match, the run refuses to sync and prints the
+recovery note instead. The marker is disposable: deleting it by hand is always safe and costs
+only the automatic rescue, and it is removed as soon as the tree is clean or a checkpoint
+succeeds.
 
 Within a run, a ticket is retried only when a second attempt could plausibly survive: the
 model was briefly unavailable, the iteration ran out of context, or the CLI got far enough

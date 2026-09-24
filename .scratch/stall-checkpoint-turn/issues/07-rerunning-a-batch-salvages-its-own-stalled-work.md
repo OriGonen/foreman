@@ -1,6 +1,6 @@
 # 07: Rerunning a batch salvages its own stalled work
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Blocked by:** 02, 03
 
@@ -35,13 +35,51 @@ disposable file in the batch directory, never a registry.
 
 **Acceptance criteria:**
 
-- [ ] A run that ends with an unsalvaged stall records a marker naming the ticket, the base
+- [x] A run that ends with an unsalvaged stall records a marker naming the ticket, the base
       ref and the sandbox
-- [ ] A rerun whose marker matches the dirty tree it finds checkpoints the work before
+- [x] A rerun whose marker matches the dirty tree it finds checkpoints the work before
       syncing, then continues the batch normally
-- [ ] A rerun with no marker, or a marker that does not match, refuses to sync and prints
+- [x] A rerun with no marker, or a marker that does not match, refuses to sync and prints
       the recovery note
-- [ ] A marker naming a different sandbox is never trusted
-- [ ] The marker is removed once the tree is clean or a checkpoint succeeds
-- [ ] Deleting the marker by hand is safe and only costs the automatic rescue
-- [ ] Nothing is committed under a ticket when the loop cannot prove the work is its own
+- [x] A marker naming a different sandbox is never trusted
+- [x] The marker is removed once the tree is clean or a checkpoint succeeds
+- [x] Deleting the marker by hand is safe and only costs the automatic rescue
+- [x] Nothing is committed under a ticket when the loop cannot prove the work is its own
+
+## Comments
+
+The marker is `<batch>/.ralph-stall-marker`, three `key=value` lines (`ticket`, `base_ref`,
+`sandbox`), written by `write_stall_marker` in `lib/ralph-loop.sh` only when a checkpoint
+turn leaves the tree still dirty. A run checks it once, at the top of its first iteration —
+after `exec_prepare`, before the budget checks and before the first `exec_sync_down` — using
+ticket 02's `exec_tree_dirty`: clean tree → marker deleted; dirty and matching (same sandbox,
+`base_ref` equal to host HEAD, same ticket as the one about to run) → checkpoint turn, then
+the batch carries on with the ticket already a stall continuation, reviewed from the marker's
+base; dirty and not matching → the existing refusal, now with a line saying a marker was found
+but not trusted.
+
+The inline checkpoint turn from ticket 03 moved into `run_checkpoint_turn` so both call sites
+share it; it reports one of `salvaged`/`stranded`/`discarded`/`failed`.
+
+Decisions worth knowing:
+
+- The marker is deleted *before* the rescue's checkpoint turn and rewritten if it fails, rather
+  than deleted after success. In a repo that has not ignored it, `git add -A` would otherwise
+  sweep it into the wip commit. `ralph doctor` now checks for the `.gitignore` pattern too.
+- The clean-tree preflight is waived when the marker matches. Without that, "just rerun it"
+  was not true as typed under `local`/`sandbox-mount`, where the agent's tree is the host's and
+  the preflight fails first.
+- No marker is written for a checkpoint turn that discards the diff, one whose commit is
+  stranded, or a dirty tree without the stall's exact signature: none of those is an
+  uncommitted diff the loop can vouch for.
+- The salvage at run start does not consume an iteration and does not check the continuation
+  cap — it cannot loop, and the operator has just asked for this run.
+
+Residual risk, inherent to the design the ticket asks for: a marker that outlives its stall
+(tree cleaned some way that does not start a run) and is then followed by someone else's dirty
+work at the same HEAD for the same ticket would match. Nothing in the marker can rule that out.
+
+The existing "syncing refuses over a dirty tree" case now deletes the marker before its rerun,
+since an unsalvaged stall now leaves one; the new cases cover the marker paths (matching,
+missing, mismatched sandbox/base/ticket, failed rescue, clean tree). Full smoke suite: 283
+passed, 0 failed.

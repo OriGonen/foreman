@@ -28,7 +28,8 @@
 #   RALPH_INVOKE         how to spell the command in a message to the user
 #   BATCH_DIR            repo-relative path to the batch directory
 #   BATCH_NAME           its basename, unless ralph.conf overrides it
-#   ORDER_FILE PROGRESS_FILE RUN_JSONL RUN_LOG BUNDLE_FILE PROMPT_EXTRA_FILE
+#   ORDER_FILE PROGRESS_FILE RUN_JSONL RUN_LOG BUNDLE_FILE STALL_MARKER_FILE
+#   PROMPT_EXTRA_FILE
 #   plus every RALPH_* knob documented in ralph.conf.template
 
 RALPH_TOOL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -233,6 +234,11 @@ PROMPT_EXTRA_FILE="$(_ralph_path "${RALPH_PROMPT_EXTRA:-}" prompt-extra.md)"
 RUN_JSONL="$(_ralph_path "${RALPH_RUN_JSONL:-}" ralph-runs.jsonl)"
 RUN_LOG="$(_ralph_path "${RALPH_RUN_LOG:-}" ralph-runs.log)"
 BUNDLE_FILE="$(_ralph_path "${RALPH_BUNDLE_FILE:-}" .ralph-iter.bundle)"
+
+# The one thing a run leaves behind for the next one: written only when a stall could not be
+# salvaged, and it is what lets a rerun salvage it instead of refusing. Disposable — see
+# ralph-loop.sh's "The stall marker". Not a knob: there is nothing about it worth choosing.
+STALL_MARKER_FILE="$BATCH_DIR/.ralph-stall-marker"
 
 # --- how the agent is executed --------------------------------------------
 # The name of an adapter in lib/exec/ — see ralph-exec.sh. sandbox (the default) runs the

@@ -34,6 +34,11 @@
 #   usage limit, on Ctrl-C, or because the machine died, the next run starts at the first
 #   ticket that has not landed. See ralph-next.sh.
 #
+#   The one exception is a stall the checkpoint turn could not salvage, which leaves a
+#   disposable marker (.ralph-stall-marker) in the batch directory. A rerun that finds the
+#   tree dirty and the marker matching runs a checkpoint turn before syncing; anything else
+#   refuses to sync. Deleting the marker only costs that rescue. See "The stall marker".
+#
 # BUDGETS (all optional; 0 or unset means no limit)
 #   RALPH_MAX_COST_USD=25     pause before an iteration that would take the run over $25
 #   RALPH_MAX_MINUTES=180     pause before an iteration once 180 minutes have elapsed
@@ -193,6 +198,45 @@ ticket_is_done() { grep -q "$RALPH_DONE_PATTERN" "$1"; }
 next_sh() { bash "$RALPH_TOOL_DIR/ralph-next.sh" "$BATCH_DIR" "$@"; }
 
 # ---------------------------------------------------------------------------
+# The stall marker
+#
+# "Just rerun it" is only true if a rerun can rescue the tree a stall left behind, and at
+# the start of a run nobody knows who left it dirty: the sandbox is per REPOSITORY, so
+# several batches share one clone, and a human may have a session in it too. Committing
+# that blind, under whatever ticket this run happened to pick first, is exactly the
+# unreviewed commit the loop has always refused. So the rescue is gated on proof the loop
+# wrote itself — a file in the batch directory, recording the ticket, the base ref and the
+# sandbox at the moment a stall was left unsalvaged (`key=value` lines, never eval'd).
+#
+# Deliberately a disposable file, not state: its absence, or any mismatch, always degrades
+# to the safe path (refuse to sync, print the recovery note), so deleting it by hand costs
+# only the automatic rescue. It bends the toolkit's no-state rule the same way the batch's
+# bundle file does — one file in the batch directory, never a registry.
+# ---------------------------------------------------------------------------
+stall_marker_get() {
+  local line
+  line=$(grep -m1 "^$1=" "$STALL_MARKER_FILE" 2>/dev/null) || { printf '%s' ''; return; }
+  printf '%s' "${line#*=}"
+}
+
+write_stall_marker() {    # write_stall_marker TICKET BASE
+  printf 'ticket=%s\nbase_ref=%s\nsandbox=%s\n' "$1" "$2" "$RALPH_SANDBOX" > "$STALL_MARKER_FILE" ||
+    warn "   note: could not record the stall, so a rerun will refuse rather than rescue it"
+}
+
+# Does the marker vouch for the tree this run is about to find, for TICKET? All three must
+# agree: the sandbox (one marker must never be trusted in another sandbox's clone), the ref
+# the stalled turn started from (HEAD has not moved since, so nothing else has landed on
+# top of the stall), and the ticket this run is about to work on.
+stall_marker_matches() {    # stall_marker_matches TICKET
+  [ -f "$STALL_MARKER_FILE" ] || return 1
+  [ -n "$1" ] || return 1
+  [ "$(stall_marker_get sandbox)" = "$RALPH_SANDBOX" ] || return 1
+  [ "$(stall_marker_get base_ref)" = "$(git rev-parse HEAD)" ] || return 1
+  [ "$(stall_marker_get ticket)" = "$1" ]
+}
+
+# ---------------------------------------------------------------------------
 # The exec adapter: everything about where the agent runs and how its commits get here.
 # Loaded once, after `say`/`warn` exist so the adapter can print through them.
 # ---------------------------------------------------------------------------
@@ -251,7 +295,10 @@ next_sh --count >/dev/null || preflight_failed=1
 
 # A dirty tree poisons the per-iteration review base: BASE_REF is HEAD, so anything
 # already modified gets reviewed as though this ticket wrote it.
-if [ "$RALPH_ALLOW_DIRTY" != "1" ] && tree_is_dirty; then
+#
+# Not when the stall marker vouches for it: that tree is about to be checkpointed before any
+# iteration starts (see "Start of run" in the loop), so it is not the reviewer's problem.
+if [ "$RALPH_ALLOW_DIRTY" != "1" ] && tree_is_dirty && ! stall_marker_matches "$(next_sh 2>/dev/null)"; then
   warn "preflight: the working tree is dirty. Commit or set aside first, so this"
   warn "           iteration's review sees only what this iteration wrote."
   warn "           Override with RALPH_ALLOW_DIRTY=1."
@@ -394,6 +441,91 @@ STALLS_ON_CURRENT=0
 # this only ever describes the last one — a ticket that stalled once and then handed off
 # deliberately is not told the second time that its handoff was reconstructed.
 LAST_CONTINUATION_STALLED=0
+# Whether the start-of-run check of the stall marker has happened yet. It happens once, before
+# the first sync of the run, and never again: after that, the loop itself is the only thing
+# that can have left the tree dirty, and it stops rather than iterate over one.
+START_OF_RUN_CHECKED=0
+# Set when a marker was found beside a dirty tree it does not vouch for, so the refusal can
+# say why no rescue was attempted rather than leaving the operator to guess.
+STALL_MARKER_UNTRUSTED=0
+
+# What to say when a checkpoint turn left the tree clean without committing. Said the same
+# way wherever it happens: nothing is left to point a recovery note at.
+checkpoint_discarded_note() {
+  warn ""
+  warn "$TICKET_FILE's uncommitted work is gone: the checkpoint turn left the tree clean"
+  warn "without ever committing anything. There is nothing to recover — the work will"
+  warn "need to be redone, not salvaged."
+}
+
+# Runs one checkpoint turn for TICKET_FILE against BASE_REF and reports how it went in
+# CHECKPOINT_OUTCOME, leaving HEAD_REF and EXEC_DIRTY as it found them afterwards. What to
+# SAY about each outcome, and what it means for the run, is the caller's — a stall found
+# mid-run and one found at the start of the next run react differently.
+#
+#   salvaged   the work is committed and the tree is clean
+#   stranded   the commit could not be brought back from the other side of the seam
+#   discarded  the tree came back clean without a commit — the diff is gone
+#   failed     the work is still uncommitted
+#
+# Its cost is added to the run total and it is recorded as its own row whatever the outcome:
+# the money was spent either way.
+run_checkpoint_turn() {
+  # ralph-prompt.sh defines ralph_checkpoint_prompt; the loop sources it per iteration, so
+  # before the first iteration it has not been loaded yet.
+  if ! declare -F ralph_checkpoint_prompt >/dev/null 2>&1; then
+    # shellcheck source=ralph-prompt.sh
+    source "$RALPH_TOOL_DIR/ralph-prompt.sh"
+  fi
+
+  # Deliberately NOT preceded by exec_sync_down. exec_run and exec_sync_down are already
+  # separate calls in this seam, so "run the agent without syncing first" needs no new
+  # adapter function — three of the four adapters have a no-op exec_sync_down anyway.
+  local checkpoint_prompt checkpoint_started_at checkpoint_agent_status checkpoint_result
+  local checkpoint_sync_failed=0
+  local -a checkpoint_args_saved
+  checkpoint_prompt="$(ralph_checkpoint_prompt "$TICKET_FILE" "$BASE_REF")"
+  checkpoint_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  # Guarded expansion, same as RALPH_CLAUDE_ARGS's other two call sites (local.sh,
+  # _sbx.sh): under bash < 4.4 and `set -u`, expanding an array that is declared but
+  # empty still raises "unbound variable" without the `+` guard.
+  checkpoint_args_saved=(${RALPH_CLAUDE_ARGS+"${RALPH_CLAUDE_ARGS[@]}"})
+  RALPH_CLAUDE_ARGS+=(--max-turns "$CHECKPOINT_MAX_TURNS")
+  exec_run "$checkpoint_prompt" "$TICKET_FILE" |
+    node "$RALPH_TOOL_DIR/ralph-stream.cjs" ${STREAM_ARGS+"${STREAM_ARGS[@]}"} > "$PAYLOAD_FILE"
+  checkpoint_agent_status=${PIPESTATUS[0]}
+  checkpoint_result=$(cat "$PAYLOAD_FILE")
+  RALPH_CLAUDE_ARGS=(${checkpoint_args_saved+"${checkpoint_args_saved[@]}"})
+
+  # Bring back whatever the checkpoint turn committed (only the clone-based sandbox has
+  # any transporting to do here) and see whether it actually rescued the work.
+  exec_collect "$BASE_REF" || checkpoint_sync_failed=1
+  HEAD_REF=$(git rev-parse HEAD)
+
+  # Recorded as its OWN row (kind=checkpoint), never folded into the iteration it
+  # salvaged — so per-iteration cost/duration figures are not distorted by a second turn
+  # hidden inside them, and a human reading the log can tell the two apart.
+  : > "$VERDICT_FILE"
+  printf '%s' "$checkpoint_result" | node "$RALPH_TOOL_DIR/ralph-record.cjs" \
+    --jsonl "$RUN_JSONL" --log "$RUN_LOG" --verdict "$VERDICT_FILE" \
+    --run-id "$RUN_ID" --iteration "$ITERATIONS_RUN" --ticket "$TICKET_FILE" \
+    --batch "$BATCH_DIR" --kind checkpoint \
+    --base-ref "$BASE_REF" --head-ref "$HEAD_REF" --started-at "$checkpoint_started_at" \
+    --exit-status "$checkpoint_agent_status" --tree-dirty "$EXEC_DIRTY" --status-flipped 0 \
+    || warn "   note: could not record the checkpoint turn (usage figures will read as zero)"
+
+  accumulate_usage "$VERDICT_FILE"
+
+  if [ "$checkpoint_sync_failed" -eq 1 ]; then
+    CHECKPOINT_OUTCOME=stranded
+  elif [ "$EXEC_DIRTY" -eq 0 ] && [ "$HEAD_REF" != "$BASE_REF" ]; then
+    CHECKPOINT_OUTCOME=salvaged
+  elif [ "$EXEC_DIRTY" -eq 0 ]; then
+    CHECKPOINT_OUTCOME=discarded
+  else
+    CHECKPOINT_OUTCOME=failed
+  fi
+}
 
 while true; do
   if [ "$PAUSE_REQUESTED" -eq 1 ]; then
@@ -430,6 +562,78 @@ while true; do
     STALLS_ON_CURRENT=0
     LAST_CONTINUATION_STALLED=0
   fi
+
+  # --- start of run: is the tree a previous run's unsalvaged stall? ------------
+  # Before the first sync of the run, and before any budget check: what is being rescued was
+  # paid for by an earlier run, and a budget limits what to commission, not whether to keep
+  # work already paid for. exec_tree_dirty is ticket 02's read-only question, so asking it
+  # here moves nothing.
+  if [ "$START_OF_RUN_CHECKED" -eq 0 ]; then
+    START_OF_RUN_CHECKED=1
+    if [ -e "$STALL_MARKER_FILE" ]; then
+      if ! exec_tree_dirty; then
+        # Clean: someone rescued it by hand, or nothing was ever there. Either way the
+        # marker no longer vouches for anything.
+        rm -f "$STALL_MARKER_FILE"
+      elif stall_marker_matches "$TICKET_FILE"; then
+        BASE_REF=$(git rev-parse HEAD)
+        stalled_from="$BASE_REF"
+        # Gone before the checkpoint turn runs, not after it succeeds: in a repo that has not
+        # ignored it, `git add -A` would sweep the marker into the very commit that is meant
+        # to hold only the ticket's work. A rescue that fails writes it again.
+        rm -f "$STALL_MARKER_FILE"
+
+        say "── found $TICKET_FILE's stalled work from an earlier run, still uncommitted"
+        warn "The earlier run stopped on a stall the checkpoint turn could not salvage, and"
+        warn "left a marker vouching for this tree. Running a checkpoint turn to commit it"
+        warn "before syncing, rather than resetting over it."
+        exec_show_dirty
+
+        run_checkpoint_turn
+
+        case "$CHECKPOINT_OUTCOME" in
+          salvaged)
+            # Exactly what the same rescue mid-run would have recorded: the ticket is now a
+            # continuation of a stall, reviewed from the commit the stall began at.
+            say "   ⋯ stalled, salvaged by a checkpoint turn  ·  $(git log -1 --format=%h "$HEAD_REF")"
+            CONTINUATIONS_ON_CURRENT=$((CONTINUATIONS_ON_CURRENT + 1))
+            STALLS_ON_CURRENT=$((STALLS_ON_CURRENT + 1))
+            LAST_CONTINUATION_STALLED=1
+            ATTEMPTS_ON_CURRENT=0
+            TICKET_BASE_REF="$stalled_from"
+            say ""
+            ;;
+          stranded)
+            warn ""
+            exec_recovery_note "$BASE_REF"
+            FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+            break
+            ;;
+          discarded)
+            checkpoint_discarded_note
+            FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+            break
+            ;;
+          *)
+            write_stall_marker "$TICKET_FILE" "$BASE_REF"
+            warn ""
+            warn "The checkpoint turn could not commit $TICKET_FILE's stalled work either."
+            warn "Stopping so you can look."
+            exec_show_dirty
+            exec_dirty_recovery_note "$BASE_REF" "$TICKET_FILE" "$BATCH_DIR" >&2
+            FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+            break
+            ;;
+        esac
+      else
+        # Dirty, and the marker does not vouch for it: another batch's stall, a stall from
+        # before HEAD moved, or a human's own work. Nothing here proves it is this ticket's,
+        # so the refusal below applies, exactly as if there were no marker.
+        STALL_MARKER_UNTRUSTED=1
+      fi
+    fi
+  fi
+
   ATTEMPTS_ON_CURRENT=$((ATTEMPTS_ON_CURRENT + 1))
 
   # --- budget checks, BEFORE spending anything on this iteration -------------
@@ -462,6 +666,10 @@ while true; do
   if exec_tree_dirty; then
     warn ""
     warn "The agent's tree already has uncommitted changes in it. Refusing to sync over them."
+    if [ "$STALL_MARKER_UNTRUSTED" -eq 1 ]; then
+      warn "(A stall marker was found, but it does not match this tree — a different sandbox,"
+      warn "commit or ticket — so nothing here can be shown to be $TICKET_FILE's own.)"
+    fi
     exec_show_dirty
     warn ""
     warn "If the changes look sound, keep them as a checkpoint and rerun to continue:"
@@ -618,80 +826,46 @@ while true; do
       warn "turn to commit what is there, rather than stopping."
       exec_show_dirty
 
-      # Deliberately NOT preceded by exec_sync_down. exec_run and exec_sync_down are already
-      # separate calls in this seam, so "run the agent without syncing first" needs no new
-      # adapter function — three of the four adapters have a no-op exec_sync_down anyway.
-      checkpoint_prompt="$(ralph_checkpoint_prompt "$TICKET_FILE" "$BASE_REF")"
-      CHECKPOINT_STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-      # Guarded expansion, same as RALPH_CLAUDE_ARGS's other two call sites (local.sh,
-      # _sbx.sh): under bash < 4.4 and `set -u`, expanding an array that is declared but
-      # empty still raises "unbound variable" without the `+` guard.
-      checkpoint_args_saved=(${RALPH_CLAUDE_ARGS+"${RALPH_CLAUDE_ARGS[@]}"})
-      RALPH_CLAUDE_ARGS+=(--max-turns "$CHECKPOINT_MAX_TURNS")
-      exec_run "$checkpoint_prompt" "$TICKET_FILE" |
-        node "$RALPH_TOOL_DIR/ralph-stream.cjs" ${STREAM_ARGS+"${STREAM_ARGS[@]}"} > "$PAYLOAD_FILE"
-      checkpoint_agent_status=${PIPESTATUS[0]}
-      checkpoint_result=$(cat "$PAYLOAD_FILE")
-      RALPH_CLAUDE_ARGS=(${checkpoint_args_saved+"${checkpoint_args_saved[@]}"})
+      run_checkpoint_turn
 
-      # Bring back whatever the checkpoint turn committed (only the clone-based sandbox has
-      # any transporting to do here) and see whether it actually rescued the work.
-      checkpoint_sync_failed=0
-      exec_collect "$BASE_REF" || checkpoint_sync_failed=1
-      HEAD_REF=$(git rev-parse HEAD)
-
-      # Recorded as its OWN row (kind=checkpoint), never folded into the iteration it
-      # salvaged — so per-iteration cost/duration figures are not distorted by a second turn
-      # hidden inside them, and a human reading the log can tell the two apart. Its cost is
-      # added to the run total regardless of how the salvage turns out: the money was spent
-      # either way, and the total must never quietly understate it.
-      : > "$VERDICT_FILE"
-      printf '%s' "$checkpoint_result" | node "$RALPH_TOOL_DIR/ralph-record.cjs" \
-        --jsonl "$RUN_JSONL" --log "$RUN_LOG" --verdict "$VERDICT_FILE" \
-        --run-id "$RUN_ID" --iteration "$ITERATIONS_RUN" --ticket "$TICKET_FILE" \
-        --batch "$BATCH_DIR" --kind checkpoint \
-        --base-ref "$BASE_REF" --head-ref "$HEAD_REF" --started-at "$CHECKPOINT_STARTED_AT" \
-        --exit-status "$checkpoint_agent_status" --tree-dirty "$EXEC_DIRTY" --status-flipped 0 \
-        || warn "   note: could not record the checkpoint turn (usage figures will read as zero)"
-
-      accumulate_usage "$VERDICT_FILE"
-
-      if [ "$checkpoint_sync_failed" -eq 1 ]; then
-        warn ""
-        exec_recovery_note "$BASE_REF"
-        FINAL_STATUS="$EXIT_NEEDS_HUMAN"
-        break
-      fi
-
-      if [ "$EXEC_DIRTY" -eq 0 ] && [ "$HEAD_REF" != "$BASE_REF" ]; then
-        say "   ⋯ stalled, salvaged by a checkpoint turn  ·  $(git log -1 --format=%h "$HEAD_REF")"
-        CONTINUATIONS_ON_CURRENT=$((CONTINUATIONS_ON_CURRENT + 1))
-        STALLS_ON_CURRENT=$((STALLS_ON_CURRENT + 1))
-        LAST_CONTINUATION_STALLED=1
-        ATTEMPTS_ON_CURRENT=0
-        if continuation_cap_reached; then
+      case "$CHECKPOINT_OUTCOME" in
+        stranded)
+          warn ""
+          exec_recovery_note "$BASE_REF"
           FINAL_STATUS="$EXIT_NEEDS_HUMAN"
           break
-        fi
-        continue
-      fi
-
-      if [ "$EXEC_DIRTY" -eq 0 ]; then
-        # The tree WAS dirty going into this turn — that is how the stall was detected —
-        # and came back clean with HEAD still unmoved. Doing nothing would have left it
-        # exactly as dirty as before, so something discarded the diff instead of committing
-        # it. There is nothing left to point a recovery note at.
-        warn ""
-        warn "$TICKET_FILE's uncommitted work is gone: the checkpoint turn left the tree clean"
-        warn "without ever committing anything. There is nothing to recover — the work will"
-        warn "need to be redone, not salvaged."
-        FINAL_STATUS="$EXIT_NEEDS_HUMAN"
-        break
-      fi
+          ;;
+        salvaged)
+          say "   ⋯ stalled, salvaged by a checkpoint turn  ·  $(git log -1 --format=%h "$HEAD_REF")"
+          CONTINUATIONS_ON_CURRENT=$((CONTINUATIONS_ON_CURRENT + 1))
+          STALLS_ON_CURRENT=$((STALLS_ON_CURRENT + 1))
+          LAST_CONTINUATION_STALLED=1
+          ATTEMPTS_ON_CURRENT=0
+          if continuation_cap_reached; then
+            FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+            break
+          fi
+          continue
+          ;;
+        discarded)
+          # The tree WAS dirty going into this turn — that is how the stall was detected —
+          # and came back clean with HEAD still unmoved. Doing nothing would have left it
+          # exactly as dirty as before, so something discarded the diff instead of committing
+          # it. There is nothing left to point a recovery note at — and nothing for a marker
+          # to vouch for.
+          checkpoint_discarded_note
+          FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+          break
+          ;;
+      esac
 
       # The checkpoint turn could not commit it either. This leaves the run exactly where
       # it would have been without the attempt: stopped for a human, with the same
       # adapter-correct recovery note the original stall would have printed.
+      #
+      # And it is the one moment the loop can say, for a later run to rely on, that this
+      # dirty tree is its own unfinished business — see "The stall marker" above.
+      write_stall_marker "$TICKET_FILE" "$BASE_REF"
       warn ""
       warn "$TICKET_FILE left uncommitted changes behind, and the checkpoint turn could not"
       warn "commit them either. Stopping so you can look."

@@ -115,6 +115,14 @@ There is no state to restore and nothing to pass; rerunning the same command is 
 procedure.
 _Avoid_: Restart, continue (that is what a continuation does)
 
+**Stall marker**:
+A disposable file in the batch directory, written only when a stall could not be salvaged,
+recording the ticket, the base ref and the sandbox name. It is the loop's proof that a dirty
+tree found at the start of a run is its own unfinished business, and so may be checkpointed
+rather than refused. Deleting it is always safe: without it a rerun refuses to sync. The one
+piece of state a run leaves for the next, kept the way the bundle file is — never a registry.
+_Avoid_: Lock, state file, journal
+
 **Session resume**:
 The deferred idea of reattaching to the agent's *own* prior conversation via the CLI's
 `--resume` flag, so a stalled turn continues with its reasoning intact. Not implemented,

@@ -151,6 +151,11 @@ read -r -d '' GITIGNORE_BLOCK <<'BLOCK'
 # repo. Written and deleted within one iteration.
 **/.ralph-iter.bundle
 
+# The marker a run leaves when a stall could not be salvaged, so that a rerun may rescue the
+# tree instead of refusing it. Disposable: deleting it only costs the automatic rescue. It
+# has to stay untracked, or the checkpoint commit that rescues the work would sweep it in.
+**/.ralph-stall-marker
+
 # Append-only run telemetry. Untracked deliberately — the loop appends to these after each
 # iteration, so tracking them would put unrelated churn in every ticket's commit.
 # Inspect with `ralph report <batch>`.
@@ -167,7 +172,7 @@ ralph.conf text eol=lf
 BLOCK
 
 missing_ignore=0
-for pat in '**/.ralph-iter.bundle' '**/ralph-runs.jsonl' '**/ralph-runs.log'; do
+for pat in '**/.ralph-iter.bundle' '**/.ralph-stall-marker' '**/ralph-runs.jsonl' '**/ralph-runs.log'; do
   if grep -qxF "$pat" .gitignore 2>/dev/null; then
     ok ".gitignore  $pat"
   else

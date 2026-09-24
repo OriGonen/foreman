@@ -60,7 +60,7 @@ TICKET
   cp "$RALPH_HOME/lib/ralph.conf.template" "$repo/batch/ralph.conf"
   printf 'RALPH_EXEC=fake\n' >> "$repo/batch/ralph.conf"
   printf '%s\n' '**/ralph-runs.jsonl' '**/ralph-runs.log' '**/.ralph-iter.bundle' \
-    > "$repo/.gitignore"
+    '**/.ralph-stall-marker' > "$repo/.gitignore"
   printf 'ralph.conf text eol=lf\n' > "$repo/.gitattributes"
 
   git -C "$repo" add -A >/dev/null
@@ -356,6 +356,11 @@ if case_is "syncing refuses over a dirty tree rather than resetting it"; then
   head_after_stall="$(git -C "$repo" rev-parse HEAD)"
   commits_after_stall="$(git -C "$repo" log --oneline | wc -l)"
 
+  # The unsalvaged stall above left a marker, which a rerun would (rightly) trust and act
+  # on — that path has its own cases below. Deleting the marker by hand is always safe, and
+  # is exactly how to reach the refusal this case is about: a dirty tree nobody can vouch for.
+  rm -f "$repo/batch/.ralph-stall-marker"
+
   # Rerunning is the natural response to any stop. RALPH_ALLOW_DIRTY=1 only waives the
   # PREFLIGHT gate on the review base (a different concern); it must not waive this
   # refusal, which exists so that "just rerun it" can never destroy the tree.
@@ -369,6 +374,142 @@ if case_is "syncing refuses over a dirty tree rather than resetting it"; then
   assert_eq "$(git -C "$repo" rev-parse HEAD)" "$head_after_stall" "HEAD did not move"
   assert_eq "$(git -C "$repo" log --oneline | wc -l)" "$commits_after_stall" "nothing new was committed"
   [ -f "$log" ] && fail "the agent should never have been run" || pass
+fi
+
+# A stall the checkpoint turn could not salvage leaves a marker; that marker is the only
+# thing that lets the NEXT run rescue the tree instead of refusing it. `fail` is what makes
+# the stall unsalvaged in the first place. Prints the repo.
+stalled_repo() {
+  local repo
+  repo="$(make_repo 2 "$1")"
+  RALPH_FAKE_BEHAVIOUR=dirty RALPH_FAKE_CHECKPOINT_BEHAVIOUR=fail \
+    run_ralph "$repo" run batch >/dev/null 2>&1
+  printf '%s' "$repo"
+}
+
+if case_is "a rerun salvages the stalled work its own previous run left behind"; then
+  repo="$(make_repo 2 rerun-salvage-repo)"
+  marker="$repo/batch/.ralph-stall-marker"
+  base="$(git -C "$repo" rev-parse HEAD)"
+
+  RALPH_FAKE_BEHAVIOUR=dirty RALPH_FAKE_CHECKPOINT_BEHAVIOUR=fail \
+    run_ralph "$repo" run batch
+  assert_eq "$ST" 20 "the unsalvaged stall stops for a human"
+  [ -f "$marker" ] && pass || fail "the unsalvaged stall records a marker"
+  assert_contains "$(cat "$marker" 2>/dev/null)" "batch/issues/01-ticket.md" "it names the ticket"
+  assert_contains "$(cat "$marker" 2>/dev/null)" "$base" "and the base ref"
+  assert_contains "$(cat "$marker" 2>/dev/null)" "ralph-rerun-salvage-repo" "and the sandbox"
+  [ -n "$(git -C "$repo" status --porcelain)" ] && pass || fail "the work is still uncommitted"
+
+  # No RALPH_ALLOW_DIRTY here: "just rerun it" has to be true as typed.
+  log="$WORK/rerun-salvage-prompts.txt"
+  RALPH_FAKE_PROMPT_LOG="$log" RALPH_FAKE_BEHAVIOUR=land \
+    run_ralph "$repo" run batch --unlimited
+  assert_eq "$ST" 0 "the rerun finishes the batch"
+  assert_eq "$(done_count "$repo")" "2" "both tickets land"
+  assert_contains "$OUT" "salvaged by a checkpoint turn" "the rescue is announced"
+  assert_contains "$(git -C "$repo" log --format=%s)" "wip: batch/issues/01-ticket.md" \
+    "the stalled work was committed by the checkpoint turn"
+  [ -e "$marker" ] && fail "the marker is gone once the checkpoint succeeded" || pass
+  assert_eq "$(git -C "$repo" status --porcelain)" "" "the tree ends clean"
+  assert_contains "$OUT" "iterations run:        2" "the rescue does not spend an iteration"
+
+  # The rescue ran BEFORE the ticket's own turn, so that turn is told it is continuing —
+  # and told the stall variant, since the handoff was reconstructed from a diff.
+  first="$(awk '/^===== fake prompt checkpoint /{f=1;next} /^===== fake prompt /{f=0} f' "$log")"
+  assert_contains "$first" "CHECKPOINT TURN" "a checkpoint turn ran first"
+  p1="$(awk '/^===== fake prompt 1 /{f=1;next} /^===== fake prompt /{f=0} f' "$log")"
+  assert_contains "$p1" "You are CONTINUING" "the ticket's turn is a continuation"
+  assert_contains "$p1" "ran out of room" "told the earlier turn ran out of room"
+  assert_contains "$p1" "reconstructed" "and that the handoff was reconstructed"
+  assert_contains "$p1" "$base" "and reviewed against the commit the stall began from"
+fi
+
+if case_is "a rerun with no stall marker refuses rather than rescuing, and deleting the marker is safe"; then
+  repo="$(stalled_repo rerun-no-marker-repo)"
+  marker="$repo/batch/.ralph-stall-marker"
+  [ -f "$marker" ] && pass || fail "the stall left a marker to delete"
+  rm -f "$marker"
+
+  head_before="$(git -C "$repo" rev-parse HEAD)"
+  log="$WORK/rerun-no-marker-prompts.txt"
+  RALPH_ALLOW_DIRTY=1 RALPH_FAKE_PROMPT_LOG="$log" RALPH_FAKE_BEHAVIOUR=land \
+    run_ralph "$repo" run batch --unlimited
+  assert_eq "$ST" 20 "no marker: refuses and stops for a human"
+  assert_contains "$OUT" "Refusing to sync" "says why"
+  assert_contains "$OUT" "git add -A && git commit -m 'wip:" "and prints the recovery note"
+  assert_eq "$(git -C "$repo" rev-parse HEAD)" "$head_before" "nothing was committed"
+  [ -f "$log" ] && fail "no agent turn of any kind may run" || pass
+  [ -n "$(git -C "$repo" status --porcelain)" ] && pass || fail "the work is untouched"
+
+  # Without the override the preflight has its say first, exactly as it always did.
+  run_ralph "$repo" run batch
+  assert_eq "$ST" 1 "a dirty tree nobody vouches for still fails the preflight"
+fi
+
+if case_is "a marker that does not match the dirty tree is never trusted"; then
+  # Each of these is a marker the loop wrote about a DIFFERENT situation than the one it
+  # finds now: another sandbox's stall, another commit's, another ticket's. The sandbox is
+  # per repository, so a dirty tree may be another batch's stall or a human's own session.
+  for field in sandbox base_ref ticket; do
+    repo="$(stalled_repo "rerun-mismatch-$field-repo")"
+    marker="$repo/batch/.ralph-stall-marker"
+    case "$field" in
+      sandbox)  sed -i 's|^sandbox=.*|sandbox=some-other-sandbox|' "$marker" ;;
+      base_ref) sed -i 's|^base_ref=.*|base_ref=0000000000000000000000000000000000000000|' "$marker" ;;
+      ticket)   sed -i 's|^ticket=.*|ticket=batch/issues/02-ticket.md|' "$marker" ;;
+    esac
+
+    head_before="$(git -C "$repo" rev-parse HEAD)"
+    log="$WORK/rerun-mismatch-$field-prompts.txt"
+    RALPH_ALLOW_DIRTY=1 RALPH_FAKE_PROMPT_LOG="$log" RALPH_FAKE_BEHAVIOUR=land \
+      run_ralph "$repo" run batch --unlimited
+    assert_eq "$ST" 20 "$field mismatch: refuses"
+    assert_contains "$OUT" "Refusing to sync" "$field mismatch: says why"
+    assert_eq "$(git -C "$repo" rev-parse HEAD)" "$head_before" "$field mismatch: nothing committed"
+    [ -f "$log" ] && fail "$field mismatch: no agent turn may run" || pass
+    [ -n "$(git -C "$repo" status --porcelain)" ] && pass || fail "$field mismatch: work untouched"
+  done
+fi
+
+if case_is "a rerun whose rescue fails stops for a human and keeps the marker"; then
+  repo="$(stalled_repo rerun-rescue-fails-repo)"
+  marker="$repo/batch/.ralph-stall-marker"
+  head_before="$(git -C "$repo" rev-parse HEAD)"
+
+  RALPH_FAKE_BEHAVIOUR=land RALPH_FAKE_CHECKPOINT_BEHAVIOUR=fail \
+    run_ralph "$repo" run batch --unlimited
+  assert_eq "$ST" 20 "a rescue that cannot commit stops for a human"
+  assert_contains "$OUT" "could not" "and says the checkpoint turn failed"
+  assert_contains "$OUT" "git add -A && git commit -m 'wip:" "with the adapter's recovery note"
+  assert_eq "$(git -C "$repo" rev-parse HEAD)" "$head_before" "nothing was committed"
+  assert_eq "$(done_count "$repo")" "0" "the ticket's own turn never ran"
+  [ -f "$marker" ] && pass || fail "the stall is still unsalvaged, so it is still marked"
+
+  # ...which is what makes the next rerun's rescue possible once the cause is fixed.
+  RALPH_FAKE_BEHAVIOUR=land run_ralph "$repo" run batch --unlimited
+  assert_eq "$ST" 0 "a later rerun rescues it"
+  assert_eq "$(done_count "$repo")" "2" "and finishes the batch"
+  [ -e "$marker" ] && fail "the marker is gone" || pass
+fi
+
+if case_is "a marker is removed once the tree is clean, and a salvaged stall leaves none"; then
+  repo="$(stalled_repo rerun-clean-repo)"
+  marker="$repo/batch/.ralph-stall-marker"
+
+  # The operator rescues it by hand, as the recovery note says, and reruns.
+  git -C "$repo" add -A
+  git -C "$repo" commit --quiet -m "wip: by hand"
+  RALPH_FAKE_BEHAVIOUR=land run_ralph "$repo" run batch --unlimited
+  assert_eq "$ST" 0 "a hand-rescued tree runs normally"
+  assert_missing "$OUT" "Refusing to sync" "no refusal"
+  [ -e "$marker" ] && fail "a clean tree retires the marker" || pass
+
+  # A stall the checkpoint turn DID salvage was never left unsalvaged, so it never marks.
+  repo="$(make_repo 2 salvaged-no-marker-repo)"
+  RALPH_FAKE_BEHAVIOUR=dirty:land run_ralph "$repo" run batch --unlimited
+  assert_eq "$ST" 0 "a salvaged stall finishes the batch"
+  [ -e "$repo/batch/.ralph-stall-marker" ] && fail "a salvaged stall records no marker" || pass
 fi
 
 if case_is "--live draws what the agent is doing, and only that"; then
