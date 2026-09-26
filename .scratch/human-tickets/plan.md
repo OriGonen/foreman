@@ -49,6 +49,10 @@ did before agent work builds on it.
   sandbox clone, and the loop never commits work it cannot prove is its own. The loop only
   commits `DONE_` renames, and only on a clean tree.
 - **Warnings never block.** They print; exit codes and run behaviour are unchanged.
+- **The noun is "followup ticket"** (renamed from "check ticket" on 2026-09-27, after tickets
+  01–04 were written; this plan still says "check ticket" below). Ticket 05 renames it in the
+  code and docs. The formats keep their spelling: `**Checks:**`, `[CHECKS <name>]`,
+  `## Sent back by`, `check: send <NN> back`.
 
 ---
 
@@ -337,42 +341,25 @@ own ticket with `**Status:** ready-for-human`, a `**Handoff:**` file and a check
 
 ## The planning skill
 
-`skills/<name>/SKILL.md` in this repo, because the formats it writes (`ready-for-human`,
-`Handoff:`, `Checks:`, `## Sent back by`) are ralph's — writer and reader change together.
-Write it following the `writing-for-agents` guidance.
+Settled with the owner on 2026-09-27; the full design is ticket 06
+(`issues/06-a-skill-writes-followup-tickets-and-handoff-files.md`). In short:
 
-It runs in the same context window as ticket generation, after the tickets are written:
-
-1. **Split mixed tickets.** A ticket that mixes human and agent work (e.g. "owner review
-   loop: contact sheets → feedback → tuning") becomes a human ticket, its check ticket, and
-   (optionally) a following agent ticket that consumes the handoff. Renumber and fix
-   `Blocked by:` lines accordingly.
-2. **Mark human tickets.** Set `**Status:** ready-for-human` and add
-   `**Handoff:** <batch>/handoff/<NN>-<slug>.md`.
-3. **Write a handoff template per human ticket**, derived from its acceptance criteria: a
-   title, a comment saying "Fill in every section, then set ticket <NN> to done.", one
-   `##` heading per criterion, each with an empty placeholder comment. It must also say:
-   record WHERE a secret is stored, never its value — the file is committed and read by an
-   agent. Every human ticket gets one, not only feedback tickets: an approval, a created
-   credential or recorded clips all have something to report back.
-4. **Write a check ticket per human ticket**, immediately after it: `**Status:**
-   ready-for-agent`, `**Blocked by:** <NN>`, `**Checks:** <NN>-<slug>.md`, and acceptance
-   criteria specific to that human ticket — every handoff section filled in (not just its
-   placeholder), and the answers satisfying the human ticket's own criteria. It must carry
-   the send-back instruction verbatim from "The ticket formats" above, including the
-   `## Sent back by <check ticket basename>` heading and the `check: send <NN> back — …`
-   commit message.
-5. Commit the tickets and handoff templates together. Tell the user to run `ralph order`.
-
-**Installing it.** `install.sh` currently writes only the `ralph` shims. Extend it to copy
-`skills/<name>/` into `~/.claude/skills/<name>/` (copy, not symlink — Windows symlinks need
-elevation, the same reason the shims are forwarders), `--force` to overwrite, and
-`--uninstall` to remove it. Update install.sh's header and README's Install section.
-
-**Open — confirm with the owner before writing it:** the skill's name; which
-ticket-generation step it follows; whether it should also be re-runnable on an existing batch
-(to add missing handoff files and check tickets — the warnings above would then say "run
-<skill>").
+- **`ralph-human-followup-tickets`**, at `skills/ralph-human-followup-tickets/SKILL.md` in this
+  repo (writer and reader change together), user-invoked, written following
+  `writing-for-agents`.
+- It runs after `to-tickets`, usually before `ralph init`, and works only from the batch on
+  disk. A human ticket is one whose status line already carries the human label: the skill
+  never classifies, splits, re-statuses or renumbers a ticket, and never edits another
+  ticket's `Blocked by:`. So the "split mixed tickets" and "mark human tickets" steps once
+  planned here are gone.
+- For each not-done human ticket it adds only what is missing — the `Handoff:` line, the
+  handoff file (never overwritten), and a followup ticket `<NN>a-followup-<slug>.md` — so
+  re-running it is safe. Warnings 1 and 2 point at it.
+- The label words come from the repo's `docs/agents/triage-labels.md` when it exists; the
+  skill tells the user the `ralph.conf` line when `RALPH_HUMAN_WORD` differs.
+- `install.sh` copies it into `~/.claude/skills/` with a marker file; `ralph doctor` warns when
+  the copy is stale.
+- Ticket 07 (human) and 07a (its followup ticket) have the owner try it on a real batch.
 
 ---
 
@@ -387,13 +374,13 @@ ticket-generation step it follows; whether it should also be re-runnable on an e
   >
   > **Handoff file**: The file a human ticket names on its `Handoff:` line, written as a
   > template at planning time and filled in by the person: what they did, where it is, what
-  > they decided. What its check ticket reads.
+  > they decided. What its followup ticket reads.
   > _Avoid_: Feedback file, report
   >
-  > **Check ticket**: An ordinary agent ticket that immediately follows a human ticket and
+  > **Followup ticket**: An ordinary agent ticket that immediately follows a human ticket and
   > names it on a `Checks:` line. It verifies the handoff file against the human ticket's
   > criteria and, if it falls short, sends the human ticket back.
-  > _Avoid_: Control ticket, review ticket, verification ticket
+  > _Avoid_: Check ticket, control ticket, review ticket, verification ticket
 
   and a run ending:
 
@@ -484,7 +471,7 @@ gate and the rename rule sit on paths every existing case goes through.
    Tests 1–4.
 4. **Ordering.** `ralph order` prompt sections and warnings. Test 14.
 5. **Docs.** README, CONTEXT.md, conf template, init prose, loop header.
-6. **The planning skill** and its install. (After the owner answers the open questions.)
+6. **The planning skill** and its install — ticket 06; then 07/07a, trying it for real.
 
 ## Done when
 
@@ -504,7 +491,7 @@ gate and the rename rule sit on paths every existing case goes through.
 - [ ] `ralph order`'s prompt places human tickets as late as their dependents allow, with
       each check ticket immediately after its human ticket
 - [ ] `RALPH_HUMAN_WORD` is configurable and empty disables human tickets
-- [ ] The planning skill writes human tickets, handoff templates and check tickets, and
+- [ ] The planning skill adds each human ticket's handoff file and followup ticket, and
       `install.sh` installs it
 - [ ] README, CONTEXT.md, conf template and init prose describe all of the above
 - [ ] `bash test/smoke.sh` passes in full
