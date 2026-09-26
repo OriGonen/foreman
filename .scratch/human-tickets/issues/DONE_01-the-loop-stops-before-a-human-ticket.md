@@ -1,6 +1,6 @@
 # 01: The loop stops before a human ticket
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Blocked by:** None (can start immediately)
 
@@ -41,19 +41,19 @@ Full design: `.scratch/human-tickets/plan.md` — "The ticket formats", "Precede
 
 **Acceptance criteria:**
 
-- [ ] A human ticket at the head of the order makes `ralph run` exit 30 with no new commits,
+- [x] A human ticket at the head of the order makes `ralph run` exit 30 with no new commits,
       no run-log rows, and no prompt sent (fake adapter's prompt log stays empty)
-- [ ] A run that reaches a human ticket mid-batch lands the tickets before it, stops at it
+- [x] A run that reaches a human ticket mid-batch lands the tickets before it, stops at it
       with exit 30, never prompts a ticket after it, and the run log ends with
       `# stopped: waiting on a human`
-- [ ] With an iteration budget of 1 and a human ticket second, the run lands the first and
+- [x] With an iteration budget of 1 and a human ticket second, the run lands the first and
       exits 30, not 10
-- [ ] Rerunning without finishing it exits 30 again with HEAD unchanged and nothing recorded
-- [ ] Setting the human ticket to `done` and committing lets a rerun continue with the next
+- [x] Rerunning without finishing it exits 30 again with HEAD unchanged and nothing recorded
+- [x] Setting the human ticket to `done` and committing lets a rerun continue with the next
       ticket
-- [ ] The note names the ticket, its handoff path when it has one, and the exact rerun command
-- [ ] `ralph dry-run` at a human ticket exits 0, says it would stop there, prints no prompt
-- [ ] `RALPH_HUMAN_WORD=needs-owner` stops on that word; `RALPH_HUMAN_WORD=` hands a
+- [x] The note names the ticket, its handoff path when it has one, and the exact rerun command
+- [x] `ralph dry-run` at a human ticket exits 0, says it would stop there, prints no prompt
+- [x] `RALPH_HUMAN_WORD=needs-owner` stops on that word; `RALPH_HUMAN_WORD=` hands a
       `ready-for-human` ticket to the agent like any other
-- [ ] The loop's header documents exit 30 and `RALPH_HUMAN_WORD`
-- [ ] New smoke cases cover the above, and `bash test/smoke.sh` passes in full
+- [x] The loop's header documents exit 30 and `RALPH_HUMAN_WORD`
+- [x] New smoke cases cover the above, and `bash test/smoke.sh` passes in full

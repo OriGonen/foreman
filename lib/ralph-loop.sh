@@ -39,6 +39,9 @@
 #   tree dirty and the marker matching runs a checkpoint turn before syncing; anything else
 #   refuses to sync. Deleting the marker only costs that rescue. See "The stall marker".
 #
+#   A human ticket is the other way a run ends without finishing the batch: see EXIT CODES.
+#   Rerunning before the person has set it to done stops at it again, and costs nothing.
+#
 # BUDGETS (all optional; 0 or unset means no limit)
 #   RALPH_MAX_COST_USD=25     pause before an iteration that would take the run over $25
 #   RALPH_MAX_MINUTES=180     pause before an iteration once 180 minutes have elapsed
@@ -51,6 +54,9 @@
 #   RALPH_MAX_CONTINUATIONS=5      consecutive iterations that may commit progress on one
 #                                  ticket without landing it before stopping for a human
 #   RALPH_CONTEXT_BUDGET_TOKENS=200000   what the prompt tells the agent to work inside
+#   RALPH_HUMAN_WORD=ready-for-human     a ticket whose status line carries this word is a
+#                                  HUMAN ticket: only a person can do it, so the loop stops
+#                                  before it (exit 30). Set it empty to turn that off.
 #   RALPH_ALLOW_DIRTY=1            skip the clean-tree preflight (not the per-iteration
 #                                  refusal to sync over a dirty tree — that one has no
 #                                  override, on purpose: it is what makes a rerun safe)
@@ -61,6 +67,8 @@
 #   0   every ticket in the batch is done
 #   10  paused, resumable — rerun the same command (budget, usage limit, Ctrl-C)
 #   20  stopped, needs a human — a ticket did not land, or the tree was left dirty
+#   30  waiting on a human — the next ticket is a human ticket; nothing was given to an
+#                  agent, and rerunning stops here again until the person marks it done
 #   1   preflight failure or bad usage
 #
 set -uo pipefail
@@ -70,6 +78,7 @@ RALPH_TOOL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EXIT_DONE=0
 EXIT_PAUSED=10
 EXIT_NEEDS_HUMAN=20
+EXIT_WAITING_ON_HUMAN=30
 
 # ---------------------------------------------------------------------------
 # Arguments: an optional batch path, then an optional mode or iteration count.
@@ -109,6 +118,8 @@ unset RALPH_BATCH_FROM_ARG
 
 # shellcheck source=ralph-config.sh
 source "$RALPH_TOOL_DIR/ralph-config.sh" || exit 1
+# shellcheck source=ralph-human.sh
+source "$RALPH_TOOL_DIR/ralph-human.sh" || exit 1
 
 MAX_COST="$RALPH_MAX_COST_USD"
 MAX_MINUTES="$RALPH_MAX_MINUTES"
@@ -245,6 +256,34 @@ mark_ticket_done_on_disk() {    # mark_ticket_done_on_disk TICKET
 
 next_sh() { bash "$RALPH_TOOL_DIR/ralph-next.sh" "$BATCH_DIR" "$@"; }
 
+# The arguments that make a rerun ask for what this run asked for.
+resume_args() {
+  if [ "$MAX_ITERATIONS" -gt 0 ]; then printf ' %s' "$MAX_ITERATIONS"; else printf ' --unlimited'; fi
+}
+
+# What a run says wherever it stops at a human ticket — before it starts, when it gets there
+# mid-run, and in the footer. One function, so the wording cannot differ between them. Prints
+# to stdout; callers that want stderr redirect.
+human_ticket_note() {    # human_ticket_note TICKET
+  local ticket="$1" handoff n=1 done_step
+  handoff="$(ralph_handoff_path "$ticket")"
+  say "── $ticket is a human ticket. The loop stops here."
+  say ""
+  say "It is marked '$RALPH_STATUS_LINE $RALPH_HUMAN_WORD': no agent is given it, and no ticket"
+  say "after it runs until it is done. It is your turn now:"
+  say ""
+  say "  $n. Do what the ticket asks."; n=$((n + 1))
+  if [ -n "$handoff" ]; then
+    say "  $n. Fill in every section of $handoff."; n=$((n + 1))
+  fi
+  say "  $n. Commit your work${handoff:+ and the handoff file}."; n=$((n + 1))
+  say "  $n. Set its status line to '$RALPH_STATUS_LINE done', tick its boxes, and commit."
+  done_step=$n; n=$((n + 1))
+  say "  $n. Rerun:  $RALPH_INVOKE run $BATCH_DIR$(resume_args)"
+  say ""
+  say "Rerunning before step $done_step stops here again, and costs nothing."
+}
+
 # ---------------------------------------------------------------------------
 # The stall marker
 #
@@ -365,6 +404,13 @@ elif [ "$pick_status" -ne 0 ]; then
   exit 1
 fi
 
+if [ "$MODE" = "run" ] && ralph_ticket_needs_human "$next_ticket"; then
+  # Before the run log header, before exec_prepare: nothing starts and nothing is recorded,
+  # so rerunning until the person is done costs exactly nothing.
+  human_ticket_note "$next_ticket" >&2
+  exit "$EXIT_WAITING_ON_HUMAN"
+fi
+
 if [ "$MODE" = "dry-run" ]; then
   say "Batch: $BATCH_DIR"
   progress_line
@@ -388,6 +434,10 @@ if [ "$MODE" = "dry-run" ]; then
   say "Logs:    $RUN_JSONL"
   say "         $RUN_LOG"
   say ""
+  if ralph_ticket_needs_human "$next_ticket"; then
+    say "Would stop before $next_ticket: it is a human ticket. No prompt would be sent."
+    exit 0
+  fi
   say "=== prompt that would be sent for $next_ticket ==="
   TICKET_FILE="$next_ticket"
   BASE_REF=$(git rev-parse HEAD)
@@ -467,6 +517,7 @@ say ""
 exec_prepare || exit 1
 
 FINAL_STATUS="$EXIT_DONE"
+HUMAN_TICKET=""
 CURRENT_TICKET=""
 ATTEMPTS_ON_CURRENT=0
 # Whether the PREVIOUS attempt on the current ticket ran out of context. A boolean, held
@@ -595,6 +646,17 @@ while true; do
       warn "ralph-next.sh failed with status $pick_status"
       FINAL_STATUS=1
     fi
+    break
+  fi
+
+  # A human ticket at the head of the order ends the run, before anything is spent on it: the
+  # stall-marker check, the attempt count and every budget check below are all about spending,
+  # and the truer reason to stop is that a person is needed — a rerun with more budget would
+  # hit this gate anyway. Only the NEXT ticket is looked at; the order is trusted, so runnable
+  # work behind a human ticket is never sought.
+  if ralph_ticket_needs_human "$TICKET_FILE"; then
+    HUMAN_TICKET="$TICKET_FILE"
+    FINAL_STATUS="$EXIT_WAITING_ON_HUMAN"
     break
   fi
 
@@ -1067,13 +1129,13 @@ case "$FINAL_STATUS" in
       say "Next up:  $remaining"
       log_append "# next up: $remaining"
     fi
-    if [ "$MAX_ITERATIONS" -gt 0 ]; then
-      resume_args=" $MAX_ITERATIONS"
-    else
-      resume_args=" --unlimited"
-    fi
-    say "Resume:   $RALPH_INVOKE run $BATCH_DIR$resume_args"
+    say "Resume:   $RALPH_INVOKE run $BATCH_DIR$(resume_args)"
     say "          (nothing to restore — the tickets' Status lines are the resume point)"
+    ;;
+  "$EXIT_WAITING_ON_HUMAN")
+    say ""
+    human_ticket_note "$HUMAN_TICKET" >&2
+    log_append "# stopped: waiting on a human — $HUMAN_TICKET"
     ;;
   "$EXIT_NEEDS_HUMAN") log_append "# stopped: needs a human" ;;
   "$EXIT_DONE")        log_append "# complete" ;;

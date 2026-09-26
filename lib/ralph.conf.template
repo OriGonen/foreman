@@ -101,6 +101,13 @@ RALPH_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)")
 #RALPH_DONE_WORD=implemented
 #RALPH_DONE_PATTERN='^\*\*Status:\*\* *implemented'
 
+# A HUMAN TICKET is one only a person can do. Mark it with this word on its status line
+# ('**Status:** ready-for-human'); the loop stops before it (exit 30) and runs nothing after
+# it until the person sets it to done. Give it a '**Handoff:** <file>' line naming the file
+# the person fills in. Set empty to treat every ticket as an agent's.
+#RALPH_HUMAN_WORD=ready-for-human
+#RALPH_HUMAN_PATTERN='^\*\*Status:\*\* *ready-for-human'
+
 # When a ticket lands with its status flipped AND every checklist box ticked, the loop
 # renames the file to DONE_<name> and commits the rename. Tickets are still found by their
 # original name (order.md need not change). Set empty to never rename.

@@ -1029,5 +1029,165 @@ if case_is "a ticket marked done counts as done, like an implemented one"; then
 fi
 
 # ---------------------------------------------------------------------------
+# Human tickets
+# ---------------------------------------------------------------------------
+
+# Ticket $2 becomes a human ticket, with a `Handoff:` line naming batch/handoff/0N-ticket.md
+# and that file created — unless $3 is `none`, which leaves it without a handoff at all.
+make_human_ticket() {
+  local repo="$1" n="$2" handoff="${3:-}" ticket
+  ticket="$repo/batch/issues/0$n-ticket.md"
+  sed -i 's/^\*\*Status:\*\* todo/**Status:** ready-for-human/' "$ticket"
+  if [ "$handoff" != none ]; then
+    sed -i "s|^\*\*Status:\*\* ready-for-human|&\n**Handoff:** batch/handoff/0$n-ticket.md|" "$ticket"
+    mkdir -p "$repo/batch/handoff"
+    printf '# Handoff %s\n\n## What you did\n\n<!-- -->\n' "$n" > "$repo/batch/handoff/0$n-ticket.md"
+  fi
+  git -C "$repo" add -A >/dev/null
+  git -C "$repo" commit --quiet -m "ticket $n is a human ticket"
+}
+
+# Ticket $2 as its person leaves it: done, committed.
+finish_human_ticket() {
+  local repo="$1" n="$2"
+  sed -i 's/^\*\*Status:\*\* ready-for-human/**Status:** done/' "$repo/batch/issues/0$n-ticket.md"
+  git -C "$repo" commit --quiet -am "ticket $n done by hand"
+}
+
+runs_rows() { grep -c . "$1/batch/ralph-runs.jsonl" 2>/dev/null || printf 0; }
+
+if case_is "a human ticket at the head of the order stops the run before anything is spent"; then
+  repo="$(make_repo 3 human-head-repo)"
+  make_human_ticket "$repo" 1
+  head="$(git -C "$repo" rev-parse HEAD)"
+  log="$WORK/human-head-prompts.txt"
+
+  RALPH_FAKE_PROMPT_LOG="$log" run_ralph "$repo" run batch --unlimited
+  assert_eq "$ST" 30 "exits waiting-on-a-human"
+  assert_eq "$(git -C "$repo" rev-parse HEAD)" "$head" "no new commits"
+  [ -e "$repo/batch/ralph-runs.jsonl" ] && fail "no run-log rows were written" || pass
+  [ -e "$repo/batch/ralph-runs.log" ] && fail "and no run log at all" || pass
+  [ -e "$log" ] && fail "no prompt was sent" || pass
+  assert_contains "$OUT" "batch/issues/01-ticket.md is a human ticket" "names the ticket"
+  assert_contains "$OUT" "batch/handoff/01-ticket.md" "names its handoff file"
+  assert_contains "$OUT" "run batch --unlimited" "gives the exact rerun command"
+  assert_contains "$OUT" "costs nothing" "says rerunning early is free"
+  assert_missing "$OUT" "== run" "there is no run to report"
+fi
+
+if case_is "a human ticket with no handoff file is named without one"; then
+  repo="$(make_repo 2 human-nohandoff-repo)"
+  make_human_ticket "$repo" 1 none
+
+  run_ralph "$repo" run batch
+  assert_eq "$ST" 30 "still stops"
+  assert_missing "$OUT" "Fill in every section" "there is no handoff step to give"
+  assert_contains "$OUT" "  2. Commit your work." "and the steps renumber"
+  assert_contains "$OUT" "  4. Rerun:" "ending at the rerun"
+fi
+
+if case_is "a run that reaches a human ticket mid-batch lands what is before it and stops"; then
+  repo="$(make_repo 4 human-mid-repo)"
+  make_human_ticket "$repo" 3
+  log="$WORK/human-mid-prompts.txt"
+
+  RALPH_FAKE_PROMPT_LOG="$log" run_ralph "$repo" run batch --unlimited
+  assert_eq "$ST" 30 "exits waiting-on-a-human"
+  assert_eq "$(done_count "$repo")" "2" "tickets 1 and 2 landed"
+  assert_contains "$OUT" "tickets landed:        2" "the usual footer is printed"
+  assert_contains "$OUT" "batch/issues/03-ticket.md is a human ticket" "then the note"
+  assert_eq "$(grep -c '^===== fake prompt' "$log")" "2" "only the two agent tickets were prompted"
+  assert_missing "$(cat "$log")" "04-ticket.md" "nothing after the human ticket was prompted"
+  assert_contains "$(tail -3 "$repo/batch/ralph-runs.log")" \
+    "# stopped: waiting on a human — batch/issues/03-ticket.md" "the run log says why it stopped"
+  assert_eq "$(git -C "$repo" status --porcelain)" "" "the tree is clean"
+fi
+
+if case_is "the human gate is checked before the iteration budget"; then
+  repo="$(make_repo 2 human-budget-repo)"
+  make_human_ticket "$repo" 2
+
+  run_ralph "$repo" run batch
+  assert_eq "$ST" 30 "waiting on a human, not paused on the budget"
+  assert_eq "$(done_count "$repo")" "1" "the first ticket landed"
+  assert_missing "$OUT" "PAUSED" "and nothing says the budget stopped it"
+  assert_contains "$OUT" "run batch 1" "the rerun command keeps the iteration count"
+fi
+
+if case_is "rerunning a human ticket without finishing it stops again, for free"; then
+  repo="$(make_repo 4 human-rerun-repo)"
+  make_human_ticket "$repo" 3
+  run_ralph "$repo" run batch --unlimited
+  head="$(git -C "$repo" rev-parse HEAD)"
+  rows="$(runs_rows "$repo")"
+  log="$WORK/human-rerun-prompts.txt"
+
+  RALPH_FAKE_PROMPT_LOG="$log" run_ralph "$repo" run batch --unlimited
+  assert_eq "$ST" 30 "stops the same way"
+  assert_eq "$(git -C "$repo" rev-parse HEAD)" "$head" "HEAD did not move"
+  assert_eq "$(runs_rows "$repo")" "$rows" "nothing was recorded"
+  [ -e "$log" ] && fail "no prompt was sent" || pass
+  assert_contains "$OUT" "batch/issues/03-ticket.md is a human ticket" "says the same thing"
+fi
+
+if case_is "setting a human ticket to done lets a rerun continue with the next ticket"; then
+  repo="$(make_repo 3 human-resume-repo)"
+  make_human_ticket "$repo" 2
+  run_ralph "$repo" run batch --unlimited
+  assert_eq "$ST" 30 "stopped at the human ticket"
+
+  finish_human_ticket "$repo" 2
+  log="$WORK/human-resume-prompts.txt"
+  RALPH_FAKE_PROMPT_LOG="$log" run_ralph "$repo" run batch --unlimited
+  assert_eq "$ST" 0 "the batch finishes"
+  assert_eq "$(grep -c '^===== fake prompt' "$log")" "1" "one prompt: the ticket after it"
+  assert_contains "$(cat "$log")" "03-ticket.md" "and it was ticket 3"
+fi
+
+if case_is "dry-run at a human ticket says it would stop there and prints no prompt"; then
+  repo="$(make_repo 2 human-dry-repo)"
+  make_human_ticket "$repo" 1
+
+  run_ralph "$repo" dry-run batch
+  assert_eq "$ST" 0 "exits 0"
+  assert_contains "$OUT" "Would stop before batch/issues/01-ticket.md" "says where it would stop"
+  assert_missing "$OUT" "=== prompt that would be sent" "prints no prompt"
+  assert_eq "$(git -C "$repo" log --oneline | wc -l)" "2" "committed nothing"
+fi
+
+if case_is "the human word is configurable and can be switched off"; then
+  repo="$(make_repo 2 human-word-repo)"
+  make_human_ticket "$repo" 1
+  sed -i 's/ready-for-human/needs-owner/' "$repo/batch/issues/01-ticket.md"
+  git -C "$repo" commit --quiet -am "a different word"
+
+  run_ralph "$repo" run batch
+  assert_eq "$ST" 10 "the default word no longer stops there: the ticket is an agent's"
+
+  repo="$(make_repo 2 human-word2-repo)"
+  make_human_ticket "$repo" 1
+  sed -i 's/ready-for-human/needs-owner/' "$repo/batch/issues/01-ticket.md"
+  git -C "$repo" commit --quiet -am "a different word"
+  RALPH_HUMAN_WORD=needs-owner run_ralph "$repo" run batch
+  assert_eq "$ST" 30 "RALPH_HUMAN_WORD=needs-owner stops on that word"
+  assert_contains "$OUT" "'**Status:** needs-owner'" "and the note quotes it"
+
+  repo="$(make_repo 2 human-off-repo)"
+  make_human_ticket "$repo" 1
+  log="$WORK/human-off-prompts.txt"
+  RALPH_HUMAN_WORD= RALPH_FAKE_PROMPT_LOG="$log" run_ralph "$repo" run batch
+  assert_eq "$ST" 10 "an empty word hands the ticket to the agent like any other"
+  assert_contains "$(cat "$log")" "01-ticket.md" "which was prompted"
+fi
+
+if case_is "a done ticket is never a human ticket"; then
+  repo="$(make_repo 2 human-done-repo)"
+  make_human_ticket "$repo" 1
+  finish_human_ticket "$repo" 1
+  run_ralph "$repo" dry-run batch
+  assert_missing "$OUT" "Would stop before" "done wins over the human marker"
+fi
+
+# ---------------------------------------------------------------------------
 printf '\n%s passed, %s failed\n' "$passed" "$failed"
 [ "$failed" -eq 0 ]

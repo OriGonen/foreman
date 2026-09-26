@@ -13,7 +13,9 @@
 # batch with no tickets yet is exactly what `ralph init` is there to scaffold.
 #
 # "Next" is the first ticket in the order whose file does not match the batch's
-# RALPH_DONE_PATTERN (by default a '**Status:** implemented' line).
+# RALPH_DONE_PATTERN (by default a '**Status:** implemented' line). That includes a human
+# ticket (ralph-human.sh): "next" says which ticket comes first, and the loop decides what
+# it means for that ticket to be one only a person can do.
 #
 # THE TICKET STATUS LINES ARE THE ONLY RESUME STATE. There is deliberately no state file:
 # an iteration commits its ticket's flipped Status line together with its code, so the

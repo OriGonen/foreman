@@ -147,6 +147,9 @@ BATCH_NAME="${RALPH_BATCH_NAME:-$(basename "$BATCH_DIR")}"
 RALPH_STATUS_LINE="${RALPH_STATUS_LINE:-**Status:**}"
 # The word the prompt tells the agent to write.
 RALPH_DONE_WORD="${RALPH_DONE_WORD:-implemented}"
+# The status line as a BRE fragment: what the done and the human patterns both start with.
+_ralph_status_line_re() { printf '%s' "$RALPH_STATUS_LINE" | sed -e 's/\\/\\\\/g' -e 's/[.[*^$]/\\&/g'; }
+
 # A ticket counts as done when this grep pattern (a BRE) matches a line in its file.
 # Derived from the two settings above by default, so they cannot drift out of sync — set
 # RALPH_DONE_PATTERN directly only if a ticket's status line isn't a simple
@@ -156,8 +159,18 @@ if [ -z "${RALPH_DONE_PATTERN:-}" ]; then
   # while the prompt asks the agent for `implemented`; with the default word, accept both.
   _ralph_done_words="$RALPH_DONE_WORD"
   [ "$RALPH_DONE_WORD" = implemented ] && _ralph_done_words='\(implemented\|done\)'
-  RALPH_DONE_PATTERN="^$(printf '%s' "$RALPH_STATUS_LINE" | sed -e 's/\\/\\\\/g' -e 's/[.[*^$]/\\&/g') *$_ralph_done_words"
+  RALPH_DONE_PATTERN="^$(_ralph_status_line_re) *$_ralph_done_words"
 fi
+
+# A HUMAN TICKET is one only a person can do (see ralph-human.sh): the loop stops before it
+# instead of handing it to an agent. `${VAR-default}`, not `:-`, so an empty word sticks and
+# switches the feature off — the pattern is then empty, and callers must not hand an empty
+# pattern to grep, which matches every line.
+RALPH_HUMAN_WORD="${RALPH_HUMAN_WORD-ready-for-human}"
+if [ -z "${RALPH_HUMAN_PATTERN:-}" ] && [ -n "$RALPH_HUMAN_WORD" ]; then
+  RALPH_HUMAN_PATTERN="^$(_ralph_status_line_re) *$RALPH_HUMAN_WORD"
+fi
+RALPH_HUMAN_PATTERN="${RALPH_HUMAN_PATTERN:-}"
 
 # A ticket that has landed with every checklist box ticked is renamed to ${prefix}<name> by
 # the loop (see mark_ticket_done_on_disk), so a directory listing shows what is finished.
