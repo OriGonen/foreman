@@ -1189,5 +1189,127 @@ if case_is "a done ticket is never a human ticket"; then
 fi
 
 # ---------------------------------------------------------------------------
+# Check tickets
+# ---------------------------------------------------------------------------
+
+# Ticket N checks ticket M: it gets a `Checks:` line naming that ticket's file.
+make_check_ticket() {
+  local repo="$1" n="$2" m="$3"
+  sed -i "s|^\*\*Status:\*\* todo|&\n**Checks:** 0$m-ticket.md|" "$repo/batch/issues/0$n-ticket.md"
+  git -C "$repo" commit --quiet -am "ticket $n checks ticket $m"
+}
+
+# A batch of 5 in which 3 is a human ticket already set to done by its person, 4 checks it, and
+# the run before that stopped at it.
+checked_repo() {    # checked_repo NAME
+  local repo
+  repo="$(make_repo 5 "$1")"
+  make_human_ticket "$repo" 3
+  make_check_ticket "$repo" 4 3
+  run_ralph "$repo" run batch --unlimited
+  finish_human_ticket "$repo" 3
+  printf '%s' "$repo"
+}
+
+if case_is "a check ticket that sends its human ticket back ends the run at exit 30"; then
+  repo="$(checked_repo check-sendback-repo)"
+  log="$WORK/check-sendback-prompts.txt"
+
+  RALPH_FAKE_BEHAVIOUR=send-back RALPH_FAKE_PROMPT_LOG="$log" run_ralph "$repo" run batch --unlimited
+  assert_eq "$ST" 30 "waiting on a human again"
+  assert_contains "$OUT" "↩ sent back to a human by 04-ticket.md" "the run says so"
+  assert_contains "$OUT" "↩ It was sent back by 04-ticket.md: read '## Sent back by 04-ticket.md'" \
+    "and the note points at the section"
+  assert_contains "$OUT" "batch/issues/03-ticket.md is a human ticket" "the note is the human ticket's"
+  [ -f "$repo/batch/issues/03-ticket.md" ] && pass || fail "the human ticket kept its name"
+  [ -e "$repo/batch/issues/DONE_03-ticket.md" ] && fail "and was not prefixed" || pass
+  assert_contains "$(cat "$repo/batch/issues/03-ticket.md")" "**Status:** ready-for-human" "it is a human ticket again"
+  assert_contains "$(cat "$repo/batch/issues/03-ticket.md")" "## Sent back by 04-ticket.md" "and carries the section"
+  assert_contains "$(cat "$repo/batch/issues/04-ticket.md")" "**Status:** todo" "the check ticket is unflipped"
+  assert_eq "$(grep -c '^===== fake prompt' "$log")" "1" "only the check ticket was prompted"
+  assert_missing "$(cat "$log")" "05-ticket.md" "nothing after it ran"
+  assert_eq "$(git -C "$repo" status --porcelain)" "" "the tree is clean"
+
+  head="$(git -C "$repo" rev-parse HEAD)"
+  rows="$(runs_rows "$repo")"
+  run_ralph "$repo" run batch --unlimited
+  assert_eq "$ST" 30 "a plain rerun stops the same way"
+  assert_contains "$OUT" "↩ It was sent back by 04-ticket.md" "and says again that it was sent back"
+  assert_eq "$(git -C "$repo" rev-parse HEAD)" "$head" "HEAD did not move"
+  assert_eq "$(runs_rows "$repo")" "$rows" "nothing was recorded"
+fi
+
+if case_is "a human ticket is renamed only once its check ticket has landed"; then
+  repo="$(checked_repo check-rename-repo)"
+
+  RALPH_FAKE_BEHAVIOUR=noop run_ralph "$repo" run batch 1
+  assert_eq "$ST" 20 "a check ticket that does nothing does not land"
+  [ -e "$repo/batch/issues/03-ticket.md" ] && pass || fail "so the human ticket keeps its name"
+  [ -e "$repo/batch/issues/DONE_03-ticket.md" ] && fail "and is not prefixed" || pass
+
+  run_ralph "$repo" run batch 1
+  assert_contains "$OUT" "batch/issues/03-ticket.md waits for batch/issues/04-ticket.md before it is marked done" \
+    "the run says what the human ticket waits for"
+  assert_contains "$OUT" "✓ landed" "the check ticket landed"
+  [ -e "$repo/batch/issues/DONE_04-ticket.md" ] && pass || fail "the check ticket is DONE_-prefixed"
+  [ -e "$repo/batch/issues/DONE_03-ticket.md" ] && pass || fail "and so is the human ticket it checked"
+  [ -e "$repo/batch/issues/03-ticket.md" ] && fail "which no longer has its old name" || pass
+  assert_eq "$(git -C "$repo" status --porcelain)" "" "the tree is clean"
+fi
+
+if case_is "Checks: resolves whichever side carries the done prefix"; then
+  # The check names the human ticket WITH the prefix; the human ticket has none.
+  repo="$(make_repo 3 check-prefix-repo)"
+  make_human_ticket "$repo" 2
+  make_check_ticket "$repo" 3 2
+  sed -i 's/^\*\*Checks:\*\* 02/**Checks:** DONE_02/' "$repo/batch/issues/03-ticket.md"
+  git -C "$repo" commit --quiet -am "the check names the prefixed name"
+  finish_human_ticket "$repo" 2
+  run_ralph "$repo" run batch 2
+  assert_contains "$OUT" "batch/issues/02-ticket.md waits for batch/issues/03-ticket.md" "found through the prefix"
+  [ -e "$repo/batch/issues/DONE_02-ticket.md" ] && pass || fail "and renamed when the check landed"
+
+  # The human ticket carries the prefix; the check names it without.
+  repo="$(make_repo 2 check-prefix2-repo)"
+  make_human_ticket "$repo" 1
+  make_check_ticket "$repo" 2 1
+  finish_human_ticket "$repo" 1
+  git -C "$repo" mv batch/issues/01-ticket.md batch/issues/DONE_01-ticket.md
+  git -C "$repo" commit --quiet -m "renamed by hand"
+  RALPH_FAKE_BEHAVIOUR=send-back run_ralph "$repo" run batch
+  assert_eq "$ST" 30 "the check found its human ticket and sent it back"
+  assert_contains "$(cat "$repo/batch/issues/DONE_01-ticket.md")" "## Sent back by 02-ticket.md" "the prefixed file"
+fi
+
+if case_is "the start-of-run sweep renames a finished ticket and leaves a dirty tree alone"; then
+  repo="$(make_repo 2 sweep-repo)"
+  sed -i 's/^\*\*Status:\*\* todo/**Status:** done\n\n- [x] the thing/' "$repo/batch/issues/01-ticket.md"
+  git -C "$repo" commit --quiet -am "ticket 1 done by hand"
+
+  run_ralph "$repo" status batch
+  run_ralph "$repo" dry-run batch
+  [ -e "$repo/batch/issues/01-ticket.md" ] && pass || fail "status and dry-run rename nothing"
+
+  run_ralph "$repo" run batch 1
+  [ -e "$repo/batch/issues/DONE_01-ticket.md" ] && pass || fail "a run renames it before picking a ticket"
+  assert_contains "$OUT" "✓ marked done" "and says so"
+  assert_contains "$(git -C "$repo" log --format=%s)" "chore: mark 01-ticket.md done" "in a commit of its own"
+
+  repo="$(make_repo 2 sweep-unticked-repo)"
+  sed -i 's/^\*\*Status:\*\* todo/**Status:** done\n\n- [ ] the thing/' "$repo/batch/issues/01-ticket.md"
+  git -C "$repo" commit --quiet -am "ticket 1 done by hand, boxes unticked"
+  run_ralph "$repo" run batch 1
+  [ -e "$repo/batch/issues/01-ticket.md" ] && pass || fail "an unticked ticket keeps its name"
+
+  repo="$(make_repo 3 sweep-dirty-repo)"
+  sed -i 's/^\*\*Status:\*\* todo/**Status:** done/' "$repo/batch/issues/01-ticket.md"
+  git -C "$repo" commit --quiet -am "ticket 1 done by hand"
+  printf 'uncommitted\n' > "$repo/scratch.txt"
+  RALPH_ALLOW_DIRTY=1 run_ralph "$repo" run batch 1
+  [ -e "$repo/batch/issues/01-ticket.md" ] && pass || fail "a dirty tree is not swept"
+  assert_missing "$(git -C "$repo" log --format=%s)" "mark 01-ticket.md done" "and no rename commit was made"
+fi
+
+# ---------------------------------------------------------------------------
 printf '\n%s passed, %s failed\n' "$passed" "$failed"
 [ "$failed" -eq 0 ]

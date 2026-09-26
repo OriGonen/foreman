@@ -1,6 +1,6 @@
 # 02: A check ticket verifies, or sends back, its human ticket
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Blocked by:** 01
 
@@ -39,16 +39,16 @@ ticket lands, start-of-run rename sweep, in-loop gate).
 
 **Acceptance criteria:**
 
-- [ ] The fake adapter has a `send-back` behaviour that sends back the ticket the current
+- [x] The fake adapter has a `send-back` behaviour that sends back the ticket the current
       ticket `Checks:`, documented in its header
-- [ ] A check ticket that sends back its human ticket ends the run with exit 30; the output
+- [x] A check ticket that sends back its human ticket ends the run with exit 30; the output
       has the `↩ sent back` line; the human ticket is `ready-for-human`, unprefixed, and
       carries the `## Sent back by` section; nothing after the check ticket ran
-- [ ] A plain rerun after a send-back prints the "sent back" paragraph in the note again
-- [ ] A human ticket set to `done` is not renamed while its check ticket is unfinished, and
+- [x] A plain rerun after a send-back prints the "sent back" paragraph in the note again
+- [x] A human ticket set to `done` is not renamed while its check ticket is unfinished, and
       the run says what it waits for
-- [ ] When the check ticket lands, both it and its human ticket are `DONE_`-prefixed
-- [ ] The start-of-run sweep renames a done, fully ticked, unprefixed ticket, and makes no
+- [x] When the check ticket lands, both it and its human ticket are `DONE_`-prefixed
+- [x] The start-of-run sweep renames a done, fully ticked, unprefixed ticket, and makes no
       commit on a dirty tree (`RALPH_ALLOW_DIRTY=1` plus an uncommitted file)
-- [ ] `Checks:` resolves whether either side carries the `DONE_` prefix
-- [ ] New smoke cases cover the above, and `bash test/smoke.sh` passes in full
+- [x] `Checks:` resolves whether either side carries the `DONE_` prefix
+- [x] New smoke cases cover the above, and `bash test/smoke.sh` passes in full

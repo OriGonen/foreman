@@ -34,6 +34,11 @@
 #     context-json  the same failure as the CLI actually reports it — valid JSON with
 #              terminal_reason "prompt_too_long". Carries "api_error_status" too, which is
 #              why classifying context exhaustion before transient matters.
+#     send-back  a check ticket that finds its human ticket's handoff inadequate: sets the
+#              ticket it `Checks:` back to the human word, appends a '## Sent back by <this
+#              ticket>' section, and commits — leaving its OWN status line unflipped, as a real
+#              check ticket does. The loop sees an ordinary unflipped commit, then stops at the
+#              human ticket (exit 30).
 #   RALPH_FAKE_PROMPT_LOG  file to append each prompt to, with a separator. Optional.
 #   RALPH_FAKE_COST        reported cost per iteration in USD. Default 0.01.
 #
@@ -119,6 +124,27 @@ _fake_land() {
     commit --quiet -m "fake: land $ticket" >/dev/null 2>&1
 }
 
+# What a check ticket does when the handoff it verifies is not good enough. The ticket it checks
+# comes from the same `Checks:` lookup the loop uses (ralph-human.sh), so a rename or a
+# DONE_ prefix on either side cannot make the two disagree.
+_fake_send_back() {
+  local ticket="$1" checked tmp
+  checked="$(ralph_checked_ticket "$ticket")"
+  if [ -z "$checked" ]; then
+    warn "fake: send-back: $ticket has no resolvable Checks: line"
+    return 2
+  fi
+  tmp="$(mktemp)"
+  awk -v sl="$RALPH_STATUS_LINE" -v hw="$RALPH_HUMAN_WORD" '
+    index($0, sl) == 1 { print sl " " hw; next }
+    { print }
+  ' "$checked" > "$tmp" && mv "$tmp" "$checked"
+  printf '\n## Sent back by %s\n\nThe handoff file is not filled in.\n' "$(basename "$ticket")" >> "$checked"
+  git add -A >/dev/null 2>&1
+  git -c user.name=ralph-fake -c user.email=fake@ralph.invalid \
+    commit --quiet -m "check: send $(_ralph_ticket_key "$checked" | sed "s/-.*//") back — the handoff is not filled in" >/dev/null 2>&1
+}
+
 # The checkpoint turn's own scripted outcome — separate from RALPH_FAKE_BEHAVIOUR because it
 # is a distinct turn, not another entry in that turn-by-turn list.
 _fake_checkpoint() {
@@ -167,6 +193,10 @@ exec_run() {
     land)
       _fake_land "$ticket"
       _fake_payload success false "landed $ticket"
+      ;;
+    send-back)
+      _fake_send_back "$ticket" || return
+      _fake_payload success false "sent the checked ticket back to a human"
       ;;
     noop)
       _fake_payload success false "did nothing"

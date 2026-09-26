@@ -40,7 +40,11 @@
 #   refuses to sync. Deleting the marker only costs that rescue. See "The stall marker".
 #
 #   A human ticket is the other way a run ends without finishing the batch: see EXIT CODES.
-#   Rerunning before the person has set it to done stops at it again, and costs nothing.
+#   Rerunning before the person has set it to done stops at it again, and costs nothing. A
+#   human ticket is followed by a check ticket (`Checks: <its file name>`); if that finds the
+#   handoff inadequate it sets the human ticket back to ready-for-human, and the run stops
+#   at it again. Every run first renames any done ticket still lacking its DONE_ prefix —
+#   never on a dirty tree, and never a ticket whose check ticket has not landed.
 #
 # BUDGETS (all optional; 0 or unset means no limit)
 #   RALPH_MAX_COST_USD=25     pause before an iteration that would take the run over $25
@@ -217,13 +221,18 @@ ticket_is_done() { grep -q "$RALPH_DONE_PATTERN" "$1"; }
 # the agent: the loop is about to re-read the ticket by its path, and a rename is exactly
 # the sort of thing that goes wrong quietly inside a turn.
 #
+# A ticket that a not-done check ticket still `Checks:` keeps its name until that check lands
+# (see ralph-human.sh), and landing a check ticket renames the ticket it checked as well. A run
+# also sweeps for done tickets at its start — that is how a ticket set to done by hand gets
+# its prefix.
+#
 # Never fatal. The ticket has landed either way; a failed rename only costs the prefix, and
 # a failed commit is undone so the tree is not left dirty for the next iteration to trip on.
 # ---------------------------------------------------------------------------
 ticket_has_unchecked_boxes() { grep -q '^[[:space:]]*[-*+][[:space:]][[:space:]]*\[ \]' "$1"; }
 
 mark_ticket_done_on_disk() {    # mark_ticket_done_on_disk TICKET
-  local ticket="$1" base renamed
+  local ticket="$1" base renamed pending
   [ -n "$RALPH_DONE_PREFIX" ] || return 0
   base="$(basename "$ticket")"
   case "$base" in "$RALPH_DONE_PREFIX"*) return 0 ;; esac
@@ -231,6 +240,14 @@ mark_ticket_done_on_disk() {    # mark_ticket_done_on_disk TICKET
 
   if ticket_has_unchecked_boxes "$ticket"; then
     warn "   note: $ticket is '$RALPH_DONE_WORD' but has unchecked boxes — leaving its name alone"
+    return 0
+  fi
+
+  # A ticket its check ticket has not yet verified stays as it is: a human ticket renamed and
+  # then sent back would be a finished-looking file waiting on a person.
+  pending="$(ralph_pending_checker "$ticket")"
+  if [ -n "$pending" ]; then
+    warn "   note: $ticket waits for $pending before it is marked done"
     return 0
   fi
 
@@ -265,10 +282,16 @@ resume_args() {
 # mid-run, and in the footer. One function, so the wording cannot differ between them. Prints
 # to stdout; callers that want stderr redirect.
 human_ticket_note() {    # human_ticket_note TICKET
-  local ticket="$1" handoff n=1 done_step
+  local ticket="$1" handoff n=1 done_step sent_back_by
   handoff="$(ralph_handoff_path "$ticket")"
   say "── $ticket is a human ticket. The loop stops here."
   say ""
+  sent_back_by="$(ralph_was_sent_back "$ticket")"
+  if [ -n "$sent_back_by" ]; then
+    say "↩ It was sent back by $sent_back_by: read '## Sent back by $sent_back_by' at the"
+    say "   bottom of it."
+    say ""
+  fi
   say "It is marked '$RALPH_STATUS_LINE $RALPH_HUMAN_WORD': no agent is given it, and no ticket"
   say "after it runs until it is done. It is your turn now:"
   say ""
@@ -394,6 +417,17 @@ if [ "$RALPH_ALLOW_DIRTY" != "1" ] && tree_is_dirty && ! stall_marker_matches "$
 fi
 
 [ "$preflight_failed" -eq 0 ] || exit 1
+
+# Start-of-run sweep: rename every ticket that is done, fully ticked and not yet prefixed. This
+# is how a ticket set to done by hand gets its prefix, and how a human ticket gets it once its
+# check has landed. Not on a dirty tree: that tree may be a stall the marker vouches for, and a
+# rename commit would move HEAD and break stall_marker_matches, losing the automatic rescue.
+# Only in a run — status and dry-run never commit.
+if [ "$MODE" = "run" ] && ! tree_is_dirty; then
+  while IFS= read -r swept; do
+    mark_ticket_done_on_disk "$swept"
+  done < <(next_sh --all)
+fi
 
 next_ticket=$(next_sh)
 pick_status=$?
@@ -655,6 +689,11 @@ while true; do
   # hit this gate anyway. Only the NEXT ticket is looked at; the order is trusted, so runnable
   # work behind a human ticket is never sought.
   if ralph_ticket_needs_human "$TICKET_FILE"; then
+    # The previous iteration was this ticket's check, and it sent it back. That iteration was
+    # reported as progress (HEAD moved, the check ticket is unflipped); say what it really was.
+    if [ -n "$CURRENT_TICKET" ] && [ "$(ralph_checked_ticket "$CURRENT_TICKET")" = "$TICKET_FILE" ]; then
+      say "   ↩ sent back to a human by $(basename "$CURRENT_TICKET")"
+    fi
     HUMAN_TICKET="$TICKET_FILE"
     FINAL_STATUS="$EXIT_WAITING_ON_HUMAN"
     break
@@ -1002,7 +1041,11 @@ while true; do
       warn "   note: status flipped but HEAD did not move — check $TICKET_FILE was committed"
     fi
     say "   ✓ landed  ·  $(git log -1 --format=%h "$HEAD_REF")"
+    # Resolved before the rename: it is read from this ticket's own file, which the rename moves.
+    checked_ticket="$(ralph_checked_ticket "$TICKET_FILE")"
     mark_ticket_done_on_disk "$TICKET_FILE"
+    # A check ticket landing is the human ticket's verification: it is done for good now.
+    [ -z "$checked_ticket" ] || mark_ticket_done_on_disk "$checked_ticket"
     continue
   fi
 
