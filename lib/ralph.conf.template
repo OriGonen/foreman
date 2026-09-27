@@ -104,7 +104,9 @@ RALPH_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)")
 # A HUMAN TICKET is one only a person can do. Mark it with this word on its status line
 # ('**Status:** ready-for-human'); the loop stops before it (exit 30) and runs nothing after
 # it until the person sets it to done. Give it a '**Handoff:** <file>' line naming the file
-# the person fills in. Set empty to treat every ticket as an agent's.
+# the person fills in, and follow it with a followup ticket ('**Checks:** <its file name>')
+# that verifies the handoff before anything builds on it. Set empty to treat every ticket
+# as an agent's.
 #RALPH_HUMAN_WORD=ready-for-human
 #RALPH_HUMAN_PATTERN='^\*\*Status:\*\* *ready-for-human'
 

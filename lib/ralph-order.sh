@@ -67,7 +67,7 @@ if [ "${#tickets[@]}" -eq 0 ]; then
   exit 0
 fi
 
-# Human tickets and check tickets change how the order is chosen, so the agent is told
+# Human tickets and followup tickets change how the order is chosen, so the agent is told
 # about them only when this batch actually has one — an ordinary batch gets the prompt it
 # always got.
 human_tickets=()
@@ -102,7 +102,7 @@ if [ "$has_checks" -eq 1 ]; then
   CHECK_SECTION=$(cat <<CHECK_EOF
 
 
-CHECK TICKETS. A ticket with a \`Checks:\` line verifies the ticket it names. It goes
+FOLLOWUP TICKETS. A ticket with a \`Checks:\` line verifies the ticket it names. It goes
 IMMEDIATELY after that ticket, with nothing between them: an unrelated ticket in between
 could build on work that has not been checked yet.
 CHECK_EOF
@@ -126,7 +126,7 @@ Read every ticket listed below and the current $ORDER_FILE. Then edit
 $ORDER_FILE in place, and change nothing else:
 
 1. Decide a run order, weighing these in priority order: dependencies first, then
-   human-ticket placement and check-ticket adjacency (see below, when this batch has
+   human-ticket placement and followup-ticket adjacency (see below, when this batch has
    either), then importance, then load.
    - DEPENDENCIES. A ticket that reads or builds on something another ticket creates must
      come after it. Two tickets that touch the same file or area should be adjacent, so a

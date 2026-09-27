@@ -8,7 +8,7 @@ repository.
 cd <any git repo>
 ralph doctor                    # is this repo ready?                  (free)
 ralph init .scratch/my-batch    # scaffold a batch, then order its tickets
-ralph status .scratch/my-batch  # what is left, what is next           (free)
+ralph status .scratch/my-batch  # what is left, what is next, where a human is needed (free)
 ralph dry-run .scratch/my-batch # the plan and the exact prompt        (free)
 ralph run .scratch/my-batch             # one iteration
 ralph run .scratch/my-batch 5           # at most 5 iterations
@@ -108,6 +108,71 @@ RALPH_TEST_CMD="npm test"
 
 Everything else has a default; `lib/ralph.conf.template` documents the full set.
 
+### Human tickets
+
+Some steps only a person can do — an owner review, a naming decision, provisioning an
+account. Mark a ticket for one on its own status line:
+
+```markdown
+# 15 — owner review of the landing-page copy
+
+**Status:** ready-for-human
+**Handoff:** .scratch/my-batch/handoff/15-owner-review.md
+
+- [ ] the owner has reviewed the copy and left feedback in the handoff file
+```
+
+`RALPH_HUMAN_WORD` (default `ready-for-human`) is the word that marks it; set it empty in
+`ralph.conf` to turn the feature off entirely — every ticket is then an agent's, as before.
+Reaching a human ticket at the head of the order stops the run **before anything is
+spent** — before the sandbox starts, before any budget check, before any prompt is sent —
+and exits **30**, naming the ticket and its handoff file. Rerunning before the person has
+finished it stops the same way again, at no cost. See "Pausing and resuming" below.
+
+**The handoff file.** The `Handoff:` line names a file the person fills in: what they did,
+where it is, what they decided. Record *where* a secret is stored — a vault path, an env
+var name — never the secret's value.
+
+**Followup tickets.** A human ticket is immediately followed, in the order, by an ordinary
+agent ticket that verifies the handoff before anything builds on it. Like any ticket it
+only does what its own text asks, so spell out what "good enough" means and what to do
+if it isn't:
+
+```markdown
+# 16 — check the owner's review
+
+**Status:** todo
+**Blocked by:** 15
+**Checks:** 15-owner-review.md
+
+- [ ] the handoff file's feedback is concrete enough to act on
+- [ ] if it isn't, send 15 back (see below) instead of flipping this ticket's status
+```
+
+`Checks:` names the human ticket's file, not a path — matched against the batch's tickets
+with any `DONE_` prefix stripped on either side, so a rename never breaks it. **Sending a
+human ticket back** means: set its status line to `ready-for-human` again, append a
+`## Sent back by 16-check-owner-review.md` section saying what's missing, commit as
+`check: send 15 back — …`, and leave the followup ticket's own status line unflipped. The
+loop recognises that shape wherever it sees it — it is what `ralph_was_sent_back` and the
+rename-gating in `lib/ralph-human.sh` look for — so once it lands, the next pick is the
+human ticket again, and the run stops there (exit 30) with the reason visible in the
+ticket itself.
+
+A human ticket is renamed `DONE_` only once its followup ticket has landed, not when the
+person flips its own status line — see the start-of-run sweep under "Pausing and
+resuming" for why.
+
+**The pattern: human → followup → apply.** A three-ticket shape for anything an agent can
+only act on once a person has weighed in:
+
+1. **15 — owner review** (human): the owner reviews the copy and leaves feedback in the
+   handoff file.
+2. **16 — check the owner's review** (followup, `Checks: 15-owner-review.md`): confirms the
+   feedback is concrete enough to act on, or sends 15 back.
+3. **17 — apply the owner's feedback** (agent, `Blocked by: 16`): rewrites the copy to
+   match what the owner asked for.
+
 ### Ordering
 
 If `order.md` exists, the lines between its `<!-- ORDER:BEGIN -->` and `<!-- ORDER:END -->`
@@ -119,15 +184,21 @@ means the batch directory itself.
 
 `ralph init` doesn't leave that at filename order: right after scaffolding, it runs
 `ralph order <batch>`, which has an agent read every ticket and rewrite the order, weighing
-three things — dependencies (what has to land before what, and which tickets touch the same
-files closely enough to keep adjacent), importance (foundations first, polish and
-sweep-every-surface tickets last), and each ticket's apparent load, so a run isn't
-front-loaded with every large ticket back to back. It writes its reasoning into the prose
-above the block, naming tickets specifically.
+these in priority order — dependencies (what has to land before what, and which tickets
+touch the same files closely enough to keep adjacent), human-ticket placement and
+followup-ticket adjacency (see below, when the batch has either), importance (foundations
+first, polish and sweep-every-surface tickets last), and each ticket's apparent load, so a
+run isn't front-loaded with every large ticket back to back. It writes its reasoning into
+the prose above the block, naming tickets specifically.
+
+When the batch has human tickets, each one is placed as **late** as its dependents allow:
+everything that does not depend on it, directly or transitively, goes before it, so the
+unattended stretch before each stop is as long as possible. A followup ticket (its
+`Checks:` line names the human ticket) is kept **immediately after** the ticket it checks,
+with nothing built on unverified work in between.
 
 That is a first pass, not a guarantee — read it, and move things by hand where it missed a
-constraint that isn't in the ticket text (a human step that has to happen first, say).
-Re-run it any time the tickets change:
+constraint that isn't in the ticket text. Re-run it any time the tickets change:
 
 ```bash
 ralph order .scratch/my-batch
@@ -313,6 +384,18 @@ It stops and asks for a human (exit **20**) when a ticket did not reach its done
 its attempts, or when an iteration left uncommitted changes behind that nothing could
 salvage. It never auto-commits that work itself — the point of the per-iteration review base
 is that nothing lands unreviewed.
+
+**Waiting on a human (exit 30)** is a different stop, for a different reason: nothing went
+wrong, the next ticket in the order is simply a human ticket, and rerunning before it is
+done stops here again, for free, same as any other resume. See "Human tickets" above for
+what triggers it and what the loop prints.
+
+Every run starts by renaming any landed ticket still lacking its `DONE_` prefix — the same
+rename a landed ticket already triggers inline, just swept once up front so a ticket
+finished by hand also gets it too. It skips this on a dirty tree (a stall's uncommitted
+work may still need its marker to match HEAD), and it skips a human ticket until its
+followup ticket has landed: renaming a human ticket the moment its own status line flips
+would make a ticket sent back afterwards look finished when it is not.
 
 A turn that ends cleanly and uncommitted, with the ticket unflipped and HEAD exactly where it
 started, is a **stall** — the shape of a turn that simply ran out of room before reaching its

@@ -1,6 +1,6 @@
 # 05: Document human tickets, followup tickets and handoff files
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Blocked by:** 01, 02, 03, 04
 
@@ -55,16 +55,16 @@ here.
 
 **Acceptance criteria:**
 
-- [ ] `CONTEXT.md` defines Human ticket, Handoff file, Followup ticket and Waiting on a human,
+- [x] `CONTEXT.md` defines Human ticket, Handoff file, Followup ticket and Waiting on a human,
       each with an _Avoid_ list; Followup ticket's includes check ticket
-- [ ] `grep -rni 'check ticket\|check-ticket\|CHECK TICKETS' lib test README.md CONTEXT.md`
+- [x] `grep -rni 'check ticket\|check-ticket\|CHECK TICKETS' lib test README.md CONTEXT.md`
       finds nothing but that _Avoid_ list
-- [ ] `**Checks:**`, `[CHECKS <name>]`, `## Sent back by` and `check: send <NN> back` are
+- [x] `**Checks:**`, `[CHECKS <name>]`, `## Sent back by` and `check: send <NN> back` are
       unchanged, and the smoke cases asserting them still pass
-- [ ] `ralph order`'s prompt has a `FOLLOWUP TICKETS` section, and the smoke case asserts it
-- [ ] The README covers the formats, handoff files, sending back, the pattern, ordering, exit
+- [x] `ralph order`'s prompt has a `FOLLOWUP TICKETS` section, and the smoke case asserts it
+- [x] The README covers the formats, handoff files, sending back, the pattern, ordering, exit
       30 and the rename, matching what the code does
-- [ ] The config template documents both settings, and says an empty word turns the feature off
-- [ ] `ralph init --no-order` on a fresh batch writes the new prose (an existing smoke case or a
+- [x] The config template documents both settings, and says an empty word turns the feature off
+- [x] `ralph init --no-order` on a fresh batch writes the new prose (an existing smoke case or a
       new assertion checks it)
-- [ ] `bash test/smoke.sh` passes in full
+- [x] `bash test/smoke.sh` passes in full

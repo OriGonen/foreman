@@ -114,7 +114,9 @@ if write_if_absent "$BATCH_DIR/order.md"; then
       echo "adjacent so the conflict is a sequential edit rather than a merge."
       echo
       echo "Anything the loop cannot infer belongs in prose here: a dependency that crosses"
-      echo "issue directories, or a ticket that must not run until a human has done something."
+      echo "issue directories. A step only a person can do belongs in its own ticket instead —"
+      echo "give it \`**Status:** ready-for-human\`, a \`**Handoff:**\` file, and a followup"
+      echo "ticket that \`Checks:\` it; \`ralph order\` places them, and the loop stops there."
     fi
     echo
     echo "<!--"

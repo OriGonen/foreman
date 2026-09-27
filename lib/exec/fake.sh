@@ -34,11 +34,11 @@
 #     context-json  the same failure as the CLI actually reports it — valid JSON with
 #              terminal_reason "prompt_too_long". Carries "api_error_status" too, which is
 #              why classifying context exhaustion before transient matters.
-#     send-back  a check ticket that finds its human ticket's handoff inadequate: sets the
+#     send-back  a followup ticket that finds its human ticket's handoff inadequate: sets the
 #              ticket it `Checks:` back to the human word, appends a '## Sent back by <this
 #              ticket>' section, and commits — leaving its OWN status line unflipped, as a real
-#              check ticket does. The loop sees an ordinary unflipped commit, then stops at the
-#              human ticket (exit 30).
+#              followup ticket does. The loop sees an ordinary unflipped commit, then stops at
+#              the human ticket (exit 30).
 #   RALPH_FAKE_PROMPT_LOG  file to append each prompt to, with a separator. Optional.
 #   RALPH_FAKE_COST        reported cost per iteration in USD. Default 0.01.
 #
@@ -124,7 +124,7 @@ _fake_land() {
     commit --quiet -m "fake: land $ticket" >/dev/null 2>&1
 }
 
-# What a check ticket does when the handoff it verifies is not good enough. The ticket it checks
+# What a followup ticket does when the handoff it verifies is not good enough. The ticket it checks
 # comes from the same `Checks:` lookup the loop uses (ralph-human.sh), so a rename or a
 # DONE_ prefix on either side cannot make the two disagree.
 _fake_send_back() {

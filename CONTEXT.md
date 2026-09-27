@@ -23,6 +23,25 @@ The sequence the batch's tickets are attempted in, and the reasoning behind it, 
 in the batch's `order.md`.
 _Avoid_: Priority, backlog, schedule
 
+**Human ticket**:
+A ticket only a person can do, marked by its own status line (`ready-for-human` by
+default, `RALPH_HUMAN_WORD`). The loop never hands one to an agent; reaching it at the
+head of the order ends the run, and nothing after it runs until the person marks it
+done.
+_Avoid_: Manual ticket, blocked ticket, HITL ticket
+
+**Handoff file**:
+The file a human ticket names on its `Handoff:` line, written as a template at planning
+time and filled in by the person: what they did, where it is, what they decided — and
+where a secret is stored, never its value. What its followup ticket reads.
+_Avoid_: Feedback file, report
+
+**Followup ticket**:
+An ordinary agent ticket that immediately follows a human ticket and names it on a
+`Checks:` line. Written to verify the handoff file against the human ticket's criteria
+and, if it falls short, send the human ticket back.
+_Avoid_: Check ticket, control ticket, review ticket, verification ticket
+
 ### The loop's units of work
 
 **Run**:
@@ -65,6 +84,14 @@ A short, single-purpose turn the loop runs in response to a stall: read the unco
 diff, commit it as `wip:`, and write the `Remaining:` list. It never continues the
 ticket's work. It converts a stall into a progression.
 _Avoid_: Salvage run, auto-commit, rescue
+
+### How a run ends
+
+**Waiting on a human**:
+The run stopped because the next ticket is a human ticket (exit 30). Rerunning before the
+person has finished it stops here again, at no cost. Distinct from a stop that *needs* a
+human because something went wrong (exit 20).
+_Avoid_: Blocked, paused (that is exit 10)
 
 ### Budgets and counters
 

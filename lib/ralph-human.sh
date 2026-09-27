@@ -5,7 +5,7 @@
 # A HUMAN TICKET is one only a person can do, marked on its own status line
 # ('**Status:** ready-for-human', RALPH_HUMAN_WORD). The loop never gives one to an agent:
 # reaching one at the head of the order ends the run (exit 30). This file is the ONE place
-# that knows the marker, the fields a human ticket carries and how a check ticket names it;
+# that knows the marker, the fields a human ticket carries and how a followup ticket names it;
 # everything else asks.
 #
 # Lookup only — each function greps a ticket file, none calls a model, none decides policy.
@@ -40,11 +40,12 @@ ralph_handoff_path() {    # ralph_handoff_path TICKET
 }
 
 # ---------------------------------------------------------------------------
-# Check tickets
+# Followup tickets
 #
-# A CHECK TICKET is an ordinary agent ticket that immediately follows a human ticket and names
-# it on a `Checks:` line — a file NAME, not a path. It verifies the human's handoff file before
-# any agent work builds on it and, if the handoff falls short, sends the human ticket back.
+# A FOLLOWUP TICKET is an ordinary agent ticket that immediately follows a human ticket and
+# names it on a `Checks:` line — a file NAME, not a path. It verifies the human's handoff file
+# before any agent work builds on it and, if the handoff falls short, sends the human ticket
+# back.
 # ---------------------------------------------------------------------------
 
 # A ticket's file name without the done prefix: what a `Checks:` line names and what
@@ -106,7 +107,7 @@ ralph_pending_checker() {    # ralph_pending_checker TICKET
   return 1
 }
 
-# The check ticket named by TICKET's LAST `## Sent back by …` heading, if any. Last, because a
+# The followup ticket named by TICKET's LAST `## Sent back by …` heading, if any. Last, because a
 # ticket sent back twice should point at the latest reason.
 ralph_was_sent_back() {    # ralph_was_sent_back TICKET
   grep '^## Sent back by ' "$1" 2>/dev/null | tail -n 1 | tr -d '\r' |
@@ -116,8 +117,8 @@ ralph_was_sent_back() {    # ralph_was_sent_back TICKET
 # ---------------------------------------------------------------------------
 # Warnings
 #
-# A batch whose human and check tickets are missing a piece — no checker, no handoff file, a
-# check ticket out of place, a `Checks:` line that resolves to nothing. `ralph status`,
+# A batch whose human and followup tickets are missing a piece — no checker, no handoff file, a
+# followup ticket out of place, a `Checks:` line that resolves to nothing. `ralph status`,
 # `ralph dry-run` and `ralph order` all print the same list, last, after everything else. They
 # never change an exit code and never stop a run: this is a check, not policy.
 # ---------------------------------------------------------------------------
@@ -142,7 +143,7 @@ ralph_human_warnings() {
       [ -n "$(ralph_handoff_path "$ticket")" ] || printf 'warning: %s has no Handoff: file\n' "$ticket"
     fi
 
-    # 3 & 4: a not-done check ticket out of place, or naming nothing in the batch. Keyed on
+    # 3 & 4: a not-done followup ticket out of place, or naming nothing in the batch. Keyed on
     # `Checks:` and order only — the checked ticket may already be done.
     if [ "$is_done" -eq 0 ]; then
       name="$(ralph_ticket_field "$ticket" Checks)"

@@ -848,6 +848,8 @@ if case_is "init scaffolds a batch from its own ticket list"; then
   order="$(cat "$repo/batch/order.md")"
   assert_contains "$order" "batch/issues/01-ticket.md" "the order block lists ticket 1"
   assert_contains "$order" "batch/issues/02-ticket.md" "the order block lists ticket 2"
+  assert_contains "$order" "ready-for-human" "the prose points at human tickets"
+  assert_contains "$order" "followup" "the prose points at followup tickets"
   assert_contains "$OUT" "created  batch/progress.txt" "progress.txt is scaffolded"
 fi
 
@@ -1192,11 +1194,11 @@ if case_is "a done ticket is never a human ticket"; then
 fi
 
 # ---------------------------------------------------------------------------
-# Check tickets
+# Followup tickets
 # ---------------------------------------------------------------------------
 
 # Ticket N checks ticket M: it gets a `Checks:` line naming that ticket's file.
-make_check_ticket() {
+make_followup_ticket() {
   local repo="$1" n="$2" m="$3"
   sed -i "s|^\*\*Status:\*\* todo|&\n**Checks:** 0$m-ticket.md|" "$repo/batch/issues/0$n-ticket.md"
   git -C "$repo" commit --quiet -am "ticket $n checks ticket $m"
@@ -1208,13 +1210,13 @@ checked_repo() {    # checked_repo NAME
   local repo
   repo="$(make_repo 5 "$1")"
   make_human_ticket "$repo" 3
-  make_check_ticket "$repo" 4 3
+  make_followup_ticket "$repo" 4 3
   run_ralph "$repo" run batch --unlimited
   finish_human_ticket "$repo" 3
   printf '%s' "$repo"
 }
 
-if case_is "a check ticket that sends its human ticket back ends the run at exit 30"; then
+if case_is "a followup ticket that sends its human ticket back ends the run at exit 30"; then
   repo="$(checked_repo check-sendback-repo)"
   log="$WORK/check-sendback-prompts.txt"
 
@@ -1228,8 +1230,8 @@ if case_is "a check ticket that sends its human ticket back ends the run at exit
   [ -e "$repo/batch/issues/DONE_03-ticket.md" ] && fail "and was not prefixed" || pass
   assert_contains "$(cat "$repo/batch/issues/03-ticket.md")" "**Status:** ready-for-human" "it is a human ticket again"
   assert_contains "$(cat "$repo/batch/issues/03-ticket.md")" "## Sent back by 04-ticket.md" "and carries the section"
-  assert_contains "$(cat "$repo/batch/issues/04-ticket.md")" "**Status:** todo" "the check ticket is unflipped"
-  assert_eq "$(grep -c '^===== fake prompt' "$log")" "1" "only the check ticket was prompted"
+  assert_contains "$(cat "$repo/batch/issues/04-ticket.md")" "**Status:** todo" "the followup ticket is unflipped"
+  assert_eq "$(grep -c '^===== fake prompt' "$log")" "1" "only the followup ticket was prompted"
   assert_missing "$(cat "$log")" "05-ticket.md" "nothing after it ran"
   assert_eq "$(git -C "$repo" status --porcelain)" "" "the tree is clean"
 
@@ -1242,45 +1244,45 @@ if case_is "a check ticket that sends its human ticket back ends the run at exit
   assert_eq "$(runs_rows "$repo")" "$rows" "nothing was recorded"
 fi
 
-if case_is "a human ticket is renamed only once its check ticket has landed"; then
+if case_is "a human ticket is renamed only once its followup ticket has landed"; then
   repo="$(checked_repo check-rename-repo)"
 
   RALPH_FAKE_BEHAVIOUR=noop run_ralph "$repo" run batch 1
-  assert_eq "$ST" 20 "a check ticket that does nothing does not land"
+  assert_eq "$ST" 20 "a followup ticket that does nothing does not land"
   [ -e "$repo/batch/issues/03-ticket.md" ] && pass || fail "so the human ticket keeps its name"
   [ -e "$repo/batch/issues/DONE_03-ticket.md" ] && fail "and is not prefixed" || pass
 
   run_ralph "$repo" run batch 1
   assert_contains "$OUT" "batch/issues/03-ticket.md waits for batch/issues/04-ticket.md before it is marked done" \
     "the run says what the human ticket waits for"
-  assert_contains "$OUT" "✓ landed" "the check ticket landed"
-  [ -e "$repo/batch/issues/DONE_04-ticket.md" ] && pass || fail "the check ticket is DONE_-prefixed"
+  assert_contains "$OUT" "✓ landed" "the followup ticket landed"
+  [ -e "$repo/batch/issues/DONE_04-ticket.md" ] && pass || fail "the followup ticket is DONE_-prefixed"
   [ -e "$repo/batch/issues/DONE_03-ticket.md" ] && pass || fail "and so is the human ticket it checked"
   [ -e "$repo/batch/issues/03-ticket.md" ] && fail "which no longer has its old name" || pass
   assert_eq "$(git -C "$repo" status --porcelain)" "" "the tree is clean"
 fi
 
 if case_is "Checks: resolves whichever side carries the done prefix"; then
-  # The check names the human ticket WITH the prefix; the human ticket has none.
+  # The followup ticket names the human ticket WITH the prefix; the human ticket has none.
   repo="$(make_repo 3 check-prefix-repo)"
   make_human_ticket "$repo" 2
-  make_check_ticket "$repo" 3 2
+  make_followup_ticket "$repo" 3 2
   sed -i 's/^\*\*Checks:\*\* 02/**Checks:** DONE_02/' "$repo/batch/issues/03-ticket.md"
-  git -C "$repo" commit --quiet -am "the check names the prefixed name"
+  git -C "$repo" commit --quiet -am "the followup names the prefixed name"
   finish_human_ticket "$repo" 2
   run_ralph "$repo" run batch 2
   assert_contains "$OUT" "batch/issues/02-ticket.md waits for batch/issues/03-ticket.md" "found through the prefix"
-  [ -e "$repo/batch/issues/DONE_02-ticket.md" ] && pass || fail "and renamed when the check landed"
+  [ -e "$repo/batch/issues/DONE_02-ticket.md" ] && pass || fail "and renamed when the followup landed"
 
-  # The human ticket carries the prefix; the check names it without.
+  # The human ticket carries the prefix; the followup ticket names it without.
   repo="$(make_repo 2 check-prefix2-repo)"
   make_human_ticket "$repo" 1
-  make_check_ticket "$repo" 2 1
+  make_followup_ticket "$repo" 2 1
   finish_human_ticket "$repo" 1
   git -C "$repo" mv batch/issues/01-ticket.md batch/issues/DONE_01-ticket.md
   git -C "$repo" commit --quiet -m "renamed by hand"
   RALPH_FAKE_BEHAVIOUR=send-back run_ralph "$repo" run batch
-  assert_eq "$ST" 30 "the check found its human ticket and sent it back"
+  assert_eq "$ST" 30 "the followup ticket found its human ticket and sent it back"
   assert_contains "$(cat "$repo/batch/issues/DONE_01-ticket.md")" "## Sent back by 02-ticket.md" "the prefixed file"
 fi
 
@@ -1288,10 +1290,10 @@ fi
 # Status, dry-run and warnings
 # ---------------------------------------------------------------------------
 
-if case_is "status marks human and check tickets and says where the loop will stop"; then
+if case_is "status marks human and followup tickets and says where the loop will stop"; then
   repo="$(make_repo 4 status-marked-repo)"
   make_human_ticket "$repo" 3
-  make_check_ticket "$repo" 4 3
+  make_followup_ticket "$repo" 4 3
 
   run_ralph "$repo" status batch
   assert_eq "$ST" 0 "status still exits 0"
@@ -1321,7 +1323,7 @@ if case_is "status names the human ticket when it is next, with its note"; then
   assert_contains "$OUT" "batch/handoff/01-ticket.md" "naming the handoff file"
 fi
 
-if case_is "warning: a human ticket with no check ticket"; then
+if case_is "warning: a human ticket with no followup ticket"; then
   repo="$(make_repo 1 warn-nocheck-repo)"
   make_human_ticket "$repo" 1
 
@@ -1354,10 +1356,10 @@ if case_is "warning: a Handoff: line naming a file that does not exist"; then
     "warns the same way as a missing line"
 fi
 
-if case_is "warning: a check ticket that is not immediately after the ticket it checks"; then
+if case_is "warning: a followup ticket that is not immediately after the ticket it checks"; then
   repo="$(make_repo 3 warn-notadjacent-repo)"
   make_human_ticket "$repo" 1
-  make_check_ticket "$repo" 3 1
+  make_followup_ticket "$repo" 3 1
   { echo '<!-- ORDER:BEGIN -->'
     echo 'batch/issues/01-ticket.md'
     echo 'batch/issues/02-ticket.md'
@@ -1384,7 +1386,7 @@ if case_is "warning: a Checks: line naming no ticket in the batch"; then
     "warns about the unresolved name"
 fi
 
-if case_is "with the human word off, only the check-ticket warnings still apply"; then
+if case_is "with the human word off, only the followup-ticket warnings still apply"; then
   repo="$(make_repo 2 warn-humanoff-repo)"
   sed -i 's/^\*\*Status:\*\* todo/**Status:** ready-for-human/' "$repo/batch/issues/01-ticket.md"
   sed -i 's/^\*\*Status:\*\* todo/&\n**Checks:** 99-nowhere.md/' "$repo/batch/issues/02-ticket.md"
@@ -1487,10 +1489,10 @@ if case_is "ralph order runs with a stub claude, spending no money and needing n
   assert_contains "$(cat "$log")" "Tickets in batch:" "the prompt lists the batch's tickets"
 fi
 
-if case_is "the ordering prompt names human tickets and check tickets"; then
+if case_is "the ordering prompt names human tickets and followup tickets"; then
   repo="$(make_repo 3 order-human-repo)"
   make_human_ticket "$repo" 2
-  make_check_ticket "$repo" 3 2
+  make_followup_ticket "$repo" 3 2
   write_order_stub "$repo"
   log="$WORK/order-human-prompt.txt"
 
@@ -1499,11 +1501,11 @@ if case_is "the ordering prompt names human tickets and check tickets"; then
   prompt="$(cat "$log")"
   assert_contains "$prompt" "HUMAN TICKETS" "the human-tickets section is present"
   assert_contains "$prompt" "batch/issues/02-ticket.md" "naming the human ticket"
-  assert_contains "$prompt" "CHECK TICKETS" "the check-tickets section is present"
+  assert_contains "$prompt" "FOLLOWUP TICKETS" "the followup-tickets section is present"
   assert_contains "$prompt" "Blocked by" "and the Blocked by: sentence is always there"
 fi
 
-if case_is "with neither kind of ticket, the ordering prompt has no human or check sections"; then
+if case_is "with neither kind of ticket, the ordering prompt has no human or followup sections"; then
   repo="$(make_repo 2 order-plain-repo)"
   write_order_stub "$repo"
   log="$WORK/order-plain-prompt.txt"
@@ -1512,11 +1514,11 @@ if case_is "with neither kind of ticket, the ordering prompt has no human or che
   assert_eq "$ST" 0 "ralph order exits 0"
   prompt="$(cat "$log")"
   assert_missing "$prompt" "HUMAN TICKETS" "no human-tickets section"
-  assert_missing "$prompt" "CHECK TICKETS" "no check-tickets section"
+  assert_missing "$prompt" "FOLLOWUP TICKETS" "no followup-tickets section"
   assert_contains "$prompt" "Blocked by" "the Blocked by: sentence is still there"
 fi
 
-if case_is "ralph order warns about a human ticket with no check ticket, and still exits 0"; then
+if case_is "ralph order warns about a human ticket with no followup ticket, and still exits 0"; then
   repo="$(make_repo 1 order-warn-repo)"
   make_human_ticket "$repo" 1
   write_order_stub "$repo"
