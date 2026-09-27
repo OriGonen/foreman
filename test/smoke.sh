@@ -94,6 +94,9 @@ if case_is "status and dry-run spend nothing and need no runner"; then
   assert_eq "$ST" 0 "status exits 0"
   assert_contains "$OUT" "Tickets done: 0 / 3" "status counts the tickets"
   assert_contains "$OUT" "batch/issues/01-ticket.md" "status names the next ticket"
+  assert_missing "$OUT" "[HUMAN]" "no human tickets, so no marking"
+  assert_missing "$OUT" "human tickets remaining" "and no human-ticket count"
+  assert_missing "$OUT" "warning:" "and no warnings — this batch has neither kind of ticket"
 
   run_ralph "$repo" dry-run batch
   assert_eq "$ST" 0 "dry-run exits 0"
@@ -1279,6 +1282,132 @@ if case_is "Checks: resolves whichever side carries the done prefix"; then
   RALPH_FAKE_BEHAVIOUR=send-back run_ralph "$repo" run batch
   assert_eq "$ST" 30 "the check found its human ticket and sent it back"
   assert_contains "$(cat "$repo/batch/issues/DONE_01-ticket.md")" "## Sent back by 02-ticket.md" "the prefixed file"
+fi
+
+# ---------------------------------------------------------------------------
+# Status, dry-run and warnings
+# ---------------------------------------------------------------------------
+
+if case_is "status marks human and check tickets and says where the loop will stop"; then
+  repo="$(make_repo 4 status-marked-repo)"
+  make_human_ticket "$repo" 3
+  make_check_ticket "$repo" 4 3
+
+  run_ralph "$repo" status batch
+  assert_eq "$ST" 0 "status still exits 0"
+  assert_contains "$OUT" "human tickets remaining: 1" "the progress line counts it"
+  assert_contains "$OUT" "  3  batch/issues/03-ticket.md   [HUMAN]" "the human ticket is marked"
+  assert_contains "$OUT" "  4  batch/issues/04-ticket.md   [CHECKS 03-ticket.md]" "and its checker names it"
+  assert_contains "$OUT" \
+    "The loop will run 2 ticket(s), then stop at batch/issues/03-ticket.md for a human." \
+    "and says where it will stop"
+  assert_missing "$OUT" "warning:" "both pieces are in place, so nothing to warn about"
+
+  run_ralph "$repo" dry-run batch
+  assert_eq "$ST" 0 "dry-run exits 0"
+  assert_contains "$OUT" "  3  batch/issues/03-ticket.md   [HUMAN]" "dry-run marks the same way"
+  assert_contains "$OUT" "  4  batch/issues/04-ticket.md   [CHECKS 03-ticket.md]" "checker included"
+fi
+
+if case_is "status names the human ticket when it is next, with its note"; then
+  repo="$(make_repo 2 status-next-human-repo)"
+  make_human_ticket "$repo" 1
+
+  run_ralph "$repo" status batch
+  assert_eq "$ST" 0 "status exits 0"
+  assert_contains "$OUT" "Next: batch/issues/01-ticket.md   [HUMAN" "Next: is marked"
+  assert_contains "$OUT" "batch/issues/01-ticket.md is a human ticket. The loop stops here." \
+    "and the note follows"
+  assert_contains "$OUT" "batch/handoff/01-ticket.md" "naming the handoff file"
+fi
+
+if case_is "warning: a human ticket with no check ticket"; then
+  repo="$(make_repo 1 warn-nocheck-repo)"
+  make_human_ticket "$repo" 1
+
+  run_ralph "$repo" status batch
+  assert_eq "$ST" 0 "warnings never change the exit code"
+  assert_contains "$OUT" \
+    "warning: batch/issues/01-ticket.md is a human ticket with no ticket that Checks: it" \
+    "warns about the missing checker"
+fi
+
+if case_is "warning: a human ticket with no handoff file"; then
+  repo="$(make_repo 1 warn-nohandoff-repo)"
+  make_human_ticket "$repo" 1 none
+
+  run_ralph "$repo" status batch
+  assert_eq "$ST" 0 "warnings never change the exit code"
+  assert_contains "$OUT" "warning: batch/issues/01-ticket.md has no Handoff: file" \
+    "warns about the missing handoff"
+fi
+
+if case_is "warning: a Handoff: line naming a file that does not exist"; then
+  repo="$(make_repo 1 warn-missinghandoff-repo)"
+  make_human_ticket "$repo" 1
+  rm "$repo/batch/handoff/01-ticket.md"
+  git -C "$repo" commit --quiet -am "the handoff file went missing"
+
+  run_ralph "$repo" status batch
+  assert_eq "$ST" 0 "warnings never change the exit code"
+  assert_contains "$OUT" "warning: batch/issues/01-ticket.md has no Handoff: file" \
+    "warns the same way as a missing line"
+fi
+
+if case_is "warning: a check ticket that is not immediately after the ticket it checks"; then
+  repo="$(make_repo 3 warn-notadjacent-repo)"
+  make_human_ticket "$repo" 1
+  make_check_ticket "$repo" 3 1
+  { echo '<!-- ORDER:BEGIN -->'
+    echo 'batch/issues/01-ticket.md'
+    echo 'batch/issues/02-ticket.md'
+    echo 'batch/issues/03-ticket.md'
+    echo '<!-- ORDER:END -->'; } > "$repo/batch/order.md"
+  git -C "$repo" add -A && git -C "$repo" commit --quiet -m "order.md puts 02 in between"
+
+  run_ralph "$repo" status batch
+  assert_eq "$ST" 0 "warnings never change the exit code"
+  assert_contains "$OUT" \
+    "warning: batch/issues/03-ticket.md should come right after batch/issues/01-ticket.md in order.md" \
+    "warns that the checker is out of place"
+fi
+
+if case_is "warning: a Checks: line naming no ticket in the batch"; then
+  repo="$(make_repo 2 warn-unresolved-repo)"
+  sed -i 's/^\*\*Status:\*\* todo/&\n**Checks:** 99-nowhere.md/' "$repo/batch/issues/02-ticket.md"
+  git -C "$repo" commit --quiet -am "ticket 2 checks nothing that exists"
+
+  run_ralph "$repo" status batch
+  assert_eq "$ST" 0 "warnings never change the exit code"
+  assert_contains "$OUT" \
+    "warning: batch/issues/02-ticket.md Checks: 99-nowhere.md, which is not a ticket in this batch" \
+    "warns about the unresolved name"
+fi
+
+if case_is "with the human word off, only the check-ticket warnings still apply"; then
+  repo="$(make_repo 2 warn-humanoff-repo)"
+  sed -i 's/^\*\*Status:\*\* todo/**Status:** ready-for-human/' "$repo/batch/issues/01-ticket.md"
+  sed -i 's/^\*\*Status:\*\* todo/&\n**Checks:** 99-nowhere.md/' "$repo/batch/issues/02-ticket.md"
+  git -C "$repo" commit --quiet -am "ticket 1 human, ticket 2 checks nothing real"
+
+  RALPH_HUMAN_WORD= run_ralph "$repo" status batch
+  assert_eq "$ST" 0 "still exits 0"
+  assert_missing "$OUT" "is a human ticket with no ticket" "warning 1 is skipped"
+  assert_missing "$OUT" "has no Handoff:" "warning 2 is skipped"
+  assert_contains "$OUT" "which is not a ticket in this batch" "warning 4 still applies"
+fi
+
+if case_is "dry-run at a human ticket still shows the marked listing and warnings"; then
+  repo="$(make_repo 1 warn-dryrun-repo)"
+  make_human_ticket "$repo" 1
+
+  run_ralph "$repo" dry-run batch
+  assert_eq "$ST" 0 "exits 0"
+  assert_contains "$OUT" "  1  batch/issues/01-ticket.md   [HUMAN]" "the listing is marked"
+  assert_contains "$OUT" \
+    "warning: batch/issues/01-ticket.md is a human ticket with no ticket that Checks: it" \
+    "and the warning is printed"
+  assert_contains "$OUT" "Would stop before batch/issues/01-ticket.md" "still says it would stop"
 fi
 
 if case_is "the start-of-run sweep renames a finished ticket and leaves a dirty tree alone"; then

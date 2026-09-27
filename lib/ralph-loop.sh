@@ -273,6 +273,36 @@ mark_ticket_done_on_disk() {    # mark_ticket_done_on_disk TICKET
 
 next_sh() { bash "$RALPH_TOOL_DIR/ralph-next.sh" "$BATCH_DIR" "$@"; }
 
+# The remaining tickets, numbered exactly as plain `nl -w3 -s'  '` would, but with a human
+# ticket marked `[HUMAN]` and a check ticket marked `[CHECKS <name>]` — the one listing
+# `status` and `dry-run` both print, so the two views cannot disagree. A batch with neither
+# kind of ticket prints exactly what plain numbering would.
+print_remaining_marked() {    # print_remaining_marked < ticket-list
+  local n=0 ticket mark checks_name
+  while IFS= read -r ticket; do
+    [ -n "$ticket" ] || continue
+    n=$((n + 1))
+    mark=""
+    if ralph_ticket_needs_human "$ticket"; then
+      mark="   [HUMAN]"
+    else
+      checks_name="$(ralph_ticket_field "$ticket" Checks)"
+      [ -n "$checks_name" ] && mark="   [CHECKS $checks_name]"
+    fi
+    say "$(printf '%3d  %s%s' "$n" "$ticket" "$mark")"
+  done
+}
+
+# How many of the remaining tickets are human tickets.
+human_tickets_remaining() {
+  local count=0 ticket
+  while IFS= read -r ticket; do
+    [ -n "$ticket" ] || continue
+    ralph_ticket_needs_human "$ticket" && count=$((count + 1))
+  done < <(next_sh --list)
+  printf '%s' "$count"
+}
+
 # The arguments that make a rerun ask for what this run asked for.
 resume_args() {
   if [ "$MAX_ITERATIONS" -gt 0 ]; then printf ' %s' "$MAX_ITERATIONS"; else printf ' --unlimited'; fi
@@ -358,9 +388,12 @@ ralph_exec_load "$RALPH_EXEC" || exit 1
 # Status / dry-run modes exit before anything is spent
 # ---------------------------------------------------------------------------
 progress_line() {
-  local counts
+  local counts human_remaining line
   counts=$(next_sh --count) || return 1
-  say "Tickets done: ${counts% *} / ${counts#* }"
+  human_remaining=$(human_tickets_remaining)
+  line="Tickets done: ${counts% *} / ${counts#* }"
+  [ "$human_remaining" -gt 0 ] && line="$line  ·  human tickets remaining: $human_remaining"
+  say "$line"
 }
 
 if [ "$MODE" = "status" ]; then
@@ -368,12 +401,35 @@ if [ "$MODE" = "status" ]; then
   progress_line || exit 1
   say ""
   if next_ticket=$(next_sh); then
-    say "Next: $next_ticket"
+    if ralph_ticket_needs_human "$next_ticket"; then
+      say "Next: $next_ticket   [HUMAN — the loop will not run until you do it]"
+    else
+      say "Next: $next_ticket"
+    fi
     say ""
     say "Remaining, in order:"
-    next_sh --list | nl -w3 -s'  '
+    next_sh --list | print_remaining_marked
+    say ""
+    if ralph_ticket_needs_human "$next_ticket"; then
+      human_ticket_note "$next_ticket"
+    else
+      human_ticket=""
+      pos=0
+      while IFS= read -r t; do
+        pos=$((pos + 1))
+        if ralph_ticket_needs_human "$t"; then human_ticket="$t"; break; fi
+      done < <(next_sh --list)
+      if [ -n "$human_ticket" ]; then
+        say "The loop will run $((pos - 1)) ticket(s), then stop at $human_ticket for a human."
+      fi
+    fi
   else
     say "Nothing left — every ticket in this batch is done."
+  fi
+  warnings="$(ralph_human_warnings)"
+  if [ -n "$warnings" ]; then
+    say ""
+    printf '%s\n' "$warnings"
   fi
   exit 0
 fi
@@ -450,7 +506,12 @@ if [ "$MODE" = "dry-run" ]; then
   progress_line
   say ""
   say "Would run, in this order:"
-  next_sh --list | nl -w3 -s'  '
+  next_sh --list | print_remaining_marked
+  dry_run_warnings="$(ralph_human_warnings)"
+  if [ -n "$dry_run_warnings" ]; then
+    say ""
+    printf '%s\n' "$dry_run_warnings"
+  fi
   say ""
   say "Exec:    $(exec_describe)"
   say "Model:   $RALPH_MODEL   Effort: $RALPH_EFFORT"
