@@ -39,6 +39,8 @@ done
 export RALPH_BATCH="$BATCH_INPUT"
 # shellcheck source=ralph-config.sh
 source "$RALPH_TOOL_DIR/ralph-config.sh" || exit 1
+# shellcheck source=ralph-human.sh
+source "$RALPH_TOOL_DIR/ralph-human.sh" || exit 1
 
 [ -f "$ORDER_FILE" ] || {
   echo "ralph order: $ORDER_FILE does not exist — run: ralph init $BATCH_DIR" >&2
@@ -65,6 +67,48 @@ if [ "${#tickets[@]}" -eq 0 ]; then
   exit 0
 fi
 
+# Human tickets and check tickets change how the order is chosen, so the agent is told
+# about them only when this batch actually has one — an ordinary batch gets the prompt it
+# always got.
+human_tickets=()
+has_checks=0
+for t in "${tickets[@]}"; do
+  ralph_ticket_needs_human "$t" && human_tickets+=("$t")
+  [ -n "$(ralph_ticket_field "$t" Checks)" ] && has_checks=1
+done
+
+HUMAN_SECTION=""
+if [ "${#human_tickets[@]}" -gt 0 ]; then
+  HUMAN_SECTION=$(cat <<HUMAN_EOF
+
+
+HUMAN TICKETS. These tickets are done by a person, not by the loop:
+$(for t in "${human_tickets[@]}"; do printf -- '- %s\n' "$t"; done)
+The loop stops at the first human ticket it reaches and runs nothing after it until a
+person has finished it. So, for each human ticket:
+- it comes after every ticket it depends on;
+- every ticket that depends on it — directly, or through another ticket — comes after it;
+- it goes as LATE as those two rules allow: every ticket that does not depend on it,
+  directly or transitively, goes before it, so the unattended stretch before each stop is
+  as long as possible.
+In the prose above the order block, name each human ticket, the tickets that wait on it,
+and why it sits where it does.
+HUMAN_EOF
+)
+fi
+
+CHECK_SECTION=""
+if [ "$has_checks" -eq 1 ]; then
+  CHECK_SECTION=$(cat <<CHECK_EOF
+
+
+CHECK TICKETS. A ticket with a \`Checks:\` line verifies the ticket it names. It goes
+IMMEDIATELY after that ticket, with nothing between them: an unrelated ticket in between
+could build on work that has not been checked yet.
+CHECK_EOF
+)
+fi
+
 # Ordering is a much smaller job than implementing a ticket, so it defaults to RALPH_MODEL
 # rather than automatically riding whatever the tickets themselves run on — set
 # RALPH_ORDERING_MODEL in ralph.conf to point it at something cheaper. Effort stays fixed
@@ -81,7 +125,9 @@ next.
 Read every ticket listed below and the current $ORDER_FILE. Then edit
 $ORDER_FILE in place, and change nothing else:
 
-1. Decide a run order, weighing three things:
+1. Decide a run order, weighing these in priority order: dependencies first, then
+   human-ticket placement and check-ticket adjacency (see below, when this batch has
+   either), then importance, then load.
    - DEPENDENCIES. A ticket that reads or builds on something another ticket creates must
      come after it. Two tickets that touch the same file or area should be adjacent, so a
      conflict between them is a sequential edit rather than a merge.
@@ -98,6 +144,10 @@ $ORDER_FILE in place, and change nothing else:
    repo-relative ticket paths, one per line, inside the existing code fence.
 4. Do not edit any ticket file. Do not invent a ticket that is not in the list below, and
    do not drop one that is.
+${HUMAN_SECTION}${CHECK_SECTION}
+
+A ticket's \`Blocked by:\` line, when it has one, is an explicit dependency: honour it
+exactly.
 
 Tickets in $BATCH_DIR:
 $(for t in "${tickets[@]}"; do printf -- '- %s\n' "$t"; done)
@@ -124,3 +174,7 @@ cost=$(node -e '
 
 echo "ralph order: wrote $ORDER_FILE${cost:+ (cost \$$cost)}"
 echo "             review it — this is a first pass, not a guarantee."
+
+warnings="$(ralph_human_warnings)"
+[ -n "$warnings" ] && printf '%s\n' "$warnings"
+exit 0

@@ -1,6 +1,6 @@
 # 04: `ralph order` places human and check tickets
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Blocked by:** 03
 
@@ -32,11 +32,11 @@ Full design: `.scratch/human-tickets/plan.md` — the `ralph-order.sh` section.
 
 **Acceptance criteria:**
 
-- [ ] A smoke case puts a stub `claude` first on `PATH` that captures the `-p` prompt and
+- [x] A smoke case puts a stub `claude` first on `PATH` that captures the `-p` prompt and
       prints `{"total_cost_usd":0}`, so `ralph order` runs with no model and no cost
-- [ ] With a human ticket and a check ticket in the batch, the captured prompt has the
+- [x] With a human ticket and a check ticket in the batch, the captured prompt has the
       human-tickets section naming the human ticket, and the check-tickets section
-- [ ] With neither, both sections are absent, and the `Blocked by:` sentence is still there
-- [ ] With a human ticket that has no check ticket, `ralph order` prints that warning after
+- [x] With neither, both sections are absent, and the `Blocked by:` sentence is still there
+- [x] With a human ticket that has no check ticket, `ralph order` prints that warning after
       ordering and still exits 0
-- [ ] `bash test/smoke.sh` passes in full
+- [x] `bash test/smoke.sh` passes in full

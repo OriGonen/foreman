@@ -1440,5 +1440,94 @@ if case_is "the start-of-run sweep renames a finished ticket and leaves a dirty 
 fi
 
 # ---------------------------------------------------------------------------
+# Ordering
+# ---------------------------------------------------------------------------
+
+# A stub `claude` on PATH for `ralph order`: captures the `-p` prompt to
+# RALPH_ORDER_PROMPT_LOG and prints a placeholder response, so ordering runs with no model
+# and no cost. Prints the stub's own directory — put it first on PATH.
+make_claude_stub() {
+  local dir="$WORK/claude-stub"
+  mkdir -p "$dir"
+  cat > "$dir/claude" <<'STUB'
+#!/bin/bash
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -p) shift; [ -n "${RALPH_ORDER_PROMPT_LOG:-}" ] && printf '%s' "$1" > "$RALPH_ORDER_PROMPT_LOG" ;;
+  esac
+  shift
+done
+echo '{"total_cost_usd":0}'
+STUB
+  chmod +x "$dir/claude"
+  printf '%s' "$dir"
+}
+
+# order.md need only exist for `ralph order` to run — it always re-derives the ticket list
+# itself (--unordered). But `ralph_human_warnings` reads the batch through `--all`, which DOES
+# honour order.md, so the block has to list every ticket already in batch/issues, or an empty
+# block reads as an empty batch.
+write_order_stub() {    # write_order_stub REPO
+  local repo="$1"
+  { echo '<!-- ORDER:BEGIN -->'
+    for f in "$repo"/batch/issues/*.md; do echo "batch/issues/$(basename "$f")"; done
+    echo '<!-- ORDER:END -->'; } > "$repo/batch/order.md"
+  git -C "$repo" add -A && git -C "$repo" commit --quiet -m "order.md stub"
+}
+
+if case_is "ralph order runs with a stub claude, spending no money and needing no model"; then
+  repo="$(make_repo 2 order-stub-repo)"
+  write_order_stub "$repo"
+  log="$WORK/order-stub-prompt.txt"
+
+  PATH="$(make_claude_stub):$PATH" RALPH_ORDER_PROMPT_LOG="$log" run_ralph "$repo" order batch
+  assert_eq "$ST" 0 "ralph order exits 0 against the stub"
+  assert_contains "$OUT" "wrote batch/order.md" "it reports writing order.md"
+  [ -f "$log" ] && pass || fail "the stub captured a prompt"
+  assert_contains "$(cat "$log")" "Tickets in batch:" "the prompt lists the batch's tickets"
+fi
+
+if case_is "the ordering prompt names human tickets and check tickets"; then
+  repo="$(make_repo 3 order-human-repo)"
+  make_human_ticket "$repo" 2
+  make_check_ticket "$repo" 3 2
+  write_order_stub "$repo"
+  log="$WORK/order-human-prompt.txt"
+
+  PATH="$(make_claude_stub):$PATH" RALPH_ORDER_PROMPT_LOG="$log" run_ralph "$repo" order batch
+  assert_eq "$ST" 0 "ralph order still exits 0"
+  prompt="$(cat "$log")"
+  assert_contains "$prompt" "HUMAN TICKETS" "the human-tickets section is present"
+  assert_contains "$prompt" "batch/issues/02-ticket.md" "naming the human ticket"
+  assert_contains "$prompt" "CHECK TICKETS" "the check-tickets section is present"
+  assert_contains "$prompt" "Blocked by" "and the Blocked by: sentence is always there"
+fi
+
+if case_is "with neither kind of ticket, the ordering prompt has no human or check sections"; then
+  repo="$(make_repo 2 order-plain-repo)"
+  write_order_stub "$repo"
+  log="$WORK/order-plain-prompt.txt"
+
+  PATH="$(make_claude_stub):$PATH" RALPH_ORDER_PROMPT_LOG="$log" run_ralph "$repo" order batch
+  assert_eq "$ST" 0 "ralph order exits 0"
+  prompt="$(cat "$log")"
+  assert_missing "$prompt" "HUMAN TICKETS" "no human-tickets section"
+  assert_missing "$prompt" "CHECK TICKETS" "no check-tickets section"
+  assert_contains "$prompt" "Blocked by" "the Blocked by: sentence is still there"
+fi
+
+if case_is "ralph order warns about a human ticket with no check ticket, and still exits 0"; then
+  repo="$(make_repo 1 order-warn-repo)"
+  make_human_ticket "$repo" 1
+  write_order_stub "$repo"
+
+  PATH="$(make_claude_stub):$PATH" run_ralph "$repo" order batch
+  assert_eq "$ST" 0 "warnings never change the exit code"
+  assert_contains "$OUT" \
+    "warning: batch/issues/01-ticket.md is a human ticket with no ticket that Checks: it" \
+    "and the warning is printed after ordering"
+fi
+
+# ---------------------------------------------------------------------------
 printf '\n%s passed, %s failed\n' "$passed" "$failed"
 [ "$failed" -eq 0 ]
