@@ -1,6 +1,6 @@
 # 03: Status shows human and check tickets, and warns about missing pieces
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Blocked by:** 02
 
@@ -39,13 +39,13 @@ Full design: `.scratch/human-tickets/plan.md` — "Warnings" and the `status` mo
 
 **Acceptance criteria:**
 
-- [ ] With a human ticket third and its check ticket fourth, `status` marks them `[HUMAN]` and
+- [x] With a human ticket third and its check ticket fourth, `status` marks them `[HUMAN]` and
       `[CHECKS 03-….md]`, shows `human tickets remaining: 1`, says it will run 2 tickets then
       stop at the human ticket, and prints no warning
-- [ ] With the human ticket next, the `Next:` line marks it and the note follows, naming the
+- [x] With the human ticket next, the `Next:` line marks it and the note follows, naming the
       handoff file
-- [ ] Each of the four warnings appears in its own case, and `status` still exits 0
-- [ ] `dry-run` shows the same markings and warnings
-- [ ] The existing status case asserts no `[HUMAN]`, no `human tickets remaining` and no
+- [x] Each of the four warnings appears in its own case, and `status` still exits 0
+- [x] `dry-run` shows the same markings and warnings
+- [x] The existing status case asserts no `[HUMAN]`, no `human tickets remaining` and no
       `warning:` — its output is unchanged
-- [ ] New smoke cases cover the above, and `bash test/smoke.sh` passes in full
+- [x] New smoke cases cover the above, and `bash test/smoke.sh` passes in full
