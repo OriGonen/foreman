@@ -1,6 +1,6 @@
 # 06: A skill writes the followup tickets and handoff files a batch's human tickets need
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Blocked by:** 05
 
@@ -99,24 +99,24 @@ what it adds; that it never overwrites a handoff file and is safe to re-run).
 
 **Acceptance criteria:**
 
-- [ ] `skills/ralph-human-followup-tickets/SKILL.md` exists, is user-invoked, and covers steps
+- [x] `skills/ralph-human-followup-tickets/SKILL.md` exists, is user-invoked, and covers steps
       1–6 above: the label mapping and the `ralph.conf` line, adding only what is missing, the
       handoff file contents including the secret rule, the followup ticket's name, title,
       fields, observable-only criteria and both outcomes verbatim, the self-check, the commit,
       and the fixed closing message
-- [ ] The skill says it never classifies, splits, re-statuses or renumbers a ticket, never edits
+- [x] The skill says it never classifies, splits, re-statuses or renumbers a ticket, never edits
       another ticket's `Blocked by:`, and never overwrites a handoff file
-- [ ] Warnings 1 and 2 end with `run /ralph-human-followup-tickets`; warnings 3 and 4 are
+- [x] Warnings 1 and 2 end with `run /ralph-human-followup-tickets`; warnings 3 and 4 are
       unchanged; the smoke assertions for them are updated
-- [ ] `bash install.sh` (smoke case with `HOME` and `CLAUDE_CONFIG_DIR` in a temp dir, `--to` a
+- [x] `bash install.sh` (smoke case with `HOME` and `CLAUDE_CONFIG_DIR` in a temp dir, `--to` a
       temp dir) installs the shims and a copy of the skill carrying the marker
-- [ ] Re-running it after changing the checkout's SKILL.md replaces the copy without `--force`
-- [ ] A skill directory of that name without the marker makes `install.sh` exit non-zero and
+- [x] Re-running it after changing the checkout's SKILL.md replaces the copy without `--force`
+- [x] A skill directory of that name without the marker makes `install.sh` exit non-zero and
       write nothing; `--force` overwrites it
-- [ ] `--uninstall` removes a marked copy and leaves an unmarked one; `--no-skill` installs no
+- [x] `--uninstall` removes a marked copy and leaves an unmarked one; `--no-skill` installs no
       skill
-- [ ] `ralph doctor` warns when the installed copy differs from the checkout's, and is silent
+- [x] `ralph doctor` warns when the installed copy differs from the checkout's, and is silent
       when they match or when no copy is installed
-- [ ] `install.sh`'s header and `--help` and the README's Install and "Human tickets" sections
+- [x] `install.sh`'s header and `--help` and the README's Install and "Human tickets" sections
       describe the skill and the flags
-- [ ] `bash test/smoke.sh` passes in full
+- [x] `bash test/smoke.sh` passes in full

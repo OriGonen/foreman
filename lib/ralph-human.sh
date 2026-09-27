@@ -139,8 +139,8 @@ ralph_human_warnings() {
     # entirely when the human word is off — nothing is ever "human" then.
     if [ "$is_done" -eq 0 ] && [ -n "$RALPH_HUMAN_PATTERN" ] && ralph_ticket_needs_human "$ticket"; then
       checker="$(printf '%s\n' "$tickets" | _ralph_checkers_of "$ticket" | head -n 1)"
-      [ -n "$checker" ] || printf 'warning: %s is a human ticket with no ticket that Checks: it\n' "$ticket"
-      [ -n "$(ralph_handoff_path "$ticket")" ] || printf 'warning: %s has no Handoff: file\n' "$ticket"
+      [ -n "$checker" ] || printf 'warning: %s is a human ticket with no ticket that Checks: it — run /ralph-human-followup-tickets\n' "$ticket"
+      [ -n "$(ralph_handoff_path "$ticket")" ] || printf 'warning: %s has no Handoff: file — run /ralph-human-followup-tickets\n' "$ticket"
     fi
 
     # 3 & 4: a not-done followup ticket out of place, or naming nothing in the batch. Keyed on

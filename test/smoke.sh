@@ -1330,7 +1330,7 @@ if case_is "warning: a human ticket with no followup ticket"; then
   run_ralph "$repo" status batch
   assert_eq "$ST" 0 "warnings never change the exit code"
   assert_contains "$OUT" \
-    "warning: batch/issues/01-ticket.md is a human ticket with no ticket that Checks: it" \
+    "warning: batch/issues/01-ticket.md is a human ticket with no ticket that Checks: it — run /ralph-human-followup-tickets" \
     "warns about the missing checker"
 fi
 
@@ -1340,7 +1340,7 @@ if case_is "warning: a human ticket with no handoff file"; then
 
   run_ralph "$repo" status batch
   assert_eq "$ST" 0 "warnings never change the exit code"
-  assert_contains "$OUT" "warning: batch/issues/01-ticket.md has no Handoff: file" \
+  assert_contains "$OUT" "warning: batch/issues/01-ticket.md has no Handoff: file — run /ralph-human-followup-tickets" \
     "warns about the missing handoff"
 fi
 
@@ -1352,7 +1352,7 @@ if case_is "warning: a Handoff: line naming a file that does not exist"; then
 
   run_ralph "$repo" status batch
   assert_eq "$ST" 0 "warnings never change the exit code"
-  assert_contains "$OUT" "warning: batch/issues/01-ticket.md has no Handoff: file" \
+  assert_contains "$OUT" "warning: batch/issues/01-ticket.md has no Handoff: file — run /ralph-human-followup-tickets" \
     "warns the same way as a missing line"
 fi
 
@@ -1407,7 +1407,7 @@ if case_is "dry-run at a human ticket still shows the marked listing and warning
   assert_eq "$ST" 0 "exits 0"
   assert_contains "$OUT" "  1  batch/issues/01-ticket.md   [HUMAN]" "the listing is marked"
   assert_contains "$OUT" \
-    "warning: batch/issues/01-ticket.md is a human ticket with no ticket that Checks: it" \
+    "warning: batch/issues/01-ticket.md is a human ticket with no ticket that Checks: it — run /ralph-human-followup-tickets" \
     "and the warning is printed"
   assert_contains "$OUT" "Would stop before batch/issues/01-ticket.md" "still says it would stop"
 fi
@@ -1526,8 +1526,141 @@ if case_is "ralph order warns about a human ticket with no followup ticket, and 
   PATH="$(make_claude_stub):$PATH" run_ralph "$repo" order batch
   assert_eq "$ST" 0 "warnings never change the exit code"
   assert_contains "$OUT" \
-    "warning: batch/issues/01-ticket.md is a human ticket with no ticket that Checks: it" \
+    "warning: batch/issues/01-ticket.md is a human ticket with no ticket that Checks: it — run /ralph-human-followup-tickets" \
     "and the warning is printed after ordering"
+fi
+
+# ---------------------------------------------------------------------------
+# install.sh and the skill copy
+# ---------------------------------------------------------------------------
+
+# A throwaway copy of this checkout's bin/lib/skills/install.sh, so a test can edit its
+# SKILL.md (simulating a pulled update) without touching the real repo. Prints its path.
+make_ralph_checkout() {
+  local name="${1:-checkout}" dir
+  dir="$WORK/$name"
+  mkdir -p "$dir"
+  cp -r "$RALPH_HOME/bin" "$RALPH_HOME/lib" "$RALPH_HOME/skills" "$RALPH_HOME/install.sh" "$dir/"
+  printf '%s' "$dir"
+}
+
+# Runs $1/install.sh with HOME, CLAUDE_CONFIG_DIR and --to all pointed at fresh directories
+# under $WORK/$2, plus any extra arguments. Captures output in $OUT, status in $ST, and sets
+# INSTALL_HOME / INSTALL_CONFIG / INSTALL_BIN for the caller to inspect. Calling it again
+# with the same NAME reuses the same three directories — that is what "re-running
+# install.sh" and "--uninstall after installing" both mean here.
+run_install() {
+  local checkout="$1" name="$2"; shift 2
+  INSTALL_HOME="$WORK/$name-home"
+  INSTALL_CONFIG="$WORK/$name-config"
+  INSTALL_BIN="$WORK/$name-bin"
+  mkdir -p "$INSTALL_HOME" "$INSTALL_CONFIG" "$INSTALL_BIN"
+  OUT="$(HOME="$INSTALL_HOME" CLAUDE_CONFIG_DIR="$INSTALL_CONFIG" bash "$checkout/install.sh" --to "$INSTALL_BIN" "$@" 2>&1)"
+  ST=$?
+}
+
+skill_copy_dir() { printf '%s/skills/ralph-human-followup-tickets' "$1"; }
+
+if case_is "install.sh installs the shims and a marked copy of the skill"; then
+  checkout="$(make_ralph_checkout install-basic-checkout)"
+  run_install "$checkout" install-basic
+
+  assert_eq "$ST" 0 "install.sh exits 0"
+  [ -f "$INSTALL_BIN/ralph" ] && pass || fail "the bash shim was written"
+  [ -f "$INSTALL_BIN/ralph.cmd" ] && pass || fail "the cmd shim was written"
+  [ -f "$(skill_copy_dir "$INSTALL_CONFIG")/SKILL.md" ] && pass || fail "the skill's SKILL.md was copied"
+  [ -f "$(skill_copy_dir "$INSTALL_CONFIG")/.ralph-installed-from" ] && pass || fail "the copy carries the marker"
+  assert_contains "$OUT" "installed skill" "and says so"
+fi
+
+if case_is "re-running install.sh after the checkout's SKILL.md changes replaces the copy, no --force needed"; then
+  checkout="$(make_ralph_checkout install-update-checkout)"
+  run_install "$checkout" install-update
+  assert_eq "$ST" 0 "the first install exits 0"
+
+  printf '\n<!-- a line the pulled update added -->\n' >> "$checkout/skills/ralph-human-followup-tickets/SKILL.md"
+  run_install "$checkout" install-update
+  assert_eq "$ST" 0 "the second install exits 0 without --force"
+  assert_contains "$(cat "$(skill_copy_dir "$INSTALL_CONFIG")/SKILL.md")" \
+    "a line the pulled update added" "the installed copy picked up the change"
+fi
+
+if case_is "a skill directory without the marker refuses and writes nothing; --force overwrites it"; then
+  checkout="$(make_ralph_checkout install-foreign-checkout)"
+  INSTALL_HOME="$WORK/install-foreign-home"
+  INSTALL_CONFIG="$WORK/install-foreign-config"
+  # Deliberately NOT created — a genuine "write nothing" refusal must not even create it.
+  INSTALL_BIN="$WORK/install-foreign-bin"
+  mkdir -p "$INSTALL_HOME" "$(skill_copy_dir "$INSTALL_CONFIG")"
+  printf "someone else's skill\n" > "$(skill_copy_dir "$INSTALL_CONFIG")/SKILL.md"
+
+  OUT="$(HOME="$INSTALL_HOME" CLAUDE_CONFIG_DIR="$INSTALL_CONFIG" bash "$checkout/install.sh" --to "$INSTALL_BIN" 2>&1)"; ST=$?
+  assert_eq "$ST" 1 "refuses without --force"
+  assert_contains "$(cat "$(skill_copy_dir "$INSTALL_CONFIG")/SKILL.md")" \
+    "someone else's skill" "the foreign directory is untouched"
+  [ -e "$INSTALL_BIN" ] && fail "nothing was written, not even the bin directory itself" || pass
+
+  OUT="$(HOME="$INSTALL_HOME" CLAUDE_CONFIG_DIR="$INSTALL_CONFIG" bash "$checkout/install.sh" --to "$INSTALL_BIN" --force 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "--force overwrites it"
+  [ -f "$(skill_copy_dir "$INSTALL_CONFIG")/.ralph-installed-from" ] && pass || fail "the copy now carries the marker"
+fi
+
+if case_is "--uninstall removes a marked copy and leaves an unmarked one alone"; then
+  checkout="$(make_ralph_checkout install-uninstall-checkout)"
+
+  run_install "$checkout" install-uninstall-marked
+  assert_eq "$ST" 0 "the install exits 0"
+  run_install "$checkout" install-uninstall-marked --uninstall
+  assert_eq "$ST" 0 "uninstall exits 0"
+  [ -e "$(skill_copy_dir "$INSTALL_CONFIG")" ] && fail "the marked copy was removed" || pass
+  [ -e "$INSTALL_BIN/ralph" ] && fail "the shims were removed too" || pass
+
+  INSTALL_HOME="$WORK/install-uninstall-foreign-home"
+  INSTALL_CONFIG="$WORK/install-uninstall-foreign-config"
+  INSTALL_BIN="$WORK/install-uninstall-foreign-bin"
+  mkdir -p "$INSTALL_HOME" "$(skill_copy_dir "$INSTALL_CONFIG")" "$INSTALL_BIN"
+  printf "someone else's skill\n" > "$(skill_copy_dir "$INSTALL_CONFIG")/SKILL.md"
+  OUT="$(HOME="$INSTALL_HOME" CLAUDE_CONFIG_DIR="$INSTALL_CONFIG" bash "$checkout/install.sh" --to "$INSTALL_BIN" --uninstall 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "uninstall still exits 0 when there is nothing of its own to remove"
+  [ -f "$(skill_copy_dir "$INSTALL_CONFIG")/SKILL.md" ] && pass || fail "the unmarked directory is left alone"
+fi
+
+if case_is "--no-skill installs only the shims"; then
+  checkout="$(make_ralph_checkout install-noskill-checkout)"
+  run_install "$checkout" install-noskill --no-skill
+
+  assert_eq "$ST" 0 "install.sh exits 0"
+  [ -f "$INSTALL_BIN/ralph" ] && pass || fail "the shims were still installed"
+  [ -e "$(skill_copy_dir "$INSTALL_CONFIG")" ] && fail "no skill directory was created" || pass
+fi
+
+if case_is "ralph doctor warns when the installed skill copy is stale, and is silent otherwise"; then
+  repo="$WORK/doctor-skill-repo"
+  mkdir -p "$repo"
+  git -C "$repo" init --quiet
+  git -C "$repo" config user.name ralph-test
+  git -C "$repo" config user.email test@ralph.invalid
+
+  doctor_home="$WORK/doctor-skill-home"
+  doctor_config="$WORK/doctor-skill-config"
+  doctor_bin="$WORK/doctor-skill-bin"
+  mkdir -p "$doctor_home" "$doctor_config"
+
+  run_doctor() { OUT="$(cd "$repo" && HOME="$doctor_home" CLAUDE_CONFIG_DIR="$doctor_config" "$RALPH" doctor 2>&1)"; ST=$?; }
+
+  run_doctor
+  assert_missing "$OUT" "ralph-human-followup-tickets" "silent before the skill is installed"
+
+  HOME="$doctor_home" CLAUDE_CONFIG_DIR="$doctor_config" bash "$RALPH_HOME/install.sh" --to "$doctor_bin" >/dev/null
+
+  run_doctor
+  assert_missing "$OUT" "STALE" "silent — the installed copy matches this checkout"
+
+  printf '\n<!-- drift -->\n' >> "$(skill_copy_dir "$doctor_config")/SKILL.md"
+  run_doctor
+  assert_contains "$OUT" "STALE" "warns once the installed copy drifts"
+  assert_contains "$OUT" "ralph-human-followup-tickets" "names the skill"
+  assert_contains "$OUT" "install.sh" "and says to re-run it"
 fi
 
 # ---------------------------------------------------------------------------

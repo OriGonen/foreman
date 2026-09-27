@@ -27,9 +27,17 @@ ralph version
 
 `install.sh` writes two small forwarding scripts — `ralph` and `ralph.cmd` — into the first
 personal `bin` directory already on your PATH (`~/bin`, then `~/.local/bin`), so both Git
-Bash and PowerShell get the same command. It writes nothing else and nothing outside that
-directory. `bash install.sh --to <dir>` picks the directory yourself; `--uninstall` removes
-the two shims and leaves the checkout alone.
+Bash and PowerShell get the same command. `bash install.sh --to <dir>` picks the directory
+yourself.
+
+It also copies the `ralph-human-followup-tickets` skill (see "Human tickets" below) into
+`${CLAUDE_CONFIG_DIR:-~/.claude}/skills/ralph-human-followup-tickets/` — a copy, not a
+symlink, marked with the checkout it came from. Re-running `install.sh` replaces a marked
+copy with whatever this checkout now has, no `--force` needed: that is how a pulled update
+reaches it. `--no-skill` installs only the shims; `--force` overwrites a same-named
+directory (shim or skill) this installer didn't write; `--uninstall` removes both, but
+leaves an unmarked directory alone; `ralph doctor` warns, for free, if an installed copy
+ever drifts from this checkout.
 
 Move the checkout later and just re-run `install.sh` to re-point the shims.
 
@@ -172,6 +180,14 @@ only act on once a person has weighed in:
    feedback is concrete enough to act on, or sends 15 back.
 3. **17 — apply the owner's feedback** (agent, `Blocked by: 16`): rewrites the copy to
    match what the owner asked for.
+
+**Writing the handoff files and followup tickets.** A person writes the human tickets
+themselves (with Matt Pocock's `to-tickets`, or by hand), but nothing writes their handoff
+files and followup tickets until `install.sh` puts the `ralph-human-followup-tickets` skill
+in `~/.claude/skills/`. Type `/ralph-human-followup-tickets`, usually right after `to-tickets`
+and before `ralph init`: it adds whichever of the three pieces above each human ticket is
+still missing, never overwrites a handoff file, and tells you what to run next. Running it
+again — on the same batch, or after adding one more human ticket — only adds what is new.
 
 ### Ordering
 

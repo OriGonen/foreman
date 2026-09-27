@@ -15,6 +15,10 @@
 #
 # --fix only ever APPENDS to .gitignore and .gitattributes. It never touches a batch, a
 # ticket, or anything already in those files.
+#
+# It also warns, for free and without affecting the exit code, when install.sh's copy of
+# the ralph-human-followup-tickets skill has drifted from this checkout's — silent
+# whenever there is nothing installed, or it still matches.
 set -uo pipefail
 
 RALPH_TOOL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -57,6 +61,9 @@ fixable=0
 ok()   { printf '  ok    %s\n' "$*"; }
 bad()  { printf '  MISS  %s\n' "$*"; problems=$((problems + 1)); }
 note() { printf '        %s\n' "$*"; }
+# Like bad(), but never touches $problems — for something worth flagging that is not a
+# reason to fail the exit code (the skill-copy staleness check is the one user of this).
+warn() { printf '  STALE %s\n' "$*"; }
 
 echo "ralph doctor"
 echo "  toolkit  $RALPH_HOME ($(git -C "$RALPH_HOME" rev-parse --short HEAD 2>/dev/null || echo 'not a git checkout'))"
@@ -132,6 +139,24 @@ while IFS=' ' read -r tool mode; do
   fi
 done <<< "$runners"
 echo
+
+# ---------------------------------------------------------------------------
+# The installed skill copy, if install.sh put one on this machine. Free (no exit-code
+# change) and silent unless it has drifted from this checkout — install.sh always
+# replaces a marked copy wholesale, so drift only means the checkout moved on since.
+# Matches install.sh's own marker file and CLAUDE_CONFIG_DIR default exactly.
+# ---------------------------------------------------------------------------
+_ralph_skill_name="ralph-human-followup-tickets"
+_ralph_skill_marker=".ralph-installed-from"
+_ralph_skill_copy="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/$_ralph_skill_name"
+_ralph_skill_src="$RALPH_HOME/skills/$_ralph_skill_name"
+if [ -f "$_ralph_skill_copy/$_ralph_skill_marker" ] &&
+   ! diff -rq -x "$_ralph_skill_marker" "$_ralph_skill_src" "$_ralph_skill_copy" >/dev/null 2>&1; then
+  echo "Skill"
+  warn "$_ralph_skill_name — installed copy differs from $_ralph_skill_src"
+  note "run: bash $RALPH_HOME/install.sh"
+  echo
+fi
 
 # ---------------------------------------------------------------------------
 # The two files a consuming repo has to provide itself
