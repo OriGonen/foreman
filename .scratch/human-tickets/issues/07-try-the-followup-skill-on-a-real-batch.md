@@ -1,6 +1,6 @@
 # 07: Try the followup-tickets skill on a real batch
 
-**Status:** ready-for-human
+**Status:** done
 **Handoff:** .scratch/human-tickets/handoff/07-try-the-followup-skill-on-a-real-batch.md
 
 **Blocked by:** 06
@@ -26,10 +26,10 @@ and judging whether its output is right is a judgment call.
 
 **Acceptance criteria:**
 
-- [ ] The skill installs, and Claude Code lists it
-- [ ] The first run added a `Handoff:` line, a handoff file and a followup ticket for every human
+- [x] The skill installs, and Claude Code lists it
+- [x] The first run added a `Handoff:` line, a handoff file and a followup ticket for every human
       ticket, and nothing else
-- [ ] The second run changed nothing
-- [ ] The third run, after `ralph init`, added only the new ticket's pieces and pointed at
+- [x] The second run changed nothing
+- [x] The third run, after `ralph init`, added only the new ticket's pieces and pointed at
       `ralph order`; after ordering, `ralph status` showed no warnings
-- [ ] Everything the skill got wrong or unclear is written down, with the file it concerns
+- [x] Everything the skill got wrong or unclear is written down, with the file it concerns
