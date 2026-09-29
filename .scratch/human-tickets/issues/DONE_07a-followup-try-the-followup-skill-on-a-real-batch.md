@@ -1,6 +1,6 @@
 # 07a: Follow up on 07 — Try the followup-tickets skill on a real batch
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Blocked by:** 07
 
@@ -30,10 +30,10 @@ with any new tickets.
 
 **Acceptance criteria:**
 
-- [ ] Every section of the handoff is answered: no section is left as its placeholder, empty,
+- [x] Every section of the handoff is answered: no section is left as its placeholder, empty,
       or "TBD"
-- [ ] The answers are specific (which files, what the skill wrote, what `ralph status` printed)
+- [x] The answers are specific (which files, what the skill wrote, what `ralph status` printed)
       and speak to each of ticket 07's criteria in turn
-- [ ] The handoff contains no secret value
-- [ ] Every problem the handoff reports is a new `ready-for-agent` ticket in this batch, or the
+- [x] The handoff contains no secret value
+- [x] Every problem the handoff reports is a new `ready-for-agent` ticket in this batch, or the
       handoff reports none
