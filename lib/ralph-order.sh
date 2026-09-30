@@ -76,8 +76,9 @@ fi
 human_tickets=()
 has_checks=0
 for t in "${tickets[@]}"; do
-  ralph_ticket_needs_human "$t" && human_tickets+=("$t")
-  [ -n "$(ralph_ticket_field "$t" Checks)" ] && has_checks=1
+  ralph_ticket_status "$t"
+  [ "$_RALPH_TICKET_HUMAN" = 1 ] && human_tickets+=("$t")
+  [ -n "$_RALPH_TICKET_CHECKS" ] && has_checks=1
 done
 
 HUMAN_SECTION=""

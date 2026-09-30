@@ -208,7 +208,7 @@ budget_label() {
 }
 
 tree_is_dirty() { [ -n "$(git status --porcelain)" ]; }
-ticket_is_done() { grep -q "$RALPH_DONE_PATTERN" "$1"; }
+ticket_is_done() { ralph_ticket_is_done "$1"; }
 
 # ---------------------------------------------------------------------------
 # Marking a finished ticket's file
@@ -282,16 +282,16 @@ next_sh() { ralph_next_answer "${1:-next}"; }
 # `status` and `dry-run` both print, so the two views cannot disagree. A batch with neither
 # kind of ticket prints exactly what plain numbering would.
 print_remaining_marked() {    # print_remaining_marked < ticket-list
-  local n=0 ticket mark checks_name
+  local n=0 ticket mark
   while IFS= read -r ticket; do
     [ -n "$ticket" ] || continue
     n=$((n + 1))
     mark=""
-    if ralph_ticket_needs_human "$ticket"; then
+    ralph_ticket_status "$ticket"
+    if [ "$_RALPH_TICKET_HUMAN" = 1 ]; then
       mark="   [HUMAN]"
-    else
-      checks_name="$(ralph_ticket_field "$ticket" Checks)"
-      [ -n "$checks_name" ] && mark="   [CHECKS $checks_name]"
+    elif [ -n "$_RALPH_TICKET_CHECKS" ]; then
+      mark="   [CHECKS $_RALPH_TICKET_CHECKS]"
     fi
     say "$(printf '%3d  %s%s' "$n" "${ticket##*/}" "$mark")"
   done

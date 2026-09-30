@@ -172,6 +172,69 @@ if [ -z "${RALPH_HUMAN_PATTERN:-}" ] && [ -n "$RALPH_HUMAN_WORD" ]; then
 fi
 RALPH_HUMAN_PATTERN="${RALPH_HUMAN_PATTERN:-}"
 
+# The two patterns above are grep BREs; a ticket's status line is read in-process (see
+# ralph-tickets.sh), where bash matches EREs. Set _RALPH_ERE to an ERE that matches what the BRE
+# does, or return 1 for a BRE this does not translate (a backreference, a GNU word escape, an
+# unclosed bracket) — the caller then falls back to grep, so a pattern is never read differently.
+# Literal ( ) { } | + ? and a leading * are escaped; \( \) \{ \} \| \+ \? lose their backslash.
+# `start` is 1 where a ^ is still an anchor and a * still literal, 2 just after the anchor (a
+# second ^ is then a literal), 0 once something has been matched.
+_ralph_bre_to_ere() {    # _ralph_bre_to_ere BRE
+  local bre="$1" out="" c next i=0 n=${#1} start=1 j
+  while [ "$i" -lt "$n" ]; do
+    c="${bre:i:1}"
+    case "$c" in
+      \\)
+        next="${bre:i+1:1}"
+        case "$next" in
+          '') return 1 ;;
+          '('|'|') out+="$next"; start=1 ;;
+          '{') [[ "${bre:i+2:1}" == [0-9] ]] || return 1    # \{,n\} is grep's, not bash's
+               out+="$next"; start=0 ;;
+          ')'|'}'|'+'|'?') out+="$next"; start=0 ;;
+          [1-9\<\>bBwWsS\`\']) return 1 ;;
+          *) out+="\\$next"; start=0 ;;
+        esac
+        i=$((i + 2)) ;;
+      '[')    # a bracket expression is the same in both, [:classes:] and a leading ] included
+        j=$((i + 1))
+        [ "${bre:j:1}" = '^' ] && j=$((j + 1))
+        [ "${bre:j:1}" = ']' ] && j=$((j + 1))
+        while [ "$j" -lt "$n" ] && [ "${bre:j:1}" != ']' ]; do
+          if [ "${bre:j:1}" = '[' ] && [[ "${bre:j+1:1}" == [:.=] ]]; then
+            next="${bre:j+1:1}"
+            j=$((j + 2))
+            while [ "$j" -lt "$n" ] && ! { [ "${bre:j:1}" = "$next" ] && [ "${bre:j+1:1}" = ']' ]; }; do j=$((j + 1)); done
+            j=$((j + 2))
+          else
+            j=$((j + 1))
+          fi
+        done
+        [ "$j" -lt "$n" ] || return 1
+        out+="${bre:i:j-i+1}"; i=$((j + 1)); start=0 ;;
+      '*') if [ "$start" != 0 ]; then out+='\*'; else out+='*'; fi; i=$((i + 1)); start=0 ;;
+      '^') if [ "$start" = 1 ]; then out+='^'; start=2; else out+='\^'; start=0; fi; i=$((i + 1)) ;;
+      '$')
+        next="${bre:i+1:2}"
+        if [ "$((i + 1))" -eq "$n" ] || [ "$next" = '\)' ] || [ "$next" = '\|' ]; then out+='$'; else out+='\$'; fi
+        i=$((i + 1)); start=0 ;;
+      '('|')'|'{'|'}'|'|'|'+'|'?') out+="\\$c"; i=$((i + 1)); start=0 ;;
+      *) out+="$c"; i=$((i + 1)); start=0 ;;
+    esac
+  done
+  _RALPH_ERE="$out"
+  [[ "" =~ $_RALPH_ERE ]]; [ "$?" -ne 2 ]    # bash itself has the last word on whether it compiles
+}
+
+# Empty means "ask grep": the pattern did not translate. An empty human pattern is the feature
+# switched off, and never reaches either.
+_RALPH_DONE_ERE=""
+_RALPH_HUMAN_ERE=""
+_ralph_bre_to_ere "$RALPH_DONE_PATTERN" && _RALPH_DONE_ERE="$_RALPH_ERE"
+if [ -n "$RALPH_HUMAN_PATTERN" ]; then
+  _ralph_bre_to_ere "$RALPH_HUMAN_PATTERN" && _RALPH_HUMAN_ERE="$_RALPH_ERE"
+fi
+
 # A ticket that has landed with every checklist box ticked is renamed to ${prefix}<name> by
 # the loop (see mark_ticket_done_on_disk), so a directory listing shows what is finished.
 # Set it empty to leave ticket files alone. `${VAR-default}`, not `:-`, so empty sticks.

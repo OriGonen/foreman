@@ -1383,6 +1383,46 @@ if case_is "status marks human and followup tickets and says where the loop will
   assert_contains "$OUT" "  4  04-ticket.md   [CHECKS 03-ticket.md]" "checker included"
 fi
 
+if case_is "a Checks: line reads the same bold or plain, with CRLF, and with trailing spaces"; then
+  repo="$(make_repo 5 checks-forms-repo)"
+  # 2: plain, no bold. 3: bold, trailing spaces. 4: a CRLF file, trailing space before the CR.
+  # 5: a value with nothing after the colon, so the first Checks: line wins and is empty.
+  sed -i 's|^\*\*Status:\*\* todo|&\nChecks: 01-ticket.md|' "$repo/batch/issues/02-ticket.md"
+  sed -i 's|^\*\*Status:\*\* todo|&\n**Checks:** 01-ticket.md   |' "$repo/batch/issues/03-ticket.md"
+  sed -i 's|^\*\*Status:\*\* todo|&\n**Checks:** 01-ticket.md |' "$repo/batch/issues/04-ticket.md"
+  sed -i 's/$/\r/' "$repo/batch/issues/04-ticket.md"
+  sed -i 's|^\*\*Status:\*\* todo|&\n**Checks:**\nChecks: 01-ticket.md|' "$repo/batch/issues/05-ticket.md"
+  git -C "$repo" commit --quiet -am "four spellings of Checks:"
+
+  run_ralph "$repo" status batch
+  assert_eq "$ST" 0 "status exits 0"
+  assert_contains "$OUT" "  2  02-ticket.md   [CHECKS 01-ticket.md]" "plain, no bold"
+  assert_contains "$OUT" "  3  03-ticket.md   [CHECKS 01-ticket.md]" "trailing spaces trimmed"
+  assert_contains "$OUT" "  4  04-ticket.md   [CHECKS 01-ticket.md]" "CRLF and trailing space trimmed"
+  assert_contains "$OUT" "  5  05-ticket.md" "an empty first Checks: line is listed"
+  assert_missing "$OUT" "05-ticket.md   [CHECKS" "and is not a followup ticket"
+  assert_missing "$OUT" "batch/issues/02-ticket.md should come right after" "the plain spelling resolves, and 02 is where it belongs"
+  assert_contains "$OUT" "warning: batch/issues/03-ticket.md should come right after batch/issues/01-ticket.md in order.md" \
+    "the trimmed name resolves to its ticket"
+  assert_contains "$OUT" "warning: batch/issues/04-ticket.md should come right after batch/issues/01-ticket.md in order.md" \
+    "and so does the CRLF one"
+  assert_missing "$OUT" "Checks: 01-ticket.md, which is not a ticket" "no spelling fails to resolve"
+fi
+
+if case_is "a custom RALPH_DONE_PATTERN and RALPH_HUMAN_PATTERN are matched as grep patterns"; then
+  repo="$(make_repo 4 custom-pattern-repo)"
+  sed -i 's|^\*\*Status:\*\* todo|State: finished|' "$repo/batch/issues/01-ticket.md"
+  sed -i 's|^\*\*Status:\*\* todo|State: over|' "$repo/batch/issues/02-ticket.md"
+  sed -i 's|^\*\*Status:\*\* todo|State: waiting on someone|' "$repo/batch/issues/03-ticket.md"
+  git -C "$repo" commit --quiet -am "a status line of another shape"
+
+  RALPH_DONE_PATTERN='^State: *\(finished\|over\)$' RALPH_HUMAN_PATTERN='^State: *waiting.*one$' \
+    run_ralph "$repo" status batch
+  assert_contains "$OUT" "Tickets done: 2 / 4" "both alternatives of the done pattern count"
+  assert_contains "$OUT" "Next: 03-ticket.md   [HUMAN" "the custom human pattern marks the next ticket"
+  assert_contains "$OUT" "  2  04-ticket.md" "and the ticket with no State: line is still to do"
+fi
+
 if case_is "status names the human ticket when it is next, with its note"; then
   repo="$(make_repo 2 status-next-human-repo)"
   make_human_ticket "$repo" 1

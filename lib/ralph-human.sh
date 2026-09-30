@@ -8,29 +8,45 @@
 # that knows the marker, the fields a human ticket carries and how a followup ticket names it;
 # everything else asks.
 #
-# Lookup only — each function greps a ticket file, none calls a model, none decides policy.
+# Lookup only — each function reads a ticket file, none calls a model, none decides policy.
 
-# The batch's ticket list comes from ralph-tickets.sh, in-process: a `Checks:` lookup is asked
-# several times per command, and used to start a new `ralph next` — and re-load the config —
-# for each.
+# The batch's ticket list, and what each ticket's file says about its status, come from
+# ralph-tickets.sh, in-process: a `Checks:` lookup is asked several times per command, and used
+# to start a new `ralph next` — and re-load the config — for each. The human marker is matched
+# there, in the same read that answers "done"; what it MEANS is decided here.
 # shellcheck source=ralph-tickets.sh
 source "$RALPH_TOOL_DIR/ralph-tickets.sh" || return 1 2>/dev/null || exit 1
 
 # Not done, and marked as a human ticket. Done wins: a human ticket its person has set to
 # `done` is done, whatever else its file says. An empty pattern (RALPH_HUMAN_WORD= switches
-# the feature off) matches nothing — never hand it to grep, where it would match every line.
+# the feature off) matches nothing: the read never matches against an empty pattern, where it
+# would match every line.
 ralph_ticket_needs_human() {    # ralph_ticket_needs_human TICKET
-  [ -n "$RALPH_HUMAN_PATTERN" ] || return 1
-  [ -f "$1" ] || return 1
-  grep -q "$RALPH_DONE_PATTERN" "$1" && return 1
-  grep -q "$RALPH_HUMAN_PATTERN" "$1"
+  ralph_ticket_status "$1"
+  [ "$_RALPH_TICKET_HUMAN" = 1 ]
 }
 
 # The trimmed value of the first `NAME:` line — anchored at the start, bold optional, so
-# '**Handoff:** x' and 'Handoff: x' read alike. Prints nothing when there is none.
+# '**Handoff:** x' and 'Handoff: x' read alike. Prints nothing when there is none. `Checks` is
+# answered from the ticket's one read; any other name reads the file in bash.
+# Callers that ask per ticket use ralph_ticket_status and take _RALPH_TICKET_CHECKS, which
+# costs no subshell.
 ralph_ticket_field() {    # ralph_ticket_field TICKET NAME
-  sed -n -e "s/^\\(\\*\\*\\)\\{0,1\\}$2:\\(\\*\\*\\)\\{0,1\\} *//p" "$1" 2>/dev/null |
-    head -n 1 | tr -d '\r' | sed -e 's/[[:space:]]*$//'
+  local line re
+  if [ "$2" = Checks ]; then
+    ralph_ticket_status "$1"
+    [ -z "$_RALPH_TICKET_CHECKS" ] || printf '%s\n' "$_RALPH_TICKET_CHECKS"
+    return 0
+  fi
+  [ -f "$1" ] || return 0
+  re="^(\\*\\*)?$2:(\\*\\*)? *(.*)\$"
+  while IFS= read -r line || [ -n "$line" ]; do
+    if _ralph_field_of "$line" "$re"; then
+      [ -z "$_RALPH_FIELD_VALUE" ] || printf '%s\n' "$_RALPH_FIELD_VALUE"
+      return 0
+    fi
+  done < "$1"
+  return 0
 }
 
 # The `Handoff:` file of TICKET, resolved like an order.md entry: as given if it exists, else
@@ -95,7 +111,8 @@ _ralph_checkers_of() {    # _ralph_checkers_of TICKET < all-tickets
   all="$(cat)"
   while IFS= read -r candidate; do
     [ -f "$candidate" ] || continue
-    name="$(ralph_ticket_field "$candidate" Checks)"
+    ralph_ticket_status "$candidate"
+    name="$_RALPH_TICKET_CHECKS"
     [ -n "$name" ] || continue
     [ "$(printf '%s\n' "$all" | _ralph_match_ticket "$name")" = "$ticket" ] && printf '%s\n' "$candidate"
   done <<< "$all"
@@ -106,7 +123,7 @@ _ralph_checkers_of() {    # _ralph_checkers_of TICKET < all-tickets
 ralph_pending_checker() {    # ralph_pending_checker TICKET
   local ticket="$1" candidate
   while IFS= read -r candidate; do
-    grep -q "$RALPH_DONE_PATTERN" "$candidate" && continue
+    ralph_ticket_is_done "$candidate" && continue
     printf '%s' "$candidate"
     return 0
   done < <(_ralph_batch_tickets | _ralph_checkers_of "$ticket")
@@ -138,13 +155,15 @@ ralph_human_warnings() {
 
   while IFS= read -r ticket; do
     [ -n "$ticket" ] || continue
-    is_done=0
-    grep -q "$RALPH_DONE_PATTERN" "$ticket" 2>/dev/null && is_done=1
+    ralph_ticket_status "$ticket"
+    is_done="$_RALPH_TICKET_DONE"
+    name="$_RALPH_TICKET_CHECKS"
 
     # 1 & 2: a not-done human ticket with no checker, or no usable handoff file. Skipped
     # entirely when the human word is off — nothing is ever "human" then.
-    if [ "$is_done" -eq 0 ] && [ -n "$RALPH_HUMAN_PATTERN" ] && ralph_ticket_needs_human "$ticket"; then
-      checker="$(printf '%s\n' "$tickets" | _ralph_checkers_of "$ticket" | head -n 1)"
+    if [ "$_RALPH_TICKET_HUMAN" = 1 ]; then
+      checker="$(printf '%s\n' "$tickets" | _ralph_checkers_of "$ticket")"
+      checker="${checker%%$'\n'*}"    # the first, if several check it
       [ -n "$checker" ] || printf 'warning: %s is a human ticket with no ticket that Checks: it — run /ralph-human-followup-tickets\n' "$ticket"
       [ -n "$(ralph_handoff_path "$ticket")" ] || printf 'warning: %s has no Handoff: file — run /ralph-human-followup-tickets\n' "$ticket"
     fi
@@ -152,7 +171,6 @@ ralph_human_warnings() {
     # 3 & 4: a not-done followup ticket out of place, or naming nothing in the batch. Keyed on
     # `Checks:` and order only — the checked ticket may already be done.
     if [ "$is_done" -eq 0 ]; then
-      name="$(ralph_ticket_field "$ticket" Checks)"
       if [ -n "$name" ]; then
         target="$(printf '%s\n' "$tickets" | _ralph_match_ticket "$name")"
         if [ -z "$target" ]; then

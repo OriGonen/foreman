@@ -18,11 +18,107 @@
 # snapshot every question recomputes the list, exactly as a fresh `ralph next` always did, so
 # holding one is only ever a saving, never a requirement for a correct answer.
 #
-# What a snapshot holds is the list of ticket PATHS. Whether a ticket has landed is read from
-# the ticket's own file at the time of each question.
+# What a snapshot holds is the list of ticket PATHS, and what each ticket's file says about
+# its status (below), read once when the snapshot is taken. With no snapshot held, a ticket's
+# file is read at the time of each question.
 
 _RALPH_TICKETS=()
 _RALPH_TICKETS_HELD=0     # 1 while a snapshot of the ordered list is held
+
+# ---------------------------------------------------------------------------
+# What a ticket's file says about its status
+#
+# Three things are asked of a ticket, over and over within one command: is it done (its
+# status line matches RALPH_DONE_PATTERN), is it a human ticket (RALPH_HUMAN_PATTERN — what that
+# means is ralph-human.sh's to say), and what does its `Checks:` line name. Each is answered by
+# ONE pass over the file, in bash: the patterns are matched as EREs derived from the configured
+# BREs (ralph-config.sh), and no process is started per question. A pattern that did not
+# translate is handed to grep, once, for that pass, so a pattern never reads differently.
+#
+# ralph_ticket_status TICKET sets the answers in variables rather than printing them, so asking
+# costs no subshell either:
+#   _RALPH_TICKET_DONE    1 if the ticket has landed
+#   _RALPH_TICKET_HUMAN   1 if it is a human ticket — never when it is done: done wins
+#   _RALPH_TICKET_CHECKS  the trimmed value of its first `Checks:` line, empty if none
+# A file that is not there has landed nothing, is nobody's ticket and checks nothing.
+# ---------------------------------------------------------------------------
+declare -A _RALPH_TS_DONE=() _RALPH_TS_HUMAN=() _RALPH_TS_CHECKS=()    # the held snapshot's reads
+_RALPH_TICKET_DONE=0
+_RALPH_TICKET_HUMAN=0
+_RALPH_TICKET_CHECKS=""
+_RALPH_FIELD_VALUE=""
+_RALPH_CHECKS_RE='^(\*\*)?Checks:(\*\*)? *(.*)$'
+
+# Is LINE a `NAME:` line, matched by RE (a regex whose third group is the value)? Sets
+# _RALPH_FIELD_VALUE to the value with CRs dropped and trailing whitespace trimmed, so a
+# CRLF file and a trailing space read like a clean one.
+_ralph_field_of() {    # _ralph_field_of LINE RE
+  [[ $1 =~ $2 ]] || return 1
+  _RALPH_FIELD_VALUE="${BASH_REMATCH[3]//$'\r'/}"
+  _RALPH_FIELD_VALUE="${_RALPH_FIELD_VALUE%"${_RALPH_FIELD_VALUE##*[![:space:]]}"}"
+}
+
+# Read FILE once and set the three answers, whatever is held.
+_ralph_ticket_read() {    # _ralph_ticket_read FILE
+  local file="$1" line human=0 have_checks=0
+  _RALPH_TICKET_DONE=0
+  _RALPH_TICKET_HUMAN=0
+  _RALPH_TICKET_CHECKS=""
+  [ -f "$file" ] || return 0
+
+  while IFS= read -r line || [ -n "$line" ]; do
+    if [ "$_RALPH_TICKET_DONE" = 0 ] && [ -n "$_RALPH_DONE_ERE" ] && [[ $line =~ $_RALPH_DONE_ERE ]]; then
+      _RALPH_TICKET_DONE=1
+    fi
+    # The empty-pattern rule: no human ERE, whether the feature is off (empty pattern) or the
+    # pattern did not translate (grep's turn, below), never reaches the match — bash, like
+    # grep, would match every line against an empty pattern.
+    if [ "$human" = 0 ] && [ -n "$_RALPH_HUMAN_ERE" ] && [[ $line =~ $_RALPH_HUMAN_ERE ]]; then
+      human=1
+    fi
+    if [ "$have_checks" = 0 ] && _ralph_field_of "$line" "$_RALPH_CHECKS_RE"; then
+      have_checks=1
+      _RALPH_TICKET_CHECKS="$_RALPH_FIELD_VALUE"
+    fi
+  done < "$file"
+
+  [ -n "$_RALPH_DONE_ERE" ] || { grep -q "$RALPH_DONE_PATTERN" "$file" && _RALPH_TICKET_DONE=1; }
+  if [ -n "$RALPH_HUMAN_PATTERN" ] && [ -z "$_RALPH_HUMAN_ERE" ]; then
+    grep -q "$RALPH_HUMAN_PATTERN" "$file" && human=1
+  fi
+  [ "$_RALPH_TICKET_DONE" = 1 ] || _RALPH_TICKET_HUMAN=$human
+  return 0
+}
+
+# Set the three answers for TICKET: from the held snapshot if it has read this ticket, else by
+# reading the file now.
+ralph_ticket_status() {    # ralph_ticket_status TICKET
+  if [ "$_RALPH_TICKETS_HELD" = 1 ] && [ -n "$1" ] && [ -n "${_RALPH_TS_DONE[$1]+set}" ]; then
+    _RALPH_TICKET_DONE="${_RALPH_TS_DONE[$1]}"
+    _RALPH_TICKET_HUMAN="${_RALPH_TS_HUMAN[$1]}"
+    _RALPH_TICKET_CHECKS="${_RALPH_TS_CHECKS[$1]}"
+  else
+    _ralph_ticket_read "$1"
+  fi
+}
+
+# Has TICKET landed?
+ralph_ticket_is_done() {    # ralph_ticket_is_done TICKET
+  ralph_ticket_status "$1"
+  [ "$_RALPH_TICKET_DONE" = 1 ]
+}
+
+# Read every ticket in _RALPH_TICKETS once, for the snapshot.
+_ralph_status_hold() {
+  local ticket
+  _RALPH_TS_DONE=(); _RALPH_TS_HUMAN=(); _RALPH_TS_CHECKS=()
+  for ticket in "${_RALPH_TICKETS[@]}"; do
+    _ralph_ticket_read "$ticket"
+    _RALPH_TS_DONE[$ticket]="$_RALPH_TICKET_DONE"
+    _RALPH_TS_HUMAN[$ticket]="$_RALPH_TICKET_HUMAN"
+    _RALPH_TS_CHECKS[$ticket]="$_RALPH_TICKET_CHECKS"
+  done
+}
 
 # An order entry may be written repo-relative (".scratch/b/issues/01.md") or relative to
 # the batch ("issues/01.md"). Accept both; complain about neither-resolves.
@@ -143,6 +239,7 @@ _ralph_tickets_get() {    # _ralph_tickets_get KIND
 ralph_tickets_hold() {
   _RALPH_TICKETS_HELD=0
   _ralph_tickets_compute ordered || return $?
+  _ralph_status_hold
   _RALPH_TICKETS_HELD=1
 }
 
@@ -151,6 +248,7 @@ ralph_tickets_hold() {
 ralph_tickets_release() {
   _RALPH_TICKETS_HELD=0
   _RALPH_TICKETS=()
+  _RALPH_TS_DONE=(); _RALPH_TS_HUMAN=(); _RALPH_TS_CHECKS=()
 }
 
 # Print what `ralph next` prints for MODE, and return what it exits with: 0 fine, 1 nothing
@@ -174,7 +272,7 @@ ralph_next_answer() {    # ralph_next_answer next|--list|--count|--all|--unorder
   case "$mode" in
     --count|--list)
       for ticket in "${_RALPH_TICKETS[@]}"; do
-        if grep -q "$RALPH_DONE_PATTERN" "$ticket"; then
+        if ralph_ticket_is_done "$ticket"; then
           done_count=$((done_count + 1))
         else
           remaining+=("$ticket")
@@ -183,7 +281,7 @@ ralph_next_answer() {    # ralph_next_answer next|--list|--count|--all|--unorder
       ;;
     next)
       for ticket in "${_RALPH_TICKETS[@]}"; do
-        grep -q "$RALPH_DONE_PATTERN" "$ticket" || { remaining=("$ticket"); break; }
+        ralph_ticket_is_done "$ticket" || { remaining=("$ticket"); break; }
       done
       ;;
   esac
