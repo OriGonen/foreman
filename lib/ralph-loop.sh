@@ -426,7 +426,8 @@ VERDICT_FILE="$(mktemp)"
 # because exec_run is now the head of a pipeline rather than a command substitution — see
 # the call site for why that matters.
 PAYLOAD_FILE="$(mktemp)"
-trap 'rm -f "$VERDICT_FILE" "$PAYLOAD_FILE"' EXIT
+# exec_cleanup is optional: an adapter that keeps a file of its own removes it here.
+trap 'rm -f "$VERDICT_FILE" "$PAYLOAD_FILE"; ! declare -F exec_cleanup >/dev/null || exec_cleanup' EXIT
 
 # The one thing that differs between a plain run and a watched one, on this side of the
 # seam. ralph-stream.cjs is in the pipeline either way — in plain mode it is a pass-through

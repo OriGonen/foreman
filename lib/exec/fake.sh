@@ -61,18 +61,33 @@ exec_required_tool() { printf ''; }
 exec_default_permission_mode() { printf 'acceptEdits'; }
 
 exec_preflight() { return 0; }
-exec_prepare()   { return 0; }
 
 exec_describe() { printf 'fake (no agent is run)'; }
 
 # The loop calls exec_run inside a command substitution, so the call count cannot live in
-# a variable — that subshell's increment would be thrown away. It lives in a file keyed on
-# the loop's own PID, which command substitution does not change.
-_FAKE_CALLS_FILE="${TMPDIR:-/tmp}/ralph-fake-$$.calls"
+# a variable — that subshell's increment would be thrown away. It lives in a file instead,
+# one per run: exec_prepare makes it (empty, so the count starts at zero) and exec_cleanup
+# removes it when the loop exits. It is NOT keyed on the PID — under Git Bash PIDs are small
+# and recycled, so a leftover file from an old run would hand a new run a stale count.
+_FAKE_CALLS_FILE=""
+
+exec_prepare() {
+  _FAKE_CALLS_FILE="$(mktemp "${TMPDIR:-/tmp}/ralph-fake.XXXXXX")" || {
+    warn "fake: cannot create the call counter under ${TMPDIR:-/tmp}"
+    return 1
+  }
+}
+
+# Optional hook, called from the loop's EXIT trap. Safe before exec_prepare has run.
+exec_cleanup() {
+  [ -z "$_FAKE_CALLS_FILE" ] || rm -f "$_FAKE_CALLS_FILE"
+  _FAKE_CALLS_FILE=""
+}
 
 _fake_bump() {
   local n=0
-  [ -f "$_FAKE_CALLS_FILE" ] && n=$(cat "$_FAKE_CALLS_FILE" 2>/dev/null)
+  [ -n "$_FAKE_CALLS_FILE" ] || { warn "fake: exec_run called before exec_prepare"; return 2; }
+  n=$(cat "$_FAKE_CALLS_FILE" 2>/dev/null)
   [[ "$n" =~ ^[0-9]+$ ]] || n=0
   n=$((n + 1))
   printf '%s' "$n" > "$_FAKE_CALLS_FILE"

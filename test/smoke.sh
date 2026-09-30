@@ -675,6 +675,20 @@ if case_is "a checkpoint turn is recorded as its own row and its cost is in the 
   assert_contains "$OUT" "every recorded iteration landed" "a salvaged stall is not flagged as a failure"
 fi
 
+if case_is "a fake run leaves no call counter behind"; then
+  # The counter used to be keyed on the loop's PID and never removed, so a recycled PID
+  # (routine under Git Bash) started the next run's count from an old value and skipped the
+  # first entry of RALPH_FAKE_BEHAVIOUR.
+  repo="$(make_repo 2 fake-counter-repo)"
+  scratch="$WORK/fake-counter-tmp"
+  mkdir -p "$scratch"
+  TMPDIR="$scratch" RALPH_FAKE_BEHAVIOUR=dirty:land run_ralph "$repo" run batch --unlimited
+
+  assert_eq "$ST" 0 "the run finishes"
+  assert_eq "$(ls "$scratch" | grep -c 'ralph-fake')" "0" "no counter file is left in TMPDIR"
+  assert_eq "$(grep -c . "$repo/batch/ralph-runs.jsonl")" "4" "and the run counted from zero, so dirty ran first"
+fi
+
 if case_is "the prompt tells the agent how to hand a ticket off"; then
   repo="$(make_repo 1 handoff-prompt-repo)"
   printf 'RALPH_CONTEXT_BUDGET_TOKENS=123456\n' >> "$repo/batch/ralph.conf"

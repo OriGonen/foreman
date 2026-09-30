@@ -16,6 +16,9 @@
 #   exec_default_permission_mode  the --permission-mode to use when the user named none
 #   exec_preflight          cheap checks; 0 ready, 1 stop. Warns for itself.
 #   exec_prepare            expensive setup, once per run, before any money is spent
+#   exec_cleanup            OPTIONAL. Remove anything exec_prepare left behind; called from
+#                           the loop's EXIT trap, so it must be safe to call before
+#                           exec_prepare has run, and more than once
 #   exec_describe           one line naming the arrangement, for status and dry-run
 #   exec_commit_note        the prompt's paragraph about committing
 #   exec_tree_dirty         is the agent's tree dirty right now? 0 no, 1 yes. Read-only —
