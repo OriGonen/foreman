@@ -6,7 +6,17 @@
 #   bash test/smoke.sh            run everything
 #   bash test/smoke.sh dirty      run the cases whose name contains "dirty"
 #
-# The fixtures live under $TMPDIR and are removed on exit unless RALPH_KEEP_FIXTURES=1.
+# Output: each selected case announces itself as `[position/total] name` when it starts and
+# prints its elapsed seconds when it ends, so a slow run can be told from a hung one; with a
+# filter, position and total count only the selected cases. The run ends with the slowest
+# cases (up to 10), the `N passed, M failed` line, and `N passed in Mm Ss` for pasting into
+# a ticket's closing note. Timing is bash's own clock — no processes per case. (Sub-second
+# resolution needs bash 5's EPOCHREALTIME; older bash falls back to whole seconds.)
+#
+# The fixtures live under $TMPDIR and are removed on exit, on Ctrl-C, and when the run is
+# terminated or its terminal closes — unless RALPH_KEEP_FIXTURES=1. (A hard kill cannot be
+# trapped. A signal that arrives mid-case is acted on when that case's current command
+# returns; Ctrl-C also reaches the command itself.)
 set -uo pipefail
 
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,10 +27,62 @@ FILTER="${1:-}"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/ralph-smoke-XXXXXX")"
 cleanup() { [ "${RALPH_KEEP_FIXTURES:-0}" = 1 ] || rm -rf "$WORK"; }
 trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
 
 passed=0
 failed=0
 CASE=""
+
+# --- progress and timing ----------------------------------------------------
+# Sets NOW_US to microseconds since some fixed point, from bash's own clock.
+now_us() {
+  if [ -n "${EPOCHREALTIME:-}" ]; then NOW_US="${EPOCHREALTIME/[.,]/}"
+  else NOW_US=$((SECONDS * 1000000)); fi
+}
+
+# The number of cases the filter selects, counted off this file's own `if case_is` lines.
+CASE_TOTAL=0
+case_line_re='^if case_is "(.*)"; then$'
+while IFS= read -r line; do
+  [[ $line =~ $case_line_re ]] || continue
+  case "${BASH_REMATCH[1]}" in *"$FILTER"*) CASE_TOTAL=$((CASE_TOTAL + 1)) ;; esac
+done < "${BASH_SOURCE[0]}"
+
+CASE_N=0
+CASE_OPEN=0
+CASE_START_US=0
+CASE_TIMES=()
+now_us; RUN_START_US=$NOW_US
+
+# Closes the case in progress, if any: prints its elapsed seconds and remembers them.
+case_end() {
+  [ "$CASE_OPEN" = 1 ] || return 0
+  local ms tenths
+  now_us
+  ms=$(( (NOW_US - CASE_START_US) / 1000 ))
+  printf -v tenths '%d.%d' $((ms / 1000)) $(( (ms % 1000) / 100 ))
+  printf '  (%ss)\n' "$tenths"
+  CASE_TIMES+=("$ms $CASE")
+  CASE_OPEN=0
+}
+
+# After the last case: the slowest cases and the total, for the closing note.
+timing_report() {
+  local line ms total_s
+  case_end
+  if [ "${#CASE_TIMES[@]}" -gt 0 ]; then
+    printf '\nSlowest cases:\n'
+    while IFS= read -r line; do
+      ms="${line%% *}"
+      printf '  %4d.%d s  %s\n' $((ms / 1000)) $(( (ms % 1000) / 100 )) "${line#* }"
+    done < <(printf '%s\n' "${CASE_TIMES[@]}" | sort -rn | head -n 10)
+  fi
+  now_us
+  total_s=$(( (NOW_US - RUN_START_US) / 1000000 ))
+  TOTAL_TEXT="$((total_s / 60))m $((total_s % 60))s"
+}
 
 # --- assertions -------------------------------------------------------------
 fail() { printf '  FAIL  %s\n' "$*" >&2; failed=$((failed + 1)); }
@@ -78,8 +140,16 @@ run_ralph() {
 done_count() { grep -l '^\*\*Status:\*\* implemented' "$1"/batch/issues/*.md 2>/dev/null | grep -c . ; }
 
 case_is() {
+  case_end
   CASE="$1"
-  case "$CASE" in *"$FILTER"*) printf '\n%s\n' "$CASE"; return 0 ;; esac
+  case "$CASE" in
+    *"$FILTER"*)
+      CASE_N=$((CASE_N + 1))
+      printf '\n[%d/%d] %s\n' "$CASE_N" "$CASE_TOTAL" "$CASE"
+      CASE_OPEN=1
+      now_us; CASE_START_US=$NOW_US
+      return 0 ;;
+  esac
   return 1
 }
 
@@ -1664,5 +1734,7 @@ if case_is "ralph doctor warns when the installed skill copy is stale, and is si
 fi
 
 # ---------------------------------------------------------------------------
+timing_report
 printf '\n%s passed, %s failed\n' "$passed" "$failed"
+printf '%s passed in %s\n' "$passed" "$TOTAL_TEXT"
 [ "$failed" -eq 0 ]
