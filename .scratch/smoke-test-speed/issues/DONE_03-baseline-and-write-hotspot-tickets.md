@@ -161,7 +161,8 @@ is by payoff as it will be when each ticket is worked, and every later ticket ta
 
 ### Is a `parallel-cases` ticket needed?
 
-**Not clearly, so none is written; it is decided by ticket 09's last step.** The effort's
+**Not clearly, so none is written; it is decided by ticket 04's last step** (04 is worked
+last, by the owner's choice, so the final suite total is taken there). The effort's
 target is 10 minutes against a baseline of 38m 41s, a factor of 3.9. The suite is 2,317 s of
 which fixtures are about 55 s; the rest is `ralph` calls.
 
@@ -172,14 +173,14 @@ The benchmark times `status` only, and most of the suite's time is `ralph run`, 
 the same config load per iteration but has not been measured, so the two cases above cannot be
 told apart yet. Both are close enough to ten minutes that a ticket written now would either be
 needless or arrive without evidence. Parallelism also carries the flakiness risk the spec
-wants taken only when needed (user story 30). Ticket 09's last step compares the suite total
+wants taken only when needed (user story 30). Ticket 04's last step compares the suite total
 from the final full run with ten minutes and, if over, writes `parallel-cases` as ticket 10,
-blocked by 09, opening with the shared-state audit.
+blocked by 04, opening with the shared-state audit.
 
 ## Notes
 
-- **Ticket 04's before number** is the Git Bash suite total above: **38m 41s** (466 passed). It is written into ticket 04. The time of one fixture build before is 0.65-0.80 s.
-- **Ticket 04 is worth less than the spec assumed.** Fixtures are about 2% of the suite, not a large share; 04 will save perhaps 45 s of 38 minutes. It still earns its place for the clarity of the harness, and nothing above depends on it, but it is the lowest-payoff ticket and is best done after 05-07 if the order is the owner's to choose. The owner decides whether to keep it in the effort.
+- **Ticket 04's before number** is the Git Bash suite total above: **38m 41s** (466 passed). It is written into ticket 04 as the baseline; since 04 is now worked last, its own "before" is the suite total taken just before it starts. The time of one fixture build before is 0.65-0.80 s.
+- **Ticket 04 is worth less than the spec assumed.** Fixtures are about 2% of the suite, not a large share; 04 will save perhaps 45 s of 38 minutes. It still earns its place for the clarity of the harness, and nothing above depends on it, but it is the lowest-payoff ticket and the owner chose to work it last, after 05-09.
 - **`report.md` overstated some of its numbers for this machine today**: `make_repo 3` 0.7 s (not 2.5 s), `ralph status` 13.4 s (not 28-30 s). `report.md`'s figures came from a busier moment; the ones here are from an idle machine, same session, and are the ones to compare against.
 - **The baseline run was interrupted by a crash of the desktop app** part-way through (the agent session died; the suite's own bash processes did not). The suite completed, its log is whole, and no other work ran on the machine. The figure is a single run.
 - The trace script used for the classification is a scratch tool, not committed: it needs only the `PS4` above and a count by `file:function` of the first line each process ran. The benchmark's `BY_CMD` table is the repeatable measure; ticket 05's closing note should record its own before and after by the same method.

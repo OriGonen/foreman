@@ -3,13 +3,13 @@
 **What to build:** `_ralph_path` returns a path by printing it, so each of its six callers
 is a command substitution, which forks. Make it set a named variable for the caller instead,
 and change the callers to match; what path it computes does not change. See `spec.md`, "Path
-helpers". This is the last of the spawn-reduction tickets, and it also closes the question
-the spec left for the end of the library work: whether the suite still needs parallel cases.
+helpers". This is the last of the spawn-reduction tickets. The question the spec left for
+the end of the library work, whether the suite still needs parallel cases, is settled by
+ticket 04, which is worked after it.
 
-**Blocked by:** 03 (the baseline), 05, 06, 07 and 08, so that it is worked last. Its last
-step also needs ticket 04 to have landed or to have been dropped by the owner (03's notes
-say it is the lowest payoff). **This ticket opens with a re-measurement and
-may close having changed nothing.**
+**Blocked by:** 03 (the baseline), 05, 06, 07 and 08, so that it is worked last of the
+spawn-reduction tickets. **This ticket opens with a re-measurement and may close having
+changed nothing.**
 
 **Status:** ready-for-agent
 
@@ -23,4 +23,3 @@ six `$(_ralph_path ...)` substitutions in `ralph-config.sh`, repeated by each of
 - [ ] Behaviour contract: output may change in wording or spacing, but **every existing smoke assertion passes with none edited**; which ticket is next, whether it is a human ticket, whether it has landed and which warnings are raised do not change
 - [ ] The benchmark's before and after are recorded here, median and spawn table
 - [ ] `bash test/smoke.sh` passes in full (unless closed unchanged); the closing note records `Full smoke suite: N passed in Mm Ss`
-- [ ] Last step, always: compare the suite total from the most recent full run (with 04 and 05-08 landed) with the spec's ten minutes. If it is over, write the `parallel-cases` ticket as ticket 10, blocked by this one, opening with the shared-state audit (`spec.md`, user stories 30-32); if it is at or under, say so here, and the effort is finished

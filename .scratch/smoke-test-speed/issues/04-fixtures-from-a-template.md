@@ -8,7 +8,9 @@ repository name) applied after the copy. Every case gets a fresh repository of i
 and no case can tell the difference. See `spec.md` in this directory, "Smoke suite
 harness".
 
-**Blocked by:** 03 (so the baseline measures the untouched suite).
+**Blocked by:** 03 (so the baseline measures the untouched suite). By the owner's choice it
+is worked last, after 05-09 (03's notes: it saves the least time). Nothing in 05-09 depends
+on it.
 
 **Status:** ready-for-agent
 
@@ -20,6 +22,12 @@ harness".
 - [ ] The ticket records the suite total before and after, and the time of one fixture build before and after; the closing note records `Full smoke suite: N passed in Mm Ss`
 - [ ] `test/bench.sh` builds its fixture from the same template (or is checked against it), so the two cannot drift; its numbers still compare with the baseline's
 
-**Before (from 03's baseline, Git Bash, HEAD `0b238c3`):** `Full smoke suite: 466 passed in 38m 41s`.
+- [ ] Last step, always: compare the suite total from this ticket's "after" run (with 05-09 and this ticket landed) with the spec's ten minutes. If it is over, write the `parallel-cases` ticket as ticket 10, blocked by this one, opening with the shared-state audit (`spec.md`, user stories 30-32); if it is at or under, say so here, and the effort is finished
+
+**Baseline (from 03, Git Bash, HEAD `0b238c3`):** `Full smoke suite: 466 passed in 38m 41s`.
 One `make_repo 3` takes 0.65-0.80 s (three builds: 804, 647, 653 ms); the suite builds 79
 fixtures, about 55 s or 2% of the run. The payoff here is therefore small; see 03's notes.
+
+**This ticket's own "before"** is the suite total of the last full run before it starts,
+with 05-09 landed, not the baseline above: take it on a clean tree and record it here. The
+one-fixture-build time before is comparable to the baseline's 0.65-0.80 s.
