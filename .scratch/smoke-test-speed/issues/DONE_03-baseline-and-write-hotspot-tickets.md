@@ -96,7 +96,7 @@ differently).
 **What the trace found that the spec did not list.** `ralph status` runs `bash ralph-next.sh`
 five times (`next_sh`) and once more through `_ralph_batch_tickets`, and each launch
 re-sources `ralph-config.sh` from nothing. With the main script, that is **7 config loads in
-one call, and 269 of the 532 events (50%) are the loads themselves**, 38 per load. Six of the
+one call, and 269 of the 532 events (50%) are the loads themselves**, about 38 per load. Six of the
 seven are avoidable: about 230 events, 43%. The repository-location, path-helper and CRLF
 hotspots are entirely inside that load; they are big only because it runs seven times.
 
@@ -155,7 +155,7 @@ is by payoff as it will be when each ticket is worked, and every later ticket ta
 "before" after the earlier ones have landed.
 
 - **05 is added to the spec's five** because it is the largest payoff by a wide margin and the other hotspots cannot be judged without it. "Once per command, remembered" cannot be met inside one process if each question starts a new process.
-- **08 and 09 open with a re-measurement** and close with a note, changing nothing, if 05 has taken them under 3% of the new total (expected: about 8 and 6 events).
+- **08 and 09 open with a re-measurement** and close with a note, changing nothing, if 05 has taken them under 3% of the new total (expected: about 8 and 6 events, 2-3% of a total of about 300).
 - **Dropped, with a note: the config line-ending check.** 7 events, 1% of the baseline, and all of them in the config load, so after 05 it is 1 event. It is not worth a ticket; if 05 lands as a single load it is already "once per command".
 - **The spec's sixth bucket, "everything else" (25%),** has no ticket of its own. Most of it is the `ralph-next.sh` listing pipelines run six times over (`find`, `sort`, `cut`), which 05 removes by listing once. What remains after 05 will show in its after-table; a residual worth more than about 5% of the new total is a new ticket then.
 

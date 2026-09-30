@@ -16,8 +16,10 @@ is left).
 **Share of the baseline spawns** (532 events, before 05): **107 events (20%)**, every one of
 them outside the config load, so 05 does not remove them. They are 49 `grep` calls (28 in
 `ralph_ticket_needs_human`, 18 in `ralph-next.sh`'s done/remaining split, 3 in
-`ralph_human_warnings`) and 12 `ralph_ticket_field` calls (12 `sed`, 6 `head`, 6 `tr`, and 24
-subshells around them). The 3 tickets are each asked about 6 to 10 times.
+`ralph_human_warnings`); 6 `ralph_ticket_field` calls, each a `sed | head | tr | sed`
+pipeline (12 `sed`, 6 `head`, 6 `tr`); and the 34 subshells around them (24 in
+`ralph_ticket_field`, 6 in `print_remaining_marked`, 4 in `ralph_human_warnings`). The 3
+tickets are each asked about 6 to 10 times.
 
 - [ ] Each ticket's file is read at most once per command for its status line, and the done, human and followup-name answers come from that read
 - [ ] No `grep`, `sed`, `head` or `tr` process is started per question per ticket; the benchmark's `grep` row falls accordingly

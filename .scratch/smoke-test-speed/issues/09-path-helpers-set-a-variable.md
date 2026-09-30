@@ -6,14 +6,16 @@ and change the callers to match; what path it computes does not change. See `spe
 helpers". This is the last of the spawn-reduction tickets, and it also closes the question
 the spec left for the end of the library work: whether the suite still needs parallel cases.
 
-**Blocked by:** 03 (the baseline), 05, and 04. **This ticket opens with a re-measurement and
+**Blocked by:** 03 (the baseline), 05, 06, 07 and 08, so that it is worked last. Its last
+step also needs ticket 04 to have landed or to have been dropped by the owner (03's notes
+say it is the lowest payoff). **This ticket opens with a re-measurement and
 may close having changed nothing.**
 
 **Status:** ready-for-agent
 
 **Share of the baseline spawns** (532 events, before 05): **42 events (8%)**, all of them the
 six `$(_ralph_path ...)` substitutions in `ralph-config.sh`, repeated by each of the 7 loads.
-05 is expected to take them to about 6, about 1% of the new total.
+05 is expected to take them to about 6, about 2% of the new total (about 300 events).
 
 - [ ] First step, before any change: run the benchmark on the tree with 05 landed and record here how many events the `_ralph_path` substitutions still account for
 - [ ] If that is under 3% of the benchmark's total, close this ticket with that number and a note, and change no code. Otherwise carry on below
