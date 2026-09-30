@@ -508,7 +508,8 @@ That tool is manual and is never invoked by the loop.
 | `lib/ralph-exec.sh` | the seam between the loop and where the agent runs — sourced, never run |
 | `lib/exec/*.sh` | one adapter per `RALPH_EXEC` mode; `_`-prefixed files are shared implementation |
 | `lib/ralph-repo.sh` | repo root and batch-relative path: the one place that crosses Windows path syntax — sourced, never run |
-| `lib/ralph-next.sh` | resolves the order against what has landed — also `--list`, `--count`, `--all`, `--unordered` |
+| `lib/ralph-next.sh` | `ralph next`: resolves the order against what has landed — also `--list`, `--count`, `--all`, `--unordered` |
+| `lib/ralph-tickets.sh` | the ticket list and the questions asked of it, as functions `ralph-next.sh` and the loop share, so one command loads its config once — sourced, never run |
 | `lib/ralph-prompt.sh` | assembles one iteration's prompt — sourced, never run |
 | `lib/prompt.template.md` | the five-step prompt, with slots |
 | `lib/ralph-record.cjs` | appends one iteration to both logs; writes the verdict the loop acts on |

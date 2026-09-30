@@ -10,6 +10,12 @@
 #
 # Lookup only — each function greps a ticket file, none calls a model, none decides policy.
 
+# The batch's ticket list comes from ralph-tickets.sh, in-process: a `Checks:` lookup is asked
+# several times per command, and used to start a new `ralph next` — and re-load the config —
+# for each.
+# shellcheck source=ralph-tickets.sh
+source "$RALPH_TOOL_DIR/ralph-tickets.sh" || return 1 2>/dev/null || exit 1
+
 # Not done, and marked as a human ticket. Done wins: a human ticket its person has set to
 # `done` is done, whatever else its file says. An empty pattern (RALPH_HUMAN_WORD= switches
 # the feature off) matches nothing — never hand it to grep, where it would match every line.
@@ -58,7 +64,7 @@ _ralph_ticket_key() {    # _ralph_ticket_key PATH_OR_NAME
 }
 
 # The batch's tickets, in order, done or not.
-_ralph_batch_tickets() { bash "$RALPH_TOOL_DIR/ralph-next.sh" "$BATCH_DIR" --all 2>/dev/null; }
+_ralph_batch_tickets() { ralph_next_answer --all 2>/dev/null; }
 
 # The first of the tickets on stdin whose key is NAME's. The one place a `Checks:` name becomes
 # a ticket.

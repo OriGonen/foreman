@@ -271,7 +271,11 @@ mark_ticket_done_on_disk() {    # mark_ticket_done_on_disk TICKET
   say "   ✓ marked done  ·  $renamed"
 }
 
-next_sh() { bash "$RALPH_TOOL_DIR/ralph-next.sh" "$BATCH_DIR" "$@"; }
+# `ralph next`, asked in-process: the config is already loaded, and a child `bash ralph-next.sh`
+# would source it all again for every question. Same modes, same output, same status (0, 1 for
+# nothing left, 2 for a malformed batch). A snapshot of the list, when one is held, answers
+# without listing the batch again — see ralph-tickets.sh for when to hold and release one.
+next_sh() { ralph_next_answer "${1:-next}"; }
 
 # The remaining tickets, numbered exactly as plain `nl -w3 -s'  '` would, but with a human
 # ticket marked `[HUMAN]` and a followup ticket marked `[CHECKS <name>]` — the one listing
@@ -398,6 +402,9 @@ progress_line() {
 
 if [ "$MODE" = "status" ]; then
   say "Batch: $BATCH_DIR${RALPH_BATCH_NAME:+ ($RALPH_BATCH_NAME)}"
+  # Nothing here changes a ticket, so the list is worked out once and every question below is
+  # answered from it.
+  ralph_tickets_hold || exit 1
   progress_line || exit 1
   say ""
   if next_ticket=$(next_sh); then
@@ -456,8 +463,9 @@ fi
 
 [ -d "$BATCH_DIR" ] || { warn "preflight: no batch directory at $BATCH_DIR"; preflight_failed=1; }
 
-# Validates every ticket path and fails loudly on a typo.
-next_sh --count >/dev/null || preflight_failed=1
+# Validates every ticket path and fails loudly on a typo. It also holds the list for the
+# questions the rest of the preflight asks, which change nothing.
+ralph_tickets_hold || preflight_failed=1
 
 # A dirty tree poisons the per-iteration review base: BASE_REF is HEAD, so anything
 # already modified gets reviewed as though this ticket wrote it.
@@ -480,10 +488,14 @@ fi
 # a rename commit would move HEAD and break stall_marker_matches, losing the automatic rescue.
 # Only in a run — status and dry-run never commit.
 if [ "$MODE" = "run" ] && ! tree_is_dirty; then
+  ralph_tickets_release    # the renames below change the list
   while IFS= read -r swept; do
     mark_ticket_done_on_disk "$swept"
   done < <(next_sh --all)
+  ralph_tickets_hold || exit 1    # the start-up questions below, on the list as it now stands
 fi
+# Whatever list is held here serves the start-up questions only: the loop releases it before
+# its first pass, since every iteration can change the list.
 
 next_ticket=$(next_sh)
 pick_status=$?
@@ -727,6 +739,10 @@ while true; do
     break
   fi
 
+  # The last iteration may have landed, renamed or reordered tickets: whatever list was held
+  # before it is not to be trusted, and nothing below holds a new one.
+  ralph_tickets_release
+
   # Not `if ! TICKET_FILE=$(...)`: after a `!` negation bash reports the *inverted* status
   # in $?, so the "nothing left" case (exit 1) would read as 0 and be mistaken for a
   # crash. Capture the status on its own line.
@@ -738,7 +754,7 @@ while true; do
       say "Every ticket in $BATCH_DIR is done."
       FINAL_STATUS="$EXIT_DONE"
     else
-      warn "ralph-next.sh failed with status $pick_status"
+      warn "ralph next failed with status $pick_status"
       FINAL_STATUS=1
     fi
     break

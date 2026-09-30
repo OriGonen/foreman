@@ -41,6 +41,8 @@ export RALPH_BATCH="$BATCH_INPUT"
 source "$RALPH_TOOL_DIR/ralph-config.sh" || exit 1
 # shellcheck source=ralph-human.sh
 source "$RALPH_TOOL_DIR/ralph-human.sh" || exit 1
+# shellcheck source=ralph-tickets.sh
+source "$RALPH_TOOL_DIR/ralph-tickets.sh" || exit 1
 
 [ -f "$ORDER_FILE" ] || {
   echo "ralph order: $ORDER_FILE does not exist — run: ralph init $BATCH_DIR" >&2
@@ -53,13 +55,14 @@ if ! command -v claude >/dev/null 2>&1; then
   exit 0
 fi
 
-# The batch's own ticket list, from the one file that knows how a batch answers that —
+# The batch's own ticket list, from the one place that knows how a batch answers that
+# (ralph-tickets.sh) —
 # including any RALPH_ISSUES_DIRS the conf sets. `--unordered` rather than `--all` because
 # re-ordering has to see tickets added since order.md was last written.
 tickets=()
 while IFS= read -r f; do
   [ -n "$f" ] && tickets+=("$f")
-done < <(bash "$RALPH_TOOL_DIR/ralph-next.sh" "$BATCH_DIR" --unordered)
+done < <(ralph_next_answer --unordered)
 
 if [ "${#tickets[@]}" -eq 0 ]; then
   echo "ralph order: $BATCH_DIR has no tickets — nothing to order."
