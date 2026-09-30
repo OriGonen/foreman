@@ -5,6 +5,8 @@
 #
 #   bash test/smoke.sh            run everything
 #   bash test/smoke.sh dirty      run the cases whose name contains "dirty"
+#   bash test/bench.sh            not a test: times `ralph status` and counts its spawns
+#                                 (see the header of test/bench.sh)
 #
 # Output: each selected case announces itself as `[position/total] name` when it starts and
 # prints its elapsed seconds when it ends, so a slow run can be told from a hung one; with a
