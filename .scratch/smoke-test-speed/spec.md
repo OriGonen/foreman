@@ -192,5 +192,6 @@ an alternative place for a ticket's "passes in full" check.
   to shorten that suite.
 - Start after ticket 08 of `human-tickets` is committed, so the baseline is measured on a
   clean HEAD.
+- Baseline (ticket 03, 2026-09-30): suite 38m 41s under Git Bash and 1m 56s under WSL; `ralph status` 13.4 s against 0.50 s. The trace found a hotspot the list above does not name: `status` sources the config 7 times, once per `ralph-next.sh` launch (50% of its spawns). It is ticket 05, and it shrinks the repository-location and path-helper hotspots to tickets that open with a re-measurement (08, 09). Fixtures are about 2% of the suite, not a large share; see ticket 03.
 - Eight stale fixture directories from earlier aborted runs (2026-09-07 and 2026-09-27)
   were removed by hand when this spec was written.

@@ -17,4 +17,9 @@ harness".
 - [ ] Fixtures are independent: a case that changes its repository cannot affect another case's
 - [ ] Callers of the fixture builder are unchanged
 - [ ] No existing assertion is edited, and `bash test/smoke.sh` passes in full
-- [ ] The ticket records the suite total before (from 03's baseline) and after, and the time of one fixture build before and after; the closing note records `Full smoke suite: N passed in Mm Ss`
+- [ ] The ticket records the suite total before and after, and the time of one fixture build before and after; the closing note records `Full smoke suite: N passed in Mm Ss`
+- [ ] `test/bench.sh` builds its fixture from the same template (or is checked against it), so the two cannot drift; its numbers still compare with the baseline's
+
+**Before (from 03's baseline, Git Bash, HEAD `0b238c3`):** `Full smoke suite: 466 passed in 38m 41s`.
+One `make_repo 3` takes 0.65-0.80 s (three builds: 804, 647, 653 ms); the suite builds 79
+fixtures, about 55 s or 2% of the run. The payoff here is therefore small; see 03's notes.
