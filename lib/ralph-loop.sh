@@ -234,7 +234,7 @@ ticket_has_unchecked_boxes() { grep -q '^[[:space:]]*[-*+][[:space:]][[:space:]]
 mark_ticket_done_on_disk() {    # mark_ticket_done_on_disk TICKET
   local ticket="$1" base renamed pending
   [ -n "$RALPH_DONE_PREFIX" ] || return 0
-  base="$(basename "$ticket")"
+  base="${ticket##*/}"
   case "$base" in "$RALPH_DONE_PREFIX"*) return 0 ;; esac
   [ -f "$ticket" ] && ticket_is_done "$ticket" || return 0
 
@@ -289,7 +289,7 @@ print_remaining_marked() {    # print_remaining_marked < ticket-list
       checks_name="$(ralph_ticket_field "$ticket" Checks)"
       [ -n "$checks_name" ] && mark="   [CHECKS $checks_name]"
     fi
-    say "$(printf '%3d  %s%s' "$n" "$ticket" "$mark")"
+    say "$(printf '%3d  %s%s' "$n" "${ticket##*/}" "$mark")"
   done
 }
 
@@ -402,9 +402,9 @@ if [ "$MODE" = "status" ]; then
   say ""
   if next_ticket=$(next_sh); then
     if ralph_ticket_needs_human "$next_ticket"; then
-      say "Next: $next_ticket   [HUMAN — the loop will not run until you do it]"
+      say "Next: ${next_ticket##*/}   [HUMAN — the loop will not run until you do it]"
     else
-      say "Next: $next_ticket"
+      say "Next: ${next_ticket##*/}"
     fi
     say ""
     say "Remaining, in order:"
@@ -420,7 +420,7 @@ if [ "$MODE" = "status" ]; then
         if ralph_ticket_needs_human "$t"; then human_ticket="$t"; break; fi
       done < <(next_sh --list)
       if [ -n "$human_ticket" ]; then
-        say "The loop will run $((pos - 1)) ticket(s), then stop at $human_ticket for a human."
+        say "The loop will run $((pos - 1)) ticket(s), then stop at ${human_ticket##*/} for a human."
       fi
     fi
   else

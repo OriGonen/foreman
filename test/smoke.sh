@@ -93,7 +93,7 @@ if case_is "status and dry-run spend nothing and need no runner"; then
   run_ralph "$repo" status batch
   assert_eq "$ST" 0 "status exits 0"
   assert_contains "$OUT" "Tickets done: 0 / 3" "status counts the tickets"
-  assert_contains "$OUT" "batch/issues/01-ticket.md" "status names the next ticket"
+  assert_contains "$OUT" "Next: 01-ticket.md" "status names the next ticket"
   assert_missing "$OUT" "[HUMAN]" "no human tickets, so no marking"
   assert_missing "$OUT" "human tickets remaining" "and no human-ticket count"
   assert_missing "$OUT" "warning:" "and no warnings — this batch has neither kind of ticket"
@@ -1298,17 +1298,17 @@ if case_is "status marks human and followup tickets and says where the loop will
   run_ralph "$repo" status batch
   assert_eq "$ST" 0 "status still exits 0"
   assert_contains "$OUT" "human tickets remaining: 1" "the progress line counts it"
-  assert_contains "$OUT" "  3  batch/issues/03-ticket.md   [HUMAN]" "the human ticket is marked"
-  assert_contains "$OUT" "  4  batch/issues/04-ticket.md   [CHECKS 03-ticket.md]" "and its checker names it"
+  assert_contains "$OUT" "  3  03-ticket.md   [HUMAN]" "the human ticket is marked"
+  assert_contains "$OUT" "  4  04-ticket.md   [CHECKS 03-ticket.md]" "and its checker names it"
   assert_contains "$OUT" \
-    "The loop will run 2 ticket(s), then stop at batch/issues/03-ticket.md for a human." \
+    "The loop will run 2 ticket(s), then stop at 03-ticket.md for a human." \
     "and says where it will stop"
   assert_missing "$OUT" "warning:" "both pieces are in place, so nothing to warn about"
 
   run_ralph "$repo" dry-run batch
   assert_eq "$ST" 0 "dry-run exits 0"
-  assert_contains "$OUT" "  3  batch/issues/03-ticket.md   [HUMAN]" "dry-run marks the same way"
-  assert_contains "$OUT" "  4  batch/issues/04-ticket.md   [CHECKS 03-ticket.md]" "checker included"
+  assert_contains "$OUT" "  3  03-ticket.md   [HUMAN]" "dry-run marks the same way"
+  assert_contains "$OUT" "  4  04-ticket.md   [CHECKS 03-ticket.md]" "checker included"
 fi
 
 if case_is "status names the human ticket when it is next, with its note"; then
@@ -1317,7 +1317,7 @@ if case_is "status names the human ticket when it is next, with its note"; then
 
   run_ralph "$repo" status batch
   assert_eq "$ST" 0 "status exits 0"
-  assert_contains "$OUT" "Next: batch/issues/01-ticket.md   [HUMAN" "Next: is marked"
+  assert_contains "$OUT" "Next: 01-ticket.md   [HUMAN" "Next: is marked"
   assert_contains "$OUT" "batch/issues/01-ticket.md is a human ticket. The loop stops here." \
     "and the note follows"
   assert_contains "$OUT" "batch/handoff/01-ticket.md" "naming the handoff file"
@@ -1405,7 +1405,7 @@ if case_is "dry-run at a human ticket still shows the marked listing and warning
 
   run_ralph "$repo" dry-run batch
   assert_eq "$ST" 0 "exits 0"
-  assert_contains "$OUT" "  1  batch/issues/01-ticket.md   [HUMAN]" "the listing is marked"
+  assert_contains "$OUT" "  1  01-ticket.md   [HUMAN]" "the listing is marked"
   assert_contains "$OUT" \
     "warning: batch/issues/01-ticket.md is a human ticket with no ticket that Checks: it — run /ralph-human-followup-tickets" \
     "and the warning is printed"
