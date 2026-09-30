@@ -46,7 +46,10 @@ Done when you know the human label, the agent label, and whether step 6 owes the
 ### 3. For each human ticket that is not done, add what it is missing
 
 Not done: its file name has no `DONE_` prefix, and its status line is not `done` or
-`implemented`. Add whichever of these three it is missing from the ticket — and only those:
+`implemented`. Add whichever of these three it is missing from the ticket — and only those.
+Every file you write or edit is UTF-8. Write each `—` (in the handoff title and the followup
+ticket title in particular) as that UTF-8 character, never as the Windows-1252 byte 0x97,
+which is not valid UTF-8. The three pieces:
 
 **The `Handoff:` line.** Directly under its status line:
 
@@ -104,8 +107,13 @@ Done when every followup ticket you wrote in step 3 carries this checklist and b
 ### 5. Check your own work
 
 For every not-done human ticket: it has a `Handoff:` line, that file exists, and some
-ticket's `Checks:` line names it. Then commit exactly the files you wrote or edited,
-together, in one commit.
+ticket's `Checks:` line names it. Also, every file you wrote or edited decodes as valid UTF-8
+(for example `iconv -f UTF-8 -t UTF-8 <file> > /dev/null` exits 0); fix any that does not,
+turning each 0x97 back into `—`, and check it again. Only then commit exactly the files you
+wrote or edited, together, in one commit.
+
+Done when every check above passes — every file you wrote or edited is valid UTF-8 — and the
+commit holds exactly those files.
 
 ### 6. Tell the user
 
