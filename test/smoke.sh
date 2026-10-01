@@ -1977,6 +1977,20 @@ if case_is "ralph doctor warns when the installed skill copy is stale, and is si
   assert_contains "$OUT" "install.sh" "and says to re-run it"
 fi
 
+if case_is "ralph finds its toolkit when bash is handed a Windows path, as ralph.cmd does, from any directory"; then
+  # ralph.cmd runs `bash C:\...\bin\ralph`. That path has no '/', so the dispatcher once
+  # resolved RALPH_HOME against the current directory and looked for lib/ one level above it.
+  if command -v cygpath >/dev/null 2>&1; then
+    elsewhere="$WORK/winpath-elsewhere"
+    mkdir -p "$elsewhere"
+    OUT="$(cd "$elsewhere" && bash "$(cygpath -w "$RALPH")" version 2>&1)"; ST=$?
+    assert_eq "$ST" 0 "version exits 0 given a backslash path"
+    assert_contains "$OUT" "$RALPH_HOME" "RALPH_HOME is the checkout, not a path beside the current directory"
+  else
+    pass  # no cygpath, so this is not Windows: a backslash path is just an odd file name
+  fi
+fi
+
 # ---------------------------------------------------------------------------
 # A case process that ran the last case in the file ends here.
 [ "$CASE_OPEN" = 1 ] && case_finish

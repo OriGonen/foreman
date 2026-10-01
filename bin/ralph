@@ -26,7 +26,11 @@ set -uo pipefail
 
 # The directory above this script's, from the shell: `dirname` would be a process, and `${x%/*}`
 # alone is wrong for a bare name and for a file in `/`.
-RALPH_HOME="${BASH_SOURCE[0]%/*}"; [ "$RALPH_HOME" != "${BASH_SOURCE[0]}" ] || RALPH_HOME=.
+#
+# ralph.cmd hands bash a Windows path (C:\...\bin\ralph), which has no '/' to strip, so
+# backslashes are turned into slashes first; otherwise this resolves against the cwd.
+_self="${BASH_SOURCE[0]//\\//}"
+RALPH_HOME="${_self%/*}"; [ "$RALPH_HOME" != "$_self" ] || RALPH_HOME=.
 RALPH_HOME="$(cd "${RALPH_HOME:-/}/.." && pwd)"
 export RALPH_HOME
 
