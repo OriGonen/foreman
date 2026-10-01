@@ -46,6 +46,22 @@ while [ $# -gt 0 ]; do
   shift
 done
 
+# On Windows, a plain `bash` in PowerShell is often the WSL launcher, not Git Bash. It runs
+# this script inside WSL, which installs into the WSL home — a place Windows Claude Code and
+# PowerShell cannot see — and nothing looks wrong. Say so. A warning, not a refusal:
+# installing for WSL itself is legitimate, and nothing here changes what is installed.
+# RALPH_PROC_VERSION stands in for /proc/version so the test can fake the signal.
+if [ -n "${WSL_DISTRO_NAME:-}" ] || grep -qi microsoft "${RALPH_PROC_VERSION:-/proc/version}" 2>/dev/null; then
+  echo "warning: this is running under WSL, so everything below goes into the WSL home,"
+  echo "         $HOME — not your Windows home. Windows Claude Code and PowerShell"
+  echo "         will not see it. To install for Windows, run this from PowerShell:"
+  echo
+  echo "           & \"C:\\Program Files\\Git\\bin\\bash.exe\" install.sh"
+  echo
+  echo "         or from Git Bash: bash install.sh. (Installing for WSL itself? Carry on.)"
+  echo
+fi
+
 SKILL_HOME_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 SKILL_TARGET="$SKILL_HOME_DIR/skills/$RALPH_SKILL_NAME"
 

@@ -1,6 +1,6 @@
 # 09: install.sh warns when it runs under WSL, and the README says how to run it on Windows
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Blocked by:** None (can start immediately)
 
@@ -23,10 +23,18 @@ from Git Bash), and why plain `bash` may not do.
 
 **Acceptance criteria:**
 
-- [ ] Under WSL, `install.sh` prints a warning naming the WSL home it is installing into and the
+- [x] Under WSL, `install.sh` prints a warning naming the WSL home it is installing into and the
       Git Bash command to use for Windows; outside WSL it prints nothing new
-- [ ] The warning does not change the exit code or what is installed
-- [ ] The README's Install section shows the PowerShell command using Git Bash's `bash.exe` and
+- [x] The warning does not change the exit code or what is installed
+- [x] The README's Install section shows the PowerShell command using Git Bash's `bash.exe` and
       says a plain `bash` there may be the WSL launcher
-- [ ] A smoke case covers the detection (forced through an environment variable or a fake
+- [x] A smoke case covers the detection (forced through an environment variable or a fake
       `/proc/version` seam, not a real WSL), and `bash test/smoke.sh` passes in full
+
+**Note:** `install.sh` detects WSL from `WSL_DISTRO_NAME` or `microsoft` in `/proc/version`
+(`RALPH_PROC_VERSION` is the test seam for the latter) and prints a warning, at the top of every
+mode except `--help`, naming `$HOME` and the Git Bash command. Nothing else changed. The README's
+Install section gained the PowerShell command and the reason a plain `bash` may not do. New smoke
+case: "install.sh warns under WSL, ...".
+
+Full smoke suite: 495 passed in 6m 47s

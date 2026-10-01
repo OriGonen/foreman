@@ -25,6 +25,17 @@ bash ~/tools/ralph/install.sh
 ralph version
 ```
 
+From PowerShell, don't use a plain `bash`: there it is often the WSL launcher
+(`...\WindowsApps\bash.exe`), which runs `install.sh` inside WSL and installs into the WSL
+home, where Windows Claude Code and PowerShell can't see it. Use Git Bash's own, from the
+checkout (or run the `bash` line above from Git Bash):
+
+```powershell
+& "C:\Program Files\Git\bin\bash.exe" install.sh
+```
+
+`install.sh` prints a warning if it finds itself running under WSL, but still installs.
+
 `install.sh` writes two small forwarding scripts — `ralph` and `ralph.cmd` — into the first
 personal `bin` directory already on your PATH (`~/bin`, then `~/.local/bin`), so both Git
 Bash and PowerShell get the same command. `bash install.sh --to <dir>` picks the directory

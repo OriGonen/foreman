@@ -1918,6 +1918,36 @@ if case_is "--no-skill installs only the shims"; then
   [ -e "$(skill_copy_dir "$INSTALL_CONFIG")" ] && fail "no skill directory was created" || pass
 fi
 
+if case_is "install.sh warns under WSL, names the WSL home and the Git Bash command, and installs the same"; then
+  checkout="$(make_ralph_checkout install-wsl-checkout)"
+
+  # Not a real WSL: the signal is WSL_DISTRO_NAME, or "microsoft" in /proc/version, which
+  # RALPH_PROC_VERSION lets a test point at a file of its own.
+  OUT="$(HOME="$WORK/install-wsl-home" CLAUDE_CONFIG_DIR="$WORK/install-wsl-config" WSL_DISTRO_NAME=Ubuntu \
+    bash "$checkout/install.sh" --to "$WORK/install-wsl-bin" 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "the warning does not change the exit code"
+  assert_contains "$OUT" "WSL" "says it is running under WSL"
+  assert_contains "$OUT" "$WORK/install-wsl-home" "names the WSL home it is installing into"
+  assert_contains "$OUT" 'C:\Program Files\Git\bin\bash.exe' "gives the Git Bash command for Windows"
+  [ -f "$WORK/install-wsl-bin/ralph" ] && [ -f "$WORK/install-wsl-bin/ralph.cmd" ] && pass || fail "the shims were still installed"
+  [ -f "$(skill_copy_dir "$WORK/install-wsl-config")/SKILL.md" ] && pass || fail "the skill was still installed"
+  assert_contains "$OUT" "installed skill" "and says so"
+
+  # The same signal from /proc/version.
+  printf 'Linux version 5.15.153.1-microsoft-standard-WSL2 (root@build) (gcc)\n' > "$WORK/fake-proc-wsl"
+  OUT="$(HOME="$WORK/install-wsl2-home" CLAUDE_CONFIG_DIR="$WORK/install-wsl2-config" RALPH_PROC_VERSION="$WORK/fake-proc-wsl" \
+    bash "$checkout/install.sh" --to "$WORK/install-wsl2-bin" 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "a /proc/version naming microsoft exits 0 too"
+  assert_contains "$OUT" 'C:\Program Files\Git\bin\bash.exe' "and warns"
+
+  # Outside WSL: nothing new, even with a /proc/version that names something else.
+  printf 'Linux version 6.1.0-18-amd64 (debian-kernel@lists.debian.org)\n' > "$WORK/fake-proc-linux"
+  OUT="$(HOME="$WORK/install-nowsl-home" CLAUDE_CONFIG_DIR="$WORK/install-nowsl-config" RALPH_PROC_VERSION="$WORK/fake-proc-linux" \
+    WSL_DISTRO_NAME= bash "$checkout/install.sh" --to "$WORK/install-nowsl-bin" 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "the install outside WSL exits 0"
+  assert_missing "$OUT" "WSL" "no warning outside WSL"
+fi
+
 if case_is "ralph doctor warns when the installed skill copy is stale, and is silent otherwise"; then
   repo="$WORK/doctor-skill-repo"
   mkdir -p "$repo"
