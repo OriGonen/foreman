@@ -25,4 +25,4 @@ wrote something. Keep the `ralph.conf` line owed by step 2, if any, in both case
 - [x] Any smoke assertion that covers the skill's text is updated, and `bash test/smoke.sh`
       passes in full
 
-**Note:** the full `bash test/smoke.sh` run ended `495 passed, 0 failed` (6m 46s). No smoke assertion covers the skill text, so none changed. Step 6 now has a separate "Nothing was added" message for a run where step 3 wrote or edited nothing; the `ralph.conf` line is appended in both cases.
+**Note:** the full `bash test/smoke.sh` run ended `495 passed, 0 failed` (6m 57s). No smoke assertion covers the skill text, so none changed. Step 6 now has a separate "Nothing was added" message for a run where step 3 wrote or edited nothing; the `ralph.conf` line is appended in both cases.
