@@ -17,6 +17,41 @@
 # The fix is to stop doing arithmetic on paths and let git answer:
 # `git rev-parse --show-prefix`, run from inside the batch, IS the repo-relative path.
 
+# `basename` and `dirname` without the process, and without the subshell a caller needs to
+# read what a command prints: each sets the variable named by its first argument. They answer
+# as the commands do — trailing separators are ignored, a name with none has the directory `.`,
+# and a lone separator is its own base name and directory — so they can stand in anywhere. On
+# Windows the commands cut at a backslash as well as a slash (a RALPH_RUN_LOG may be `C:\x\y`),
+# so these do too.
+#   _ralph_basename VAR PATH      VAR = PATH without its directory
+#   _ralph_dirname  VAR PATH      VAR = PATH without its last component
+case "${OSTYPE:-}" in
+  msys*|cygwin*|win32*) _ralph_seps='\/' ;;
+  *)                    _ralph_seps='/' ;;
+esac
+_ralph_trim_seps() {    # _ralph_trim_seps VAR VALUE: VAR = VALUE without trailing separators, bar a lone one
+  local _rt="$2"
+  while [ "${#_rt}" -gt 1 ] && [ "${_rt%["$_ralph_seps"]}" != "$_rt" ]; do _rt="${_rt%["$_ralph_seps"]}"; done
+  printf -v "$1" '%s' "$_rt"
+}
+_ralph_basename() {
+  local _rp
+  _ralph_trim_seps _rp "$2"
+  case "$_rp" in ["$_ralph_seps"]) ;; *) _rp="${_rp##*["$_ralph_seps"]}" ;; esac
+  printf -v "$1" '%s' "$_rp"
+}
+_ralph_dirname() {
+  local _rp
+  _ralph_trim_seps _rp "$2"
+  case "$_rp" in
+    ["$_ralph_seps"]) ;;
+    *["$_ralph_seps"]*) _ralph_trim_seps _rp "${_rp%["$_ralph_seps"]*}"
+                        [ -n "$_rp" ] || _rp="${2:0:1}" ;;
+    *)                  _rp=. ;;
+  esac
+  printf -v "$1" '%s' "$_rp"
+}
+
 # Absolute path of the repository containing the current directory, normalised through
 # cd+pwd so it is in the shell's own path syntax. Prints nothing and returns 1 if there is
 # no repository here.

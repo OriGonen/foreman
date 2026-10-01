@@ -24,7 +24,9 @@
 # <batch>/issues.
 set -uo pipefail
 
-RALPH_TOOL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# This file's directory, from the shell and not `dirname` (see ralph-config.sh).
+RALPH_TOOL_DIR="${BASH_SOURCE[0]%/*}"; [ "$RALPH_TOOL_DIR" != "${BASH_SOURCE[0]}" ] || RALPH_TOOL_DIR=.
+RALPH_TOOL_DIR="$(cd "${RALPH_TOOL_DIR:-/}" && pwd)"
 
 FORCE=0
 NO_ORDER=0
@@ -86,6 +88,8 @@ if write_if_absent "$BATCH_DIR/ralph.conf"; then
   wrote_any=1
 fi
 
+_ralph_basename init_batch_name "$BATCH_DIR"
+
 # --- order.md --------------------------------------------------------------
 if write_if_absent "$BATCH_DIR/order.md"; then
   # What tickets this batch has is ralph-next.sh's question, not this file's: it is the
@@ -99,7 +103,7 @@ if write_if_absent "$BATCH_DIR/order.md"; then
   done < <(bash "$RALPH_TOOL_DIR/ralph-next.sh" "$BATCH_DIR" --unordered)
 
   {
-    echo "# $(basename "$BATCH_DIR") — implementation order"
+    echo "# $init_batch_name — implementation order"
     echo
     echo "\`ralph-loop.sh\` reads the block at the bottom of this file, takes the first ticket"
     echo "whose Status line is not flipped, and runs exactly that one."
@@ -138,7 +142,7 @@ fi
 # --- progress.txt ----------------------------------------------------------
 if write_if_absent "$BATCH_DIR/progress.txt"; then
   {
-    echo "# $(basename "$BATCH_DIR") — the agent's running notes."
+    echo "# $init_batch_name — the agent's running notes."
     echo "# One short entry per iteration, appended by the agent. The tail of this file is"
     echo "# attached to every later prompt, so length here is a recurring cost."
     echo

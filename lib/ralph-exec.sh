@@ -38,7 +38,9 @@
 # That is the ONLY thing that differs between a plain run and a watched one: there is one
 # exec_run per adapter, never a second code path per mode.
 
-RALPH_EXEC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/exec" 2>/dev/null && pwd)"
+# Beside this file, from the shell and not `dirname` (see ralph-config.sh).
+RALPH_EXEC_DIR="${BASH_SOURCE[0]%/*}"; [ "$RALPH_EXEC_DIR" != "${BASH_SOURCE[0]}" ] || RALPH_EXEC_DIR=.
+RALPH_EXEC_DIR="$(cd "${RALPH_EXEC_DIR:-/}/exec" 2>/dev/null && pwd)"
 
 # The adapters print through these. ralph-loop.sh defines its own first; anything else
 # sourcing an adapter (ralph-prompt.sh, ralph-doctor.sh) gets these.

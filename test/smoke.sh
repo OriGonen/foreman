@@ -1423,6 +1423,45 @@ if case_is "a custom RALPH_DONE_PATTERN and RALPH_HUMAN_PATTERN are matched as g
   assert_contains "$OUT" "  2  04-ticket.md" "and the ticket with no State: line is still to do"
 fi
 
+if case_is "a status line holding . [ * ^ $ or a backslash matches itself only"; then
+  repo="$(make_repo 6 status-line-chars-repo)"
+  line='St.t[u]s*^$\x:'
+  # 1: the line exactly. 2-3: what an unescaped . or [u] would also match. 4: the line, but not
+  # done and the human word. 5: an unescaped * would let `ss` through. 6: no backslash.
+  printf '# T\n\n%s implemented\n' "$line" > "$repo/batch/issues/01-ticket.md"
+  printf '# T\n\n%s implemented\n' 'Stxt[u]s*^$\x:' > "$repo/batch/issues/02-ticket.md"
+  printf '# T\n\n%s implemented\n' 'St.tus*^$\x:' > "$repo/batch/issues/03-ticket.md"
+  printf '# T\n\n%s ready-for-human\n' "$line" > "$repo/batch/issues/04-ticket.md"
+  printf '# T\n\n%s implemented\n' 'St.t[u]ss^$\x:' > "$repo/batch/issues/05-ticket.md"
+  printf '# T\n\n%s implemented\n' 'St.t[u]s*^$x:' > "$repo/batch/issues/06-ticket.md"
+  git -C "$repo" add -A >/dev/null
+  git -C "$repo" commit --quiet -m "a status line of metacharacters"
+
+  RALPH_STATUS_LINE="$line" run_ralph "$repo" status batch
+  assert_eq "$ST" 0 "status exits 0"
+  assert_contains "$OUT" "Tickets done: 1 / 6" "only the ticket carrying the line itself is done"
+  assert_contains "$OUT" "  3  04-ticket.md   [HUMAN]" "the human pattern is escaped the same way"
+  assert_missing "$OUT" "02-ticket.md   [HUMAN" "and no other ticket is a human ticket"
+fi
+
+if case_is "file names are cut the way basename and dirname cut them"; then
+  repo="$(make_repo 1 name-helpers-repo)"
+  paths=("" a a/ a// / /a /a/ /a// a/b a/b/ a//b ./a ../a "a b/c d" /a//b// C:/x/y -x a/-b "a/b.md" ".scratch/b/issues/01-t.md"
+         'C:\x\y.jsonl' 'C:\y' 'a\b' 'a\b\' '\a' '\' 'a/b\c' 'a\b/c')
+  helpers_out="$(cd "$repo" && RALPH_BATCH=batch bash -c '
+    source "$1/lib/ralph-config.sh" || exit 1
+    shift
+    for p in "$@"; do
+      _ralph_basename b "$p"; _ralph_dirname d "$p"
+      printf "%s\t%s\n" "$b" "$d"
+    done' _ "$RALPH_HOME" "${paths[@]}" 2>&1)"
+  want=""
+  for p in "${paths[@]}"; do
+    want+="$(basename -- "$p")"$'\t'"$(dirname -- "$p")"$'\n'
+  done
+  assert_eq "$helpers_out" "${want%$'\n'}" "basename and dirname answers, for every awkward path"
+fi
+
 if case_is "status names the human ticket when it is next, with its note"; then
   repo="$(make_repo 2 status-next-human-repo)"
   make_human_ticket "$repo" 1

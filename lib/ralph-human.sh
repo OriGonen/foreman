@@ -74,7 +74,7 @@ ralph_handoff_path() {    # ralph_handoff_path TICKET
 # it is matched on, so the prefix on either side is irrelevant.
 _ralph_ticket_key() {    # _ralph_ticket_key PATH_OR_NAME
   local base
-  base="$(basename "$1")"
+  _ralph_basename base "$1"
   [ -z "$RALPH_DONE_PREFIX" ] || base="${base#"$RALPH_DONE_PREFIX"}"
   printf '%s' "$base"
 }

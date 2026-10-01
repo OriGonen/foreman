@@ -77,7 +77,9 @@
 #
 set -uo pipefail
 
-RALPH_TOOL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# This file's directory, from the shell and not `dirname` (see ralph-config.sh).
+RALPH_TOOL_DIR="${BASH_SOURCE[0]%/*}"; [ "$RALPH_TOOL_DIR" != "${BASH_SOURCE[0]}" ] || RALPH_TOOL_DIR=.
+RALPH_TOOL_DIR="$(cd "${RALPH_TOOL_DIR:-/}" && pwd)"
 
 EXIT_DONE=0
 EXIT_PAUSED=10
@@ -232,7 +234,7 @@ ticket_is_done() { ralph_ticket_is_done "$1"; }
 ticket_has_unchecked_boxes() { grep -q '^[[:space:]]*[-*+][[:space:]][[:space:]]*\[ \]' "$1"; }
 
 mark_ticket_done_on_disk() {    # mark_ticket_done_on_disk TICKET
-  local ticket="$1" base renamed pending
+  local ticket="$1" base dir renamed pending
   [ -n "$RALPH_DONE_PREFIX" ] || return 0
   base="${ticket##*/}"
   case "$base" in "$RALPH_DONE_PREFIX"*) return 0 ;; esac
@@ -251,7 +253,8 @@ mark_ticket_done_on_disk() {    # mark_ticket_done_on_disk TICKET
     return 0
   fi
 
-  renamed="$(dirname "$ticket")/$RALPH_DONE_PREFIX$base"
+  _ralph_dirname dir "$ticket"
+  renamed="$dir/$RALPH_DONE_PREFIX$base"
   if [ -e "$renamed" ]; then
     warn "   note: $renamed already exists — not renaming $ticket"
     return 0
@@ -605,7 +608,10 @@ on_interrupt() {
 }
 trap on_interrupt INT TERM
 
-mkdir -p "$(dirname "$RUN_JSONL")" "$(dirname "$RUN_LOG")"
+_ralph_dirname _jsonl_dir "$RUN_JSONL"
+_ralph_dirname _log_dir "$RUN_LOG"
+mkdir -p "$_jsonl_dir" "$_log_dir"
+unset _jsonl_dir _log_dir
 log_append ""
 log_append "#############################################################################"
 log_append "# run $RUN_ID started $RUN_STARTED_AT"
@@ -769,7 +775,8 @@ while true; do
     # The previous iteration was this ticket's followup, and it sent it back. That iteration was
     # reported as progress (HEAD moved, the followup ticket is unflipped); say what it really was.
     if [ -n "$CURRENT_TICKET" ] && [ "$(ralph_checked_ticket "$CURRENT_TICKET")" = "$TICKET_FILE" ]; then
-      say "   ↩ sent back to a human by $(basename "$CURRENT_TICKET")"
+      _ralph_basename _sent_back_by "$CURRENT_TICKET"
+      say "   ↩ sent back to a human by $_sent_back_by"
     fi
     HUMAN_TICKET="$TICKET_FILE"
     FINAL_STATUS="$EXIT_WAITING_ON_HUMAN"

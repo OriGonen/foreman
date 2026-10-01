@@ -21,7 +21,9 @@
 # whenever there is nothing installed, or it still matches.
 set -uo pipefail
 
-RALPH_TOOL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# This file's directory, from the shell and not `dirname` (see ralph-config.sh).
+RALPH_TOOL_DIR="${BASH_SOURCE[0]%/*}"; [ "$RALPH_TOOL_DIR" != "${BASH_SOURCE[0]}" ] || RALPH_TOOL_DIR=.
+RALPH_TOOL_DIR="$(cd "${RALPH_TOOL_DIR:-/}" && pwd)"
 
 FIX=0
 while [ $# -gt 0 ]; do

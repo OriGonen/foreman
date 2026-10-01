@@ -34,7 +34,9 @@
 # Exit codes: 0 fine · 1 nothing left to do (in `next` mode) · 2 the batch is malformed.
 set -uo pipefail
 
-RALPH_TOOL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# This file's directory, from the shell and not `dirname` (see ralph-config.sh).
+RALPH_TOOL_DIR="${BASH_SOURCE[0]%/*}"; [ "$RALPH_TOOL_DIR" != "${BASH_SOURCE[0]}" ] || RALPH_TOOL_DIR=.
+RALPH_TOOL_DIR="$(cd "${RALPH_TOOL_DIR:-/}" && pwd)"
 
 MODE=next
 case "${1:-}" in

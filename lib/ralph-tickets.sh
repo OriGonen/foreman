@@ -130,7 +130,7 @@ _ralph_resolve_ticket() {
   # was written (RALPH_DONE_PREFIX), so a finished ticket stays findable.
   if [ -n "$RALPH_DONE_PREFIX" ]; then
     local dir base
-    dir="$(dirname "$entry")"; base="$(basename "$entry")"
+    _ralph_dirname dir "$entry"; _ralph_basename base "$entry"
     if [ -f "$dir/$RALPH_DONE_PREFIX$base" ]; then printf '%s' "$dir/$RALPH_DONE_PREFIX$base"; return 0; fi
     if [ -f "$BATCH_DIR/$dir/$RALPH_DONE_PREFIX$base" ]; then
       printf '%s' "$BATCH_DIR/$dir/$RALPH_DONE_PREFIX$base"; return 0
@@ -192,7 +192,7 @@ _ralph_tickets_compute() {    # _ralph_tickets_compute KIND
     while IFS= read -r resolved_dir; do
       [ -d "$resolved_dir" ] || continue
       while IFS= read -r file; do
-        base="$(basename "$file")"
+        _ralph_basename base "$file"
         skip=0
         for excluded in $RALPH_ISSUES_EXCLUDE; do
           [ "$base" = "$excluded" ] && skip=1 && break
@@ -200,7 +200,7 @@ _ralph_tickets_compute() {    # _ralph_tickets_compute KIND
         [ "$skip" -eq 1 ] || _RALPH_TICKETS+=("$file")
       done < <(find "$resolved_dir" -maxdepth 1 -name '*.md' -type f |
                while IFS= read -r f; do
-                 key="$(basename "$f")"
+                 _ralph_basename key "$f"
                  [ -z "$RALPH_DONE_PREFIX" ] || key="${key#"$RALPH_DONE_PREFIX"}"
                  printf '%s\t%s\n' "$key" "$f"
                done | sort -t $'\t' -k1,1 | cut -f2-)

@@ -24,7 +24,10 @@
 # See $RALPH_HOME/README.md for the whole picture.
 set -uo pipefail
 
-RALPH_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# The directory above this script's, from the shell: `dirname` would be a process, and `${x%/*}`
+# alone is wrong for a bare name and for a file in `/`.
+RALPH_HOME="${BASH_SOURCE[0]%/*}"; [ "$RALPH_HOME" != "${BASH_SOURCE[0]}" ] || RALPH_HOME=.
+RALPH_HOME="$(cd "${RALPH_HOME:-/}/.." && pwd)"
 export RALPH_HOME
 
 # How the messages below the dispatcher should tell the user to invoke us. Exported so

@@ -32,7 +32,10 @@
 #   PROMPT_EXTRA_FILE
 #   plus every RALPH_* knob documented in ralph.conf.template
 
-RALPH_TOOL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# This file's directory, from the shell: `dirname` would be a process, and `${x%/*}` alone is
+# wrong for a bare name (`bash script.sh`) and for a file in `/`.
+RALPH_TOOL_DIR="${BASH_SOURCE[0]%/*}"; [ "$RALPH_TOOL_DIR" != "${BASH_SOURCE[0]}" ] || RALPH_TOOL_DIR=.
+RALPH_TOOL_DIR="$(cd "${RALPH_TOOL_DIR:-/}" && pwd)"
 RALPH_HOME="${RALPH_HOME:-$(cd "$RALPH_TOOL_DIR/.." && pwd)}"
 
 # How every "here is what to type next" message should name this toolkit. The `ralph`
@@ -141,14 +144,22 @@ unset _RALPH_FROM_ENV _ralph_name _ralph_candidates _ralph_count
 # ---------------------------------------------------------------------------
 # Defaults for everything ralph.conf and the environment left unset
 # ---------------------------------------------------------------------------
-BATCH_NAME="${RALPH_BATCH_NAME:-$(basename "$BATCH_DIR")}"
+_ralph_basename BATCH_NAME "$BATCH_DIR"
+BATCH_NAME="${RALPH_BATCH_NAME:-$BATCH_NAME}"
 
 # --- tickets ---------------------------------------------------------------
 RALPH_STATUS_LINE="${RALPH_STATUS_LINE:-**Status:**}"
 # The word the prompt tells the agent to write.
 RALPH_DONE_WORD="${RALPH_DONE_WORD:-implemented}"
-# The status line as a BRE fragment: what the done and the human patterns both start with.
-_ralph_status_line_re() { printf '%s' "$RALPH_STATUS_LINE" | sed -e 's/\\/\\\\/g' -e 's/[.[*^$]/\\&/g'; }
+# The status line as a BRE fragment, which the done and the human patterns both start with:
+# every character that means something in a BRE is escaped, so it matches itself only. Done in
+# the shell, once, with no `sed`; the backslash goes first so it does not double the others.
+_ralph_bs='\'
+_ralph_status_line_re="${RALPH_STATUS_LINE//"$_ralph_bs"/"$_ralph_bs$_ralph_bs"}"
+for _ralph_c in . '[' '*' '^' '$'; do
+  _ralph_status_line_re="${_ralph_status_line_re//"$_ralph_c"/"$_ralph_bs$_ralph_c"}"
+done
+unset _ralph_c _ralph_bs
 
 # A ticket counts as done when this grep pattern (a BRE) matches a line in its file.
 # Derived from the two settings above by default, so they cannot drift out of sync — set
@@ -159,7 +170,7 @@ if [ -z "${RALPH_DONE_PATTERN:-}" ]; then
   # while the prompt asks the agent for `implemented`; with the default word, accept both.
   _ralph_done_words="$RALPH_DONE_WORD"
   [ "$RALPH_DONE_WORD" = implemented ] && _ralph_done_words='\(implemented\|done\)'
-  RALPH_DONE_PATTERN="^$(_ralph_status_line_re) *$_ralph_done_words"
+  RALPH_DONE_PATTERN="^$_ralph_status_line_re *$_ralph_done_words"
 fi
 
 # A HUMAN TICKET is one only a person can do (see ralph-human.sh): the loop stops before it
@@ -168,7 +179,7 @@ fi
 # pattern to grep, which matches every line.
 RALPH_HUMAN_WORD="${RALPH_HUMAN_WORD-ready-for-human}"
 if [ -z "${RALPH_HUMAN_PATTERN:-}" ] && [ -n "$RALPH_HUMAN_WORD" ]; then
-  RALPH_HUMAN_PATTERN="^$(_ralph_status_line_re) *$RALPH_HUMAN_WORD"
+  RALPH_HUMAN_PATTERN="^$_ralph_status_line_re *$RALPH_HUMAN_WORD"
 fi
 RALPH_HUMAN_PATTERN="${RALPH_HUMAN_PATTERN:-}"
 
@@ -296,7 +307,7 @@ ralph_issues_hint() {
 
   for f in "$BATCH_DIR"/*.md; do
     [ -f "$f" ] || continue
-    base="$(basename "$f")"
+    _ralph_basename base "$f"
     local skip=0
     for excluded in $RALPH_ISSUES_EXCLUDE; do
       [ "$base" = "$excluded" ] && skip=1 && break
@@ -330,7 +341,9 @@ STALL_MARKER_FILE="$BATCH_DIR/.ralph-stall-marker"
 # agent on a private clone inside sbx; sandbox-mount bind-mounts this tree; local runs
 # `claude` here with no sandbox; fake runs no agent at all.
 RALPH_EXEC="${RALPH_EXEC:-sandbox}"
-RALPH_SANDBOX="${RALPH_SANDBOX:-ralph-$(basename "$REPO_ROOT")}"
+_ralph_basename _ralph_repo_name "$REPO_ROOT"
+RALPH_SANDBOX="${RALPH_SANDBOX:-ralph-$_ralph_repo_name}"
+unset _ralph_repo_name
 RALPH_SANDBOX_SETUP="${RALPH_SANDBOX_SETUP:-}"
 RALPH_SANDBOX_PROBE="${RALPH_SANDBOX_PROBE:-}"
 RALPH_SKIP_SANDBOX_PROBE="${RALPH_SKIP_SANDBOX_PROBE:-0}"
