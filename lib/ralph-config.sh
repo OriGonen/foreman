@@ -52,7 +52,7 @@ source "$RALPH_TOOL_DIR/ralph-repo.sh" || {
   return 1 2>/dev/null || exit 1
 }
 
-REPO_ROOT="$(ralph_repo_root)" || {
+ralph_repo_root REPO_ROOT || {
   echo "ralph: not inside a git repository" >&2
   return 1 2>/dev/null || exit 1
 }
@@ -86,7 +86,7 @@ fi
 
 # Accept an absolute path, a Windows-style path, or a path relative to the repo root or to
 # the caller's own directory — and let git normalise all of them to repo-relative.
-BATCH_DIR="$(ralph_batch_relpath "$RALPH_BATCH" "$REPO_ROOT")"
+ralph_batch_relpath BATCH_DIR "$RALPH_BATCH" "$REPO_ROOT"
 case "$?" in
   1)
     echo "ralph: no such directory: $RALPH_BATCH" >&2

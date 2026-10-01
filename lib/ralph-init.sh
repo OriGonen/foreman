@@ -51,14 +51,14 @@ fi
 source "$RALPH_TOOL_DIR/ralph-repo.sh" || {
   echo "ralph-init: cannot load $RALPH_TOOL_DIR/ralph-repo.sh" >&2; exit 1; }
 
-REPO_ROOT="$(ralph_repo_root)" || {
+ralph_repo_root REPO_ROOT || {
   echo "ralph-init: not inside a git repository" >&2; exit 1; }
 
 # The batch has to exist before git can tell us where it is, and creating it is this
 # script's job anyway.
 mkdir -p "$BATCH_INPUT" || exit 1
 
-BATCH_DIR="$(ralph_batch_relpath "$BATCH_INPUT" "$REPO_ROOT")"
+ralph_batch_relpath BATCH_DIR "$BATCH_INPUT" "$REPO_ROOT"
 case "$?" in
   1) echo "ralph-init: $BATCH_INPUT is not a directory" >&2; exit 1 ;;
   2) echo "ralph-init: the batch directory must be inside $REPO_ROOT" >&2; exit 1 ;;

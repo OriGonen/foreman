@@ -52,37 +52,64 @@ _ralph_dirname() {
   printf -v "$1" '%s' "$_rp"
 }
 
-# Absolute path of the repository containing the current directory, normalised through
-# cd+pwd so it is in the shell's own path syntax. Prints nothing and returns 1 if there is
-# no repository here.
+# Where the repository is, and where the batch is inside it, are each asked of git once per
+# command, and what git answered is kept: in the variable the caller names, which it then uses
+# for the rest of the command. Both functions set that variable rather than print, because a
+# function that prints is read through a command substitution, which forks; and both move
+# through directories with the shell's own `cd` (restoring where they started) rather than in
+# a subshell. Git itself still takes a `$( )` to be read, so each answer costs one fork.
+
+# ralph_repo_root VAR
+# VAR = absolute path of the repository containing the current directory, normalised through
+# cd+pwd so it is in the shell's own path syntax. Returns 1, setting nothing, if there is no
+# repository here.
 ralph_repo_root() {
-  local top
-  top="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
-  (cd "$top" 2>/dev/null && pwd) || return 1
+  local _rr_top _rr_here="$PWD"
+  _rr_top="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
+  cd "$_rr_top" 2>/dev/null || return 1
+  _rr_top="$PWD"
+  cd "$_rr_here" || return 1
+  printf -v "$1" '%s' "$_rr_top"
 }
 
-# The repo-relative path of $1, or "." for the repo root itself.
+# ralph_batch_relpath VAR GIVEN ROOT
+# VAR = the repo-relative path of GIVEN, or "." for the repo root itself.
 #
-# Returns 1 and prints nothing when $1 is not a directory, 2 when it is not inside the
-# repository whose root is $2. The caller writes the error message, because ralph-init and
+# Returns 1, setting nothing, when GIVEN is not a directory, 2 when it is not inside the
+# repository whose root is ROOT. The caller writes the error message, because ralph-init and
 # ralph-config want to say different things about it.
+#
+# `--show-toplevel` is asked from two places, because they are two questions: of
+# ralph_repo_root, from where the command stands (which repository are we working in?), and
+# here, from inside the batch (which repository is the batch in?). Answering the second from
+# the first would lose the check that a batch in a different repository is refused. What this
+# function asks is one git process: the batch's `--show-toplevel` and `--show-prefix` together.
 ralph_batch_relpath() {
-  local given="$1" repo_root="$2" prefix batch_top
-  [ -d "$given" ] || return 1
+  local _rb_given="$2" _rb_root="$3" _rb_here="$PWD" _rb_answer _rb_top _rb_prefix="" _rb_rc=0
+  [ -d "$_rb_given" ] || return 1
 
-  # Both of these are asked from INSIDE the batch directory, so git resolves the alias,
-  # the symlink and the drive-letter spelling for us.
-  prefix="$(cd "$given" 2>/dev/null && git rev-parse --show-prefix 2>/dev/null)" || return 2
-  batch_top="$(cd "$given" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null)" || return 2
+  # Both answers are asked from INSIDE the batch directory, so git resolves the alias, the
+  # symlink and the drive-letter spelling for us. (`git` prints the prefix as an empty line
+  # at the top of the repository, which the `$( )` trims away.)
+  CDPATH= cd "$_rb_given" 2>/dev/null || return 2
+  if _rb_answer="$(git rev-parse --show-toplevel --show-prefix 2>/dev/null)"; then
+    case "$_rb_answer" in
+      *$'\n'*) _rb_top="${_rb_answer%%$'\n'*}"; _rb_prefix="${_rb_answer#*$'\n'}" ;;
+      *)       _rb_top="$_rb_answer" ;;
+    esac
+    # A directory inside a *different* repository would also yield a prefix, so check that
+    # the repository git found is the one we are working in. Both sides go through the same
+    # cd+pwd normalisation, which is what makes the comparison meaningful.
+    if cd "$_rb_top" 2>/dev/null; then _rb_top="$PWD"; else _rb_rc=2; fi
+    [ "$_rb_top" = "$_rb_root" ] || _rb_rc=2
+  else
+    _rb_rc=2
+  fi
+  cd "$_rb_here" || return 2
+  [ "$_rb_rc" = 0 ] || return "$_rb_rc"
 
-  # A directory inside a *different* repository would also yield a prefix, so check that
-  # the repository git found is the one we are working in. Both sides go through the same
-  # cd+pwd normalisation, which is what makes the comparison meaningful.
-  batch_top="$(cd "$batch_top" 2>/dev/null && pwd)" || return 2
-  [ "$batch_top" = "$repo_root" ] || return 2
-
-  prefix="${prefix%/}"
-  printf '%s' "${prefix:-.}"
+  _rb_prefix="${_rb_prefix%/}"
+  printf -v "$1" '%s' "${_rb_prefix:-.}"
 }
 
 # Every directory under $1 (default: the current directory) that has a ralph.conf in it,

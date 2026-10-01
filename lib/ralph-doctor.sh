@@ -48,7 +48,7 @@ source "$RALPH_TOOL_DIR/ralph-repo.sh" || {
 source "$RALPH_TOOL_DIR/ralph-exec.sh" || {
   echo "ralph doctor: cannot load $RALPH_TOOL_DIR/ralph-exec.sh" >&2; exit 1; }
 
-REPO_ROOT="$(ralph_repo_root)" || {
+ralph_repo_root REPO_ROOT || {
   echo "ralph doctor: not inside a git repository." >&2
   echo "              A batch lives in a repo, because each iteration commits its work." >&2
   exit 1
