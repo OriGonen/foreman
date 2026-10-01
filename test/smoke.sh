@@ -5,33 +5,95 @@
 #
 #   bash test/smoke.sh            run everything
 #   bash test/smoke.sh dirty      run the cases whose name contains "dirty"
+#   RALPH_SMOKE_JOBS=1 bash test/smoke.sh
+#                                 one case at a time (the default is one per core; see below)
 #   bash test/bench.sh            not a test: times `ralph status` and counts its spawns
 #                                 (see the header of test/bench.sh)
 #
-# Output: each selected case announces itself as `[position/total] name` when it starts and
-# prints its elapsed seconds when it ends, so a slow run can be told from a hung one; with a
-# filter, position and total count only the selected cases. The run ends with the slowest
-# cases (up to 10), the `N passed, M failed` line, and `N passed in Mm Ss` for pasting into
-# a ticket's closing note. Timing is bash's own clock — no processes per case. (Sub-second
-# resolution needs bash 5's EPOCHREALTIME; older bash falls back to whole seconds.)
+# Output: each selected case announces itself as `[position/total] name` and ends with its
+# elapsed seconds, so a slow run can be told from a hung one; with a filter, position and
+# total count only the selected cases. The run ends with the slowest cases (up to 10), the
+# `N passed, M failed` line, and `N passed in Mm Ss` for pasting into a ticket's closing
+# note. Timing is bash's own clock — no processes per case. (Sub-second resolution needs
+# bash 5's EPOCHREALTIME; older bash falls back to whole seconds.)
+#
+# Parallel cases: this file is two programs. Run by a person it is the runner: it builds the
+# fixture template, then starts one case process per selected case — this same file, told
+# which case to run — keeping at most RALPH_SMOKE_JOBS going at once (default: one per
+# logical core; under Git Bash process creation stops scaling there). A case process writes
+# its output to a buffer file and its counts to a result file, both under the run's work
+# directory; the runner replays the buffers in case order, each whole, so the log reads as a
+# serial run's does, and sums the counts. A case's header appears when every case before it
+# has been printed, its lines when the case has finished (so a FAIL line, which a serial run
+# sends to stderr, arrives with the rest of its case's output on stdout). A case that ends
+# without finishing — its process died, or its name was not found — counts as a failure.
+#
+# Cases share nothing: each has repositories, logs and install directories of its own names,
+# its own TMPDIR (so the fake adapter's per-PID call counter starts empty), and its own
+# process. The runner builds the template before any case starts and nothing writes to it.
 #
 # The fixtures live under $TMPDIR and are removed on exit, on Ctrl-C, and when the run is
-# terminated or its terminal closes — unless RALPH_KEEP_FIXTURES=1. (A hard kill cannot be
-# trapped. A signal that arrives mid-case is acted on when that case's current command
-# returns; Ctrl-C also reaches the command itself.)
+# terminated or its terminal closes — unless RALPH_KEEP_FIXTURES=1. Those signals stop the
+# case processes too, with everything they started, before the directory goes. (A hard kill
+# cannot be trapped.)
 set -uo pipefail
 
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RALPH_HOME="$(cd "$TEST_DIR/.." && pwd)"
 RALPH="$RALPH_HOME/bin/ralph"
-FILTER="${1:-}"
+SELF="$TEST_DIR/${BASH_SOURCE[0]##*/}"
 
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/ralph-smoke-XXXXXX")"
-cleanup() { [ "${RALPH_KEEP_FIXTURES:-0}" = 1 ] || rm -rf "$WORK"; }
-trap cleanup EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
-trap 'exit 129' HUP
+# Set only by the runner, on a case process: the case's name, its position, and the work
+# directory it shares with the runner.
+CASE_WANTED="${_SMOKE_CASE:-}"
+
+if [ -n "$CASE_WANTED" ]; then
+  FILTER=""
+  WORK="$_SMOKE_WORK"
+  CASE_IDX="$_SMOKE_IDX"
+  mkdir -p "$WORK/.tmp/$CASE_IDX"
+  export TMPDIR="$WORK/.tmp/$CASE_IDX"
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  trap 'exit 129' HUP
+else
+  FILTER="${1:-}"
+  JOBS="${RALPH_SMOKE_JOBS:-${NUMBER_OF_PROCESSORS:-$(nproc 2>/dev/null)}}"
+  JOBS="${JOBS:-4}"
+  if ! [[ $JOBS =~ ^[1-9][0-9]*$ ]]; then
+    printf 'usage: RALPH_SMOKE_JOBS must be a positive number, not "%s"\n' "$JOBS" >&2
+    exit 2
+  fi
+  WORK="$(mktemp -d "${TMPDIR:-/tmp}/ralph-smoke-XXXXXX")"
+  JOB_PIDS=()
+  # Stops the case processes still running — each leads a process group of its own, so the
+  # signal reaches everything it started — then removes the directory. Windows keeps a
+  # directory busy while a process that had it as its working directory is still dying, so
+  # the removal is tried again, and the processes killed outright if they outlast the first
+  # tries.
+  stop_cases() {
+    local i
+    for i in "${!JOB_PIDS[@]}"; do
+      [ -e "$WORK/.results/$i.rc" ] || kill "-$1" -- "-${JOB_PIDS[i]}" 2>/dev/null
+    done
+  }
+  cleanup() {
+    local try
+    { stop_cases TERM; wait; } 2>/dev/null    # not the shell's "Terminated" notices
+    [ "${RALPH_KEEP_FIXTURES:-0}" = 1 ] && return
+    for try in 1 2 3 4 5 6; do
+      rm -rf "$WORK" 2>/dev/null
+      [ -e "$WORK" ] || return 0
+      [ "$try" = 3 ] && stop_cases KILL
+      sleep 1
+    done
+    printf 'smoke.sh: could not remove %s\n' "$WORK" >&2
+  }
+  trap cleanup EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  trap 'exit 129' HUP
+fi
 
 passed=0
 failed=0
@@ -44,46 +106,19 @@ now_us() {
   else NOW_US=$((SECONDS * 1000000)); fi
 }
 
-# The number of cases the filter selects, counted off this file's own `if case_is` lines.
-CASE_TOTAL=0
-case_line_re='^if case_is "(.*)"; then$'
-while IFS= read -r line; do
-  [[ $line =~ $case_line_re ]] || continue
-  case "${BASH_REMATCH[1]}" in *"$FILTER"*) CASE_TOTAL=$((CASE_TOTAL + 1)) ;; esac
-done < "${BASH_SOURCE[0]}"
-
-CASE_N=0
 CASE_OPEN=0
 CASE_START_US=0
-CASE_TIMES=()
-now_us; RUN_START_US=$NOW_US
+CASE_MS=0
 
-# Closes the case in progress, if any: prints its elapsed seconds and remembers them.
+# Closes the case in progress, if any: prints its elapsed seconds and keeps them in CASE_MS.
 case_end() {
   [ "$CASE_OPEN" = 1 ] || return 0
-  local ms tenths
+  local tenths
   now_us
-  ms=$(( (NOW_US - CASE_START_US) / 1000 ))
-  printf -v tenths '%d.%d' $((ms / 1000)) $(( (ms % 1000) / 100 ))
+  CASE_MS=$(( (NOW_US - CASE_START_US) / 1000 ))
+  printf -v tenths '%d.%d' $((CASE_MS / 1000)) $(( (CASE_MS % 1000) / 100 ))
   printf '  (%ss)\n' "$tenths"
-  CASE_TIMES+=("$ms $CASE")
   CASE_OPEN=0
-}
-
-# After the last case: the slowest cases and the total, for the closing note.
-timing_report() {
-  local line ms total_s
-  case_end
-  if [ "${#CASE_TIMES[@]}" -gt 0 ]; then
-    printf '\nSlowest cases:\n'
-    while IFS= read -r line; do
-      ms="${line%% *}"
-      printf '  %4d.%d s  %s\n' $((ms / 1000)) $(( (ms % 1000) / 100 )) "${line#* }"
-    done < <(printf '%s\n' "${CASE_TIMES[@]}" | sort -rn | head -n 10)
-  fi
-  now_us
-  total_s=$(( (NOW_US - RUN_START_US) / 1000000 ))
-  TOTAL_TEXT="$((total_s / 60))m $((total_s % 60))s"
 }
 
 # --- assertions -------------------------------------------------------------
@@ -105,7 +140,6 @@ assert_missing() {
 # test/bench.sh). It lives in $WORK, so it goes when the run's work directory does.
 . "$TEST_DIR/fixture.sh"
 FIXTURE_TEMPLATE="$WORK/.template"
-build_fixture_template "$FIXTURE_TEMPLATE"
 
 # A repo with one batch of $1 tickets, none of them done. Prints its path.
 make_repo() {
@@ -123,19 +157,136 @@ run_ralph() {
 
 done_count() { grep -l '^\*\*Status:\*\* implemented' "$1"/batch/issues/*.md 2>/dev/null | grep -c . ; }
 
+# --- the case process -------------------------------------------------------
+# Every `if case_is "name"; then` below runs its body only in the case process that was
+# asked for that name; in every other it is false, and the process leaves at the first
+# case_is after its own case's `fi` (or at the end of the file, for the last case).
 case_is() {
-  case_end
+  if [ "$CASE_OPEN" = 1 ]; then case_finish; exit 0; fi
+  [ "$1" = "$CASE_WANTED" ] || return 1
   CASE="$1"
-  case "$CASE" in
-    *"$FILTER"*)
-      CASE_N=$((CASE_N + 1))
-      printf '\n[%d/%d] %s\n' "$CASE_N" "$CASE_TOTAL" "$CASE"
-      CASE_OPEN=1
-      now_us; CASE_START_US=$NOW_US
-      return 0 ;;
-  esac
-  return 1
+  CASE_OPEN=1
+  now_us; CASE_START_US=$NOW_US
+  return 0
 }
+
+# Ends the case: its elapsed seconds into the buffer, its counts into the result file the
+# runner sums.
+case_finish() {
+  case_end
+  printf '%s %s %s\n' "$passed" "$failed" "$CASE_MS" > "$WORK/.results/$CASE_IDX.counts"
+}
+
+# --- the runner -------------------------------------------------------------
+# Runs the selected cases, at most $JOBS at a time, and prints them in order. Sets the
+# totals the final lines report.
+run_cases() {
+  local line name i seen=$'\n' wait_n=1 inflight=0
+  local case_line_re='^if case_is "(.*)"; then$'
+  NAMES=()
+  while IFS= read -r line; do
+    [[ $line =~ $case_line_re ]] || continue
+    name="${BASH_REMATCH[1]}"
+    # A name must be told apart from every other by the case process, filter or no filter.
+    case "$seen" in
+      *$'\n'"$name"$'\n'*) printf 'smoke.sh: two cases are named "%s"\n' "$name" >&2; return 2 ;;
+    esac
+    seen+="$name"$'\n'
+    case "$name" in *"$FILTER"*) NAMES+=("$name") ;; esac
+  done < "$SELF"
+  TOTAL=${#NAMES[@]}
+
+  # Waiting for whichever case finishes first needs bash 4.3; without it, one at a time.
+  if (( BASH_VERSINFO[0] * 100 + BASH_VERSINFO[1] < 403 )); then wait_n=0; JOBS=1; fi
+
+  mkdir -p "$WORK/.results" "$WORK/.out" "$WORK/.tmp"
+  build_fixture_template "$FIXTURE_TEMPLATE"
+
+  HEAD=0
+  SHOWN=-1
+  CASE_TIMES=()
+  set -m    # a process group per case process, so an interrupt can stop all of its children
+
+  for ((i = 1; i <= TOTAL; i++)); do
+    while (( inflight >= JOBS )); do
+      if (( wait_n )); then wait -n; else wait; fi
+      inflight=$((inflight - 1))
+      print_ready
+    done
+    start_case "$i"
+    inflight=$((inflight + 1))
+    print_ready
+  done
+  while (( HEAD < TOTAL && inflight > 0 )); do
+    if (( wait_n )); then wait -n; else wait; fi
+    inflight=$((inflight - 1))
+    print_ready
+  done
+  return 0
+}
+
+# Starts the case process for the case at position $1 (1-based) in the background. It gets
+# no stdin, as it would not under `$(...)` in a serial run, and its stdout and stderr go to
+# one buffer file. The `.rc` file marks the process as over, whatever the way it ended.
+start_case() {
+  local n="$1"
+  (
+    _SMOKE_CASE="${NAMES[n - 1]}" _SMOKE_WORK="$WORK" _SMOKE_IDX="$n" \
+      "$BASH" "$SELF" > "$WORK/.out/$n" 2>&1 < /dev/null
+    echo $? > "$WORK/.results/$n.rc"
+  ) &
+  JOB_PIDS[n]=$!
+}
+
+# Prints, in case order, every case from the head of the queue that has finished: its
+# header, its buffered lines, and the verdict of its counts. Stops at the first that has not,
+# after showing its header — so the log always names the case being waited on.
+print_ready() {
+  local n line p f ms rc
+  while (( HEAD < TOTAL )); do
+    n=$((HEAD + 1))
+    if (( SHOWN != HEAD )); then
+      printf '\n[%d/%d] %s\n' "$n" "$TOTAL" "${NAMES[HEAD]}"
+      SHOWN=$HEAD
+    fi
+    [ -e "$WORK/.results/$n.rc" ] || return 0
+    while IFS= read -r line || [ -n "$line" ]; do printf '%s\n' "$line"; done < "$WORK/.out/$n"
+    if read -r p f ms 2>/dev/null < "$WORK/.results/$n.counts"; then
+      passed=$((passed + p)); failed=$((failed + f))
+      CASE_TIMES+=("$ms ${NAMES[HEAD]}")
+    else
+      read -r rc < "$WORK/.results/$n.rc"
+      printf '  FAIL  the case ended (exit status %s) without finishing\n' "$rc" >&2
+      failed=$((failed + 1))
+    fi
+    HEAD=$((HEAD + 1))
+  done
+}
+
+# After the last case: the slowest cases and the total, for the closing note.
+timing_report() {
+  local line ms total_s
+  if [ "${#CASE_TIMES[@]}" -gt 0 ]; then
+    printf '\nSlowest cases:\n'
+    while IFS= read -r line; do
+      ms="${line%% *}"
+      printf '  %4d.%d s  %s\n' $((ms / 1000)) $(( (ms % 1000) / 100 )) "${line#* }"
+    done < <(printf '%s\n' "${CASE_TIMES[@]}" | sort -rn | head -n 10)
+  fi
+  now_us
+  total_s=$(( (NOW_US - RUN_START_US) / 1000000 ))
+  TOTAL_TEXT="$((total_s / 60))m $((total_s % 60))s"
+}
+
+if [ -z "$CASE_WANTED" ]; then
+  now_us; RUN_START_US=$NOW_US
+  run_cases || exit $?
+  timing_report
+  printf '\n%s passed, %s failed\n' "$passed" "$failed"
+  printf '%s passed in %s\n' "$passed" "$TOTAL_TEXT"
+  [ "$failed" -eq 0 ]
+  exit $?
+fi
 
 # ---------------------------------------------------------------------------
 # Cases
@@ -1582,7 +1733,7 @@ fi
 # RALPH_ORDER_PROMPT_LOG and prints a placeholder response, so ordering runs with no model
 # and no cost. Prints the stub's own directory — put it first on PATH.
 make_claude_stub() {
-  local dir="$WORK/claude-stub"
+  local dir="$WORK/claude-stub-$CASE_IDX"    # one per case: cases run side by side
   mkdir -p "$dir"
   cat > "$dir/claude" <<'STUB'
 #!/bin/bash
@@ -1797,7 +1948,6 @@ if case_is "ralph doctor warns when the installed skill copy is stale, and is si
 fi
 
 # ---------------------------------------------------------------------------
-timing_report
-printf '\n%s passed, %s failed\n' "$passed" "$failed"
-printf '%s passed in %s\n' "$passed" "$TOTAL_TEXT"
-[ "$failed" -eq 0 ]
+# A case process that ran the last case in the file ends here.
+[ "$CASE_OPEN" = 1 ] && case_finish
+exit 0

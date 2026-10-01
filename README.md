@@ -520,7 +520,7 @@ That tool is manual and is never invoked by the loop.
 | `lib/ralph-order.sh` | has an agent order the tickets by dependency, importance and load |
 | `lib/ralph-doctor.sh` | checks the machine, the repo and the batches; `--fix` writes the repo's two files |
 | `lib/ralph.conf.template` | every knob, commented, with its default |
-| `test/smoke.sh` | end-to-end tests of the loop, run through the `fake` adapter — no sandbox, no model, no money |
+| `test/smoke.sh` | end-to-end tests of the loop, run through the `fake` adapter — no sandbox, no model, no money; cases run side by side, `RALPH_SMOKE_JOBS=1` for one at a time |
 | `test/bench.sh` | times `ralph status` on a 3-ticket batch and counts its spawns by command — a measuring instrument, not a test; `bash test/bench.sh [runs]` |
 | `test/fixture.sh` | sourced by the two above: builds a template repository once and copies it for each fixture |
 | `assumptions.md` | the decisions taken while generalising this, and how to undo them |
