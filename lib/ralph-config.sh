@@ -256,18 +256,21 @@ RALPH_DONE_PREFIX="${RALPH_DONE_PREFIX-DONE_}"
 #   absolute            used as given
 #   repo-relative       used as given, if something is already there
 #   batch-relative      otherwise — and this is what a bare filename means
-_ralph_path() {
-  local given="$1" fallback="$2"
-  [ -n "$given" ] || { printf '%s/%s' "$BATCH_DIR" "$fallback"; return; }
-  case "$given" in
-    /*|[A-Za-z]:[/\\]*) printf '%s' "$given"; return ;;
+#
+# Sets the variable it is told to, the convention _ralph_basename uses, because a helper that
+# prints its answer has to be called in a command substitution, and that forks.
+_ralph_path() {                  # _ralph_path VAR GIVEN FALLBACK
+  local _rp_given="$2"
+  if [ -z "$_rp_given" ]; then printf -v "$1" '%s/%s' "$BATCH_DIR" "$3"; return; fi
+  case "$_rp_given" in
+    /*|[A-Za-z]:[/\\]*) printf -v "$1" '%s' "$_rp_given"; return ;;
   esac
-  if [ -e "$given" ]; then printf '%s' "$given"; else printf '%s/%s' "$BATCH_DIR" "$given"; fi
+  if [ -e "$_rp_given" ]; then printf -v "$1" '%s' "$_rp_given"; else printf -v "$1" '%s/%s' "$BATCH_DIR" "$_rp_given"; fi
 }
 
 # Where the run order comes from. If the order file is missing, ralph-next.sh falls back
 # to every *.md under RALPH_ISSUES_DIRS in filename order.
-ORDER_FILE="$(_ralph_path "${RALPH_ORDER_FILE:-}" order.md)"
+_ralph_path ORDER_FILE "${RALPH_ORDER_FILE:-}" order.md
 RALPH_ISSUES_DIRS="${RALPH_ISSUES_DIRS:-issues}"
 RALPH_ISSUES_EXCLUDE="${RALPH_ISSUES_EXCLUDE:-README.md spec.md order.md}"
 
@@ -322,14 +325,14 @@ ralph_issues_hint() {
 }
 
 # --- the agent's notes -----------------------------------------------------
-PROGRESS_FILE="$(_ralph_path "${RALPH_PROGRESS_FILE:-}" progress.txt)"
+_ralph_path PROGRESS_FILE "${RALPH_PROGRESS_FILE:-}" progress.txt
 RALPH_PROGRESS_TAIL_BYTES="${RALPH_PROGRESS_TAIL_BYTES:-6000}"
-PROMPT_EXTRA_FILE="$(_ralph_path "${RALPH_PROMPT_EXTRA:-}" prompt-extra.md)"
+_ralph_path PROMPT_EXTRA_FILE "${RALPH_PROMPT_EXTRA:-}" prompt-extra.md
 
 # --- telemetry (append-only, never read back by the loop) ------------------
-RUN_JSONL="$(_ralph_path "${RALPH_RUN_JSONL:-}" ralph-runs.jsonl)"
-RUN_LOG="$(_ralph_path "${RALPH_RUN_LOG:-}" ralph-runs.log)"
-BUNDLE_FILE="$(_ralph_path "${RALPH_BUNDLE_FILE:-}" .ralph-iter.bundle)"
+_ralph_path RUN_JSONL "${RALPH_RUN_JSONL:-}" ralph-runs.jsonl
+_ralph_path RUN_LOG "${RALPH_RUN_LOG:-}" ralph-runs.log
+_ralph_path BUNDLE_FILE "${RALPH_BUNDLE_FILE:-}" .ralph-iter.bundle
 
 # The one thing a run leaves behind for the next one: written only when a stall could not be
 # salvaged, and it is what lets a rerun salvage it instead of refusing. Disposable — see
