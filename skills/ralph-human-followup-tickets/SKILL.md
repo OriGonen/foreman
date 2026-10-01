@@ -117,7 +117,7 @@ commit holds exactly those files.
 
 ### 6. Tell the user
 
-The same way every time, without running any of it:
+Without running any of it. If step 3 wrote or edited a file, say this:
 
 ```
 Next:  ralph init <batch>   (or: ralph order <batch>, if <batch>/ralph.conf already exists —
@@ -125,7 +125,15 @@ Next:  ralph init <batch>   (or: ralph order <batch>, if <batch>/ralph.conf alre
 Then:  ralph status <batch> should show no warnings.
 ```
 
-If step 2 found a `ralph.conf` line to add, append it:
+If step 3 wrote or edited nothing (no not-done human ticket was missing a piece), no
+`ralph init` or `ralph order` is owed, so give no `Next:` / `Then:` block — say this instead:
+
+```
+Nothing was added — no human ticket in <batch> was missing a Handoff: line, handoff file or
+followup ticket. No ralph command is needed for this run.
+```
+
+Whichever you said, if step 2 found a `ralph.conf` line to add, append it:
 
 ```
 Also add to <batch>/ralph.conf:
