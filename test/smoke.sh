@@ -101,35 +101,17 @@ assert_missing() {
 }
 
 # --- fixture ----------------------------------------------------------------
+# Every fixture is a copy of one template, built once per run (test/fixture.sh, shared with
+# test/bench.sh). It lives in $WORK, so it goes when the run's work directory does.
+. "$TEST_DIR/fixture.sh"
+FIXTURE_TEMPLATE="$WORK/.template"
+build_fixture_template "$FIXTURE_TEMPLATE"
+
 # A repo with one batch of $1 tickets, none of them done. Prints its path.
 make_repo() {
-  local count="${1:-2}" name="${2:-repo}" repo i
-  repo="$WORK/$name"
-  mkdir -p "$repo/batch/issues"
-  git -C "$repo" init --quiet
-  git -C "$repo" config core.autocrlf false
-  git -C "$repo" config user.name ralph-test
-  git -C "$repo" config user.email test@ralph.invalid
-
-  for i in $(seq 1 "$count"); do
-    cat > "$repo/batch/issues/0$i-ticket.md" <<TICKET
-# Ticket $i
-
-**Status:** todo
-
-Do the $i-th thing.
-TICKET
-  done
-
-  cp "$RALPH_HOME/lib/ralph.conf.template" "$repo/batch/ralph.conf"
-  printf 'RALPH_EXEC=fake\n' >> "$repo/batch/ralph.conf"
-  printf '%s\n' '**/ralph-runs.jsonl' '**/ralph-runs.log' '**/.ralph-iter.bundle' \
-    '**/.ralph-stall-marker' > "$repo/.gitignore"
-  printf 'ralph.conf text eol=lf\n' > "$repo/.gitattributes"
-
-  git -C "$repo" add -A >/dev/null
-  git -C "$repo" commit --quiet -m "tickets"
-  printf '%s' "$repo"
+  local count="${1:-2}" name="${2:-repo}"
+  copy_fixture "$FIXTURE_TEMPLATE" "$WORK/$name" "$count"
+  printf '%s' "$WORK/$name"
 }
 
 # Run ralph in $1 with the rest as arguments. Captures stdout+stderr in $OUT, status in $ST.

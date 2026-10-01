@@ -43,30 +43,12 @@ trap 'exit 143' TERM
 trap 'exit 129' HUP
 
 # --- fixture ----------------------------------------------------------------
-# The same repository as the smoke suite's `make_repo 3` (test/smoke.sh): keep the two in
-# step, so these numbers compare with the suite's and with report.md.
+# The same repository as the smoke suite's `make_repo 3`, built by the same code
+# (test/fixture.sh), so these numbers compare with the suite's and with report.md.
+. "$TEST_DIR/fixture.sh"
 REPO="$WORK/bench-repo"
-mkdir -p "$REPO/batch/issues"
-git -C "$REPO" init --quiet
-git -C "$REPO" config core.autocrlf false
-git -C "$REPO" config user.name ralph-test
-git -C "$REPO" config user.email test@ralph.invalid
-for i in 1 2 3; do
-  cat > "$REPO/batch/issues/0$i-ticket.md" <<TICKET
-# Ticket $i
-
-**Status:** todo
-
-Do the $i-th thing.
-TICKET
-done
-cp "$RALPH_HOME/lib/ralph.conf.template" "$REPO/batch/ralph.conf"
-printf 'RALPH_EXEC=fake\n' >> "$REPO/batch/ralph.conf"
-printf '%s\n' '**/ralph-runs.jsonl' '**/ralph-runs.log' '**/.ralph-iter.bundle' \
-  '**/.ralph-stall-marker' > "$REPO/.gitignore"
-printf 'ralph.conf text eol=lf\n' > "$REPO/.gitattributes"
-git -C "$REPO" add -A >/dev/null
-git -C "$REPO" commit --quiet -m "tickets"
+build_fixture_template "$WORK/template"
+copy_fixture "$WORK/template" "$REPO" 3
 
 # --- clock ------------------------------------------------------------------
 # Sets NOW_MS to milliseconds since some fixed point. No process where bash 5 has its clock.
