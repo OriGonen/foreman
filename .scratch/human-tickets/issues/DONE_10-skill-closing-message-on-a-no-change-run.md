@@ -1,6 +1,6 @@
 # 10: The skill's closing message is shorter when a run changed nothing
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Blocked by:** None (can start immediately)
 
@@ -18,9 +18,11 @@ wrote something. Keep the `ralph.conf` line owed by step 2, if any, in both case
 
 **Acceptance criteria:**
 
-- [ ] `SKILL.md` step 6 gives a distinct, shorter closing message for a run that wrote nothing,
+- [x] `SKILL.md` step 6 gives a distinct, shorter closing message for a run that wrote nothing,
       with no `Next:` / `Then:` block
-- [ ] A run that wrote something keeps the existing `Next:` / `Then:` message unchanged
-- [ ] The `ralph.conf` line from step 2 is still appended in both cases
-- [ ] Any smoke assertion that covers the skill's text is updated, and `bash test/smoke.sh`
+- [x] A run that wrote something keeps the existing `Next:` / `Then:` message unchanged
+- [x] The `ralph.conf` line from step 2 is still appended in both cases
+- [x] Any smoke assertion that covers the skill's text is updated, and `bash test/smoke.sh`
       passes in full
+
+**Note:** the full `bash test/smoke.sh` run ended `495 passed, 0 failed` (6m 46s). No smoke assertion covers the skill text, so none changed. Step 6 now has a separate "Nothing was added" message for a run where step 3 wrote or edited nothing; the `ralph.conf` line is appended in both cases.
