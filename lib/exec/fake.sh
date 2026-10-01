@@ -39,6 +39,8 @@
 #              ticket>' section, and commits — leaving its OWN status line unflipped, as a real
 #              followup ticket does. The loop sees an ordinary unflipped commit, then stops at
 #              the human ticket (exit 30).
+#     auth     exit non-zero with a 401 / "Failed to authenticate" payload: the agent's login
+#              expired. The loop should stop at once, not retry.
 #   RALPH_FAKE_PROMPT_LOG  file to append each prompt to, with a separator. Optional.
 #   RALPH_FAKE_COST        reported cost per iteration in USD. Default 0.01.
 #
@@ -276,6 +278,19 @@ exec_run() {
       ;;
     context)
       printf 'prompt is too long: 250000 tokens > 200000 maximum\n'
+      return 1
+      ;;
+    auth)
+      # The agent's login expired: valid JSON, is_error true, and an "api_error_status" of 401
+      # whose field name contains the transient pattern 'api_error' — so, like context-json,
+      # only classification order keeps it from being retried as a transient blip.
+      printf '{"type":"result","subtype":"success","is_error":true,'
+      printf '"api_error_status":401,'
+      printf '"session_id":"fake-session","num_turns":1,"duration_ms":100,'
+      printf '"duration_api_ms":0,"total_cost_usd":0,'
+      printf '"usage":{"input_tokens":0,"output_tokens":0,'
+      printf '"cache_read_input_tokens":0,"cache_creation_input_tokens":0},'
+      printf '"result":"Failed to authenticate: OAuth session expired and could not be refreshed"}\n'
       return 1
       ;;
     context-json)

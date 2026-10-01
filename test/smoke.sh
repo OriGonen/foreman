@@ -420,6 +420,21 @@ if case_is "a real context payload is not mistaken for a transient one"; then
   assert_missing "$runlog" "TRANSIENT ERROR SIGNAL DETECTED" "and not as a transient error"
 fi
 
+if case_is "an expired agent login stops the run at once, named, with no retry"; then
+  # The payload carries "api_error_status": 401, which would read as transient and earn a
+  # free second attempt. It must be classified as an auth failure instead.
+  repo="$(make_repo 2 auth-repo)"
+  RALPH_TICKET_ATTEMPTS=3 RALPH_FAKE_BEHAVIOUR=auth:land run_ralph "$repo" run batch --unlimited
+
+  assert_eq "$ST" 20 "stops for a human"
+  assert_missing "$OUT" "(attempt 2)" "makes no second attempt"
+  assert_contains "$OUT" "could not authenticate" "names the cause on the terminal"
+  assert_eq "$(done_count "$repo")" "0" "nothing landed"
+  runlog="$(cat "$repo/batch/ralph-runs.log")"
+  assert_contains "$runlog" "AUTH FAILURE SIGNAL DETECTED" "recorded as an auth failure"
+  assert_missing "$runlog" "TRANSIENT ERROR SIGNAL DETECTED" "and not as a transient error"
+fi
+
 if case_is "a dirty tree stops the run and is never auto-committed"; then
   # `dirty` is the loop's exact stall signature (see the "stall is salvaged" case below), so
   # a bare stall is normally rescued by a checkpoint turn rather than stopping here. Forcing

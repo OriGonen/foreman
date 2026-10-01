@@ -983,6 +983,7 @@ while true; do
   transient=$(verdict_get "$VERDICT_FILE" transient)
   parse_ok=$(verdict_get "$VERDICT_FILE" parse_ok)
   context_exhausted=$(verdict_get "$VERDICT_FILE" context_exhausted)
+  auth_failed=$(verdict_get "$VERDICT_FILE" auth_failed)
   permission_denied=$(verdict_get "$VERDICT_FILE" permission_denied)
   is_error=$(verdict_get "$VERDICT_FILE" is_error)
   PREV_CONTEXT_EXHAUSTED="${context_exhausted:-0}"
@@ -999,6 +1000,28 @@ while true; do
 
   if [ "$PAUSE_REQUESTED" -eq 1 ]; then
     FINAL_STATUS="$EXIT_PAUSED"
+    break
+  fi
+
+  # 1b. The agent's login is dead. Stop at once, like a limit: a retry runs the same CLI with
+  #     the same expired credentials. Say so on the terminal — `sbx` forwards none of the
+  #     agent's own error text, so without this the console shows only "exit 1" and the
+  #     cause sits in the run log.
+  if [ "$auth_failed" = "1" ]; then
+    warn ""
+    warn "$TICKET_FILE was not attempted: the agent could not authenticate (its login has"
+    warn "expired or was revoked). Retrying cannot help, so the run stops here."
+    case "$RALPH_EXEC" in
+      sandbox|sandbox-mount)
+        warn "Sign in again inside the sandbox, then rerun:"
+        warn "  sbx run --name $RALPH_SANDBOX      (then /login if it does not prompt)"
+        warn "If that does not take, \`sbx rm --force $RALPH_SANDBOX\` and let ralph recreate it."
+        ;;
+      *)
+        warn "Sign in again with \`claude\` (then /login), and rerun."
+        ;;
+    esac
+    FINAL_STATUS="$EXIT_NEEDS_HUMAN"
     break
   fi
 
