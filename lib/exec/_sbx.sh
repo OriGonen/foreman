@@ -6,7 +6,9 @@
 # bind mount of this working tree) and therefore how commits come back. Creating the
 # sandbox, running the agent in it, and the readiness probe are identical.
 
-_sbx_sh() { sbx exec "$RALPH_SANDBOX" sh -c "$1"; }
+# Never the terminal on stdin: nothing run this way reads it, and a `sbx exec` that forwarded
+# it could swallow a key meant for ralph-keys.sh between iterations.
+_sbx_sh() { sbx exec "$RALPH_SANDBOX" sh -c "$1" </dev/null; }
 
 _SBX_SOURCE_MOUNT=/run/sandbox/source
 

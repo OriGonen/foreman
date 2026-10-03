@@ -51,6 +51,7 @@
 #   RALPH_MAX_MINUTES=180     pause before an iteration once 180 minutes have elapsed
 #   <iterations> argument     pause after this many iterations (default: 1)
 #   --unlimited               no iteration cap; only cost/time budgets stop it
+#   + / - while it runs       one more / one fewer iteration (on a terminal; see ralph-keys.sh)
 #
 # OTHER KNOBS (all settable in ralph.conf; the environment wins over it)
 #   RALPH_MODEL=sonnet            RALPH_EFFORT=high
@@ -586,7 +587,38 @@ VERDICT_FILE="$(mktemp)"
 # because exec_run is now the head of a pipeline rather than a command substitution — see
 # the call site for why that matters.
 PAYLOAD_FILE="$(mktemp)"
-trap 'rm -f "$VERDICT_FILE" "$PAYLOAD_FILE"' EXIT
+# What the key reader (ralph-keys.sh) and this loop share: `budget`, which the reader owns
+# once it is seeded here, and `iteration`, which only this loop writes. See refresh_budget.
+RUN_CTL_DIR="$(mktemp -d)"
+printf '%s\n' "$MAX_ITERATIONS" > "$RUN_CTL_DIR/budget"
+printf '0\n' > "$RUN_CTL_DIR/iteration"
+KEYS_PID=""
+SAVED_STTY=""
+on_exit() {
+  if [ -n "$KEYS_PID" ]; then
+    kill "$KEYS_PID" 2>/dev/null
+    wait "$KEYS_PID" 2>/dev/null
+  fi
+  # The reader restores the terminal itself; this is for a reader that died too hard to.
+  [ -z "$SAVED_STTY" ] || stty "$SAVED_STTY" 2>/dev/null
+  rm -rf "$VERDICT_FILE" "$PAYLOAD_FILE" "$RUN_CTL_DIR"
+}
+trap on_exit EXIT
+
+# Picks up a budget changed from the keyboard since it was last read. A missing or garbled
+# file changes nothing. Called before the iteration-budget check, and before the footer so
+# the pause reason and the resume command report the budget as it ended.
+refresh_budget() {
+  local budget="" when
+  read -r budget < "$RUN_CTL_DIR/budget" 2>/dev/null
+  [[ "$budget" =~ ^[0-9]+$ ]] || return 0
+  budget=$((10#$budget))
+  [ "$budget" != "$MAX_ITERATIONS" ] || return 0
+  when="after iteration $ITERATIONS_RUN"
+  [ "$ITERATIONS_RUN" -gt 0 ] || when="before the first iteration"
+  log_append "# iteration budget changed: $(budget_label "$MAX_ITERATIONS") → $(budget_label "$budget") ($when)"
+  MAX_ITERATIONS="$budget"
+}
 
 # The one thing that differs between a plain run and a watched one, on this side of the
 # seam. ralph-stream.cjs is in the pipeline either way — in plain mode it is a pass-through
@@ -628,6 +660,17 @@ say ""
 # checking the sandbox, running the batch's readiness probe — happens here, once, behind
 # the adapter's own interface. `local` and `fake` have nothing to do.
 exec_prepare || exit 1
+
+# + and - change the iteration budget mid-run, from a reader in the background. Only on a
+# terminal: a run whose stdin is redirected (CI, a test, `</dev/null`) behaves as it always
+# did. `<&0` is load-bearing — a non-interactive shell otherwise hands `&` /dev/null.
+if [ -t 0 ]; then
+  SAVED_STTY="$(stty -g 2>/dev/null)"
+  bash "$RALPH_TOOL_DIR/ralph-keys.sh" "$RUN_CTL_DIR" $$ <&0 &
+  KEYS_PID=$!
+  say "keys: + one more iteration  ·  - one fewer"
+  say ""
+fi
 
 FINAL_STATUS="$EXIT_DONE"
 HUMAN_TICKET=""
@@ -703,7 +746,7 @@ run_checkpoint_turn() {
   # empty still raises "unbound variable" without the `+` guard.
   checkpoint_args_saved=(${RALPH_CLAUDE_ARGS+"${RALPH_CLAUDE_ARGS[@]}"})
   RALPH_CLAUDE_ARGS+=(--max-turns "$CHECKPOINT_MAX_TURNS")
-  exec_run "$checkpoint_prompt" "$TICKET_FILE" |
+  exec_run "$checkpoint_prompt" "$TICKET_FILE" </dev/null |
     node "$RALPH_TOOL_DIR/ralph-stream.cjs" ${STREAM_ARGS+"${STREAM_ARGS[@]}"} > "$PAYLOAD_FILE"
   checkpoint_agent_status=${PIPESTATUS[0]}
   checkpoint_result=$(cat "$PAYLOAD_FILE")
@@ -870,6 +913,7 @@ while true; do
   ATTEMPTS_ON_CURRENT=$((ATTEMPTS_ON_CURRENT + 1))
 
   # --- budget checks, BEFORE spending anything on this iteration -------------
+  refresh_budget
   if [ "$MAX_ITERATIONS" -gt 0 ] && [ "$ITERATIONS_RUN" -ge "$MAX_ITERATIONS" ]; then
     PAUSE_REASON="iteration budget reached ($MAX_ITERATIONS)"
     FINAL_STATUS="$EXIT_PAUSED"
@@ -891,7 +935,8 @@ while true; do
   [ -n "$TICKET_BASE_REF" ] || TICKET_BASE_REF="$BASE_REF"
   STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-  say "── iteration $ITERATIONS_RUN  ·  $TICKET_FILE$([ "$ATTEMPTS_ON_CURRENT" -gt 1 ] && printf ' (attempt %s)' "$ATTEMPTS_ON_CURRENT")"
+  printf '%s\n' "$ITERATIONS_RUN" > "$RUN_CTL_DIR/iteration"
+  say "── iteration $ITERATIONS_RUN$([ "$MAX_ITERATIONS" -gt 0 ] && printf ' of %s' "$MAX_ITERATIONS")  ·  $TICKET_FILE$([ "$ATTEMPTS_ON_CURRENT" -gt 1 ] && printf ' (attempt %s)' "$ATTEMPTS_ON_CURRENT")"
 
   # Ask before touching anything: on the clone-based sandbox, syncing is a hard reset plus
   # a wipe of untracked files, and rerunning is the most natural response to any stop there
@@ -946,7 +991,11 @@ while true; do
   # conflate the filter's status with the agent's, and every branch below turns on the
   # agent's. Everything after these three lines — the recorder call, the verdict, the branch
   # order — is untouched by whether the run is being watched.
-  exec_run "$RALPH_PROMPT" "$TICKET_FILE" |
+  #
+  # The agent gets /dev/null for stdin, never the terminal: the prompt goes in with `-p`, and
+  # an agent holding the terminal can swallow the keys meant for ralph-keys.sh or switch the
+  # terminal's mode under it. Same for the checkpoint turn.
+  exec_run "$RALPH_PROMPT" "$TICKET_FILE" </dev/null |
     node "$RALPH_TOOL_DIR/ralph-stream.cjs" ${STREAM_ARGS+"${STREAM_ARGS[@]}"} > "$PAYLOAD_FILE"
   agent_status=${PIPESTATUS[0]}
   result=$(cat "$PAYLOAD_FILE")
@@ -1220,6 +1269,7 @@ done
 # Footer
 # ---------------------------------------------------------------------------
 trap - INT TERM
+refresh_budget
 
 billed=$((RUN_INPUT + RUN_OUTPUT))
 elapsed_min=$((SECONDS / 60))

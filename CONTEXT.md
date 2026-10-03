@@ -95,6 +95,9 @@ _Avoid_: Blocked, paused (that is exit 10)
 
 ### Budgets and counters
 
+The iteration budget is the one budget that can change during a run: `+` and `-` on the
+terminal running it move it by one, and the loop reads it again before each iteration.
+
 **Attempt**:
 An unproductive try at a ticket — one that neither landed nor progressed nor stalled.
 Counted per ticket per run, capped by `RALPH_TICKET_ATTEMPTS`.

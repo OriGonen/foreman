@@ -41,8 +41,15 @@
 #              the human ticket (exit 30).
 #     auth     exit non-zero with a 401 / "Failed to authenticate" payload: the agent's login
 #              expired. The loop should stop at once, not retry.
+#   RALPH_FAKE_KEYS        keys "pressed" while each call runs, as a `:`-separated list
+#              parallel to RALPH_FAKE_BEHAVIOUR: `+:` presses + during call 1 and nothing
+#              during call 2, `--` presses - twice during call 1. Unlike the behaviour list it
+#              does not repeat its last entry — a call past the end presses nothing. Applied
+#              through ralph-keys.sh --apply, so everything but the terminal read is real.
+#   RALPH_FAKE_SLEEP       seconds each call takes before acting. Default 0. For trying the
+#              + / - keys by hand, which need an iteration long enough to press them in.
 #   RALPH_FAKE_PROMPT_LOG  file to append each prompt to, with a separator. Optional.
-#   RALPH_FAKE_COST        reported cost per iteration in USD. Default 0.01.
+#   RALPH_FAKE_COST       reported cost per iteration in USD. Default 0.01.
 #
 # The behaviour may also be a `:`-separated list — `noop:land` lands on the second
 # attempt — which is how retry accounting gets a test.
@@ -98,6 +105,22 @@ _fake_behaviour() {
     [ "$i" -eq "$call" ] && { printf '%s' "$chosen"; return; }
   done
   printf '%s' "$chosen"
+}
+
+# Presses call $1's entry of RALPH_FAKE_KEYS against the loop's control directory, as the
+# person at the terminal would while that call runs. Nothing once the list runs out.
+_fake_press_keys() {
+  local call="$1" i=0 keys=""
+  [ -n "${RALPH_FAKE_KEYS:-}" ] && [ -n "${RUN_CTL_DIR:-}" ] || return 0
+  local IFS=':'
+  # shellcheck disable=SC2086
+  set -- $RALPH_FAKE_KEYS
+  for keys in "$@"; do
+    i=$((i + 1))
+    [ "$i" -eq "$call" ] || continue
+    [ -z "$keys" ] || bash "$RALPH_TOOL_DIR/ralph-keys.sh" --apply "$keys" "$RUN_CTL_DIR"
+    return 0
+  done
 }
 
 # The `claude --output-format json` shape, as much of it as ralph-record.cjs reads.
@@ -180,6 +203,9 @@ exec_run() {
     *"CHECKPOINT TURN"*) : ;;
     *) call="$(_fake_bump)"; behaviour="$(_fake_behaviour "$call")"; label="$call" ;;
   esac
+
+  [ "${RALPH_FAKE_SLEEP:-0}" = 0 ] || sleep "$RALPH_FAKE_SLEEP"
+  [ "$label" = checkpoint ] || _fake_press_keys "$call"
 
   if [ -n "${RALPH_FAKE_PROMPT_LOG:-}" ]; then
     { printf '===== fake prompt %s (%s) =====\n' "$label" "$ticket"

@@ -402,6 +402,7 @@ The loop pauses itself, cleanly, when:
 | `RALPH_MAX_COST_USD` reached | stops **before** starting an iteration that would exceed it |
 | `RALPH_MAX_MINUTES` reached | same |
 | the iteration-count argument is reached | same |
+| the iteration budget, after `-` was pressed during the run | same — the iteration running when you pressed it still finishes |
 | a usage / rate / billing limit is detected in the response | stops immediately, reporting the reset time when the response carries one |
 | Ctrl-C | records the interrupted iteration, writes the footer, then stops |
 
@@ -484,6 +485,24 @@ letting the figures in the summary silently disagree with the budget that was se
 
 Any `RALPH_*` set in the environment beats the batch's `ralph.conf`, so a one-off run needs
 no edit.
+
+#### Changing the budget mid-run
+
+While `ralph run` is going, press keys in its terminal:
+
+- `+` (or `=`): one more iteration
+- `-` (or `_`): one fewer
+
+The run prints a line such as `⌨ iterations: 2 of 5`, and the iteration header shows the
+budget (`── iteration 2 of 5`). The loop reads the new budget before the next iteration. A key
+never stops or interrupts the iteration already running, so `-` cannot go below it. On an
+`--unlimited` run, `-` makes the run stop after the iteration running; `+` from there adds
+iterations again. Each change is written to the run log.
+
+A key only counts while an iteration is running. Once the last iteration ends, the run pauses
+straight away, and you resume by rerunning with a new `<n>`. The keys work only when the
+run's stdin is a terminal; a run with stdin redirected (CI, a script, `</dev/null`) ignores
+the keyboard and prints no `keys:` hint.
 
 ## The logs
 

@@ -321,6 +321,73 @@ if case_is "one iteration is the default, and it lands one ticket"; then
   assert_eq "$(git -C "$repo" log --oneline | wc -l)" "3" "the landing commit, plus the rename marking it done"
 fi
 
+if case_is "+ during a run adds an iteration"; then
+  repo="$(make_repo 3 keys-plus-repo)"
+  RALPH_FAKE_KEYS=+ run_ralph "$repo" run batch 1
+
+  assert_eq "$ST" 10 "still stops paused on the iteration budget"
+  assert_contains "$OUT" "iteration budget reached (2)" "the budget it stopped on is the new one"
+  assert_eq "$(done_count "$repo")" "2" "two tickets landed, not one"
+  assert_contains "$OUT" "── iteration 2 of 2" "the header shows the new budget"
+  assert_contains "$OUT" "⌨ iterations: 1 of 2" "the key press is acknowledged"
+  assert_contains "$OUT" "run batch 2" "the resume command carries the new budget"
+  assert_contains "$(cat "$repo/batch/ralph-runs.log")" "# iteration budget changed: 1 → 2 (after iteration 1)" \
+    "the run log records the change"
+  # A run whose stdin is not a terminal starts no reader, and says nothing about keys.
+  assert_missing "$OUT" "keys: +" "no key hint without a terminal"
+fi
+
+if case_is "- during a run removes an iteration, never below the one running"; then
+  repo="$(make_repo 3 keys-minus-repo)"
+  RALPH_FAKE_KEYS=- run_ralph "$repo" run batch 3
+  assert_eq "$ST" 10 "stops paused on the iteration budget"
+  assert_contains "$OUT" "iteration budget reached (2)" "one fewer than asked for"
+  assert_eq "$(done_count "$repo")" "2" "two tickets landed"
+  assert_contains "$OUT" "── iteration 1 of 3" "the first header shows the budget it started with"
+
+  repo="$(make_repo 3 keys-floor-repo)"
+  RALPH_FAKE_KEYS=--- run_ralph "$repo" run batch 3
+  assert_contains "$OUT" "iteration budget reached (1)" "three presses floor at the iteration running"
+  assert_eq "$(done_count "$repo")" "1" "that iteration still finishes"
+  assert_contains "$OUT" "⌨ stops after this iteration (1 of 1)" "says the run stops after it"
+fi
+
+if case_is "- on an unlimited run stops it after the iteration running"; then
+  repo="$(make_repo 3 keys-unlimited-repo)"
+  RALPH_FAKE_KEYS=- run_ralph "$repo" run batch --unlimited
+
+  assert_eq "$ST" 10 "pauses rather than finishing the batch"
+  assert_eq "$(done_count "$repo")" "1" "one ticket landed"
+  assert_contains "$OUT" "── iteration 1  ·" "an unlimited header has no 'of'"
+  assert_contains "$OUT" "iteration budget reached (1)" "says why it paused"
+  assert_contains "$OUT" "run batch 1" "the resume command names the budget it ended with"
+  assert_contains "$(cat "$repo/batch/ralph-runs.log")" "# iteration budget changed: unlimited → 1" \
+    "the run log records the change"
+fi
+
+if case_is "ralph-keys.sh --apply: the floor and unlimited"; then
+  ctl="$WORK/keys-ctl"
+  mkdir -p "$ctl"
+  keys() { OUT="$(bash "$RALPH_HOME/lib/ralph-keys.sh" --apply "$1" "$ctl" 2>&1)"; read -r budget < "$ctl/budget"; }
+
+  printf '0\n' > "$ctl/budget"; printf '2\n' > "$ctl/iteration"
+  keys +
+  assert_eq "$budget" 0 "+ leaves unlimited alone"
+  assert_contains "$OUT" "already unlimited" "and says so"
+  keys -
+  assert_eq "$budget" 2 "- on unlimited stops after the iteration running"
+  assert_contains "$OUT" "stops after this iteration (2 of 2)" "and says so"
+  keys +=
+  assert_eq "$budget" 4 "+ and = each add one"
+  assert_contains "$OUT" "iterations: 2 of 4" "and say where the run now ends"
+  keys -_-x
+  assert_eq "$budget" 2 "- and _ each remove one, down to the floor; other keys do nothing"
+
+  printf '5\n' > "$ctl/budget"; printf '0\n' > "$ctl/iteration"
+  keys ------
+  assert_eq "$budget" 1 "before the first iteration, the floor is 1"
+fi
+
 if case_is "--unlimited runs the batch to completion"; then
   repo="$(make_repo 3 unlimited-repo)"
   run_ralph "$repo" run batch --unlimited

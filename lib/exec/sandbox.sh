@@ -97,7 +97,7 @@ _sbx_sync_up() {
     warn "   could not bundle the sandbox's commits"
     return 1
   fi
-  if ! sbx cp "$RALPH_SANDBOX:/tmp/ralph-iter.bundle" "$BUNDLE_FILE" >/dev/null 2>&1; then
+  if ! sbx cp "$RALPH_SANDBOX:/tmp/ralph-iter.bundle" "$BUNDLE_FILE" </dev/null >/dev/null 2>&1; then
     warn "   could not copy the bundle out of the sandbox"
     return 1
   fi
