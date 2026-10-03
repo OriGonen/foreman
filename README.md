@@ -425,6 +425,14 @@ work may still need its marker to match HEAD), and it skips a human ticket until
 followup ticket has landed: renaming a human ticket the moment its own status line flips
 would make a ticket sent back afterwards look finished when it is not.
 
+A batch whose every ticket is done gets the same treatment: when a run finishes it (or finds
+nothing left to do), the batch directory itself is renamed `DONE_<name>` — `.scratch/foo`
+becomes `.scratch/DONE_foo` — and the rename committed on its own, `chore: mark foo batch
+done`. The run log and `progress.txt` travel with the directory. It is skipped, with a note,
+when tracked files under the batch have uncommitted changes (`RALPH_ALLOW_DIRTY`), or when
+the `DONE_` name is already taken. `RALPH_DONE_PREFIX=` turns off both this and the ticket
+rename. Afterwards every command needs the new path: `ralph report .scratch/DONE_foo`.
+
 A turn that ends cleanly and uncommitted, with the ticket unflipped and HEAD exactly where it
 started, is a **stall** — the shape of a turn that simply ran out of room before reaching its
 own checkpoint step. Rather than stopping, the loop runs a short **checkpoint turn**: a

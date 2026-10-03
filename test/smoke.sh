@@ -155,7 +155,8 @@ run_ralph() {
   ST=$?
 }
 
-done_count() { grep -l '^\*\*Status:\*\* implemented' "$1"/batch/issues/*.md 2>/dev/null | grep -c . ; }
+# Counts the implemented tickets, in the batch directory or in its DONE_ rename once finished.
+done_count() { grep -l '^\*\*Status:\*\* implemented' "$1"/batch/issues/*.md "$1"/DONE_batch/issues/*.md 2>/dev/null | grep -c . ; }
 
 # --- the case process -------------------------------------------------------
 # Every `if case_is "name"; then` below runs its body only in the case process that was
@@ -887,9 +888,9 @@ if case_is "a ticket that hands off part-finished is continued, not failed"; the
   assert_missing "$p2" "reconstructed" "the deliberate-handoff notice is unchanged"
   assert_missing "$p2" "ran out of room" "and does not carry the stall's context-retry framing"
 
-  run_ralph "$repo" report batch
+  run_ralph "$repo" report DONE_batch
   assert_contains "$OUT" "progressed 1" "the report counts it as its own outcome"
-  run_ralph "$repo" report batch --failures
+  run_ralph "$repo" report DONE_batch --failures
   assert_contains "$OUT" "every recorded iteration landed" "and does not flag it as a problem"
 fi
 
@@ -952,16 +953,16 @@ if case_is "a checkpoint turn is recorded as its own row and its cost is in the 
   assert_contains "$OUT" "iterations run:        3" "the checkpoint turn does not advance the iteration count"
   assert_contains "$OUT" "cost (USD, reported):  \$0.400000" "but its cost is folded into the run total"
 
-  jsonl="$repo/batch/ralph-runs.jsonl"
+  jsonl="$repo/DONE_batch/ralph-runs.jsonl"
   assert_eq "$(grep -c . "$jsonl")" "4" "all 4 turns are recorded"
   assert_eq "$(grep -c '"kind":"checkpoint"' "$jsonl")" "1" "one of them is its own, distinguishable row"
 
-  run_ralph "$repo" report batch
+  run_ralph "$repo" report DONE_batch
   assert_contains "$OUT" "stalled 1" "the report counts the stall as its own outcome"
   assert_contains "$OUT" "checkpoint turns 1" "and the checkpoint as its own bucket"
   assert_contains "$OUT" '$0.4000' "totalling all 4 turns' cost"
 
-  run_ralph "$repo" report batch --failures
+  run_ralph "$repo" report DONE_batch --failures
   assert_contains "$OUT" "every recorded iteration landed" "a salvaged stall is not flagged as a failure"
 fi
 
@@ -1081,14 +1082,14 @@ if case_is "the run is recorded for ralph report"; then
   repo="$(make_repo 2 report-repo)"
   RALPH_FAKE_COST=0.25 run_ralph "$repo" run batch --unlimited
 
-  assert_eq "$(grep -c . "$repo/batch/ralph-runs.jsonl")" "2" "one record per iteration"
+  assert_eq "$(grep -c . "$repo/DONE_batch/ralph-runs.jsonl")" "2" "one record per iteration"
 
-  run_ralph "$repo" report batch
+  run_ralph "$repo" report DONE_batch
   assert_eq "$ST" 0 "report reads the log"
   assert_contains "$OUT" "iterations 2  ·  landed 2" "report agrees with the run"
   assert_contains "$OUT" '$0.5000' "report totals the cost"
 
-  run_ralph "$repo" report batch --failures
+  run_ralph "$repo" report DONE_batch --failures
   assert_contains "$OUT" "every recorded iteration landed" "nothing is flagged"
 fi
 
@@ -1245,7 +1246,7 @@ if case_is "a landed ticket with every box ticked is renamed DONE_"; then
   repo="$(make_repo 2 done-rename-repo)"
   run_ralph "$repo" run batch --unlimited
   assert_eq "$ST" 0 "the batch finishes"
-  d="$repo/batch/issues"
+  d="$repo/DONE_batch/issues"
   [ -f "$d/DONE_01-ticket.md" ] && [ -f "$d/DONE_02-ticket.md" ] && pass || fail "both tickets carry the prefix"
   [ -e "$d/01-ticket.md" ] && fail "the old name is gone" || pass
   assert_contains "$OUT" "marked done" "the rename is announced"
@@ -1253,9 +1254,9 @@ if case_is "a landed ticket with every box ticked is renamed DONE_"; then
   assert_contains "$(git -C "$repo" log --format=%s)" "chore: mark 01-ticket.md done" "as its own commit"
   assert_eq "$(done_count "$repo")" "2" "renamed tickets still count as done"
 
-  run_ralph "$repo" next batch --count
+  run_ralph "$repo" next DONE_batch --count
   assert_eq "$OUT" "2 2" "--count agrees"
-  run_ralph "$repo" run batch
+  run_ralph "$repo" run DONE_batch
   assert_eq "$ST" 0 "a rerun has nothing left to do and renames nothing further"
 fi
 
@@ -1266,7 +1267,7 @@ if case_is "a ticket with an unticked box, or not yet done, keeps its name"; the
   git -C "$repo" commit --quiet -am "boxes"
 
   run_ralph "$repo" run batch --unlimited
-  d="$repo/batch/issues"
+  d="$repo/DONE_batch/issues"
   [ -f "$d/01-ticket.md" ] && pass || fail "unticked box: the name is kept"
   assert_contains "$OUT" "unchecked boxes" "and says why"
   [ -f "$d/DONE_02-ticket.md" ] && pass || fail "every box ticked: renamed"
@@ -1307,6 +1308,70 @@ if case_is "RALPH_DONE_PREFIX empty leaves ticket files alone"; then
   RALPH_DONE_PREFIX= run_ralph "$repo" run batch --unlimited
   assert_eq "$ST" 0 "the batch finishes"
   [ -f "$repo/batch/issues/01-ticket.md" ] && pass || fail "the ticket kept its name"
+  [ -d "$repo/batch" ] && pass || fail "and so did the batch"
+fi
+
+if case_is "a finished batch directory is renamed with the done prefix"; then
+  repo="$(make_repo 2 done-batch-repo)"
+  run_ralph "$repo" run batch --unlimited
+  assert_eq "$ST" 0 "the batch finishes"
+  [ -d "$repo/DONE_batch" ] && [ ! -e "$repo/batch" ] && pass || fail "batch became DONE_batch"
+  assert_contains "$OUT" "batch marked done  ·  DONE_batch" "the rename is announced"
+  assert_eq "$(git -C "$repo" log -1 --format=%s)" "chore: mark batch batch done" "the rename is the last commit"
+  assert_eq "$(git -C "$repo" status --porcelain)" "" "and the tree is clean"
+  [ -f "$repo/DONE_batch/ralph-runs.log" ] && pass || fail "the run log moved with the directory"
+  [ -f "$repo/DONE_batch/issues/DONE_02-ticket.md" ] && pass || fail "the tickets are inside"
+
+  run_ralph "$repo" run DONE_batch
+  assert_eq "$ST" 0 "running the renamed batch is still a finished batch"
+  assert_contains "$OUT" "Nothing to do" "says there is nothing to do"
+  assert_missing "$OUT" "batch marked done" "and does not rename it again"
+  [ -d "$repo/DONE_batch" ] && [ ! -e "$repo/DONE_DONE_batch" ] && pass || fail "no second prefix"
+fi
+
+if case_is "RALPH_DONE_PREFIX empty leaves the batch directory alone"; then
+  repo="$(make_repo 1 done-batch-off-repo)"
+  RALPH_DONE_PREFIX= run_ralph "$repo" run batch --unlimited
+  assert_eq "$ST" 0 "the batch finishes"
+  [ -d "$repo/batch" ] && [ ! -e "$repo/DONE_batch" ] && pass || fail "the batch kept its name"
+  assert_missing "$OUT" "batch marked done" "and nothing is announced"
+fi
+
+if case_is "a batch with a tracked modification keeps its name"; then
+  # A dirty tree stalls an iteration, so this only arises when the batch was finished by hand
+  # and the run has nothing to do.
+  repo="$(make_repo 1 done-batch-dirty-repo)"
+  printf '# Ticket 1
+
+**Status:** implemented
+
+- [x] one
+' > "$repo/batch/issues/01-ticket.md"
+  git -C "$repo" commit --quiet -am "01 done by hand"
+  printf '# edited by hand
+' >> "$repo/batch/ralph.conf"
+  RALPH_ALLOW_DIRTY=1 run_ralph "$repo" run batch
+  assert_eq "$ST" 0 "nothing to do is a success"
+  [ -d "$repo/batch" ] && [ ! -e "$repo/DONE_batch" ] && pass || fail "the batch kept its name"
+  assert_contains "$OUT" "has uncommitted changes — leaving its name alone" "says why"
+  assert_contains "$(git -C "$repo" status --porcelain)" "ralph.conf" "the edit is still uncommitted"
+fi
+
+if case_is "a batch finished by hand is renamed on the next run"; then
+  repo="$(make_repo 1 done-batch-hand-repo)"
+  printf '# Ticket 1\n\n**Status:** implemented\n\n- [x] one\n' > "$repo/batch/issues/01-ticket.md"
+  git -C "$repo" commit --quiet -am "01 done by hand"
+  run_ralph "$repo" run batch
+  assert_eq "$ST" 0 "nothing to do is a success"
+  assert_contains "$OUT" "Nothing to do" "says so"
+  [ -d "$repo/DONE_batch" ] && [ ! -e "$repo/batch" ] && pass || fail "batch became DONE_batch"
+  assert_eq "$(git -C "$repo" log -1 --format=%s)" "chore: mark batch batch done" "committed"
+fi
+
+if case_is "the usage line shows minutes beside seconds"; then
+  repo="$(make_repo 1 usage-minutes-repo)"
+  run_ralph "$repo" run batch --unlimited
+  assert_contains "$OUT" "1.2s (0.0m)" "the fake adapter's 1200 ms"
 fi
 
 if case_is "a ticket marked done counts as done, like an implemented one"; then
@@ -1559,7 +1624,7 @@ if case_is "Checks: resolves whichever side carries the done prefix"; then
   finish_human_ticket "$repo" 2
   run_ralph "$repo" run batch 2
   assert_contains "$OUT" "batch/issues/02-ticket.md waits for batch/issues/03-ticket.md" "found through the prefix"
-  [ -e "$repo/batch/issues/DONE_02-ticket.md" ] && pass || fail "and renamed when the followup landed"
+  [ -e "$repo/DONE_batch/issues/DONE_02-ticket.md" ] && pass || fail "and renamed when the followup landed"
 
   # The human ticket carries the prefix; the followup ticket names it without.
   repo="$(make_repo 2 check-prefix2-repo)"
@@ -1788,7 +1853,7 @@ if case_is "the start-of-run sweep renames a finished ticket and leaves a dirty 
   [ -e "$repo/batch/issues/01-ticket.md" ] && pass || fail "status and dry-run rename nothing"
 
   run_ralph "$repo" run batch 1
-  [ -e "$repo/batch/issues/DONE_01-ticket.md" ] && pass || fail "a run renames it before picking a ticket"
+  [ -e "$repo/DONE_batch/issues/DONE_01-ticket.md" ] && pass || fail "a run renames it before picking a ticket"
   assert_contains "$OUT" "✓ marked done" "and says so"
   assert_contains "$(git -C "$repo" log --format=%s)" "chore: mark 01-ticket.md done" "in a commit of its own"
 
@@ -1796,7 +1861,7 @@ if case_is "the start-of-run sweep renames a finished ticket and leaves a dirty 
   sed -i 's/^\*\*Status:\*\* todo/**Status:** done\n\n- [ ] the thing/' "$repo/batch/issues/01-ticket.md"
   git -C "$repo" commit --quiet -am "ticket 1 done by hand, boxes unticked"
   run_ralph "$repo" run batch 1
-  [ -e "$repo/batch/issues/01-ticket.md" ] && pass || fail "an unticked ticket keeps its name"
+  [ -e "$repo/DONE_batch/issues/01-ticket.md" ] && pass || fail "an unticked ticket keeps its name"
 
   repo="$(make_repo 3 sweep-dirty-repo)"
   sed -i 's/^\*\*Status:\*\* todo/**Status:** done/' "$repo/batch/issues/01-ticket.md"

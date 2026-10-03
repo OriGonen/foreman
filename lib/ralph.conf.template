@@ -113,7 +113,8 @@ RALPH_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)")
 
 # When a ticket lands with its status flipped AND every checklist box ticked, the loop
 # renames the file to DONE_<name> and commits the rename. Tickets are still found by their
-# original name (order.md need not change). Set empty to never rename.
+# original name (order.md need not change). Once every ticket is done the batch directory
+# is renamed the same way, so later commands need its new path. Set empty to never rename.
 #RALPH_DONE_PREFIX=DONE_
 
 # The run order. If order.md exists, its <!-- ORDER:BEGIN --> block is the order and

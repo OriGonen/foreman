@@ -275,6 +275,47 @@ mark_ticket_done_on_disk() {    # mark_ticket_done_on_disk TICKET
   say "   ✓ marked done  ·  $renamed"
 }
 
+# The same for the batch directory, once every ticket in it is done: .scratch/foo becomes
+# .scratch/${RALPH_DONE_PREFIX}foo, renamed and committed on its own. One prefix knob covers
+# both; empty turns both off. Only called when the run has finished the batch — last thing a
+# run does, since its footer is still being written into the directory — or found nothing left
+# to do. Anything that names the batch afterwards needs the new path.
+#
+# Never fatal, for the same reason as the ticket version. A batch with tracked files modified
+# or staged keeps its name: the pathspec commit would sweep them in, which RALPH_ALLOW_DIRTY
+# makes possible. Untracked and ignored files (the run log, progress.txt) just travel with
+# the directory.
+mark_batch_done_on_disk() {
+  local base dir renamed
+  [ -n "$RALPH_DONE_PREFIX" ] || return 0
+  [ "$BATCH_DIR" != "." ] || return 0
+  _ralph_basename base "$BATCH_DIR"
+  case "$base" in "$RALPH_DONE_PREFIX"*) return 0 ;; esac
+
+  _ralph_dirname dir "$BATCH_DIR"
+  renamed="$dir/$RALPH_DONE_PREFIX$base"
+  [ "$dir" != "." ] || renamed="$RALPH_DONE_PREFIX$base"
+  if [ -e "$renamed" ]; then
+    warn "   note: $renamed already exists — not renaming $BATCH_DIR"
+    return 0
+  fi
+  if [ -n "$(git status --porcelain --untracked-files=no -- "$BATCH_DIR")" ]; then
+    warn "   note: $BATCH_DIR has uncommitted changes — leaving its name alone"
+    return 0
+  fi
+
+  if ! git mv -- "$BATCH_DIR" "$renamed" 2>/dev/null; then
+    warn "   note: could not rename $BATCH_DIR (is it tracked?) — leaving it as is"
+    return 0
+  fi
+  if ! git commit --quiet -m "chore: mark $base batch done" -- "$BATCH_DIR" "$renamed" >/dev/null 2>&1; then
+    git mv -- "$renamed" "$BATCH_DIR" >/dev/null 2>&1
+    warn "   note: could not commit the rename of $BATCH_DIR — left it as is"
+    return 0
+  fi
+  say "   ✓ batch marked done  ·  $renamed"
+}
+
 # `ralph next`, asked in-process: the config is already loaded, and a child `bash ralph-next.sh`
 # would source it all again for every question. Same modes, same output, same status (0, 1 for
 # nothing left, 2 for a malformed batch). A snapshot of the list, when one is held, answers
@@ -505,6 +546,8 @@ next_ticket=$(next_sh)
 pick_status=$?
 if [ "$pick_status" -eq 1 ]; then
   say "Nothing to do — every ticket in $BATCH_DIR is already done."
+  # A batch finished by hand gets marked too, like the start-of-run sweep does for tickets.
+  [ "$MODE" = "run" ] && mark_batch_done_on_disk
   exit "$EXIT_DONE"
 elif [ "$pick_status" -ne 0 ]; then
   exit 1
@@ -1344,5 +1387,8 @@ esac
 log_append "#############################################################################"
 say ""
 say "Appended to $RUN_JSONL and $RUN_LOG"
+
+# Last, because the footer above writes into the batch directory this moves.
+[ "$MODE" = "run" ] && [ "$FINAL_STATUS" = "$EXIT_DONE" ] && mark_batch_done_on_disk
 
 exit "$FINAL_STATUS"

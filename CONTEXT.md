@@ -11,7 +11,8 @@ behaves, `lib/` is how it does it, and `docs/adr/` is why.
 
 **Batch**:
 A directory containing a `ralph.conf`, and the tickets to be worked through. The unit
-`ralph run` is pointed at.
+`ralph run` is pointed at. Once every ticket in it is done, the loop renames the directory
+with the `DONE_` prefix, as it does a finished ticket.
 _Avoid_: Project, job, queue
 
 **Ticket**:
