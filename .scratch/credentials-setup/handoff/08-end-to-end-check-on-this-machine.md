@@ -1,17 +1,26 @@
-# Handoff: end-to-end check on this machine
+# Handoff — 08: End-to-end check on this machine
 
-Never paste a token's value here.
+<!-- Fill in every section below, then set ticket 08's status line to done, tick its boxes and
+     commit. Ticket 08a-followup-end-to-end-check-on-this-machine.md checks this file.
+     This file is committed and read by an agent: record a secret by WHERE it is stored, never
+     its value. -->
 
-## `ralph setup`, `--check`, `doctor`
+## `ralph setup` completed; `--check` exited 0; doctor showed credentials ok
 
-## `sbx secret ls` afterwards
+<!-- -->
 
-## Live run in tldw
+## `sbx secret ls` no longer shows an oauth anthropic secret
 
-(ticket that started, any prompt or stop seen)
+<!-- -->
 
-## Wrong-token run
+## The live run started a ticket with no Docker prompt and no auth stop
 
-(where it stopped, the message shown; did the token appear in console or `ralph-runs.log`?)
+<!-- -->
 
-## Wording in `ralph setup` that was confusing
+## A wrong token stopped the run in preflight, and the token appeared nowhere
+
+<!-- -->
+
+## Anything confusing in `ralph setup`'s wording is written down
+
+<!-- -->

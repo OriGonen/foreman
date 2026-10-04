@@ -1,24 +1,26 @@
-# Handoff: how `sbx secret` handles a `claude setup-token` token
+# Handoff — 02: Find out how `sbx secret` handles a `claude setup-token` token
 
-Never paste a token's value here. Say where it is stored instead.
+<!-- Fill in every section below, then set ticket 02's status line to done, tick its boxes and
+     commit. Ticket 02a-followup-find-out-how-sbx-secret-takes-a-setup-token.md checks this file.
+     This file is committed and read by an agent: record a secret by WHERE it is stored, never
+     its value. -->
 
-## Does the anthropic slot accept a setup-token token?
+## Whether the anthropic slot accepts a setup-token token, or only an API key, is recorded
 
-(yes / no — and if no, did an API key work instead?)
+<!-- -->
 
-## Re-setting an existing secret
+## What re-setting an existing secret does (global, scoped, over oauth) is recorded
 
-- Global, over an api-key secret:
-- Global, over an `(oauth configured)` secret:
-- Scoped (`--sandbox`):
+<!-- -->
 
-## Does an existing sandbox pick up a changed global secret?
+## Whether an existing sandbox picks up a changed global secret is recorded
 
-## Does the openrouter custom secret interfere?
+<!-- -->
 
-## `sbx` output for a rejected token (value redacted)
+## Whether the openrouter custom secret interferes is recorded
 
-```
-```
+<!-- -->
 
-## Anything else ticket 03 should know
+## The exact `sbx` output for a rejected/invalid token is pasted (value redacted)
+
+<!-- -->
