@@ -475,6 +475,9 @@ done`. The run log and `progress.txt` travel with the directory. It is skipped, 
 when tracked files under the batch have uncommitted changes (`RALPH_ALLOW_DIRTY`), or when
 the `DONE_` name is already taken. `RALPH_DONE_PREFIX=` turns off both this and the ticket
 rename. Afterwards every command needs the new path: `ralph report .scratch/DONE_foo`.
+A `DONE_` batch is also skipped when `<batch>` is omitted, so `ralph status` on its own finds
+the one unfinished batch rather than complaining that two directories have a `ralph.conf`.
+(The prefix is read from the environment for this, since no batch's `ralph.conf` is known yet.)
 
 A turn that ends cleanly and uncommitted, with the ticket unflipped and HEAD exactly where it
 started, is a **stall** — the shape of a turn that simply ran out of room before reaching its

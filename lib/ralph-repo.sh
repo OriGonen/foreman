@@ -118,13 +118,19 @@ ralph_batch_relpath() {
 # function) use, so an omitted batch means the same thing everywhere.
 #
 # Skips dependency trees, git internals, and the worktrees Claude Code creates (each of
-# which contains a full copy of every batch).
+# which contains a full copy of every batch). Also skips finished batches — directories
+# the loop renamed with RALPH_DONE_PREFIX (DONE_foo) — so a batch left lying around after
+# it finished cannot make an omitted <batch> ambiguous. Name one explicitly to still use it.
+# The prefix is read from the environment only: this runs before any batch's ralph.conf is
+# known, so a prefix set there cannot apply.
 ralph_find_batches() {
-  local root="${1:-.}"
+  local root="${1:-.}" prefix="${RALPH_DONE_PREFIX-DONE_}"
+  local -a skip_done=()
+  [ -z "$prefix" ] || skip_done=( -o -type d -name "${prefix//[\\*?[]/\\&}*" )
   (
     cd "$root" 2>/dev/null || return 1
     find . \
-      \( -name node_modules -o -name .git -o -path './.claude/worktrees' -o -name .svelte-kit \) -prune \
+      \( -name node_modules -o -name .git -o -path './.claude/worktrees' -o -name .svelte-kit "${skip_done[@]}" \) -prune \
       -o -name ralph.conf -print 2>/dev/null |
       sed 's|^\./||; s|/ralph\.conf$||' | sort
   )

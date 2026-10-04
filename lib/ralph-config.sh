@@ -72,7 +72,8 @@ if [ -z "${RALPH_BATCH:-}" ]; then
   if [ "$_ralph_count" = "1" ]; then
     RALPH_BATCH="$_ralph_candidates"
   elif [ "$_ralph_count" = "0" ]; then
-    echo "ralph: no batch given and no ralph.conf found anywhere in $REPO_ROOT." >&2
+    echo "ralph: no batch given and no unfinished ralph.conf batch found anywhere in $REPO_ROOT." >&2
+    echo "       (Finished batches, renamed ${RALPH_DONE_PREFIX-DONE_}<name>, are skipped; name one to use it.)" >&2
     echo "       Pass one:      $RALPH_INVOKE status <batch-dir>" >&2
     echo "       Or create one: $RALPH_INVOKE init <batch-dir>" >&2
     return 1 2>/dev/null || exit 1

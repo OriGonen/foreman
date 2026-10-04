@@ -1503,6 +1503,28 @@ if case_is "a finished batch directory is renamed with the done prefix"; then
   [ -d "$repo/DONE_batch" ] && [ ! -e "$repo/DONE_DONE_batch" ] && pass || fail "no second prefix"
 fi
 
+if case_is "commands with no batch argument skip finished batches"; then
+  repo="$(make_repo 1 done-batch-skip-repo)"
+  run_ralph "$repo" run batch --unlimited
+  assert_eq "$ST" 0 "the batch finishes and becomes DONE_batch"
+
+  run_ralph "$repo" status
+  [ "$ST" != 0 ] && pass || fail "a repo whose only batch is finished has no batch to default to"
+  assert_contains "$OUT" "no unfinished ralph.conf batch" "and says why"
+
+  # A second, unfinished batch becomes the only candidate — the finished one does not make it ambiguous.
+  mkdir -p "$repo/other/issues"
+  cp "$repo/DONE_batch/ralph.conf" "$repo/other/ralph.conf"
+  printf '# Ticket 1\n\n**Status:** ready-for-agent\n\n- [ ] one\n' > "$repo/other/issues/01-ticket.md"
+  git -C "$repo" add other && git -C "$repo" commit --quiet -m "another batch"
+  run_ralph "$repo" status
+  assert_eq "$ST" 0 "status picks the unfinished batch"
+  assert_contains "$OUT" "01-ticket.md" "and lists its ticket"
+
+  run_ralph "$repo" status DONE_batch
+  assert_eq "$ST" 0 "a finished batch can still be named"
+fi
+
 if case_is "RALPH_DONE_PREFIX empty leaves the batch directory alone"; then
   repo="$(make_repo 1 done-batch-off-repo)"
   RALPH_DONE_PREFIX= run_ralph "$repo" run batch --unlimited
