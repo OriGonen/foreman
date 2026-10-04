@@ -628,6 +628,52 @@ if case_is "the dirty-tree recovery note matches the mode actually in force"; th
   assert_missing "$note" "git add -A && git commit -m 'wip:" "sandbox: never the host-commit line"
 fi
 
+if case_is "the sandbox adapters sign in to Docker with a token, only when asked to"; then
+  # A stub `sbx` that records how it was called, so this needs no Docker account and the
+  # token can be checked for the one property that matters: it is on stdin, not in argv.
+  stub="$WORK/dockerlogin-bin"; mkdir -p "$stub"
+  cat > "$stub/sbx" <<'STUB'
+#!/bin/bash
+printf '%s\n' "$*" > "$STUB_ARGS"
+cat > "$STUB_STDIN"
+[ "${STUB_EXIT:-0}" -eq 0 ] || { echo "unauthorized: bad token"; exit 1; }
+STUB
+  chmod +x "$stub/sbx"
+  login_with() {
+    PATH="$stub:$PATH" STUB_ARGS="$WORK/login.args" STUB_STDIN="$WORK/login.stdin" \
+      bash -c '
+        warn() { printf "%s\n" "$*" >&2; }
+        warn_preflight() { warn "preflight: $*"; }
+        source "$1/lib/exec/_sbx.sh"
+        _sbx_login
+      ' _ "$RALPH_HOME" 2>&1
+  }
+  rm -f "$WORK/login.args" "$WORK/login.stdin"
+
+  # Neither variable set: nothing changes from before — sbx is not even called.
+  unset RALPH_DOCKER_USERNAME RALPH_DOCKER_PAT
+  OUT="$(login_with)"; ST=$?
+  assert_eq "$ST" 0 "no variables: succeeds"
+  assert_eq "$([ -e "$WORK/login.args" ] && echo called || echo not-called)" "not-called" \
+    "no variables: sbx login is not run"
+
+  OUT="$(RALPH_DOCKER_USERNAME=someone login_with)"
+  assert_eq "$([ -e "$WORK/login.args" ] && echo called || echo not-called)" "not-called" \
+    "a username without a token: still not run"
+
+  OUT="$(RALPH_DOCKER_USERNAME=someone RALPH_DOCKER_PAT=SECRET-TOKEN-123 login_with)"; ST=$?
+  assert_eq "$ST" 0 "both set: succeeds"
+  assert_contains "$(cat "$WORK/login.args")" "login --username someone --password-stdin" \
+    "logs in non-interactively"
+  assert_missing "$(cat "$WORK/login.args")" "SECRET-TOKEN-123" "the token is not on the command line"
+  assert_eq "$(cat "$WORK/login.stdin")" "SECRET-TOKEN-123" "the token arrives on stdin"
+
+  OUT="$(RALPH_DOCKER_USERNAME=someone RALPH_DOCKER_PAT=SECRET-TOKEN-123 STUB_EXIT=1 login_with)"
+  assert_contains "$OUT" "could not sign in to Docker" "a rejected token is reported"
+  assert_contains "$OUT" "unauthorized: bad token" "with what sbx said"
+  assert_missing "$OUT" "SECRET-TOKEN-123" "and never echoes the token"
+fi
+
 if case_is "syncing refuses over a dirty tree rather than resetting it"; then
   repo="$(make_repo 2 refuse-sync-repo)"
 
@@ -2136,6 +2182,140 @@ if case_is "ralph finds its toolkit when bash is handed a Windows path, as ralph
   else
     pass  # no cygpath, so this is not Windows: a backslash path is just an odd file name
   fi
+fi
+
+# --- colour (ralph-ui.sh) ----------------------------------------------------
+# run_ralph captures through `$(...)`, so none of these runs has a terminal: what they show is
+# the auto rule (plain), and RALPH_COLOR=always for the colour itself. A real terminal is the
+# one thing a test run cannot give — try `RALPH_COLOR=auto ralph run <batch>` by hand.
+
+# The lines whose wording colour must not change: every event line, rule and frame, with the
+# things that differ between two runs (the run id, a commit's short sha) normalised away.
+colour_lines() {
+  printf '%s\n' "$1" | sed $'s/\033\[[0-9;]*m//g' |
+    grep -E '^( +(✓|⋯|↩|✗)|──|== )' |
+    sed -E 's/[0-9]{8}T[0-9]{6}Z-[0-9]+/RUN/; s/[0-9a-f]{7}( |$)/SHA\1/'
+}
+
+if case_is "colour is off when output is not a terminal, and the log never carries it"; then
+  ESC=$'\033'
+  repo="$(make_repo 3 colour-plain-repo)"
+  RALPH_FAKE_BEHAVIOUR=transient:land:partial-turn:land run_ralph "$repo" run batch --unlimited
+
+  assert_eq "$ST" 0 "the batch finishes"
+  assert_missing "$OUT" "$ESC" "a captured run has no escape codes at all"
+  assert_contains "$OUT" "   ✓ landed  ·  " "a landing line keeps its shape"
+  assert_contains "$OUT" "   ⋯ progressed  ·  " "and a progress line"
+  assert_contains "$OUT" "   ✗ did not land (exit 1)." "and a failure line"
+  assert_contains "$OUT" "── iteration 1  ·  batch/issues/01-ticket.md" "and the iteration rule"
+  assert_contains "$OUT" "== run " "and the summary frame"
+
+  # NO_COLOR is a no-op here, being already off — and must not break anything.
+  NO_COLOR=1 run_ralph "$repo" status batch
+  assert_missing "$OUT" "$ESC" "status with NO_COLOR set is plain too"
+
+  # Forcing colour on must not reach the files a run writes.
+  repo="$(make_repo 3 colour-log-repo)"
+  RALPH_COLOR=always RALPH_FAKE_BEHAVIOUR=land run_ralph "$repo" run batch --unlimited
+  assert_missing "$(cat "$repo"/*batch/ralph-runs.log)" "$ESC" "the run log has no escape codes, even with colour forced"
+  assert_missing "$(cat "$repo"/*batch/ralph-runs.jsonl)" "$ESC" "nor has the jsonl"
+fi
+
+if case_is "RALPH_COLOR=always colours the glyph or prefix only, and the words stay the same"; then
+  ESC=$'\033'
+  # A ticket with an open checkbox is what makes the loop print a `note:` when it lands. Both
+  # runs get it, so the lines compared below are the same lines.
+  plain_repo="$(make_repo 3 colour-same-plain)"
+  printf '\n- [ ] still open\n' >> "$plain_repo/batch/issues/01-ticket.md"
+  git -C "$plain_repo" commit --quiet -am "open box"
+  RALPH_FAKE_BEHAVIOUR=transient:land:partial-turn:land run_ralph "$plain_repo" run batch --unlimited
+  plain_lines="$(colour_lines "$OUT")"
+
+  repo="$(make_repo 3 colour-same-repo)"
+  printf '\n- [ ] still open\n' >> "$repo/batch/issues/01-ticket.md"
+  git -C "$repo" commit --quiet -am "open box"
+  RALPH_COLOR=always RALPH_FAKE_BEHAVIOUR=transient:land:partial-turn:land \
+    run_ralph "$repo" run batch --unlimited
+
+  assert_contains "$OUT" "${ESC}[32m✓${ESC}[0m landed  ·  " "landed is a green tick"
+  assert_contains "$OUT" "${ESC}[2m⋯${ESC}[0m progressed  ·  " "progress is a dim ellipsis"
+  assert_contains "$OUT" "${ESC}[31m✗${ESC}[0m did not land (exit 1)." "a failure is a red cross"
+  assert_contains "$OUT" "${ESC}[34m──${ESC}[0m iteration 1  ·  " "a rule is blue, its text is not"
+  assert_contains "$OUT" "${ESC}[34m==${ESC}[0m run " "the summary frame opens blue"
+  assert_contains "$OUT" "${ESC}[34m==${ESC}[0m"$'\n' "and closes blue"
+  assert_contains "$OUT" "   ${ESC}[33mnote:${ESC}[0m batch/issues/01-ticket.md is 'implemented' but has unchecked boxes" \
+    "a note's prefix is yellow"
+  # Take the codes out and the same words are left, in the same places.
+  assert_eq "$(colour_lines "$OUT")" "$plain_lines" "stripped of colour, the output is the plain output"
+fi
+
+if case_is "RALPH_COLOR is read from ralph.conf, the environment beats it, and a bad value is refused"; then
+  ESC=$'\033'
+  repo="$(make_repo 4 colour-conf-repo)"
+  printf 'RALPH_COLOR=always\n' >> "$repo/batch/ralph.conf"
+  git -C "$repo" commit --quiet -am "colour on"
+
+  run_ralph "$repo" run batch
+  assert_contains "$OUT" "${ESC}[32m✓${ESC}[0m landed" "ralph.conf can turn colour on"
+
+  RALPH_COLOR=never run_ralph "$repo" run batch
+  assert_missing "$OUT" "$ESC" "and the environment wins over it"
+
+  # An explicit RALPH_COLOR is a decision about ralph; NO_COLOR is a default for every tool.
+  NO_COLOR=1 RALPH_COLOR=always run_ralph "$repo" run batch
+  assert_contains "$OUT" "${ESC}[32m✓${ESC}[0m landed" "RALPH_COLOR=always wins over NO_COLOR"
+
+  RALPH_COLOR=rainbow run_ralph "$repo" status batch
+  assert_eq "$ST" 1 "an unknown value is a usage error"
+  assert_contains "$OUT" "RALPH_COLOR must be auto, always or never (got 'rainbow')" "that says what is allowed"
+fi
+
+if case_is "a preflight failure is prefixed in colour only when asked to be"; then
+  ESC=$'\033'
+  repo="$(make_repo 1 colour-preflight-repo)"
+  printf 'stray edit\n' >> "$repo/batch/issues/01-ticket.md"
+
+  run_ralph "$repo" run batch
+  assert_eq "$ST" 1 "a dirty tree is refused"
+  assert_contains "$OUT" "preflight: the working tree is dirty." "plain: the prefix is just text"
+  assert_missing "$OUT" "$ESC" "and there is no escape code"
+
+  RALPH_COLOR=always run_ralph "$repo" run batch
+  assert_eq "$ST" 1 "still refused"
+  assert_contains "$OUT" "${ESC}[33mpreflight:${ESC}[0m the working tree is dirty." "forced: the prefix is yellow"
+  assert_contains "$OUT" "           iteration's review sees only what this iteration wrote." \
+    "continuation lines keep their 11-column indent, uncoloured"
+fi
+
+if case_is "a key echo is plain text unless colour is asked for, and always takes over the line"; then
+  ESC=$'\033'
+  ctl="$WORK/colour-keys-ctl"
+  mkdir -p "$ctl"
+  printf '3\n' > "$ctl/budget"
+  printf '1\n' > "$ctl/iteration"
+
+  OUT="$(bash "$RALPH_HOME/lib/ralph-keys.sh" --apply + "$ctl" 2>&1)"
+  assert_eq "$OUT" $'\r\033[2K   ⌨ iterations: 1 of 4' "plain: byte for byte what it always was"
+
+  OUT="$(RALPH_COLOR=always bash "$RALPH_HOME/lib/ralph-keys.sh" --apply + "$ctl" 2>&1)"
+  assert_eq "$OUT" $'\r\033[2K   \033[34m⌨\033[0m iterations: 1 of 5' \
+    "forced: only the glyph is blue, and the erase-line still comes first"
+
+  OUT="$(NO_COLOR=1 bash "$RALPH_HOME/lib/ralph-keys.sh" --apply + "$ctl" 2>&1)"
+  assert_missing "$OUT" "[34m" "NO_COLOR keeps the echo plain"
+fi
+
+if case_is "--live draws its clock dim only when colour is on, and the line is otherwise the same"; then
+  ESC=$'\033'
+  repo="$(make_repo 2 colour-live-repo)"
+  RALPH_FAKE_BEHAVIOUR=stream run_ralph "$repo" run batch --live
+  assert_missing "$OUT" "$ESC" "a plain ticker line has no escape codes"
+  assert_contains "$OUT" " · Write src/foo.js" "and is clock, dot, label"
+
+  repo="$(make_repo 2 colour-live-forced-repo)"
+  RALPH_COLOR=always RALPH_FAKE_BEHAVIOUR=stream run_ralph "$repo" run batch --live
+  assert_contains "$OUT" "   ${ESC}[2m00:0" "forced: the clock digits are dim"
+  assert_contains "$OUT" "${ESC}[0m · Write src/foo.js" "and the dot and the label are not"
 fi
 
 # ---------------------------------------------------------------------------

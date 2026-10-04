@@ -42,6 +42,11 @@
 RALPH_EXEC_DIR="${BASH_SOURCE[0]%/*}"; [ "$RALPH_EXEC_DIR" != "${BASH_SOURCE[0]}" ] || RALPH_EXEC_DIR=.
 RALPH_EXEC_DIR="$(cd "${RALPH_EXEC_DIR:-/}/exec" 2>/dev/null && pwd)"
 
+# The adapters' preflight lines use warn_preflight, so anything that loads an adapter needs
+# the output helpers (guarded: ralph-loop.sh sources the same file).
+# shellcheck source=ralph-ui.sh
+source "$RALPH_EXEC_DIR/../ralph-ui.sh" || return 1
+
 # The adapters print through these. ralph-loop.sh defines its own first; anything else
 # sourcing an adapter (ralph-prompt.sh, ralph-doctor.sh) gets these.
 if ! declare -F say >/dev/null 2>&1; then

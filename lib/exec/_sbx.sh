@@ -36,7 +36,7 @@ _sbx_point_origin_at_source() {
 # mount is the thing anyone means.
 _sbx_preflight() {
   [ "$(git rev-parse --git-dir)" != "$(git rev-parse --git-common-dir)" ] || return 0
-  warn "preflight: this is a linked worktree ($REPO_ROOT)."
+  warn_preflight "this is a linked worktree ($REPO_ROOT)."
   warn "           The sandbox acts on the repository at this path, and a worktree's .git"
   warn "           is a file pointing outside it. Run the loop from the primary checkout,"
   warn "           on whichever branch you want the batch to land on — or set"
@@ -70,7 +70,7 @@ _sbx_probe() {
   fi
   _sbx_sh "$RALPH_SANDBOX_PROBE" >/dev/null 2>&1 && return 0
 
-  warn "preflight: the sandbox is not ready — this probe still fails:"
+  warn_preflight "the sandbox is not ready — this probe still fails:"
   warn "             $RALPH_SANDBOX_PROBE"
   warn "           Every iteration's verification step would fail the same way, so"
   warn "           nothing has been spent. Diagnose with:"
@@ -105,7 +105,29 @@ exec_run() {
     --print "${RALPH_EXEC_FORMAT_ARGS[@]}" -p "$1"
 }
 
-exec_preflight() { _sbx_preflight; }
+# Sign in to Docker without a browser, when asked to. `sbx` signs out on its own schedule and
+# its first command after that starts an interactive device-code flow — which, run unattended,
+# is a stall rather than a prompt. With RALPH_DOCKER_USERNAME and RALPH_DOCKER_PAT in the
+# environment, log in with a Docker access token first; `sbx login` is idempotent, so doing
+# it every run costs one call and removes the question of whether the session is still live.
+#
+# Environment only, never ralph.conf: that file is checked into the batch's repository, and
+# the token is a credential. It travels on stdin, so it is on no command line and in no
+# process listing. Neither variable set means nothing changes from before.
+_sbx_login() {
+  [ -n "${RALPH_DOCKER_USERNAME:-}" ] && [ -n "${RALPH_DOCKER_PAT:-}" ] || return 0
+  local out
+  if out=$(printf '%s' "$RALPH_DOCKER_PAT" |
+           sbx login --username "$RALPH_DOCKER_USERNAME" --password-stdin 2>&1); then
+    return 0
+  fi
+  warn_preflight "could not sign in to Docker as '$RALPH_DOCKER_USERNAME' with RALPH_DOCKER_PAT."
+  warn "           The token may be revoked or mistyped. sbx said:"
+  printf '%s\n' "$out" | sed 's/^/             /' >&2
+  return 1
+}
+
+exec_preflight() { _sbx_login && _sbx_preflight; }
 
 # The commands that get a range of commits out of the sandbox's clone and onto this
 # branch — one source of truth for the two recovery notes that both need it (stranded

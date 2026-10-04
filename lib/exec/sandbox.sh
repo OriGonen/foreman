@@ -31,7 +31,7 @@ exec_prepare() {
   # A sandbox left over from the other arrangement is the single most expensive mistake
   # available here: it looks fine and fails every iteration *after* paying for the work.
   if ! _sbx_is_clone_mode; then
-    warn "preflight: sandbox '$RALPH_SANDBOX' exists but has no $_SBX_SOURCE_MOUNT in it —"
+    warn_preflight "sandbox '$RALPH_SANDBOX' exists but has no $_SBX_SOURCE_MOUNT in it —"
     warn "           it is not a clone sandbox. Recreate it:"
     warn "             sbx rm --force $RALPH_SANDBOX"
     warn "           (If \`sbx\` is signed out, run \`sbx login\` first.)"
@@ -42,7 +42,7 @@ exec_prepare() {
   # of a repo that already has a GitHub (or other) origin keeps that URL, so left alone this
   # would fetch GitHub and reset to a commit that may never have been pushed there.
   if ! _sbx_point_origin_at_source; then
-    warn "preflight: could not point '$RALPH_SANDBOX''s origin at $_SBX_SOURCE_MOUNT."
+    warn_preflight "could not point '$RALPH_SANDBOX''s origin at $_SBX_SOURCE_MOUNT."
     warn "           Its origin is currently:"
     warn "             $(_sbx_sh 'git remote get-url origin 2>/dev/null' 2>/dev/null | tr -d '\r')"
     warn "           and exec_sync_down fetches from origin every iteration, so this must"

@@ -20,6 +20,11 @@
 # no external commands: a reader waiting on a key starts no processes, which matters under
 # MSYS, where starting one is the expensive thing. A key press may spawn one (the `mv`).
 
+# This file's directory, from the shell and not `dirname` (see ralph-config.sh).
+_keys_dir="${BASH_SOURCE[0]%/*}"; [ "$_keys_dir" != "${BASH_SOURCE[0]}" ] || _keys_dir=.
+# shellcheck source=ralph-ui.sh
+source "$_keys_dir/ralph-ui.sh" || exit 1
+
 # Sets _KEYS_BUDGET and _KEYS_ITERATION from the control files; a missing or garbled file
 # reads as 0.
 _keys_read_state() {
@@ -31,9 +36,10 @@ _keys_read_state() {
   [[ "$_KEYS_ITERATION" =~ ^[0-9]+$ ]] || _KEYS_ITERATION=0
 }
 
-# One line on stderr. The leading `\r` plus erase-line takes over whatever in-place line is
-# there — the `--live` ticker (ralph-stream.cjs) — which repaints itself on its next tick.
-_keys_say() { printf '\r\033[2K   ⌨ %s\n' "$1" >&2; }
+# One line on stderr, drawn by ralph-ui.sh. Its leading `\r` plus erase-line takes over
+# whatever in-place line is there — the `--live` ticker (ralph-stream.cjs) — which repaints
+# itself on its next tick.
+_keys_say() { ui_key_echo "$1"; }
 
 # Applies one key to the control files and says what it did. Anything that is not one of
 # the four keys is ignored without a word.

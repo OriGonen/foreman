@@ -286,6 +286,22 @@ inside the sandbox before any money is spent, and `RALPH_SANDBOX_SETUP` to the c
 fixes it. Without them the first iteration on a fresh clone pays for the model's work and
 then fails its verification step.
 
+**Staying signed in to Docker.** `sbx` signs out on its own schedule, and its next command
+then starts a browser device-code flow that an unattended run cannot answer. Give ralph a
+Docker access token and it signs in itself, quietly, at the start of every run:
+
+```powershell
+setx RALPH_DOCKER_USERNAME "your-docker-username"
+setx RALPH_DOCKER_PAT "dckr_pat_..."      # then open a new terminal
+```
+
+Create the token at hub.docker.com → Account settings → Personal access tokens (expiration
+*None*; the lowest *Repo* permission that `sbx login` accepts). These are read from the
+environment only — never put the token in `ralph.conf`, which is committed. A rejected
+token stops the run in preflight with what `sbx` said. Neither variable set means ralph
+does nothing here, as before. This covers Docker's login only; the agent's own Claude login
+inside the sandbox is separate (`sbx secret ls`).
+
 The sandbox is named `ralph-<repo>` by default, so each repository gets its own and every
 batch in it shares that one — the setup cost is paid once per repo.
 
@@ -322,6 +338,29 @@ pipeline either way and is a pass-through when the run is not being watched, so 
 code path rather than two. `--live` also switches the agent to `--output-format stream-json`
 (which the CLI requires `--verbose` alongside); the recorder still receives exactly the one
 result object it always did. `ralph dry-run` reports which state a run would use.
+
+### Colour — `NO_COLOR` and `RALPH_COLOR`
+
+On a terminal, ralph colours the **glyph or prefix** of a line and nothing else: `✓` green,
+`✗` red, `⋯` dim, `↩` and the `note:` and `preflight:` prefixes yellow, `⌨` and the `──` and
+`==` rules blue, and the `--live` clock dim. The words are never coloured and the glyph still
+carries the meaning, so a run read without colour loses nothing. Only the terminal's basic 16
+colours are used, so your own theme picks the shades.
+
+Colour is decided per stream: it is on only when the stream a line is written to is a
+terminal, so `ralph run … > run.txt`, a pipe, or CI output stays plain, byte for byte. The run
+log and the jsonl never contain colour codes. It is off when `NO_COLOR` is set or `TERM` is
+`dumb`. `RALPH_COLOR` overrides all of that, in the environment or in `ralph.conf`:
+
+| `RALPH_COLOR` | |
+|---|---|
+| `auto` | the default: a terminal, unless `NO_COLOR` is set |
+| `always` | colour even when piped or redirected — and even with `NO_COLOR` set, since naming it is a decision about ralph |
+| `never` | no colour |
+
+```bash
+RALPH_COLOR=always ralph run .scratch/my-batch | less -R
+```
 
 ### Tickets bigger than one turn
 
@@ -553,6 +592,7 @@ That tool is manual and is never invoked by the loop.
 | `lib/ralph-record.cjs` | appends one iteration to both logs; writes the verdict the loop acts on |
 | `lib/ralph-report.cjs` | manual log reader |
 | `lib/ralph-stream.cjs` | sits between the agent and the recorder; draws the run when `--live`, a pass-through otherwise |
+| `lib/ralph-ui.sh` | how output looks: the glyphs, indents, `  ·  ` separators and colour, as `say_event`, `say_rule` and friends — sourced, never run |
 | `lib/ralph-strip-ansi.cjs` | removes `sbx`'s banner control codes — shared by the two above |
 | `lib/ralph-init.sh` | scaffolds a batch, then runs `ralph-order.sh` unless told not to |
 | `lib/ralph-order.sh` | has an agent order the tickets by dependency, importance and load |

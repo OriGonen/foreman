@@ -67,6 +67,9 @@
 #                                  override, on purpose: it is what makes a rerun safe)
 #   RALPH_SANDBOX=<name>           sandbox to create/reattach to
 #   RALPH_SKIP_SANDBOX_PROBE=1     skip the batch's sandbox readiness probe and its setup
+#   RALPH_DOCKER_USERNAME / RALPH_DOCKER_PAT   (environment only, sandbox modes) sign in to
+#                                  Docker with this access token before each run, so an
+#                                  expired `sbx` session never waits on a browser
 #
 # EXIT CODES
 #   0   every ticket in the batch is done
@@ -127,6 +130,8 @@ unset RALPH_BATCH_FROM_ARG
 source "$RALPH_TOOL_DIR/ralph-config.sh" || exit 1
 # shellcheck source=ralph-human.sh
 source "$RALPH_TOOL_DIR/ralph-human.sh" || exit 1
+# shellcheck source=ralph-ui.sh
+source "$RALPH_TOOL_DIR/ralph-ui.sh" || exit 1
 
 MAX_COST="$RALPH_MAX_COST_USD"
 MAX_MINUTES="$RALPH_MAX_MINUTES"
@@ -242,7 +247,7 @@ mark_ticket_done_on_disk() {    # mark_ticket_done_on_disk TICKET
   [ -f "$ticket" ] && ticket_is_done "$ticket" || return 0
 
   if ticket_has_unchecked_boxes "$ticket"; then
-    warn "   note: $ticket is '$RALPH_DONE_WORD' but has unchecked boxes — leaving its name alone"
+    warn_note "$ticket is '$RALPH_DONE_WORD' but has unchecked boxes — leaving its name alone"
     return 0
   fi
 
@@ -250,29 +255,29 @@ mark_ticket_done_on_disk() {    # mark_ticket_done_on_disk TICKET
   # and then sent back would be a finished-looking file waiting on a person.
   pending="$(ralph_pending_checker "$ticket")"
   if [ -n "$pending" ]; then
-    warn "   note: $ticket waits for $pending before it is marked done"
+    warn_note "$ticket waits for $pending before it is marked done"
     return 0
   fi
 
   _ralph_dirname dir "$ticket"
   renamed="$dir/$RALPH_DONE_PREFIX$base"
   if [ -e "$renamed" ]; then
-    warn "   note: $renamed already exists — not renaming $ticket"
+    warn_note "$renamed already exists — not renaming $ticket"
     return 0
   fi
 
   if ! git mv -- "$ticket" "$renamed" 2>/dev/null; then
-    warn "   note: could not rename $ticket (is it tracked?) — leaving it as is"
+    warn_note "could not rename $ticket (is it tracked?) — leaving it as is"
     return 0
   fi
   # Only the two paths: a bare `git commit` would sweep up anything else staged, which
   # RALPH_ALLOW_DIRTY makes possible.
   if ! git commit --quiet -m "chore: mark $base done" -- "$ticket" "$renamed" >/dev/null 2>&1; then
     git mv -- "$renamed" "$ticket" >/dev/null 2>&1
-    warn "   note: could not commit the rename of $ticket — left it as is"
+    warn_note "could not commit the rename of $ticket — left it as is"
     return 0
   fi
-  say "   ✓ marked done  ·  $renamed"
+  say_event ok "marked done" "$renamed"
 }
 
 # The same for the batch directory, once every ticket in it is done: .scratch/foo becomes
@@ -296,24 +301,24 @@ mark_batch_done_on_disk() {
   renamed="$dir/$RALPH_DONE_PREFIX$base"
   [ "$dir" != "." ] || renamed="$RALPH_DONE_PREFIX$base"
   if [ -e "$renamed" ]; then
-    warn "   note: $renamed already exists — not renaming $BATCH_DIR"
+    warn_note "$renamed already exists — not renaming $BATCH_DIR"
     return 0
   fi
   if [ -n "$(git status --porcelain --untracked-files=no -- "$BATCH_DIR")" ]; then
-    warn "   note: $BATCH_DIR has uncommitted changes — leaving its name alone"
+    warn_note "$BATCH_DIR has uncommitted changes — leaving its name alone"
     return 0
   fi
 
   if ! git mv -- "$BATCH_DIR" "$renamed" 2>/dev/null; then
-    warn "   note: could not rename $BATCH_DIR (is it tracked?) — leaving it as is"
+    warn_note "could not rename $BATCH_DIR (is it tracked?) — leaving it as is"
     return 0
   fi
   if ! git commit --quiet -m "chore: mark $base batch done" -- "$BATCH_DIR" "$renamed" >/dev/null 2>&1; then
     git mv -- "$renamed" "$BATCH_DIR" >/dev/null 2>&1
-    warn "   note: could not commit the rename of $BATCH_DIR — left it as is"
+    warn_note "could not commit the rename of $BATCH_DIR — left it as is"
     return 0
   fi
-  say "   ✓ batch marked done  ·  $renamed"
+  say_event ok "batch marked done" "$renamed"
 }
 
 # `ralph next`, asked in-process: the config is already loaded, and a child `bash ralph-next.sh`
@@ -327,18 +332,19 @@ next_sh() { ralph_next_answer "${1:-next}"; }
 # `status` and `dry-run` both print, so the two views cannot disagree. A batch with neither
 # kind of ticket prints exactly what plain numbering would.
 print_remaining_marked() {    # print_remaining_marked < ticket-list
-  local n=0 ticket mark
+  local n=0 ticket mark line
   while IFS= read -r ticket; do
     [ -n "$ticket" ] || continue
     n=$((n + 1))
     mark=""
     ralph_ticket_status "$ticket"
     if [ "$_RALPH_TICKET_HUMAN" = 1 ]; then
-      mark="   [HUMAN]"
+      ui_paint mark 1 warn "[HUMAN]"; mark="   $mark"
     elif [ -n "$_RALPH_TICKET_CHECKS" ]; then
-      mark="   [CHECKS $_RALPH_TICKET_CHECKS]"
+      ui_paint mark 1 muted "[CHECKS $_RALPH_TICKET_CHECKS]"; mark="   $mark"
     fi
-    say "$(printf '%3d  %s%s' "$n" "${ticket##*/}" "$mark")"
+    printf -v line '%3d  %s%s' "$n" "${ticket##*/}" "$mark"
+    say "$line"
   done
 }
 
@@ -363,7 +369,7 @@ resume_args() {
 human_ticket_note() {    # human_ticket_note TICKET
   local ticket="$1" handoff n=1 done_step sent_back_by
   handoff="$(ralph_handoff_path "$ticket")"
-  say "── $ticket is a human ticket. The loop stops here."
+  say_rule "$ticket is a human ticket. The loop stops here."
   say ""
   sent_back_by="$(ralph_was_sent_back "$ticket")"
   if [ -n "$sent_back_by" ]; then
@@ -410,7 +416,7 @@ stall_marker_get() {
 
 write_stall_marker() {    # write_stall_marker TICKET BASE
   printf 'ticket=%s\nbase_ref=%s\nsandbox=%s\n' "$1" "$2" "$RALPH_SANDBOX" > "$STALL_MARKER_FILE" ||
-    warn "   note: could not record the stall, so a rerun will refuse rather than rescue it"
+    warn_note "could not record the stall, so a rerun will refuse rather than rescue it"
 }
 
 # Does the marker vouch for the tree this run is about to find, for TICKET? All three must
@@ -442,11 +448,11 @@ progress_line() {
   human_remaining=$(human_tickets_remaining)
   line="Tickets done: ${counts% *} / ${counts#* }"
   [ "$human_remaining" -gt 0 ] && line="$line  ·  human tickets remaining: $human_remaining"
-  say "$line"
+  say_tag muted "Tickets done:" "${line#Tickets done: }"
 }
 
 if [ "$MODE" = "status" ]; then
-  say "Batch: $BATCH_DIR${RALPH_BATCH_NAME:+ ($RALPH_BATCH_NAME)}"
+  say_tag muted "Batch:" "$BATCH_DIR${RALPH_BATCH_NAME:+ ($RALPH_BATCH_NAME)}"
   # Nothing here changes a ticket, so the list is worked out once and every question below is
   # answered from it.
   ralph_tickets_hold || exit 1
@@ -454,9 +460,10 @@ if [ "$MODE" = "status" ]; then
   say ""
   if next_ticket=$(next_sh); then
     if ralph_ticket_needs_human "$next_ticket"; then
-      say "Next: ${next_ticket##*/}   [HUMAN — the loop will not run until you do it]"
+      ui_paint human_flag 1 warn "[HUMAN — the loop will not run until you do it]"
+      say_tag muted "Next:" "${next_ticket##*/}   $human_flag"
     else
-      say "Next: ${next_ticket##*/}"
+      say_tag muted "Next:" "${next_ticket##*/}"
     fi
     say ""
     say "Remaining, in order:"
@@ -492,7 +499,7 @@ fi
 preflight_failed=0
 
 for tool in git node awk; do
-  command -v "$tool" >/dev/null 2>&1 || { warn "preflight: '$tool' is not on PATH"; preflight_failed=1; }
+  command -v "$tool" >/dev/null 2>&1 || { warn_preflight "'$tool' is not on PATH"; preflight_failed=1; }
 done
 # What this arrangement needs, asked of the adapter rather than decided here. Both are
 # cheap and start nothing: the expensive setup is exec_prepare, further down, after the
@@ -500,13 +507,13 @@ done
 if [ "$MODE" = "run" ]; then
   exec_tool="$(exec_required_tool)"
   if [ -n "$exec_tool" ] && ! command -v "$exec_tool" >/dev/null 2>&1; then
-    warn "preflight: '$exec_tool' is not on PATH (RALPH_EXEC=$RALPH_EXEC)"
+    warn_preflight "'$exec_tool' is not on PATH (RALPH_EXEC=$RALPH_EXEC)"
     preflight_failed=1
   fi
   exec_preflight || preflight_failed=1
 fi
 
-[ -d "$BATCH_DIR" ] || { warn "preflight: no batch directory at $BATCH_DIR"; preflight_failed=1; }
+[ -d "$BATCH_DIR" ] || { warn_preflight "no batch directory at $BATCH_DIR"; preflight_failed=1; }
 
 # Validates every ticket path and fails loudly on a typo. It also holds the list for the
 # questions the rest of the preflight asks, which change nothing.
@@ -518,7 +525,7 @@ ralph_tickets_hold || preflight_failed=1
 # Not when the stall marker vouches for it: that tree is about to be checkpointed before any
 # iteration starts (see "Start of run" in the loop), so it is not the reviewer's problem.
 if [ "$RALPH_ALLOW_DIRTY" != "1" ] && tree_is_dirty && ! stall_marker_matches "$(next_sh 2>/dev/null)"; then
-  warn "preflight: the working tree is dirty. Commit or set aside first, so this"
+  warn_preflight "the working tree is dirty. Commit or set aside first, so this"
   warn "           iteration's review sees only what this iteration wrote."
   warn "           Override with RALPH_ALLOW_DIRTY=1."
   git status --short >&2
@@ -561,7 +568,7 @@ if [ "$MODE" = "run" ] && ralph_ticket_needs_human "$next_ticket"; then
 fi
 
 if [ "$MODE" = "dry-run" ]; then
-  say "Batch: $BATCH_DIR"
+  say_tag muted "Batch:" "$BATCH_DIR"
   progress_line
   say ""
   say "Would run, in this order:"
@@ -668,6 +675,9 @@ refresh_budget() {
 # — so there is one code path here rather than two.
 STREAM_ARGS=()
 [ "$RALPH_STREAM" = "1" ] && STREAM_ARGS=(--live)
+# The ticker is drawn by a node process that cannot see ralph.conf, so the one colour decision
+# (ralph-ui.sh, for stderr, which is where it draws) is made here and handed over as a flag.
+[ "$RALPH_STREAM" = "1" ] && ui_color_on 2 && STREAM_ARGS+=(--color)
 
 # Ctrl-C should end the run between iterations rather than half-way through one. The trap
 # only raises a flag; the agent is a foreground child, so an interrupt during an iteration
@@ -810,7 +820,7 @@ run_checkpoint_turn() {
     --batch "$BATCH_DIR" --kind checkpoint \
     --base-ref "$BASE_REF" --head-ref "$HEAD_REF" --started-at "$checkpoint_started_at" \
     --exit-status "$checkpoint_agent_status" --tree-dirty "$EXEC_DIRTY" --status-flipped 0 \
-    || warn "   note: could not record the checkpoint turn (usage figures will read as zero)"
+    || warn_note "could not record the checkpoint turn (usage figures will read as zero)"
 
   accumulate_usage "$VERDICT_FILE"
 
@@ -862,7 +872,7 @@ while true; do
     # reported as progress (HEAD moved, the followup ticket is unflipped); say what it really was.
     if [ -n "$CURRENT_TICKET" ] && [ "$(ralph_checked_ticket "$CURRENT_TICKET")" = "$TICKET_FILE" ]; then
       _ralph_basename _sent_back_by "$CURRENT_TICKET"
-      say "   ↩ sent back to a human by $_sent_back_by"
+      say_event sentback "sent back to a human by $_sent_back_by"
     fi
     HUMAN_TICKET="$TICKET_FILE"
     FINAL_STATUS="$EXIT_WAITING_ON_HUMAN"
@@ -902,7 +912,7 @@ while true; do
         # to hold only the ticket's work. A rescue that fails writes it again.
         rm -f "$STALL_MARKER_FILE"
 
-        say "── found $TICKET_FILE's stalled work from an earlier run, still uncommitted"
+        say_rule "found $TICKET_FILE's stalled work from an earlier run, still uncommitted"
         warn "The earlier run stopped on a stall the checkpoint turn could not salvage, and"
         warn "left a marker vouching for this tree. Running a checkpoint turn to commit it"
         warn "before syncing, rather than resetting over it."
@@ -914,7 +924,7 @@ while true; do
           salvaged)
             # Exactly what the same rescue mid-run would have recorded: the ticket is now a
             # continuation of a stall, reviewed from the commit the stall began at.
-            say "   ⋯ stalled, salvaged by a checkpoint turn  ·  $(git log -1 --format=%h "$HEAD_REF")"
+            say_event progress "stalled, salvaged by a checkpoint turn" "$(git log -1 --format=%h "$HEAD_REF")"
             CONTINUATIONS_ON_CURRENT=$((CONTINUATIONS_ON_CURRENT + 1))
             STALLS_ON_CURRENT=$((STALLS_ON_CURRENT + 1))
             LAST_CONTINUATION_STALLED=1
@@ -979,7 +989,9 @@ while true; do
   STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
   printf '%s\n' "$ITERATIONS_RUN" > "$RUN_CTL_DIR/iteration"
-  say "── iteration $ITERATIONS_RUN$([ "$MAX_ITERATIONS" -gt 0 ] && printf ' of %s' "$MAX_ITERATIONS")  ·  $TICKET_FILE$([ "$ATTEMPTS_ON_CURRENT" -gt 1 ] && printf ' (attempt %s)' "$ATTEMPTS_ON_CURRENT")"
+  iter_of=""; [ "$MAX_ITERATIONS" -le 0 ] || iter_of=" of $MAX_ITERATIONS"
+  iter_attempt=""; [ "$ATTEMPTS_ON_CURRENT" -le 1 ] || iter_attempt=" (attempt $ATTEMPTS_ON_CURRENT)"
+  say_rule "iteration $ITERATIONS_RUN$iter_of  ·  $TICKET_FILE$iter_attempt"
 
   # Ask before touching anything: on the clone-based sandbox, syncing is a hard reset plus
   # a wipe of untracked files, and rerunning is the most natural response to any stop there
@@ -1066,7 +1078,7 @@ while true; do
     --batch "$BATCH_DIR" \
     --base-ref "$BASE_REF" --head-ref "$HEAD_REF" --started-at "$STARTED_AT" \
     --exit-status "$agent_status" --tree-dirty "$dirty" --status-flipped "$flipped" \
-    || warn "   note: could not record iteration $ITERATIONS_RUN (usage figures will read as zero)"
+    || warn_note "could not record iteration $ITERATIONS_RUN (usage figures will read as zero)"
 
   accumulate_usage "$VERDICT_FILE"
 
@@ -1184,7 +1196,7 @@ while true; do
           break
           ;;
         salvaged)
-          say "   ⋯ stalled, salvaged by a checkpoint turn  ·  $(git log -1 --format=%h "$HEAD_REF")"
+          say_event progress "stalled, salvaged by a checkpoint turn" "$(git log -1 --format=%h "$HEAD_REF")"
           CONTINUATIONS_ON_CURRENT=$((CONTINUATIONS_ON_CURRENT + 1))
           STALLS_ON_CURRENT=$((STALLS_ON_CURRENT + 1))
           LAST_CONTINUATION_STALLED=1
@@ -1237,9 +1249,9 @@ while true; do
   if [ "$flipped" -eq 1 ]; then
     LANDED=$((LANDED + 1))
     if [ "$HEAD_REF" = "$BASE_REF" ]; then
-      warn "   note: status flipped but HEAD did not move — check $TICKET_FILE was committed"
+      warn_note "status flipped but HEAD did not move — check $TICKET_FILE was committed"
     fi
-    say "   ✓ landed  ·  $(git log -1 --format=%h "$HEAD_REF")"
+    say_event ok "landed" "$(git log -1 --format=%h "$HEAD_REF")"
     # Resolved before the rename: it is read from this ticket's own file, which the rename moves.
     checked_ticket="$(ralph_checked_ticket "$TICKET_FILE")"
     mark_ticket_done_on_disk "$TICKET_FILE"
@@ -1262,7 +1274,7 @@ while true; do
     CONTINUATIONS_ON_CURRENT=$((CONTINUATIONS_ON_CURRENT + 1))
     LAST_CONTINUATION_STALLED=0
     ATTEMPTS_ON_CURRENT=0
-    say "   ⋯ progressed  ·  $(git log -1 --format=%h "$HEAD_REF")"
+    say_event progress "progressed" "$(git log -1 --format=%h "$HEAD_REF")"
 
     if continuation_cap_reached; then
       FINAL_STATUS="$EXIT_NEEDS_HUMAN"
@@ -1288,7 +1300,8 @@ while true; do
   if [ "$ATTEMPTS_ON_CURRENT" -lt "$TICKET_ATTEMPTS" ] &&
      { [ "$transient" = "1" ] || [ "$context_exhausted" = "1" ] ||
        { [ "$agent_status" -ne 0 ] && [ "$parse_ok" = "1" ]; }; }; then
-    warn "   ✗ did not land (exit $agent_status)$([ "$context_exhausted" = "1" ] && printf ', out of context')."
+    fail_why=""; [ "$context_exhausted" != "1" ] || fail_why=", out of context"
+    say_event fail "did not land (exit $agent_status)$fail_why."
     warn "     Retrying — attempt $((ATTEMPTS_ON_CURRENT + 1)) of $TICKET_ATTEMPTS."
     continue
   fi
@@ -1331,7 +1344,7 @@ EOF
 )
 
 say ""
-say "== run $RUN_ID  ·  $BATCH_DIR =="
+say_frame "run $RUN_ID  ·  $BATCH_DIR"
 say "$summary"
 
 log_append ""

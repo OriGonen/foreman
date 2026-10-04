@@ -86,6 +86,15 @@ RALPH_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)")
 # so the default path is exactly what it always was.
 #RALPH_STREAM=0
 
+# Colour for the glyphs and prefixes in ralph's output (✓ ✗ ⋯ ↩ ⌨, note:, preflight:, the
+# ── and == rules), using your terminal's own 16 colours. The words are never coloured, and
+# the glyph carries the meaning either way.
+#   auto    colour only when the stream is a terminal, and not when NO_COLOR is set.  DEFAULT.
+#   always  colour even when piped or redirected. Wins over NO_COLOR.
+#   never   no colour.
+# Whatever the setting, ralph-runs.log and ralph-runs.jsonl never contain colour codes.
+#RALPH_COLOR=auto
+
 # Anything else that is specific to this batch goes in prompt-extra.md next to this file.
 # It is spliced into the prompt between Verify and Review, under its own heading. Leave
 # the file out entirely if there is nothing to add.

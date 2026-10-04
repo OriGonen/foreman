@@ -375,6 +375,9 @@ RALPH_ALLOW_DIRTY="${RALPH_ALLOW_DIRTY:-0}"
 # Watch the iteration as it happens (`ralph run --live` sets this). Off by default, so the
 # default path — the agent's own --output-format included — stays exactly as it was.
 RALPH_STREAM="${RALPH_STREAM:-0}"
+# Colour on glyphs and prefixes — see ralph-ui.sh. auto: only on a terminal, and not with
+# NO_COLOR set; always / never force it. Piped and logged output is never coloured under auto.
+RALPH_COLOR="${RALPH_COLOR:-auto}"
 # How much context a ticket is expected to fit well inside. A prompt slot, not a limit
 # anything enforces — the CLI has no such flag, and --autocompact is the real backstop. It
 # lives here rather than as a literal in the shared template because it is model- and
@@ -406,6 +409,14 @@ if [ -z "${RALPH_PERMISSION_MODE:-}" ]; then
   RALPH_PERMISSION_MODE="$(ralph_exec_default_permission_mode "$RALPH_EXEC")" ||
     RALPH_PERMISSION_MODE=acceptEdits
 fi
+
+case "$RALPH_COLOR" in
+  auto|always|never) ;;
+  *)
+    echo "ralph: RALPH_COLOR must be auto, always or never (got '$RALPH_COLOR')" >&2
+    return 1 2>/dev/null || exit 1
+    ;;
+esac
 
 for _ralph_int in RALPH_TICKET_ATTEMPTS RALPH_MAX_MINUTES RALPH_PROGRESS_TAIL_BYTES \
                   RALPH_CONTEXT_BUDGET_TOKENS RALPH_MAX_CONTINUATIONS; do

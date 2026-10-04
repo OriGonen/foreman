@@ -47,12 +47,12 @@ source "$RALPH_TOOL_DIR/ralph-human.sh" || exit 1
 source "$RALPH_TOOL_DIR/ralph-tickets.sh" || exit 1
 
 [ -f "$ORDER_FILE" ] || {
-  echo "ralph order: $ORDER_FILE does not exist — run: ralph init $BATCH_DIR" >&2
+  warn_tag error "ralph order:" "$ORDER_FILE does not exist — run: ralph init $BATCH_DIR"
   exit 1
 }
 
 if ! command -v claude >/dev/null 2>&1; then
-  echo "ralph order: 'claude' is not on PATH — skipping." >&2
+  warn_tag error "ralph order:" "'claude' is not on PATH — skipping."
   echo "              $ORDER_FILE keeps its filename order; re-run \`ralph order $BATCH_DIR\` once it is." >&2
   exit 0
 fi
@@ -67,7 +67,7 @@ while IFS= read -r f; do
 done < <(ralph_next_answer --unordered)
 
 if [ "${#tickets[@]}" -eq 0 ]; then
-  echo "ralph order: $BATCH_DIR has no tickets — nothing to order."
+  say_tag muted "ralph order:" "$BATCH_DIR has no tickets — nothing to order."
   ralph_issues_hint
   exit 0
 fi
@@ -160,14 +160,14 @@ $(for t in "${tickets[@]}"; do printf -- '- %s\n' "$t"; done)
 PROMPT_EOF
 )
 
-echo "ralph order: reading ${#tickets[@]} ticket(s) in $BATCH_DIR ..."
+say_tag muted "ralph order:" "reading ${#tickets[@]} ticket(s) in $BATCH_DIR ..."
 
 RESPONSE=$(claude --model "$MODEL" --effort "$EFFORT" --permission-mode acceptEdits \
   --print --output-format json -p "$PROMPT")
 status=$?
 
 if [ "$status" -ne 0 ]; then
-  echo "ralph order: the agent call failed (exit $status) — $ORDER_FILE is unchanged." >&2
+  warn_tag error "ralph order:" "the agent call failed (exit $status) — $ORDER_FILE is unchanged."
   exit 1
 fi
 
@@ -178,7 +178,7 @@ cost=$(node -e '
   } catch {}
 ' <<< "$RESPONSE")
 
-echo "ralph order: wrote $ORDER_FILE${cost:+ (cost \$$cost)}"
+say_tag muted "ralph order:" "wrote $ORDER_FILE${cost:+ (cost \$$cost)}"
 echo "             review it — this is a first pass, not a guarantee."
 
 warnings="$(ralph_human_warnings)"

@@ -17,7 +17,7 @@ exec_prepare() {
   # A sandbox left over from the other arrangement is the single most expensive mistake
   # available here: it looks fine and fails every iteration *after* paying for the work.
   if _sbx_is_clone_mode; then
-    warn "preflight: sandbox '$RALPH_SANDBOX' is a clone, but RALPH_EXEC=sandbox-mount expects"
+    warn_preflight "sandbox '$RALPH_SANDBOX' is a clone, but RALPH_EXEC=sandbox-mount expects"
     warn "           a bind mount — the agent's commits would never reach this tree."
     warn "           Recreate it:  sbx rm --force $RALPH_SANDBOX"
     return 1
