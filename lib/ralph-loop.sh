@@ -67,9 +67,11 @@
 #                                  override, on purpose: it is what makes a rerun safe)
 #   RALPH_SANDBOX=<name>           sandbox to create/reattach to
 #   RALPH_SKIP_SANDBOX_PROBE=1     skip the batch's sandbox readiness probe and its setup
-#   RALPH_DOCKER_USERNAME / RALPH_DOCKER_PAT   (environment only, sandbox modes) sign in to
-#                                  Docker with this access token before each run, so an
-#                                  expired `sbx` session never waits on a browser
+#   RALPH_DOCKER_USERNAME / RALPH_DOCKER_PAT   (sandbox modes; the environment, else the
+#                                  credentials file ~/.config/ralph/env or $RALPH_CREDENTIALS_FILE —
+#                                  never ralph.conf) sign in to Docker with this access token
+#                                  before each run, so an expired `sbx` session never waits
+#                                  on a browser
 #
 # EXIT CODES
 #   0   every ticket in the batch is done

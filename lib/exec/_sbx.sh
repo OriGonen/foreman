@@ -6,6 +6,12 @@
 # bind mount of this working tree) and therefore how commits come back. Creating the
 # sandbox, running the agent in it, and the readiness probe are identical.
 
+# The credentials reader, in lib/ (from the shell, not `dirname`; see
+# ralph-config.sh).
+_sbx_dir="${BASH_SOURCE[0]%/*}"; [ "$_sbx_dir" != "${BASH_SOURCE[0]}" ] || _sbx_dir=.
+# shellcheck source=../ralph-credentials.sh
+source "$_sbx_dir/../ralph-credentials.sh" || return 1
+
 # Never the terminal on stdin: nothing run this way reads it, and a `sbx exec` that forwarded
 # it could swallow a key meant for ralph-keys.sh between iterations.
 _sbx_sh() { sbx exec "$RALPH_SANDBOX" sh -c "$1" </dev/null; }
@@ -107,21 +113,24 @@ exec_run() {
 
 # Sign in to Docker without a browser, when asked to. `sbx` signs out on its own schedule and
 # its first command after that starts an interactive device-code flow — which, run unattended,
-# is a stall rather than a prompt. With RALPH_DOCKER_USERNAME and RALPH_DOCKER_PAT in the
-# environment, log in with a Docker access token first; `sbx login` is idempotent, so doing
-# it every run costs one call and removes the question of whether the session is still live.
+# is a stall rather than a prompt. With RALPH_DOCKER_USERNAME and RALPH_DOCKER_PAT to hand,
+# log in with a Docker access token first; `sbx login` is idempotent, so doing it every run
+# costs one call and removes the question of whether the session is still live.
 #
-# Environment only, never ralph.conf: that file is checked into the batch's repository, and
-# the token is a credential. It travels on stdin, so it is on no command line and in no
-# process listing. Neither variable set means nothing changes from before.
+# Both come from the credentials file (~/.config/ralph/env; see ralph-credentials.sh) or,
+# winning over it, the environment — never ralph.conf: that file is checked into the batch's
+# repository, and the token is a credential. They are read into locals and ralph never
+# exports them, and the token travels on stdin, so it is on no command line and in no process
+# listing. Either missing means nothing changes from before.
 _sbx_login() {
-  [ -n "${RALPH_DOCKER_USERNAME:-}" ] && [ -n "${RALPH_DOCKER_PAT:-}" ] || return 0
-  local out
-  if out=$(printf '%s' "$RALPH_DOCKER_PAT" |
-           sbx login --username "$RALPH_DOCKER_USERNAME" --password-stdin 2>&1); then
+  local user pat out
+  user="$(ralph_credential RALPH_DOCKER_USERNAME)"
+  pat="$(ralph_credential RALPH_DOCKER_PAT)"
+  [ -n "$user" ] && [ -n "$pat" ] || return 0
+  if out=$(printf '%s' "$pat" | sbx login --username "$user" --password-stdin 2>&1); then
     return 0
   fi
-  warn_preflight "could not sign in to Docker as '$RALPH_DOCKER_USERNAME' with RALPH_DOCKER_PAT."
+  warn_preflight "could not sign in to Docker as '$user' with RALPH_DOCKER_PAT."
   warn "           The token may be revoked or mistyped. sbx said:"
   printf '%s\n' "$out" | sed 's/^/             /' >&2
   return 1

@@ -288,19 +288,23 @@ then fails its verification step.
 
 **Staying signed in to Docker.** `sbx` signs out on its own schedule, and its next command
 then starts a browser device-code flow that an unattended run cannot answer. Give ralph a
-Docker access token and it signs in itself, quietly, at the start of every run:
+Docker access token and it signs in itself, quietly, at the start of every run. Put the
+username and token in `~/.config/ralph/env` (or wherever `RALPH_CREDENTIALS_FILE` points) —
+a local file outside every repository, plain `NAME=value` lines:
 
-```powershell
-setx RALPH_DOCKER_USERNAME "your-docker-username"
-setx RALPH_DOCKER_PAT "dckr_pat_..."      # then open a new terminal
+```
+RALPH_DOCKER_USERNAME=your-docker-username
+RALPH_DOCKER_PAT=dckr_pat_...
 ```
 
 Create the token at hub.docker.com → Account settings → Personal access tokens (expiration
-*None*; the lowest *Repo* permission that `sbx login` accepts). These are read from the
-environment only — never put the token in `ralph.conf`, which is committed. A rejected
-token stops the run in preflight with what `sbx` said. Neither variable set means ralph
-does nothing here, as before. This covers Docker's login only; the agent's own Claude login
-inside the sandbox is separate (`sbx secret ls`).
+*None*; the lowest *Repo* permission that `sbx login` accepts). The file is read as data and
+never run, and it is plaintext, so keep it out of `ralph.conf`, which is committed. A real
+environment variable of the same name wins over the file. A rejected token stops the run in
+preflight with what `sbx` said; the token itself is never printed, never on a command line,
+and reaches `sbx` on stdin only. Neither set means ralph does nothing here, as before. This
+covers Docker's login only; the agent's own Claude login inside the sandbox is separate
+(`sbx secret ls`).
 
 The sandbox is named `ralph-<repo>` by default, so each repository gets its own and every
 batch in it shares that one — the setup cost is paid once per repo.
@@ -592,6 +596,7 @@ That tool is manual and is never invoked by the loop.
 | `lib/ralph-record.cjs` | appends one iteration to both logs; writes the verdict the loop acts on |
 | `lib/ralph-report.cjs` | manual log reader |
 | `lib/ralph-stream.cjs` | sits between the agent and the recorder; draws the run when `--live`, a pass-through otherwise |
+| `lib/ralph-credentials.sh` | the one reader of the credentials file (`~/.config/ralph/env`): path, lookup (environment, else file), and `…last4` mask — sourced, never run |
 | `lib/ralph-ui.sh` | how output looks: the glyphs, indents, `  ·  ` separators and colour, as `say_event`, `say_rule` and friends — sourced, never run |
 | `lib/ralph-strip-ansi.cjs` | removes `sbx`'s banner control codes — shared by the two above |
 | `lib/ralph-init.sh` | scaffolds a batch, then runs `ralph-order.sh` unless told not to |

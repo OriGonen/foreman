@@ -65,6 +65,9 @@ else
     exit 2
   fi
   WORK="$(mktemp -d "${TMPDIR:-/tmp}/ralph-smoke-XXXXXX")"
+  # No case may read the operator's real credentials file (~/.config/ralph/env): a case that
+  # wants one points RALPH_CREDENTIALS_FILE at its own. Case processes inherit this.
+  export RALPH_CREDENTIALS_FILE="$WORK/no-such-credentials-file"
   JOB_PIDS=()
   # Stops the case processes still running — each leads a process group of its own, so the
   # signal reaches everything it started — then removes the directory. Windows keeps a
@@ -628,6 +631,87 @@ if case_is "the dirty-tree recovery note matches the mode actually in force"; th
   assert_missing "$note" "git add -A && git commit -m 'wip:" "sandbox: never the host-commit line"
 fi
 
+if case_is "the credentials reader finds a name in the file, and an environment variable beats it"; then
+  # lookup NAME — the reader's answer, run the way every caller runs it: sourced, in a
+  # subshell, so nothing it does can leak into this test.
+  lookup() {
+    bash -c 'source "$1/lib/ralph-credentials.sh"; ralph_credential "$2"' _ "$RALPH_HOME" "$1" 2>&1
+  }
+  creds="$WORK/creds-env"
+  export RALPH_CREDENTIALS_FILE="$creds"
+
+  # A missing file yields empty, not an error.
+  OUT="$(lookup RALPH_DOCKER_USERNAME)"; ST=$?
+  assert_eq "$ST" 0 "missing file: succeeds"
+  assert_eq "$OUT" "" "missing file: empty"
+
+  printf '%s\r\n' \
+    '# the operator'"'"'s keys' \
+    '' \
+    'RALPH_DOCKER_USERNAME=someone' \
+    'RALPH_DOCKER_PAT="dckr_pat_quoted"' \
+    "RALPH_CLAUDE_TOKEN='sk-ant-single'" \
+    '   # an indented comment' \
+    'WITH_EQUALS=a=b=c' \
+    'WITH_SPACE = spaced value  ' \
+    'EMPTY=' > "$creds"
+  printf 'LAST_LINE_NO_NEWLINE=tail' >> "$creds"
+
+  assert_eq "$(lookup RALPH_DOCKER_USERNAME)" "someone" "a name present only in the file is found"
+  assert_eq "$(lookup RALPH_DOCKER_PAT)" "dckr_pat_quoted" "CRLF endings and double quotes are stripped"
+  assert_eq "$(lookup RALPH_CLAUDE_TOKEN)" "sk-ant-single" "single quotes are stripped"
+  assert_eq "$(lookup WITH_EQUALS)" "a=b=c" "the value is everything after the first ="
+  assert_eq "$(lookup WITH_SPACE)" "spaced value" "blanks around the name and value are trimmed"
+  assert_eq "$(lookup LAST_LINE_NO_NEWLINE)" "tail" "a last line without a newline is read"
+  assert_eq "$(lookup EMPTY)" "" "an empty value is empty"
+  assert_eq "$(lookup NOT_THERE)" "" "an absent name is empty"
+  assert_eq "$(lookup '# the operator')" "" "a comment is not a name"
+
+  # The real environment wins over the file; an empty variable does not mask the file.
+  OUT="$(RALPH_DOCKER_USERNAME=from-env lookup RALPH_DOCKER_USERNAME)"
+  assert_eq "$OUT" "from-env" "an environment variable beats the file"
+  OUT="$(RALPH_DOCKER_USERNAME= lookup RALPH_DOCKER_USERNAME)"
+  assert_eq "$OUT" "someone" "an empty environment variable does not hide the file's value"
+
+  # RALPH_CREDENTIALS_FILE moves the file; without it the file is ~/.config/ralph/env.
+  printf 'RALPH_DOCKER_USERNAME=elsewhere\n' > "$WORK/other-creds"
+  OUT="$(RALPH_CREDENTIALS_FILE="$WORK/other-creds" lookup RALPH_DOCKER_USERNAME)"
+  assert_eq "$OUT" "elsewhere" "RALPH_CREDENTIALS_FILE moves the file"
+  mkdir -p "$WORK/creds-home/.config/ralph"
+  printf 'RALPH_DOCKER_USERNAME=from-home\n' > "$WORK/creds-home/.config/ralph/env"
+  OUT="$(unset RALPH_CREDENTIALS_FILE; HOME="$WORK/creds-home" lookup RALPH_DOCKER_USERNAME)"
+  assert_eq "$OUT" "from-home" "by default the file is ~/.config/ralph/env"
+  OUT="$(unset RALPH_CREDENTIALS_FILE; HOME="$WORK/creds-home" bash -c \
+    'source "$1/lib/ralph-credentials.sh"; ralph_credentials_file' _ "$RALPH_HOME")"
+  assert_eq "$OUT" "$WORK/creds-home/.config/ralph/env" "the resolved path is available to callers"
+
+  # Parsed as data, never sourced: nothing in the file may run.
+  rm -f "$WORK/PWNED"
+  printf '%s\n' \
+    "RALPH_DOCKER_PAT=\$(touch $WORK/PWNED)" \
+    "touch $WORK/PWNED" \
+    "RALPH_CLAUDE_TOKEN=\`touch $WORK/PWNED\`" \
+    "x[\$(touch $WORK/PWNED)]=1" \
+    "FOO=bar; touch $WORK/PWNED" > "$creds"
+  assert_eq "$(lookup RALPH_DOCKER_PAT)" "\$(touch $WORK/PWNED)" "shell code in a value is returned as text"
+  assert_eq "$(lookup FOO)" "bar; touch $WORK/PWNED" "a trailing command is part of the value"
+  lookup RALPH_CLAUDE_TOKEN >/dev/null
+  lookup "x[\$(touch $WORK/PWNED)]" >/dev/null
+  RALPH_DOCKER_PAT= lookup 'a[$(touch '"$WORK"'/PWNED)]' >/dev/null
+  assert_eq "$([ -e "$WORK/PWNED" ] && echo executed || echo inert)" "inert" "no line of the file was executed"
+
+  # A UTF-8 byte-order mark, as Windows editors write one, does not hide the first name.
+  printf '\xEF\xBB\xBFRALPH_DOCKER_USERNAME=with-bom\r\nSECOND=ok\r\n' > "$creds"
+  assert_eq "$(lookup RALPH_DOCKER_USERNAME)" "with-bom" "a byte-order mark on the first line is ignored"
+  assert_eq "$(lookup SECOND)" "ok" "and the lines after it are unaffected"
+
+  # The mask shows only the last four characters, and nothing at all of a short value.
+  mask() { bash -c 'source "$1/lib/ralph-credentials.sh"; ralph_mask "$2"' _ "$RALPH_HOME" "$1"; }
+  assert_eq "$(mask dckr_pat_abcdef1234)" "…1234" "a token is masked to …last4"
+  assert_eq "$(mask short)" "…" "a short value shows nothing of itself"
+  assert_eq "$(mask '')" "" "an empty value has no mask"
+fi
+
 if case_is "the sandbox adapters sign in to Docker with a token, only when asked to"; then
   # A stub `sbx` that records how it was called, so this needs no Docker account and the
   # token can be checked for the one property that matters: it is on stdin, not in argv.
@@ -672,6 +756,50 @@ STUB
   assert_contains "$OUT" "could not sign in to Docker" "a rejected token is reported"
   assert_contains "$OUT" "unauthorized: bad token" "with what sbx said"
   assert_missing "$OUT" "SECRET-TOKEN-123" "and never echoes the token"
+
+  # The same login from the credentials file, with nothing in the environment.
+  creds="$WORK/login-creds"
+  export RALPH_CREDENTIALS_FILE="$creds"
+  printf '%s\r\n' '# docker' 'RALPH_DOCKER_USERNAME=filed-user' 'RALPH_DOCKER_PAT="FILE-TOKEN-456"' > "$creds"
+  rm -f "$WORK/login.args" "$WORK/login.stdin"
+  OUT="$(login_with)"; ST=$?
+  assert_eq "$ST" 0 "file only: succeeds"
+  assert_contains "$(cat "$WORK/login.args")" "login --username filed-user --password-stdin" \
+    "file only: logs in as the file's username"
+  assert_missing "$(cat "$WORK/login.args")" "FILE-TOKEN-456" "file only: the token is not on the command line"
+  assert_eq "$(cat "$WORK/login.stdin")" "FILE-TOKEN-456" "file only: the token arrives on stdin"
+  assert_missing "$OUT" "FILE-TOKEN-456" "file only: and is never printed"
+
+  # The environment wins over the file, name by name.
+  OUT="$(RALPH_DOCKER_PAT=ENV-TOKEN-789 login_with)"; ST=$?
+  assert_contains "$(cat "$WORK/login.args")" "login --username filed-user" \
+    "the file supplies the name the environment lacks"
+  assert_eq "$(cat "$WORK/login.stdin")" "ENV-TOKEN-789" "an environment token beats the file's"
+
+  # The file's token is rejected: said so, without the token.
+  OUT="$(STUB_EXIT=1 login_with)"; ST=$?
+  assert_eq "$ST" 1 "a rejected file token fails the preflight step"
+  assert_contains "$OUT" "could not sign in to Docker as 'filed-user'" "a rejected file token is reported"
+  assert_missing "$OUT" "FILE-TOKEN-456" "file only: a rejection never echoes the token"
+
+  # A file with only half the pair is the same as no file: sbx is not called.
+  printf 'RALPH_DOCKER_USERNAME=filed-user\n' > "$creds"
+  rm -f "$WORK/login.args" "$WORK/login.stdin"
+  OUT="$(login_with)"; ST=$?
+  assert_eq "$ST" 0 "a file with a username only: succeeds"
+  assert_eq "$([ -e "$WORK/login.args" ] && echo called || echo not-called)" "not-called" \
+    "a file with a username only: sbx login is not run"
+
+  # The token is read, never exported: a child of the login does not inherit it.
+  printf 'RALPH_DOCKER_USERNAME=filed-user\nRALPH_DOCKER_PAT=FILE-TOKEN-456\n' > "$creds"
+  cat > "$stub/sbx" <<'STUB'
+#!/bin/bash
+printf '%s\n' "$*" > "$STUB_ARGS"
+cat > "$STUB_STDIN"
+env > "$STUB_ENV"
+STUB
+  STUB_ENV="$WORK/login.env" login_with >/dev/null
+  assert_missing "$(cat "$WORK/login.env")" "FILE-TOKEN-456" "the token is not in sbx's environment"
 fi
 
 if case_is "syncing refuses over a dirty tree rather than resetting it"; then
