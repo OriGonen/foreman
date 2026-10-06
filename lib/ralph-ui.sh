@@ -10,7 +10,7 @@
 #   warn_note TEXT                                      "   note: TEXT"        (stderr)
 #   warn_preflight TEXT                                 "preflight: TEXT"      (stderr)
 #   ui_key_echo TEXT                                    "   ⌨ TEXT"            (stderr)
-#   ui_bar_open|ui_bar_draw|ui_bar_close ROWS [TEXT]    the pinned status bar   (stderr)
+#   ui_bar_rows|ui_bar_draw|ui_bar_resized|ui_bar_close  the pinned status bar   (stderr)
 #   say_tag STYLE TAG TEXT                              "TAG TEXT"             (stdout)
 #   warn_tag STYLE TAG TEXT                             "TAG TEXT"             (stderr)
 #   ui_paint VAR FD STYLE TEXT                          VAR = TEXT, coloured when FD wants it
@@ -134,27 +134,60 @@ ui_key_echo() {    # ui_key_echo TEXT
   printf '\r\033[2K   %s %s\n' "$mark" "$1" >&2
 }
 
-# THE STATUS BAR. On a terminal, `ralph run` keeps the bottom row for one line that is
-# redrawn in place — the iteration count, the live view, the keys — while everything else
-# scrolls in the rows above it. ROWS is the terminal's height. Each call is one printf, so
-# one write: the bar and the --live ticker (a separate process) cannot interleave mid-line.
+# THE STATUS BAR. On a terminal, `ralph run` keeps the bottom rows for lines that are
+# redrawn in place while everything else scrolls in the rows above them: the bar itself (the
+# iteration count, the live view, the keys) on the last row, and with the live view on, the
+# agent's activity on the row above it. ROWS is the terminal's height; KEPT is how many rows
+# are held back, 0 for none. Only ralph-keys.sh draws there, and each call is one printf, so
+# one write: nothing else on the terminal can land in the middle of it.
 #
-#   ui_bar_open ROWS        confine scrolling to rows 1..ROWS-1. Setting the region homes the
-#                           cursor, so it is saved and restored around that; the newline-
-#                           then-up first makes sure the cursor is not on the bar's row.
-#   ui_bar_draw ROWS TEXT   TEXT on row ROWS, the cursor put back where it was.
-#   ui_bar_close ROWS       scrolling over the whole screen again, and the bar's row blanked.
-ui_bar_open() {    # ui_bar_open ROWS
-  local e="$_UI_ESC"
-  printf '\n%s7%s[1;%dr%s8%s[1A' "$e" "$e" "$(($1 - 1))" "$e" "$e" >&2
+# Every line drawn there must fit its row. A line that wraps puts its tail on the row below
+# and leaves its head behind when it is redrawn — the bug the in-place --live line had.
+#
+#   ui_bar_rows ROWS FROM TO  hold back TO rows instead of FROM. Growing scrolls the text up
+#                             first with ESC D (index: down a row, scrolling at the bottom, the
+#                             column kept) and back up, so the cursor is never left in a held
+#                             row. Shrinking blanks the rows given back. Setting the region
+#                             homes the cursor, so it is saved and restored around that.
+#   ui_bar_draw ROWS BAR [TICKER]   BAR on the last row, TICKER on the one above when given;
+#                             the cursor put back where it was.
+#   ui_bar_resized ROWS KEPT  after the terminal changed size. A terminal moves its text on a
+#                             resize — reflowed, pulled back from scrollback — and the old bar
+#                             moves with it, to a row nobody can know. It can only be BELOW
+#                             the cursor, though, where nothing else is: so everything from the
+#                             cursor down is erased, and the rows are held back again.
+#   ui_bar_close ROWS KEPT    scrolling over the whole screen again, and everything from the
+#                             cursor down erased — the held rows, and any bar a resize the
+#                             reader did not hear about left somewhere else.
+ui_bar_rows() {    # ui_bar_rows ROWS FROM TO
+  local e="$_UI_ESC" rows="$1" from="$2" to="$3" out="" i
+  if [ "$to" -gt "$from" ]; then
+    for ((i = from; i < to; i++)); do out+="${e}D"; done
+    out+="${e}[$((to - from))A"
+  fi
+  out+="${e}7"
+  if [ "$to" -gt 0 ]; then out+="${e}[1;$((rows - to))r"; else out+="${e}[r"; fi
+  for ((i = rows - from + 1; i <= rows - to; i++)); do out+="${e}[${i};1H${e}[2K"; done
+  out+="${e}8"
+  printf '%s' "$out" >&2
 }
 
-ui_bar_draw() {    # ui_bar_draw ROWS TEXT
-  local e="$_UI_ESC"
-  printf '%s7%s[%d;1H%s[2K%s%s8' "$e" "$e" "$1" "$e" "$2" "$e" >&2
+ui_bar_draw() {    # ui_bar_draw ROWS BAR [TICKER]
+  local e="$_UI_ESC" out
+  out="${e}7"
+  [ $# -lt 3 ] || out+="${e}[$(($1 - 1));1H${e}[2K$3"
+  out+="${e}[$1;1H${e}[2K$2${e}8"
+  printf '%s' "$out" >&2
 }
 
-ui_bar_close() {    # ui_bar_close ROWS
+ui_bar_resized() {    # ui_bar_resized ROWS KEPT
   local e="$_UI_ESC"
-  printf '%s7%s[r%s8%s7%s[%d;1H%s[2K%s8' "$e" "$e" "$e" "$e" "$e" "$1" "$e" "$e" >&2
+  printf '%s[J%s7%s[r%s8' "$e" "$e" "$e" "$e" >&2
+  ui_bar_rows "$1" 0 "$2"
+}
+
+ui_bar_close() {    # ui_bar_close ROWS KEPT
+  local e="$_UI_ESC"
+  printf '%s[J' "$e" >&2
+  ui_bar_rows "$1" "$2" 0
 }

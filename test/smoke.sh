@@ -427,6 +427,50 @@ if case_is "ralph-stream.cjs --live-file draws only while the file says on"; the
   assert_missing "$ERR" "src/drawn.js" "no file reads as off"
 fi
 
+if case_is "ralph-stream.cjs --activity-file writes down, never draws"; then
+  # With a status bar the key reader draws the live view, so the filter must not touch the
+  # terminal: two processes drawing on one screen is what left lines behind.
+  activity="$WORK/stream-activity"
+  err="$WORK/stream-activity-err"
+  OUT="$(printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"npm test"}}]}}' \
+    '{"type":"result","subtype":"success","total_cost_usd":0.01}' |
+    node "$RALPH_HOME/lib/ralph-stream.cjs" --activity-file "$activity" 2>"$err")"
+  assert_eq "$(cat "$err")" "" "nothing on stderr"
+  assert_eq "$OUT" '{"type":"result","subtype":"success","total_cost_usd":0.01}' "the payload is the result object"
+  read -r epoch label < "$activity"
+  assert_eq "$label" "Bash npm test" "the file has the latest label"
+  if [[ "$epoch" =~ ^[0-9]{10}$ ]]; then pass; else fail "the start is in epoch seconds: got '$epoch'"; fi
+fi
+
+if case_is "ralph-keys.sh --text: the live view's line never wraps"; then
+  ctl="$WORK/text-ctl"
+  mkdir -p "$ctl"
+  printf '3\n' > "$ctl/budget"; printf '1\n' > "$ctl/iteration"; printf '1\n' > "$ctl/live"
+  long="Bash $(printf 'x%.0s' {1..120})"
+  printf -v now '%(%s)T' -1
+  printf '%s %s\n' "$((now - 75))" "$long" > "$ctl/activity"
+  text() {
+    OUT="$(RALPH_COLOR=never bash "$RALPH_HOME/lib/ralph-keys.sh" --text "$ctl" "$1")"
+    BAR="${OUT%%$'\n'*}" TICKER=""
+    [[ "$OUT" != *$'\n'* ]] || TICKER="${OUT#*$'\n'}"
+  }
+  # Widths in characters, not bytes: `·` and `…` are one column each.
+  LC_ALL=C.UTF-8
+
+  text 60
+  assert_contains "$TICKER" "   01:1" "the clock runs from the epoch in the file"
+  assert_eq "${#TICKER}" 59 "a long label is cut to one column short of the width"
+  assert_contains "$BAR" "+ more  - fewer  L live" "the bar's hints fit in 60 columns"
+  assert_contains "$TICKER" "…" "and says it was cut"
+  assert_contains "$BAR" "iteration 1 of 3" "the bar comes first"
+  text 200
+  assert_contains "$TICKER" "$long" "a label that fits is whole"
+
+  rm -f "$ctl/activity"
+  text 60
+  assert_eq "$TICKER" "" "no activity file, no line"
+fi
+
 if case_is "--unlimited runs the batch to completion"; then
   repo="$(make_repo 3 unlimited-repo)"
   run_ralph "$repo" run batch --unlimited

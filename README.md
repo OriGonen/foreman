@@ -551,7 +551,10 @@ While `ralph run` is going, press keys in its terminal:
 
 The bottom row of the terminal is a status bar, redrawn in place as you press keys and as
 each iteration starts: `── iteration 2 of 5  ·  live off  ·  + more  - fewer  L live`. The
-rest of the output scrolls above it, and the bar is cleared when the run ends. Each
+rest of the output scrolls above it, and the bar is cleared when the run ends. While the
+live view is on, the row just above the bar shows what the agent did last and a clock
+(`   03:12 · Bash npm test`), cut to fit the terminal; turning it off gives that row back.
+Resizing the terminal redraws both rows at the new bottom. Each
 iteration's header also shows the budget as it stood when that iteration started
 (`── iteration 2 of 5`). If the run ends with the live view turned on by `L`, the resume
 command carries `--live`. The loop reads the new budget before the next iteration. A key
@@ -565,6 +568,9 @@ run's stdin is a terminal; a run with stdin redirected (CI, a script, `</dev/nul
 the keyboard and prints no `keys:` hint. On a terminal the agent always reports in
 `stream-json`, so `L` can turn the view on mid-iteration; the recorded verdict and usage are
 the same either way.
+
+To try all of this without an agent or any cost, `bash test/demo.sh` runs a fake agent on
+a throwaway batch (see the script's header for its options).
 
 ## The logs
 

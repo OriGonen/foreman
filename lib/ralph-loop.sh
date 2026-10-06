@@ -647,8 +647,9 @@ VERDICT_FILE="$(mktemp)"
 # the call site for why that matters.
 PAYLOAD_FILE="$(mktemp)"
 # What the key reader (ralph-keys.sh) and this loop share: `budget` and `live`, which the
-# reader owns once they are seeded here, `iteration`, which only this loop writes, and
-# `screen`, the status bar's size. See refresh_budget and ralph-keys.sh.
+# reader owns once they are seeded here, `iteration`, which only this loop writes, `screen`,
+# the status bar's size, and `activity`, what the agent is doing for the live view's row.
+# See refresh_budget and ralph-keys.sh.
 RUN_CTL_DIR="$(mktemp -d)"
 printf '%s\n' "$MAX_ITERATIONS" > "$RUN_CTL_DIR/budget"
 printf '0\n' > "$RUN_CTL_DIR/iteration"
@@ -656,14 +657,14 @@ printf '%s\n' "$RALPH_STREAM" > "$RUN_CTL_DIR/live"
 KEYS_PID=""
 SAVED_STTY=""
 on_exit() {
-  local rows=""
+  local rows="" kept=""
   if [ -n "$KEYS_PID" ]; then
     kill "$KEYS_PID" 2>/dev/null
     wait "$KEYS_PID" 2>/dev/null
   fi
   # The status bar, if there is one: whole-screen scrolling back, before the shell's prompt.
-  read -r rows _ 2>/dev/null < "$RUN_CTL_DIR/screen"
-  [[ "$rows" =~ ^[0-9]+$ ]] && ui_bar_close "$rows"
+  read -r rows _ kept 2>/dev/null < "$RUN_CTL_DIR/screen"
+  [[ "$rows" =~ ^[0-9]+$ ]] && [[ "$kept" =~ ^[12]$ ]] && ui_bar_close "$rows" "$kept"
   # The reader restores the terminal itself; this is for a reader that died too hard to.
   [ -z "$SAVED_STTY" ] || stty "$SAVED_STTY" 2>/dev/null
   rm -rf "$VERDICT_FILE" "$PAYLOAD_FILE" "$RUN_CTL_DIR"
@@ -690,12 +691,24 @@ refresh_budget() {
 # — so there is one code path here rather than two.
 #
 # On a terminal the L key can turn the view on or off at any moment (ralph-keys.sh), so the
-# agent always reports in stream-json there and the filter follows the `live` control file.
-# Off a terminal there is no key, and --live alone decides, as it always did.
+# agent always reports in stream-json there. With a status bar (stderr a terminal too, and
+# tall enough) the filter only writes down what the agent is doing, and the key reader draws
+# it above the bar: one process drawing, so the two can never trip over each other. Without
+# a bar the filter draws its own line, following the `live` control file. Off a terminal
+# there is no key, and --live alone decides, as it always did.
+BAR_ROWS=0 BAR_COLS=0
+if [ -t 0 ] && [ -t 2 ] && [ "${TERM:-}" != dumb ]; then
+  read -r BAR_ROWS BAR_COLS <<< "$(stty size 2>/dev/null)"
+  [[ "$BAR_ROWS" =~ ^[0-9]+$ ]] && [[ "$BAR_COLS" =~ ^[0-9]+$ ]] && [ "$BAR_ROWS" -ge 4 ] || BAR_ROWS=0
+fi
 STREAM_ARGS=()
 if [ -t 0 ]; then
   export RALPH_LIVE_KEY=1
-  STREAM_ARGS=(--live-file "$RUN_CTL_DIR/live")
+  if [ "$BAR_ROWS" -gt 0 ]; then
+    STREAM_ARGS=(--activity-file "$RUN_CTL_DIR/activity")
+  else
+    STREAM_ARGS=(--live-file "$RUN_CTL_DIR/live")
+  fi
 elif [ "$RALPH_STREAM" = "1" ]; then
   STREAM_ARGS=(--live)
 fi
@@ -743,19 +756,18 @@ exec_prepare || exit 1
 # behaves as it always did. `<&0` is load-bearing — a non-interactive shell otherwise hands
 # `&` /dev/null.
 #
-# With stderr on a terminal too, the bottom row becomes the status bar the reader draws
-# (ralph-ui.sh). The hint line goes first, so it scrolls with the rest of the header.
+# With a status bar (see STREAM_ARGS), the bottom row becomes the bar the reader draws
+# (ralph-ui.sh), and the row above it the live view while that is on. The hint line goes
+# first, so it scrolls with the rest of the header.
 if [ -t 0 ]; then
   SAVED_STTY="$(stty -g 2>/dev/null)"
   say "keys: + one more iteration  ·  - one fewer  ·  L live view on/off"
   say ""
-  if [ -t 2 ] && [ "${TERM:-}" != dumb ]; then
-    read -r _rows _cols <<< "$(stty size 2>/dev/null)"
-    if [[ "$_rows" =~ ^[0-9]+$ ]] && [[ "$_cols" =~ ^[0-9]+$ ]] && [ "$_rows" -ge 3 ]; then
-      printf '%s %s\n' "$_rows" "$_cols" > "$RUN_CTL_DIR/screen"
-      ui_bar_open "$_rows"
-    fi
-    unset _rows _cols
+  if [ "$BAR_ROWS" -gt 0 ]; then
+    _kept=1; [ "$RALPH_STREAM" != 1 ] || _kept=2
+    printf '%s %s %s\n' "$BAR_ROWS" "$BAR_COLS" "$_kept" > "$RUN_CTL_DIR/screen"
+    ui_bar_rows "$BAR_ROWS" 0 "$_kept"
+    unset _kept
   fi
   bash "$RALPH_TOOL_DIR/ralph-keys.sh" "$RUN_CTL_DIR" $$ <&0 &
   KEYS_PID=$!
@@ -839,6 +851,7 @@ run_checkpoint_turn() {
     node "$RALPH_TOOL_DIR/ralph-stream.cjs" ${STREAM_ARGS+"${STREAM_ARGS[@]}"} > "$PAYLOAD_FILE"
   checkpoint_agent_status=${PIPESTATUS[0]}
   checkpoint_result=$(cat "$PAYLOAD_FILE")
+  rm -f "$RUN_CTL_DIR/activity"
   RALPH_CLAUDE_ARGS=(${checkpoint_args_saved+"${checkpoint_args_saved[@]}"})
 
   # Bring back whatever the checkpoint turn committed (only the clone-based sandbox has
@@ -1080,7 +1093,7 @@ while true; do
 
   # `${PIPESTATUS[0]}` is load-bearing: `set -o pipefail` is on, so a plain `$?` here would
   # conflate the filter's status with the agent's, and every branch below turns on the
-  # agent's. Everything after these three lines — the recorder call, the verdict, the branch
+  # agent's. Everything after this pipeline and the clean-up below it — the recorder call, the verdict, the branch
   # order — is untouched by whether the run is being watched.
   #
   # The agent gets /dev/null for stdin, never the terminal: the prompt goes in with `-p`, and
@@ -1090,6 +1103,9 @@ while true; do
     node "$RALPH_TOOL_DIR/ralph-stream.cjs" ${STREAM_ARGS+"${STREAM_ARGS[@]}"} > "$PAYLOAD_FILE"
   agent_status=${PIPESTATUS[0]}
   result=$(cat "$PAYLOAD_FILE")
+  # The live view's row goes blank until the next agent starts, rather than showing a clock
+  # still counting on a command that has finished.
+  rm -f "$RUN_CTL_DIR/activity"
 
   # Bring the iteration's commits back before inspecting anything: the ticket's Status
   # line, and every check below, lives in the work the agent just did. The adapter sets

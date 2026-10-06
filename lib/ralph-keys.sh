@@ -5,6 +5,7 @@
 #
 #   ralph-keys.sh <ctl-dir> <loop-pid>      read keys until the loop is gone
 #   ralph-keys.sh --apply <keys> <ctl-dir>  apply each key in <keys> once, as if pressed
+#   ralph-keys.sh --text <ctl-dir> [cols]   print the bar's line, then the live view's line
 #
 #   +  =    one more iteration
 #   -  _    one fewer — never below the iteration already running
@@ -14,25 +15,43 @@
 #   budget     the iteration budget, 0 for unlimited. Seeded by the loop, then written only
 #              here (temp file plus mv, so the loop never reads half a number).
 #   live       1 while the live view is on, else 0. Seeded by the loop, then written only
-#              here; read by ralph-stream.cjs once a second.
+#              here; read by ralph-stream.cjs when there is no bar (see below).
 #   iteration  the iteration now running, written by the loop. Only read here.
-#   screen     "ROWS COLS" while the loop has a status bar open, written by the loop (and
-#              here, on a resize). No file, no bar: each key press prints a line instead.
+#   screen     "ROWS COLS KEPT" while the loop has a status bar open: the terminal's size and
+#              how many bottom rows are held back. Written by the loop, then here on a resize
+#              or an L. No file, no bar: each key press prints a line instead.
+#   activity   "EPOCH LABEL" while an iteration runs with a bar open: when it started and what
+#              the agent did last. Written by ralph-stream.cjs, removed by the loop after.
 # The loop reads `budget` before each iteration's budget check; a key never touches the
 # iteration already running.
 #
-# THE STATUS BAR (ralph-ui.sh draws it; the loop opens and closes it). The reader repaints it
-# after every key, and whenever the loop starts a new iteration — it checks once a second.
+# THE STATUS BAR (ralph-ui.sh draws it; the loop opens and closes it). This reader is the
+# only thing that draws there — the live view included, from `activity`, on the row above the
+# bar. One writer, so nothing else ever moves the cursor under it. It repaints after every
+# key, and once a second: a new iteration, the live view's clock.
 #
-# The idle loop is builtins only — `read`, `kill -0`, `printf`, `read < file`. No `$(...)`,
-# no external commands: a reader waiting on a key starts no processes, which matters under
-# MSYS, where starting one is the expensive thing. A key press may spawn one (the `mv`), and
-# so may a resize (`stty size`).
+# The idle loop is builtins only — `read`, `kill -0`, `printf` (the clock too: `%(%s)T`),
+# `read < file`. No `$(...)`, no external commands: a reader waiting on a key starts no
+# processes, which matters under MSYS, where starting one is the expensive thing. A key press
+# may spawn one (the `mv`), and so may a resize (`stty size`).
 
 # This file's directory, from the shell and not `dirname` (see ralph-config.sh).
 _keys_dir="${BASH_SOURCE[0]%/*}"; [ "$_keys_dir" != "${BASH_SOURCE[0]}" ] || _keys_dir=.
 # shellcheck source=ralph-ui.sh
 source "$_keys_dir/ralph-ui.sh" || exit 1
+
+# The lines drawn here are fitted to the terminal's width by ${#…}, which counts bytes unless
+# the locale is UTF-8 — and Git Bash often has none set, so every `·` counted twice. Switched
+# here only, by assignment (bash re-reads the locale then); a machine without the locale
+# keeps byte counts, which only cut a line shorter than it had to be.
+if [ "${#_UI_SEP}" != 5 ]; then
+  for _keys_locale in C.UTF-8 en_US.UTF-8; do
+    { LC_ALL="$_keys_locale"; } 2>/dev/null
+    [ "${#_UI_SEP}" != 5 ] || break
+    unset LC_ALL
+  done
+  unset _keys_locale
+fi
 
 # Sets _KEYS_BUDGET, _KEYS_ITERATION and _KEYS_LIVE from the control files; a missing or
 # garbled file reads as 0.
@@ -135,6 +154,30 @@ keys_bar_text() {    # keys_bar_text CTL_DIR COLS
   _KEYS_BAR="$rule $head"
 }
 
+# Sets _KEYS_TICKER to the live view's line for <ctl-dir>/activity, fitted to COLS:
+#      03:12 · Bash ./gradlew assembleDebug
+# The clock runs from the epoch second ralph-stream.cjs wrote with the label, so it keeps
+# moving while the agent is quiet. Empty when there is no activity file (between iterations).
+keys_ticker_text() {    # keys_ticker_text CTL_DIR COLS
+  local cols="$2" started="" label="" now s clock room
+  _KEYS_TICKER=""
+  read -r started label 2>/dev/null < "$1/activity"
+  [[ "$started" =~ ^[0-9]+$ ]] || return 0
+  printf -v now '%(%s)T' -1 2>/dev/null
+  [[ "$now" =~ ^[0-9]+$ ]] || now="$started"
+  s=$((now - started)); [ "$s" -ge 0 ] || s=0
+  printf -v clock '%02d:%02d' $((s / 60)) $((s % 60))
+  # "   " + clock + " · " + label, one column spare: the line must never wrap.
+  room=$((cols - 1 - 3 - ${#clock} - 3))
+  if [ "$room" -lt 1 ]; then
+    label=""
+  elif [ "${#label}" -gt "$room" ]; then
+    label="${label:0:room-1}…"
+  fi
+  ui_paint clock 2 muted "$clock"
+  _KEYS_TICKER="   $clock · $label"
+}
+
 if [ "${1:-}" = "--apply" ]; then
   keys="${2:-}" dir="${3:-}"
   [ -d "$dir" ] || { printf 'ralph-keys: no control directory at %s\n' "$dir" >&2; exit 1; }
@@ -145,9 +188,18 @@ if [ "${1:-}" = "--apply" ]; then
   exit 0
 fi
 
+if [ "${1:-}" = "--text" ]; then
+  dir="${2:-}" cols="${3:-80}"
+  [ -d "$dir" ] || { printf 'ralph-keys: no control directory at %s\n' "$dir" >&2; exit 1; }
+  keys_bar_text "$dir" "$cols"
+  keys_ticker_text "$dir" "$cols"
+  printf '%s\n%s\n' "$_KEYS_BAR" "$_KEYS_TICKER"
+  exit 0
+fi
+
 CTL_DIR="${1:-}" LOOP_PID="${2:-}"
 if [ ! -d "$CTL_DIR" ] || ! [[ "$LOOP_PID" =~ ^[0-9]+$ ]]; then
-  printf 'usage: ralph-keys.sh <ctl-dir> <loop-pid>  |  ralph-keys.sh --apply <keys> <ctl-dir>\n' >&2
+  printf 'usage: ralph-keys.sh <ctl-dir> <loop-pid>  |  --apply <keys> <ctl-dir>  |  --text <ctl-dir> [cols]\n' >&2
   exit 1
 fi
 
@@ -165,23 +217,41 @@ trap restore_tty EXIT
 # not reach this at all; TERM is what the loop sends when the run ends.
 trap 'exit 0' INT TERM HUP
 
-# The bar, if the loop opened one: its size, and what was last drawn, so an idle second
-# that changed nothing draws nothing.
-ROWS=0 COLS=0 DRAWN=""
-read -r ROWS COLS 2>/dev/null < "$CTL_DIR/screen"
-[[ "$ROWS" =~ ^[0-9]+$ ]] && [[ "$COLS" =~ ^[0-9]+$ ]] || ROWS=0
+# The bar, if the loop opened one: the terminal's size, how many bottom rows are held back
+# (1, or 2 with the live view's row), and what was last drawn, so a second that changed
+# nothing draws nothing. The loop reads `screen` back to close the bar on the way out.
+ROWS=0 COLS=0 KEPT=0 DRAWN=""
+read -r ROWS COLS KEPT 2>/dev/null < "$CTL_DIR/screen"
+[[ "$ROWS" =~ ^[0-9]+$ ]] && [[ "$COLS" =~ ^[0-9]+$ ]] && [[ "$KEPT" =~ ^[12]$ ]] || ROWS=0
 
+# Draws the bar, and the live view's row above it while the view is on. The row comes and
+# goes with L: held back when it turns on (the text above scrolls up one), given back when it
+# turns off.
 repaint() {
+  local want
   [ "$ROWS" -gt 0 ] || return 0
   keys_bar_text "$CTL_DIR" "$COLS"
-  [ "$_KEYS_BAR" != "$DRAWN" ] || return 0
-  ui_bar_draw "$ROWS" "$_KEYS_BAR"
-  DRAWN="$_KEYS_BAR"
+  want=$((1 + _KEYS_LIVE))
+  if [ "$want" != "$KEPT" ]; then
+    ui_bar_rows "$ROWS" "$KEPT" "$want"
+    KEPT="$want" DRAWN=""
+    _keys_write "$CTL_DIR" screen "$ROWS $COLS $KEPT"
+  fi
+  if [ "$KEPT" = 2 ]; then
+    keys_ticker_text "$CTL_DIR" "$COLS"
+    [ "$_KEYS_BAR"$'\n'"$_KEYS_TICKER" != "$DRAWN" ] || return 0
+    ui_bar_draw "$ROWS" "$_KEYS_BAR" "$_KEYS_TICKER"
+    DRAWN="$_KEYS_BAR"$'\n'"$_KEYS_TICKER"
+  else
+    [ "$_KEYS_BAR" != "$DRAWN" ] || return 0
+    ui_bar_draw "$ROWS" "$_KEYS_BAR"
+    DRAWN="$_KEYS_BAR"
+  fi
 }
 
-# A resize moves the bottom row. Blank the old bar, scroll over the new size, and tell the
-# loop (it closes the bar on the way out). The trap only raises a flag: bash runs it between
-# commands, and the work is done at the top of the loop below.
+# A resize: erase the old bar wherever the terminal moved it, hold the rows back again at the
+# new size, and tell the loop. The trap only raises a flag: bash runs it between commands,
+# and the work is done at the top of the loop below.
 RESIZED=0
 trap 'RESIZED=1' WINCH
 on_resize() {
@@ -190,12 +260,9 @@ on_resize() {
   read -r rows cols < <(stty size 2>/dev/null)
   [[ "$rows" =~ ^[0-9]+$ ]] && [[ "$cols" =~ ^[0-9]+$ ]] && [ "$rows" -ge 3 ] || return 0
   [ "$rows" != "$ROWS" ] || [ "$cols" != "$COLS" ] || return 0
-  # Taller: the old bar is now a row inside the scrolling area. Shorter: it is the new
-  # bottom row, or gone, and is drawn over either way.
-  [ "$rows" -le "$ROWS" ] || ui_bar_draw "$ROWS" ""
-  ui_bar_open "$rows"
+  ui_bar_resized "$rows" "$KEPT"
   ROWS="$rows" COLS="$cols" DRAWN=""
-  _keys_write "$CTL_DIR" screen "$ROWS $COLS"
+  _keys_write "$CTL_DIR" screen "$ROWS $COLS $KEPT"
 }
 
 repaint
