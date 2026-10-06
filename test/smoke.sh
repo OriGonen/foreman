@@ -390,6 +390,41 @@ if case_is "ralph-keys.sh --apply: the floor and unlimited"; then
   printf '5\n' > "$ctl/budget"; printf '0\n' > "$ctl/iteration"
   keys ------
   assert_eq "$budget" 1 "before the first iteration, the floor is 1"
+
+  rm -f "$ctl/live"
+  keys L
+  assert_eq "$(cat "$ctl/live")" 1 "L turns the live view on from no file"
+  assert_contains "$OUT" "live view on" "and says so"
+  keys l
+  assert_eq "$(cat "$ctl/live")" 0 "l turns it off again"
+  assert_contains "$OUT" "live view off" "and says so"
+  keys LL
+  assert_eq "$(cat "$ctl/live")" 0 "two presses come back to where they started"
+  assert_eq "$budget" 1 "L leaves the budget alone"
+fi
+
+if case_is "ralph-stream.cjs --live-file draws only while the file says on"; then
+  # What L switches between: the agent reports in stream-json either way, the payload is the
+  # result object either way, and only the drawing follows the file.
+  live_file="$WORK/stream-live"
+  events='{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"src/drawn.js"}}]}}
+{"type":"result","subtype":"success","total_cost_usd":0.01}'
+  stream() {
+    local err="$WORK/stream-err"
+    OUT="$(printf '%s\n' "$events" | node "$RALPH_HOME/lib/ralph-stream.cjs" --live-file "$live_file" 2>"$err")"
+    ERR="$(cat "$err")"
+  }
+
+  printf '0\n' > "$live_file"; stream
+  assert_missing "$ERR" "src/drawn.js" "off: nothing is drawn"
+  assert_eq "$OUT" '{"type":"result","subtype":"success","total_cost_usd":0.01}' "off: the payload is the result object"
+
+  printf '1\n' > "$live_file"; stream
+  assert_contains "$ERR" "Write src/drawn.js" "on: the write is drawn"
+  assert_eq "$OUT" '{"type":"result","subtype":"success","total_cost_usd":0.01}' "on: the same payload"
+
+  rm -f "$live_file"; stream
+  assert_missing "$ERR" "src/drawn.js" "no file reads as off"
 fi
 
 if case_is "--unlimited runs the batch to completion"; then

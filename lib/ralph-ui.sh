@@ -10,6 +10,7 @@
 #   warn_note TEXT                                      "   note: TEXT"        (stderr)
 #   warn_preflight TEXT                                 "preflight: TEXT"      (stderr)
 #   ui_key_echo TEXT                                    "   ⌨ TEXT"            (stderr)
+#   ui_bar_open|ui_bar_draw|ui_bar_close ROWS [TEXT]    the pinned status bar   (stderr)
 #   say_tag STYLE TAG TEXT                              "TAG TEXT"             (stdout)
 #   warn_tag STYLE TAG TEXT                             "TAG TEXT"             (stderr)
 #   ui_paint VAR FD STYLE TEXT                          VAR = TEXT, coloured when FD wants it
@@ -131,4 +132,29 @@ ui_key_echo() {    # ui_key_echo TEXT
   local mark
   ui_paint mark 2 accent '⌨'
   printf '\r\033[2K   %s %s\n' "$mark" "$1" >&2
+}
+
+# THE STATUS BAR. On a terminal, `ralph run` keeps the bottom row for one line that is
+# redrawn in place — the iteration count, the live view, the keys — while everything else
+# scrolls in the rows above it. ROWS is the terminal's height. Each call is one printf, so
+# one write: the bar and the --live ticker (a separate process) cannot interleave mid-line.
+#
+#   ui_bar_open ROWS        confine scrolling to rows 1..ROWS-1. Setting the region homes the
+#                           cursor, so it is saved and restored around that; the newline-
+#                           then-up first makes sure the cursor is not on the bar's row.
+#   ui_bar_draw ROWS TEXT   TEXT on row ROWS, the cursor put back where it was.
+#   ui_bar_close ROWS       scrolling over the whole screen again, and the bar's row blanked.
+ui_bar_open() {    # ui_bar_open ROWS
+  local e="$_UI_ESC"
+  printf '\n%s7%s[1;%dr%s8%s[1A' "$e" "$e" "$(($1 - 1))" "$e" "$e" >&2
+}
+
+ui_bar_draw() {    # ui_bar_draw ROWS TEXT
+  local e="$_UI_ESC"
+  printf '%s7%s[%d;1H%s[2K%s%s8' "$e" "$e" "$1" "$e" "$2" "$e" >&2
+}
+
+ui_bar_close() {    # ui_bar_close ROWS
+  local e="$_UI_ESC"
+  printf '%s7%s[r%s8%s7%s[%d;1H%s[2K%s8' "$e" "$e" "$e" "$e" "$e" "$1" "$e" "$e" >&2
 }

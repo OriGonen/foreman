@@ -52,6 +52,8 @@
 #   <iterations> argument     pause after this many iterations (default: 1)
 #   --unlimited               no iteration cap; only cost/time budgets stop it
 #   + / - while it runs       one more / one fewer iteration (on a terminal; see ralph-keys.sh)
+#   L while it runs           live view on / off, as --live (on a terminal). The bottom row
+#                             shows the iteration count and the live view as they change.
 #
 # OTHER KNOBS (all settable in ralph.conf; the environment wins over it)
 #   RALPH_MODEL=sonnet            RALPH_EFFORT=high
@@ -362,7 +364,12 @@ human_tickets_remaining() {
 
 # The arguments that make a rerun ask for what this run asked for.
 resume_args() {
+  local live=""
   if [ "$MAX_ITERATIONS" -gt 0 ]; then printf ' %s' "$MAX_ITERATIONS"; else printf ' --unlimited'; fi
+  # The live view as the run ended, when L turned it on: --live only adds, and a run that
+  # started live (flag or ralph.conf) will start live again without being told.
+  [ -n "${RUN_CTL_DIR:-}" ] && read -r live 2>/dev/null < "$RUN_CTL_DIR/live"
+  [ "$live" != 1 ] || [ "$RALPH_STREAM" = 1 ] || printf ' --live'
 }
 
 # What a run says wherever it stops at a human ticket — before it starts, when it gets there
@@ -639,18 +646,24 @@ VERDICT_FILE="$(mktemp)"
 # because exec_run is now the head of a pipeline rather than a command substitution — see
 # the call site for why that matters.
 PAYLOAD_FILE="$(mktemp)"
-# What the key reader (ralph-keys.sh) and this loop share: `budget`, which the reader owns
-# once it is seeded here, and `iteration`, which only this loop writes. See refresh_budget.
+# What the key reader (ralph-keys.sh) and this loop share: `budget` and `live`, which the
+# reader owns once they are seeded here, `iteration`, which only this loop writes, and
+# `screen`, the status bar's size. See refresh_budget and ralph-keys.sh.
 RUN_CTL_DIR="$(mktemp -d)"
 printf '%s\n' "$MAX_ITERATIONS" > "$RUN_CTL_DIR/budget"
 printf '0\n' > "$RUN_CTL_DIR/iteration"
+printf '%s\n' "$RALPH_STREAM" > "$RUN_CTL_DIR/live"
 KEYS_PID=""
 SAVED_STTY=""
 on_exit() {
+  local rows=""
   if [ -n "$KEYS_PID" ]; then
     kill "$KEYS_PID" 2>/dev/null
     wait "$KEYS_PID" 2>/dev/null
   fi
+  # The status bar, if there is one: whole-screen scrolling back, before the shell's prompt.
+  read -r rows _ 2>/dev/null < "$RUN_CTL_DIR/screen"
+  [[ "$rows" =~ ^[0-9]+$ ]] && ui_bar_close "$rows"
   # The reader restores the terminal itself; this is for a reader that died too hard to.
   [ -z "$SAVED_STTY" ] || stty "$SAVED_STTY" 2>/dev/null
   rm -rf "$VERDICT_FILE" "$PAYLOAD_FILE" "$RUN_CTL_DIR"
@@ -675,11 +688,20 @@ refresh_budget() {
 # The one thing that differs between a plain run and a watched one, on this side of the
 # seam. ralph-stream.cjs is in the pipeline either way — in plain mode it is a pass-through
 # — so there is one code path here rather than two.
+#
+# On a terminal the L key can turn the view on or off at any moment (ralph-keys.sh), so the
+# agent always reports in stream-json there and the filter follows the `live` control file.
+# Off a terminal there is no key, and --live alone decides, as it always did.
 STREAM_ARGS=()
-[ "$RALPH_STREAM" = "1" ] && STREAM_ARGS=(--live)
+if [ -t 0 ]; then
+  export RALPH_LIVE_KEY=1
+  STREAM_ARGS=(--live-file "$RUN_CTL_DIR/live")
+elif [ "$RALPH_STREAM" = "1" ]; then
+  STREAM_ARGS=(--live)
+fi
 # The ticker is drawn by a node process that cannot see ralph.conf, so the one colour decision
 # (ralph-ui.sh, for stderr, which is where it draws) is made here and handed over as a flag.
-[ "$RALPH_STREAM" = "1" ] && ui_color_on 2 && STREAM_ARGS+=(--color)
+[ "${#STREAM_ARGS[@]}" -gt 0 ] && ui_color_on 2 && STREAM_ARGS+=(--color)
 
 # Ctrl-C should end the run between iterations rather than half-way through one. The trap
 # only raises a flag; the agent is a foreground child, so an interrupt during an iteration
@@ -716,15 +738,27 @@ say ""
 # the adapter's own interface. `local` and `fake` have nothing to do.
 exec_prepare || exit 1
 
-# + and - change the iteration budget mid-run, from a reader in the background. Only on a
-# terminal: a run whose stdin is redirected (CI, a test, `</dev/null`) behaves as it always
-# did. `<&0` is load-bearing — a non-interactive shell otherwise hands `&` /dev/null.
+# + and - change the iteration budget mid-run, and L the live view, from a reader in the
+# background. Only on a terminal: a run whose stdin is redirected (CI, a test, `</dev/null`)
+# behaves as it always did. `<&0` is load-bearing — a non-interactive shell otherwise hands
+# `&` /dev/null.
+#
+# With stderr on a terminal too, the bottom row becomes the status bar the reader draws
+# (ralph-ui.sh). The hint line goes first, so it scrolls with the rest of the header.
 if [ -t 0 ]; then
   SAVED_STTY="$(stty -g 2>/dev/null)"
+  say "keys: + one more iteration  ·  - one fewer  ·  L live view on/off"
+  say ""
+  if [ -t 2 ] && [ "${TERM:-}" != dumb ]; then
+    read -r _rows _cols <<< "$(stty size 2>/dev/null)"
+    if [[ "$_rows" =~ ^[0-9]+$ ]] && [[ "$_cols" =~ ^[0-9]+$ ]] && [ "$_rows" -ge 3 ]; then
+      printf '%s %s\n' "$_rows" "$_cols" > "$RUN_CTL_DIR/screen"
+      ui_bar_open "$_rows"
+    fi
+    unset _rows _cols
+  fi
   bash "$RALPH_TOOL_DIR/ralph-keys.sh" "$RUN_CTL_DIR" $$ <&0 &
   KEYS_PID=$!
-  say "keys: + one more iteration  ·  - one fewer"
-  say ""
 fi
 
 FINAL_STATUS="$EXIT_DONE"

@@ -121,9 +121,10 @@ ralph_exec_dirty_recovery_note() {
 # `json` normally: one object, printed when the turn ends. `stream-json` when the run is
 # being watched, so ralph-stream.cjs has events to draw as they happen. --verbose is not
 # optional there — `claude --print --output-format=stream-json` refuses to start without it,
-# and says so.
+# and says so. RALPH_LIVE_KEY=1 (set by ralph-loop.sh when the L key is live) asks for
+# stream-json too: the view may be turned on mid-iteration, and by then it is too late to ask.
 ralph_exec_format_args() {
-  if [ "${RALPH_STREAM:-0}" = "1" ]; then
+  if [ "${RALPH_STREAM:-0}" = "1" ] || [ "${RALPH_LIVE_KEY:-0}" = "1" ]; then
     RALPH_EXEC_FORMAT_ARGS=(--output-format stream-json --verbose)
   else
     RALPH_EXEC_FORMAT_ARGS=(--output-format json)
