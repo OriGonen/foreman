@@ -2390,9 +2390,9 @@ if case_is "RALPH_COLOR=always colours the glyph or prefix only, and the words s
   assert_contains "$OUT" "${ESC}[32m✓${ESC}[0m landed  ·  " "landed is a green tick"
   assert_contains "$OUT" "${ESC}[2m⋯${ESC}[0m progressed  ·  " "progress is a dim ellipsis"
   assert_contains "$OUT" "${ESC}[31m✗${ESC}[0m did not land (exit 1)." "a failure is a red cross"
-  assert_contains "$OUT" "${ESC}[34m──${ESC}[0m iteration 1  ·  " "a rule is blue, its text is not"
-  assert_contains "$OUT" "${ESC}[34m==${ESC}[0m run " "the summary frame opens blue"
-  assert_contains "$OUT" "${ESC}[34m==${ESC}[0m"$'\n' "and closes blue"
+  assert_contains "$OUT" "${ESC}[36m──${ESC}[0m iteration 1  ·  " "a rule is cyan, its text is not"
+  assert_contains "$OUT" "${ESC}[36m==${ESC}[0m run " "the summary frame opens cyan"
+  assert_contains "$OUT" "${ESC}[36m==${ESC}[0m"$'\n' "and closes cyan"
   assert_contains "$OUT" "   ${ESC}[33mnote:${ESC}[0m batch/issues/01-ticket.md is 'implemented' but has unchecked boxes" \
     "a note's prefix is yellow"
   # Take the codes out and the same words are left, in the same places.
@@ -2448,11 +2448,11 @@ if case_is "a key echo is plain text unless colour is asked for, and always take
   assert_eq "$OUT" $'\r\033[2K   ⌨ iterations: 1 of 4' "plain: byte for byte what it always was"
 
   OUT="$(RALPH_COLOR=always bash "$RALPH_HOME/lib/ralph-keys.sh" --apply + "$ctl" 2>&1)"
-  assert_eq "$OUT" $'\r\033[2K   \033[34m⌨\033[0m iterations: 1 of 5' \
-    "forced: only the glyph is blue, and the erase-line still comes first"
+  assert_eq "$OUT" $'\r\033[2K   \033[36m⌨\033[0m iterations: 1 of 5' \
+    "forced: only the glyph is cyan, and the erase-line still comes first"
 
   OUT="$(NO_COLOR=1 bash "$RALPH_HOME/lib/ralph-keys.sh" --apply + "$ctl" 2>&1)"
-  assert_missing "$OUT" "[34m" "NO_COLOR keeps the echo plain"
+  assert_missing "$OUT" "[36m" "NO_COLOR keeps the echo plain"
 fi
 
 if case_is "--live draws its clock dim only when colour is on, and the line is otherwise the same"; then
@@ -2466,6 +2466,25 @@ if case_is "--live draws its clock dim only when colour is on, and the line is o
   RALPH_COLOR=always RALPH_FAKE_BEHAVIOUR=stream run_ralph "$repo" run batch --live
   assert_contains "$OUT" "   ${ESC}[2m00:0" "forced: the clock digits are dim"
   assert_contains "$OUT" "${ESC}[0m · Write src/foo.js" "and the dot and the label are not"
+fi
+
+if case_is "status colours its labels when asked to, and prints the same words either way"; then
+  ESC=$'\033'
+  repo="$(make_repo 3 colour-status-repo)"
+  sed -i 's/Status:\*\* todo/Status:** ready-for-human/' "$repo/batch/issues/02-ticket.md"
+  git -C "$repo" commit --quiet -am "human ticket"
+
+  run_ralph "$repo" status batch
+  plain="$OUT"
+  assert_missing "$plain" "$ESC" "a captured status is plain"
+  assert_contains "$plain" "Batch: batch" "and keeps its first line"
+  assert_contains "$plain" "  2  02-ticket.md   [HUMAN]" "and the marked list"
+
+  RALPH_COLOR=always run_ralph "$repo" status batch
+  assert_contains "$OUT" "${ESC}[36mBatch:${ESC}[0m batch" "forced: the Batch label is cyan"
+  assert_contains "$OUT" "${ESC}[36mNext:${ESC}[0m 01-ticket.md" "and the Next label"
+  assert_contains "$OUT" "02-ticket.md   ${ESC}[33m[HUMAN]${ESC}[0m" "and the human flag is yellow"
+  assert_eq "$(printf '%s' "$OUT" | sed $'s/\033\[[0-9;]*m//g')" "$plain" "stripped of colour it is the plain status"
 fi
 
 # ---------------------------------------------------------------------------

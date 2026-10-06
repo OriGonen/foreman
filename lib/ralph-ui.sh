@@ -23,7 +23,7 @@
 # COLOUR is added here and nowhere else, to the glyph or prefix only — never to a sentence.
 # The glyph stays the signal; colour is a second channel, so output read without it loses
 # nothing. Only the basic 16 ANSI colours are used, so a terminal's own theme decides the
-# shades: ok green, warn yellow, error red, accent blue, muted dim.
+# shades: ok green, warn yellow, error red, accent cyan, muted dim.
 #
 # Colour is on only when the stream being written is a terminal. It is decided per call,
 # from `[ -t FD ]` on the stream that call writes to, so:
@@ -64,7 +64,7 @@ ui_paint() {
       ok)     code=32 ;;
       warn)   code=33 ;;
       error)  code=31 ;;
-      accent) code=34 ;;
+      accent) code=36 ;;
       muted)  code=2 ;;
       *)      code=0 ;;
     esac

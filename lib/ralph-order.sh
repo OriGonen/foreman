@@ -67,7 +67,7 @@ while IFS= read -r f; do
 done < <(ralph_next_answer --unordered)
 
 if [ "${#tickets[@]}" -eq 0 ]; then
-  say_tag muted "ralph order:" "$BATCH_DIR has no tickets — nothing to order."
+  say_tag accent "ralph order:" "$BATCH_DIR has no tickets — nothing to order."
   ralph_issues_hint
   exit 0
 fi
@@ -160,7 +160,7 @@ $(for t in "${tickets[@]}"; do printf -- '- %s\n' "$t"; done)
 PROMPT_EOF
 )
 
-say_tag muted "ralph order:" "reading ${#tickets[@]} ticket(s) in $BATCH_DIR ..."
+say_tag accent "ralph order:" "reading ${#tickets[@]} ticket(s) in $BATCH_DIR ..."
 
 RESPONSE=$(claude --model "$MODEL" --effort "$EFFORT" --permission-mode acceptEdits \
   --print --output-format json -p "$PROMPT")
@@ -178,7 +178,7 @@ cost=$(node -e '
   } catch {}
 ' <<< "$RESPONSE")
 
-say_tag muted "ralph order:" "wrote $ORDER_FILE${cost:+ (cost \$$cost)}"
+say_tag accent "ralph order:" "wrote $ORDER_FILE${cost:+ (cost \$$cost)}"
 echo "             review it — this is a first pass, not a guarantee."
 
 warnings="$(ralph_human_warnings)"

@@ -346,8 +346,8 @@ result object it always did. `ralph dry-run` reports which state a run would use
 ### Colour — `NO_COLOR` and `RALPH_COLOR`
 
 On a terminal, ralph colours the **glyph or prefix** of a line and nothing else: `✓` green,
-`✗` red, `⋯` dim, `↩` and the `note:` and `preflight:` prefixes yellow, `⌨` and the `──` and
-`==` rules blue, and the `--live` clock dim. The words are never coloured and the glyph still
+`✗` red, `⋯` dim, `↩` and the `note:` and `preflight:` prefixes yellow, `⌨`, the status labels and the `──` and
+`==` rules cyan, and the `--live` clock dim. The words are never coloured and the glyph still
 carries the meaning, so a run read without colour loses nothing. Only the terminal's basic 16
 colours are used, so your own theme picks the shades.
 

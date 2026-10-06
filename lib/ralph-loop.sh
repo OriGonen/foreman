@@ -450,11 +450,11 @@ progress_line() {
   human_remaining=$(human_tickets_remaining)
   line="Tickets done: ${counts% *} / ${counts#* }"
   [ "$human_remaining" -gt 0 ] && line="$line  ·  human tickets remaining: $human_remaining"
-  say_tag muted "Tickets done:" "${line#Tickets done: }"
+  say_tag accent "Tickets done:" "${line#Tickets done: }"
 }
 
 if [ "$MODE" = "status" ]; then
-  say_tag muted "Batch:" "$BATCH_DIR${RALPH_BATCH_NAME:+ ($RALPH_BATCH_NAME)}"
+  say_tag accent "Batch:" "$BATCH_DIR${RALPH_BATCH_NAME:+ ($RALPH_BATCH_NAME)}"
   # Nothing here changes a ticket, so the list is worked out once and every question below is
   # answered from it.
   ralph_tickets_hold || exit 1
@@ -463,9 +463,9 @@ if [ "$MODE" = "status" ]; then
   if next_ticket=$(next_sh); then
     if ralph_ticket_needs_human "$next_ticket"; then
       ui_paint human_flag 1 warn "[HUMAN — the loop will not run until you do it]"
-      say_tag muted "Next:" "${next_ticket##*/}   $human_flag"
+      say_tag accent "Next:" "${next_ticket##*/}   $human_flag"
     else
-      say_tag muted "Next:" "${next_ticket##*/}"
+      say_tag accent "Next:" "${next_ticket##*/}"
     fi
     say ""
     say "Remaining, in order:"
@@ -570,7 +570,7 @@ if [ "$MODE" = "run" ] && ralph_ticket_needs_human "$next_ticket"; then
 fi
 
 if [ "$MODE" = "dry-run" ]; then
-  say_tag muted "Batch:" "$BATCH_DIR"
+  say_tag accent "Batch:" "$BATCH_DIR"
   progress_line
   say ""
   say "Would run, in this order:"
