@@ -94,18 +94,18 @@ exec_required_tool() { printf 'sbx'; }
 # for. Both sbx modes; an explicit RALPH_PERMISSION_MODE still wins.
 exec_default_permission_mode() { printf 'bypassPermissions'; }
 
-# Verified against a real sandbox, not assumed: `sbx run … -- <flags>` delivers them to
-# claude verbatim — omitting --verbose gets the CLI's own refusal of stream-json, which is a
-# rule only claude knows — and under stream-json sbx prefixes its OSC title sequence to the
-# FIRST JSON object rather than putting it on a line of its own. ralph-stream.cjs strips per
-# line before testing for `{`, so that line parses; the banner's other lines are dropped.
+# `sbx exec`, not `sbx run`. `run` is the interactive attach: with stdin not a terminal — and
+# the loop always gives exec_run /dev/null — sbx v0.47 prints its banner and exits 0 without
+# claude's output, or fails with `inspect exec: context deadline exceeded`. Either way the
+# payload is empty and every iteration records 0 turns. Verified against a real sandbox:
+# `sbx exec` starts the sandbox when it is stopped, runs in the clone's workspace, and passes
+# claude's stdout through as clean stream-json, with no banner.
 #
-# What sbx does NOT forward is the agent's own error text: a claude that fails to start
-# yields sbx's banner and `ERROR: agent exited with code 1` and nothing else. That is why
-# the filter keeps a tail when no result object ever arrives.
+# ralph-stream.cjs still strips control codes per line and keeps a tail when no result
+# object ever arrives, so a claude that fails to start stays diagnosable either way.
 exec_run() {
   ralph_exec_format_args
-  sbx run claude --name "$RALPH_SANDBOX" -- \
+  sbx exec "$RALPH_SANDBOX" claude \
     --model "$RALPH_MODEL" --effort "$RALPH_EFFORT" --permission-mode "$RALPH_PERMISSION_MODE" \
     ${RALPH_CLAUDE_ARGS+"${RALPH_CLAUDE_ARGS[@]}"} \
     --print "${RALPH_EXEC_FORMAT_ARGS[@]}" -p "$1"
