@@ -6,6 +6,8 @@
 #   ralph run     <batch> 5            # run at most 5 iterations
 #   ralph run     <batch> --unlimited  # run until done or a budget stops it
 #   ralph run     <batch> --live       # show what the agent is doing, as it does it
+#   ralph run     <batch> --adopt-dirty  # review and commit uncommitted work left in the
+#                                        # agent's tree, then continue (see RESUMING)
 #   ralph status  <batch>              # what is left, what is next
 #   ralph dry-run <batch>              # print the plan and the next prompt
 #
@@ -34,10 +36,15 @@
 #   usage limit, on Ctrl-C, or because the machine died, the next run starts at the first
 #   ticket that has not landed. See ralph-next.sh.
 #
-#   The one exception is a stall the checkpoint turn could not salvage, which leaves a
-#   disposable marker (.ralph-stall-marker) in the batch directory. A rerun that finds the
-#   tree dirty and the marker matching runs a checkpoint turn before syncing; anything else
-#   refuses to sync. Deleting the marker only costs that rescue. See "The stall marker".
+#   The one exception is a run that stopped part-way through a turn — a usage limit,
+#   Ctrl-C, a dead terminal, or a stall the checkpoint turn could not salvage — leaving work
+#   uncommitted. Every agent turn writes a disposable marker (.ralph-stall-marker) in the
+#   batch directory first and removes it once the turn is dealt with. A rerun that finds the
+#   tree dirty and the marker matching runs a REVIEW turn before syncing: an agent reads the
+#   diff against the ticket, commits it as wip: if it is the ticket's work, and refuses it
+#   (stopping for a human) on a red flag. Anything else refuses to sync, unless --adopt-dirty
+#   says to review it anyway. Deleting the marker only costs that rescue. See "The stall
+#   marker".
 #
 #   A human ticket is the other way a run ends without finishing the batch: see EXIT CODES.
 #   Rerunning before the person has set it to done stops at it again, and costs nothing. A
@@ -99,6 +106,7 @@ EXIT_WAITING_ON_HUMAN=30
 # ---------------------------------------------------------------------------
 MODE=run
 MAX_ITERATIONS=1   # default: one iteration. --unlimited sets this to 0 (no cap).
+ADOPT_DIRTY=0      # --adopt-dirty: review and commit a dirty tree no marker vouches for.
 
 # The header comment above is the help text. Stop at the first non-comment line rather
 # than at a fixed line number, which drifts every time the header grows.
@@ -113,8 +121,9 @@ while [ $# -gt 0 ]; do
     # beats a RALPH_STREAM in the batch's ralph.conf — the same precedence every other knob
     # has. It has to be a real flag: the parser below rejects any unknown `-*`.
     --live)      export RALPH_STREAM=1 ;;
+    --adopt-dirty) ADOPT_DIRTY=1 ;;
     --help|-h)   show_help; exit 0 ;;
-    -*)          echo "Usage: ${RALPH_INVOKE:-ralph} run [<batch>] [<iterations>|--unlimited] [--live]" >&2; exit 1 ;;
+    -*)          echo "Usage: ${RALPH_INVOKE:-ralph} run [<batch>] [<iterations>|--unlimited] [--live] [--adopt-dirty]" >&2; exit 1 ;;
     *)
       if [[ "$1" =~ ^[0-9]+$ ]]; then
         MAX_ITERATIONS="$1"
@@ -410,7 +419,10 @@ human_ticket_note() {    # human_ticket_note TICKET
 # that blind, under whatever ticket this run happened to pick first, is exactly the
 # unreviewed commit the loop has always refused. So the rescue is gated on proof the loop
 # wrote itself — a file in the batch directory, recording the ticket, the base ref and the
-# sandbox at the moment a stall was left unsalvaged (`key=value` lines, never eval'd).
+# sandbox of a turn that did not finish cleanly (`key=value` lines, never eval'd): written
+# before every turn, kept when the run pauses on a usage limit or Ctrl-C with the turn's
+# work uncommitted, and written again when a stall is left unsalvaged. See
+# docs/adr/0002-in-flight-marker-and-review-turn.md.
 #
 # Deliberately a disposable file, not state: its absence, or any mismatch, always degrades
 # to the safe path (refuse to sync, print the recovery note), so deleting it by hand costs
@@ -426,6 +438,19 @@ stall_marker_get() {
 write_stall_marker() {    # write_stall_marker TICKET BASE
   printf 'ticket=%s\nbase_ref=%s\nsandbox=%s\n' "$1" "$2" "$RALPH_SANDBOX" > "$STALL_MARKER_FILE" ||
     warn_note "could not record the stall, so a rerun will refuse rather than rescue it"
+}
+
+# Written before every agent turn, so that whatever stops the run mid-turn — a usage limit,
+# Ctrl-C, a closed terminal, a dead machine — leaves the marker behind to vouch for the tree
+# it leaves. Removed once the turn's result has been dealt with (see the main loop).
+#
+# Only where the marker is gitignored, as ralph init and ralph doctor arrange: the agent's
+# `git add -A` runs while it exists, and in a mode where the agent works in this tree an
+# unignored marker would be swept into the ticket's commit. Without the ignore line a run
+# simply has no in-flight marker, and a stop mid-turn is refused as it always was.
+mark_turn_in_flight() {
+  git check-ignore -q "$STALL_MARKER_FILE" 2>/dev/null || return 0
+  write_stall_marker "$TICKET_FILE" "$BASE_REF"
 }
 
 # Does the marker vouch for the tree this run is about to find, for TICKET? All three must
@@ -533,7 +558,9 @@ ralph_tickets_hold || preflight_failed=1
 #
 # Not when the stall marker vouches for it: that tree is about to be checkpointed before any
 # iteration starts (see "Start of run" in the loop), so it is not the reviewer's problem.
-if [ "$RALPH_ALLOW_DIRTY" != "1" ] && tree_is_dirty && ! stall_marker_matches "$(next_sh 2>/dev/null)"; then
+# Nor under --adopt-dirty, which asks for exactly that checkpoint without a marker.
+if [ "$RALPH_ALLOW_DIRTY" != "1" ] && [ "$ADOPT_DIRTY" != "1" ] && tree_is_dirty &&
+   ! stall_marker_matches "$(next_sh 2>/dev/null)"; then
   warn_preflight "the working tree is dirty. Commit or set aside first, so this"
   warn "           iteration's review sees only what this iteration wrote."
   warn "           Override with RALPH_ALLOW_DIRTY=1."
@@ -826,10 +853,18 @@ checkpoint_discarded_note() {
 #
 # Its cost is added to the run total and it is recorded as its own row whatever the outcome:
 # the money was spent either way.
-run_checkpoint_turn() {
+#
+# MODE is `stall` (the default: a turn of THIS run stalled, so commit what it left without
+# judging it) or `review` (work an EARLIER run left: read it against the ticket first, and
+# refuse a red flag). Only `review` can end a fourth way:
+#
+#   rejected   the reviewer refused to commit it; the tree is untouched, and its reasons are
+#              in CHECKPOINT_REJECTION
+run_checkpoint_turn() {    # run_checkpoint_turn [stall|review]
+  local mode="${1:-stall}"
   # ralph-prompt.sh defines ralph_checkpoint_prompt; the loop sources it per iteration, so
   # before the first iteration it has not been loaded yet.
-  if ! declare -F ralph_checkpoint_prompt >/dev/null 2>&1; then
+  if ! declare -F ralph_review_checkpoint_prompt >/dev/null 2>&1; then
     # shellcheck source=ralph-prompt.sh
     source "$RALPH_TOOL_DIR/ralph-prompt.sh"
   fi
@@ -840,13 +875,20 @@ run_checkpoint_turn() {
   local checkpoint_prompt checkpoint_started_at checkpoint_agent_status checkpoint_result
   local checkpoint_sync_failed=0
   local -a checkpoint_args_saved
-  checkpoint_prompt="$(ralph_checkpoint_prompt "$TICKET_FILE" "$BASE_REF")"
+  CHECKPOINT_REJECTION=""
+  if [ "$mode" = review ]; then
+    checkpoint_prompt="$(ralph_review_checkpoint_prompt "$TICKET_FILE" "$BASE_REF")"
+  else
+    checkpoint_prompt="$(ralph_checkpoint_prompt "$TICKET_FILE" "$BASE_REF")"
+  fi
   checkpoint_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   # Guarded expansion, same as RALPH_CLAUDE_ARGS's other two call sites (local.sh,
   # _sbx.sh): under bash < 4.4 and `set -u`, expanding an array that is declared but
   # empty still raises "unbound variable" without the `+` guard.
   checkpoint_args_saved=(${RALPH_CLAUDE_ARGS+"${RALPH_CLAUDE_ARGS[@]}"})
   RALPH_CLAUDE_ARGS+=(--max-turns "$CHECKPOINT_MAX_TURNS")
+  # A checkpoint turn killed part-way is still uncommitted work a rerun should review.
+  mark_turn_in_flight
   exec_run "$checkpoint_prompt" "$TICKET_FILE" </dev/null |
     node "$RALPH_TOOL_DIR/ralph-stream.cjs" ${STREAM_ARGS+"${STREAM_ARGS[@]}"} > "$PAYLOAD_FILE"
   checkpoint_agent_status=${PIPESTATUS[0]}
@@ -879,9 +921,43 @@ run_checkpoint_turn() {
     CHECKPOINT_OUTCOME=salvaged
   elif [ "$EXEC_DIRTY" -eq 0 ]; then
     CHECKPOINT_OUTCOME=discarded
+  elif [ "$mode" = review ] &&
+       CHECKPOINT_REJECTION="$(review_rejection_reasons "$PAYLOAD_FILE")"; then
+    # What the tree shows decides first: a reviewer that wrote the refusal line and then
+    # committed anyway has salvaged the work, whatever it said.
+    CHECKPOINT_OUTCOME=rejected
   else
     CHECKPOINT_OUTCOME=failed
   fi
+  # Whichever way it ended, the turn is dealt with. On `failed` the caller decides whether a
+  # marker belongs there.
+  rm -f "$STALL_MARKER_FILE"
+}
+
+# The reasons a review checkpoint turn gave for refusing, from the refusal line at the end of
+# its reply (ralph-prompt.sh's RALPH_REVIEW_REJECTED_SENTINEL). Prints them and succeeds when
+# there is such a line; fails when there is none. The payload is the result object, or — in
+# the live view — stream-json ending in it; anything unparseable is searched as plain text.
+review_rejection_reasons() {    # review_rejection_reasons PAYLOAD_FILE
+  node -e '
+    const fs = require("node:fs");
+    const [file, sentinel] = process.argv.slice(1);
+    let raw = "";
+    try { raw = fs.readFileSync(file, "utf8"); } catch { process.exit(1); }
+    let text = null;
+    for (const line of raw.split(/\r?\n/)) {
+      try {
+        const obj = JSON.parse(line);
+        if (obj && obj.type === "result" && typeof obj.result === "string") text = obj.result;
+      } catch {}
+    }
+    if (text === null) text = raw;
+    const hits = text.split(/\r?\n/).filter((l) => l.includes(sentinel));
+    if (!hits.length) process.exit(1);
+    const last = hits[hits.length - 1];
+    const reasons = last.slice(last.indexOf(sentinel) + sentinel.length).replace(/^[\s:\u2014-]+/, "").trim();
+    console.log(reasons || "(no reasons given)");
+  ' "$1" "$RALPH_REVIEW_REJECTED_SENTINEL"
 }
 
 while true; do
@@ -941,74 +1017,122 @@ while true; do
     LAST_CONTINUATION_STALLED=0
   fi
 
-  # --- start of run: is the tree a previous run's unsalvaged stall? ------------
+  # --- start of run: is the tree an earlier run's unfinished work? -----------
   # Before the first sync of the run, and before any budget check: what is being rescued was
   # paid for by an earlier run, and a budget limits what to commission, not whether to keep
   # work already paid for. exec_tree_dirty is ticket 02's read-only question, so asking it
   # here moves nothing.
+  #
+  # Two things can vouch for a dirty tree: the marker (written before every agent turn, so a
+  # run stopped by a usage limit, Ctrl-C or a dead terminal leaves one), or the operator,
+  # with --adopt-dirty. Either way it goes through a REVIEW turn, not the stall's blind one:
+  # nobody has looked at this work, and the turn that wrote it may have been cut off mid-file.
   if [ "$START_OF_RUN_CHECKED" -eq 0 ]; then
     START_OF_RUN_CHECKED=1
-    if [ -e "$STALL_MARKER_FILE" ]; then
-      if ! exec_tree_dirty; then
-        # Clean: someone rescued it by hand, or nothing was ever there. Either way the
-        # marker no longer vouches for anything.
-        rm -f "$STALL_MARKER_FILE"
-      elif stall_marker_matches "$TICKET_FILE"; then
-        BASE_REF=$(git rev-parse HEAD)
-        stalled_from="$BASE_REF"
-        # Gone before the checkpoint turn runs, not after it succeeds: in a repo that has not
-        # ignored it, `git add -A` would sweep the marker into the very commit that is meant
-        # to hold only the ticket's work. A rescue that fails writes it again.
-        rm -f "$STALL_MARKER_FILE"
+    rescue_why=""
+    if [ -e "$STALL_MARKER_FILE" ] && ! exec_tree_dirty; then
+      # Clean: someone rescued it by hand, or nothing was ever there. Either way the
+      # marker no longer vouches for anything.
+      rm -f "$STALL_MARKER_FILE"
+    elif [ -e "$STALL_MARKER_FILE" ] && stall_marker_matches "$TICKET_FILE"; then
+      rescue_why=marker
+    elif [ "$ADOPT_DIRTY" -eq 1 ] && exec_tree_dirty; then
+      rescue_why=adopted
+    elif [ -e "$STALL_MARKER_FILE" ]; then
+      # Dirty, and the marker does not vouch for it: another batch's stall, a stall from
+      # before HEAD moved, or a human's own work. Nothing here proves it is this ticket's,
+      # so the refusal below applies, exactly as if there were no marker.
+      STALL_MARKER_UNTRUSTED=1
+    fi
 
-        say_rule "found $TICKET_FILE's stalled work from an earlier run, still uncommitted"
-        warn "The earlier run stopped on a stall the checkpoint turn could not salvage, and"
-        warn "left a marker vouching for this tree. Running a checkpoint turn to commit it"
-        warn "before syncing, rather than resetting over it."
-        exec_show_dirty
+    if [ -n "$rescue_why" ]; then
+      BASE_REF=$(git rev-parse HEAD)
+      stalled_from="$BASE_REF"
+      # Gone before the checkpoint turn runs, not after it succeeds: in a repo that has not
+      # ignored it, `git add -A` would sweep the marker into the very commit that is meant
+      # to hold only the ticket's work. A rescue that fails writes it again.
+      rm -f "$STALL_MARKER_FILE"
 
-        run_checkpoint_turn
-
-        case "$CHECKPOINT_OUTCOME" in
-          salvaged)
-            # Exactly what the same rescue mid-run would have recorded: the ticket is now a
-            # continuation of a stall, reviewed from the commit the stall began at.
-            say_event progress "stalled, salvaged by a checkpoint turn" "$(git log -1 --format=%h "$HEAD_REF")"
-            CONTINUATIONS_ON_CURRENT=$((CONTINUATIONS_ON_CURRENT + 1))
-            STALLS_ON_CURRENT=$((STALLS_ON_CURRENT + 1))
-            LAST_CONTINUATION_STALLED=1
-            ATTEMPTS_ON_CURRENT=0
-            TICKET_BASE_REF="$stalled_from"
-            say ""
-            ;;
-          stranded)
-            warn ""
-            exec_recovery_note "$BASE_REF"
-            FINAL_STATUS="$EXIT_NEEDS_HUMAN"
-            break
-            ;;
-          discarded)
-            checkpoint_discarded_note
-            FINAL_STATUS="$EXIT_NEEDS_HUMAN"
-            break
-            ;;
-          *)
-            write_stall_marker "$TICKET_FILE" "$BASE_REF"
-            warn ""
-            warn "The checkpoint turn could not commit $TICKET_FILE's stalled work either."
-            warn "Stopping so you can look."
-            exec_show_dirty
-            exec_dirty_recovery_note "$BASE_REF" "$TICKET_FILE" "$BATCH_DIR" >&2
-            FINAL_STATUS="$EXIT_NEEDS_HUMAN"
-            break
-            ;;
-        esac
+      say_rule "found $TICKET_FILE's unfinished work from an earlier run, still uncommitted"
+      if [ "$rescue_why" = marker ]; then
+        warn "An earlier run stopped part-way through this ticket (a usage limit, an interrupt,"
+        warn "or a stall it could not salvage) and left a marker vouching for this tree."
       else
-        # Dirty, and the marker does not vouch for it: another batch's stall, a stall from
-        # before HEAD moved, or a human's own work. Nothing here proves it is this ticket's,
-        # so the refusal below applies, exactly as if there were no marker.
-        STALL_MARKER_UNTRUSTED=1
+        warn "Nothing vouches for this tree, but --adopt-dirty says to treat it as"
+        warn "$TICKET_FILE's own unfinished work."
       fi
+      warn "Running a review turn to read it and commit it as wip: before syncing, rather"
+      warn "than resetting over it."
+      exec_show_dirty
+
+      run_checkpoint_turn review
+
+      case "$CHECKPOINT_OUTCOME" in
+        salvaged)
+          # Exactly what the same rescue mid-run would have recorded: the ticket is now a
+          # continuation of a stall, reviewed from the commit the stall began at.
+          say_event progress "reviewed and salvaged by a checkpoint turn" "$(git log -1 --format=%h "$HEAD_REF")"
+          CONTINUATIONS_ON_CURRENT=$((CONTINUATIONS_ON_CURRENT + 1))
+          STALLS_ON_CURRENT=$((STALLS_ON_CURRENT + 1))
+          LAST_CONTINUATION_STALLED=1
+          ATTEMPTS_ON_CURRENT=0
+          TICKET_BASE_REF="$stalled_from"
+          say ""
+          # Ctrl-C during the review turn: the work is safe now, so stop here rather than
+          # start the iteration the interrupt was meant to prevent.
+          if [ "$PAUSE_REQUESTED" -eq 1 ]; then
+            FINAL_STATUS="$EXIT_PAUSED"
+            break
+          fi
+          ;;
+        rejected)
+          # No marker is written back: a rerun would only pay for the same refusal again.
+          warn ""
+          warn "The review turn refused to commit $TICKET_FILE's leftover work:"
+          printf '%s\n' "$CHECKPOINT_REJECTION" | sed 's/^/  /' >&2
+          warn ""
+          warn "The tree is untouched. Look at it yourself; if it is sound after all, keep it"
+          warn "as a checkpoint and rerun to continue:"
+          exec_dirty_recovery_note "$BASE_REF" "$TICKET_FILE" "$BATCH_DIR" >&2
+          FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+          break
+          ;;
+        stranded)
+          warn ""
+          exec_recovery_note "$BASE_REF"
+          FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+          break
+          ;;
+        discarded)
+          checkpoint_discarded_note
+          FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+          break
+          ;;
+        *)
+          write_stall_marker "$TICKET_FILE" "$BASE_REF"
+          # The review turn itself ran into the usage limit, or was interrupted: the same
+          # pause any iteration would take, and the marker means the next run tries the
+          # review again.
+          limit_hit=$(verdict_get "$VERDICT_FILE" limit_hit)
+          if [ "$limit_hit" = "1" ]; then
+            limit_reset=$(verdict_get "$VERDICT_FILE" limit_reset)
+            PAUSE_REASON="usage limit reached${limit_reset:+ · resets $limit_reset}"
+            FINAL_STATUS="$EXIT_PAUSED"
+            break
+          fi
+          if [ "$PAUSE_REQUESTED" -eq 1 ]; then
+            FINAL_STATUS="$EXIT_PAUSED"
+            break
+          fi
+          warn ""
+          warn "The review turn could not commit $TICKET_FILE's leftover work either."
+          warn "Stopping so you can look."
+          exec_show_dirty
+          exec_dirty_recovery_note "$BASE_REF" "$TICKET_FILE" "$BATCH_DIR" >&2
+          FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+          break
+          ;;
+      esac
     fi
   fi
 
@@ -1054,7 +1178,10 @@ while true; do
     fi
     exec_show_dirty
     warn ""
-    warn "If the changes look sound, keep them as a checkpoint and rerun to continue:"
+    warn "If they are $TICKET_FILE's work, rerun with --adopt-dirty to have an agent review"
+    warn "them and commit them as a checkpoint:"
+    warn "  $RALPH_INVOKE run $BATCH_DIR$(resume_args) --adopt-dirty"
+    warn "Or keep them as a checkpoint by hand and rerun to continue:"
     exec_dirty_recovery_note "$BASE_REF" "$TICKET_FILE" "$BATCH_DIR" >&2
     FINAL_STATUS="$EXIT_NEEDS_HUMAN"
     break
@@ -1099,6 +1226,7 @@ while true; do
   # The agent gets /dev/null for stdin, never the terminal: the prompt goes in with `-p`, and
   # an agent holding the terminal can swallow the keys meant for ralph-keys.sh or switch the
   # terminal's mode under it. Same for the checkpoint turn.
+  mark_turn_in_flight
   exec_run "$RALPH_PROMPT" "$TICKET_FILE" </dev/null |
     node "$RALPH_TOOL_DIR/ralph-stream.cjs" ${STREAM_ARGS+"${STREAM_ARGS[@]}"} > "$PAYLOAD_FILE"
   agent_status=${PIPESTATUS[0]}
@@ -1143,6 +1271,20 @@ while true; do
   permission_denied=$(verdict_get "$VERDICT_FILE" permission_denied)
   is_error=$(verdict_get "$VERDICT_FILE" is_error)
   PREV_CONTEXT_EXHAUSTED="${context_exhausted:-0}"
+
+  # The turn is over and nothing killed the loop, so the in-flight marker has done its job —
+  # except where the run is about to pause with the turn's work still uncommitted. That is
+  # the work a rerun should pick up, so the marker stays, rewritten against HEAD as it is now
+  # (the turn may have committed part of it before it stopped). Every other dirty stop goes
+  # to a human exactly as before; the stall below writes its own marker when it gives up.
+  if [ -e "$STALL_MARKER_FILE" ]; then
+    if { [ "$limit_hit" = "1" ] || [ "$PAUSE_REQUESTED" -eq 1 ]; } &&
+       [ "$sync_failed" -eq 0 ] && [ "$dirty" -eq 1 ]; then
+      write_stall_marker "$TICKET_FILE" "$HEAD_REF"
+    else
+      rm -f "$STALL_MARKER_FILE"
+    fi
+  fi
 
   # --- decide what happens next ---------------------------------------------
 

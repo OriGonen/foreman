@@ -86,6 +86,16 @@ diff, commit it as `wip:`, and write the `Remaining:` list. It never continues t
 ticket's work. It converts a stall into a progression.
 _Avoid_: Salvage run, auto-commit, rescue
 
+**Review turn**:
+The checkpoint turn a run takes at its START, for uncommitted work an earlier run left
+behind (a usage limit, Ctrl-C, a dead terminal, an unsalvaged stall). Unlike the mid-run
+checkpoint turn it reads the diff against the ticket first — without building or testing
+it — and commits it as `wip:` unless it finds a clear red flag (out-of-scope changes,
+secrets, mass deletion, garbage). On a red flag it commits nothing and the run stops for a
+human with its reasons. Taken when the stall marker matches, or under `--adopt-dirty`.
+See `docs/adr/0002-in-flight-marker-and-review-turn.md`.
+_Avoid_: Code review (that is the ticket's own review step), audit
+
 ### How a run ends
 
 **Waiting on a human**:
@@ -147,12 +157,21 @@ procedure.
 _Avoid_: Restart, continue (that is what a continuation does)
 
 **Stall marker**:
-A disposable file in the batch directory, written only when a stall could not be salvaged,
-recording the ticket, the base ref and the sandbox name. It is the loop's proof that a dirty
-tree found at the start of a run is its own unfinished business, and so may be checkpointed
-rather than refused. Deleting it is always safe: without it a rerun refuses to sync. The one
-piece of state a run leaves for the next, kept the way the bundle file is — never a registry.
+A disposable file in the batch directory, recording the ticket, the base ref and the sandbox
+name. Written before every agent turn and removed once the turn is dealt with, so it is left
+behind exactly when a run stopped part-way through a turn — a usage limit, Ctrl-C, a dead
+terminal — or when a stall could not be salvaged. It is the loop's proof that a dirty tree
+found at the start of a run is its own unfinished business, and so may go through a review
+turn rather than be refused. Deleting it is always safe: without it a rerun refuses to sync.
+The one piece of state a run leaves for the next, kept the way the bundle file is — never a
+registry.
 _Avoid_: Lock, state file, journal
+
+**Adopt dirty**:
+`ralph run --adopt-dirty`: the operator vouching for a dirty tree no marker vouches for, as
+the next ticket's own work. It goes through the same review turn. On a clean tree the flag
+does nothing.
+_Avoid_: Force, allow dirty (that is `RALPH_ALLOW_DIRTY`, which only waives the preflight)
 
 **Session resume**:
 The deferred idea of reattaching to the agent's *own* prior conversation via the CLI's

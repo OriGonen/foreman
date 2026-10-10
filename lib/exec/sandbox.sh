@@ -26,7 +26,7 @@ source "$RALPH_EXEC_DIR/_sbx.sh"
 exec_describe() { printf 'sandbox (sandbox %s)' "$RALPH_SANDBOX"; }
 
 exec_prepare() {
-  _sbx_create clone
+  _sbx_create clone || return 1
 
   # A sandbox left over from the other arrangement is the single most expensive mistake
   # available here: it looks fine and fails every iteration *after* paying for the work.

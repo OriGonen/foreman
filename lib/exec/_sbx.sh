@@ -50,15 +50,34 @@ _sbx_preflight() {
   return 1
 }
 
-# Create the sandbox up front (idempotent — fine if a prior run left it) so every agent
-# call reattaches to it instead of creating it: a fresh-create prints a setup banner on
-# stdout that would corrupt the --output-format json we parse for usage.
+# Does the sandbox exist? `sbx ls -q` prints one name per line (CRLF on Windows).
+_sbx_exists() {
+  sbx ls -q 2>/dev/null | tr -d '\r' | grep -qxF "$RALPH_SANDBOX"
+}
+
+# Create the sandbox up front so every agent call reattaches to it instead of creating it:
+# a fresh-create prints a setup banner on stdout that would corrupt the --output-format json
+# we parse for usage.
+#
+# One a prior run left is reused as it is, without asking `sbx create` — which refuses with
+# "sandbox ... already exists", an error on every run that meant nothing. Only a sandbox that
+# is missing is created, and only a create that leaves it still missing is an error.
 _sbx_create() {
+  local out
+  _sbx_exists && return 0
+  say "Creating sandbox '$RALPH_SANDBOX'…"
   if [ "$1" = clone ]; then
-    sbx create --clone --name "$RALPH_SANDBOX" claude "$REPO_ROOT" >&2 || true
+    out=$(sbx create --clone --name "$RALPH_SANDBOX" claude "$REPO_ROOT" 2>&1)
   else
-    sbx create --name "$RALPH_SANDBOX" claude "$REPO_ROOT" >&2 || true
-  fi
+    out=$(sbx create --name "$RALPH_SANDBOX" claude "$REPO_ROOT" 2>&1)
+  fi && return 0
+  # `sbx ls` can fail on its own (the daemon still starting), so a create that lost a race
+  # with a sandbox that was there all along is not a failure either.
+  _sbx_exists && return 0
+  warn_preflight "could not create sandbox '$RALPH_SANDBOX' for $REPO_ROOT. sbx said:"
+  printf '%s\n' "$out" | tr -d '\r' | sed 's/^/             /' >&2
+  warn "           (If \`sbx\` is signed out, run \`sbx login\` first.)"
+  return 1
 }
 
 # The batch's readiness probe: one command that must succeed inside the sandbox before any

@@ -54,8 +54,11 @@ which is not valid UTF-8. The three pieces:
 **The `Handoff:` line.** Directly under its status line:
 
 ```
-**Handoff:** .scratch/<batch>/handoff/<its file name>
+**Handoff:** .scratch/<batch>/handoff/HANDOFF_<its file name>
 ```
+
+The `HANDOFF_` prefix keeps the handoff file from sharing its ticket's exact file name. A
+`Handoff:` line that already exists is left as it is, whatever it names.
 
 **The handoff file**, at that path, unless it already exists (never overwrite one — it may
 hold the person's answers):

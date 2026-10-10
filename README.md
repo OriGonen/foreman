@@ -75,7 +75,7 @@ directory**, inside the repository being worked on:
 | `prompt-extra.md` | project-specific prompt text (optional) |
 | `ralph-runs.jsonl` `ralph-runs.log` | append-only run telemetry, gitignored |
 | `.ralph-iter.bundle` | transient; exists only inside one iteration |
-| `.ralph-stall-marker` | disposable; left only when a stall could not be salvaged, so a rerun may rescue it — see "Pausing and resuming" |
+| `.ralph-stall-marker` | disposable; exists while an agent turn runs, and is left behind when a run stops part-way through one (a usage limit, Ctrl-C, a stall it could not salvage), so a rerun may review and rescue the work — see "Pausing and resuming" |
 
 Two batches never share any of it, and two *repositories* never share any of it either. Run
 one, pause it, switch repos, run another, come back — each resumes exactly where it was.
@@ -136,7 +136,7 @@ account. Mark a ticket for one on its own status line:
 # 15 — owner review of the landing-page copy
 
 **Status:** ready-for-human
-**Handoff:** .scratch/my-batch/handoff/15-owner-review.md
+**Handoff:** .scratch/my-batch/handoff/HANDOFF_15-owner-review.md
 
 - [ ] the owner has reviewed the copy and left feedback in the handoff file
 ```
@@ -449,6 +449,10 @@ The loop pauses itself, cleanly, when:
 | a usage / rate / billing limit is detected in the response | stops immediately, reporting the reset time when the response carries one |
 | Ctrl-C | records the interrupted iteration, writes the footer, then stops |
 
+A limit or a Ctrl-C that lands part-way through a turn usually leaves its work uncommitted.
+Rerunning reviews that work and commits it as `wip:` before carrying on — see "Rerunning a
+stop like that salvages it" below.
+
 All of those exit **10** and print how to resume.
 
 It stops and asks for a human (exit **20**) when a ticket did not reach its done state after
@@ -488,18 +492,29 @@ progression, and the same ticket continues on the next iteration. Only when the 
 turn *also* cannot commit does the run stop, for the same reason it always did. See
 `docs/adr/0001-checkpoint-turn-over-session-resume.md`.
 
-**Rerunning a stop like that salvages it.** When a run ends on a stall it could not salvage,
-it leaves a small marker, `.ralph-stall-marker`, in the batch directory naming the ticket, the
-base commit and the sandbox. The next run checks for it before its first sync: if the tree is
-dirty and the marker matches — same sandbox, same base commit, same ticket — it runs the
-checkpoint turn first and then carries on with the batch. The marker is what proves the
+**Rerunning a stop like that salvages it.** Before every agent turn the loop writes a small
+marker, `.ralph-stall-marker`, in the batch directory naming the ticket, the base commit and
+the sandbox, and removes it once the turn has been dealt with. So a run that stops part-way
+through a turn — a usage limit, Ctrl-C, a closed terminal, or a stall the checkpoint turn
+could not salvage — leaves it behind. The next run checks for it before its first sync: if
+the tree is dirty and the marker matches — same sandbox, same base commit, same ticket — it
+runs a **review turn** first: an agent reads the diff against the ticket (it does not run the
+build or the tests — interrupted work is expected to be unfinished) and commits it as `wip:`
+with a `Remaining:` note listing anything half-written. It then carries on with the batch.
+If the reviewer finds a clear red flag instead — changes outside the ticket, secrets, mass
+deletion or garbage — it commits nothing, the run stops (exit 20) with its reasons, and the
+tree is left for you. The marker is what proves the
 uncommitted work is the loop's own. The sandbox is per *repository*, so a dirty clone may be
 another batch's stall or your own session inside it, and committing that blind, under
 whichever ticket this run picked first, is exactly the unreviewed commit the loop refuses to
 make. With no marker, or one that does not match, the run refuses to sync and prints the
-recovery note instead. The marker is disposable: deleting it by hand is always safe and costs
-only the automatic rescue, and it is removed as soon as the tree is clean or a checkpoint
-succeeds.
+recovery note instead. If you know the work is the next ticket's, `ralph run --adopt-dirty`
+sends it through the same review turn without a marker. The marker is disposable: deleting it
+by hand is always safe and costs only the automatic rescue, and it is removed as soon as the
+tree is clean, a checkpoint succeeds, or a reviewer refuses the work. It is only written where
+`.gitignore` ignores it (as `ralph init` and `ralph doctor --fix` arrange), so an agent's
+`git add -A` can never sweep it into a commit. See
+`docs/adr/0002-in-flight-marker-and-review-turn.md`.
 
 Within a run, a ticket is retried only when a second attempt could plausibly survive: the
 model was briefly unavailable, the iteration ran out of context, or the CLI got far enough

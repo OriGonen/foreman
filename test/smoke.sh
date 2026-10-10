@@ -791,6 +791,51 @@ if case_is "the credentials reader finds a name in the file, and an environment 
   assert_eq "$(mask '')" "" "an empty value has no mask"
 fi
 
+if case_is "a sandbox that already exists is reused, and only a failed create is an error"; then
+  # A stub `sbx` that knows of the sandboxes in $STUB_EXISTING (CRLF, as on Windows) and logs
+  # each create, which succeeds or fails as $STUB_CREATE says.
+  stub="$WORK/sbxcreate-bin"; mkdir -p "$stub"
+  cat > "$stub/sbx" <<'STUB'
+#!/bin/bash
+case "$1" in
+  ls)     for n in $STUB_EXISTING; do printf '%s\r\n' "$n"; done ;;
+  create) printf '%s\n' "$*" >> "$STUB_LOG"
+          [ "${STUB_CREATE:-ok}" = ok ] || { echo "error: no space left on device"; exit 1; } ;;
+esac
+STUB
+  chmod +x "$stub/sbx"
+  create_with() {    # create_with clone|mount
+    PATH="$stub:$PATH" STUB_LOG="$WORK/create.log" RALPH_SANDBOX=ralph-x REPO_ROOT=/repo \
+      bash -c '
+        say() { printf "%s\n" "$*" >&2; }
+        warn() { printf "%s\n" "$*" >&2; }
+        warn_preflight() { warn "preflight: $*"; }
+        source "$1/lib/exec/_sbx.sh"
+        _sbx_create "$2"
+      ' _ "$RALPH_HOME" "$1" 2>&1
+  }
+
+  rm -f "$WORK/create.log"
+  OUT="$(STUB_EXISTING="other ralph-x" create_with clone)"; ST=$?
+  assert_eq "$ST" 0 "an existing sandbox: succeeds"
+  assert_eq "$OUT" "" "an existing sandbox: says nothing at all"
+  assert_eq "$([ -e "$WORK/create.log" ] && echo called || echo not-called)" "not-called" \
+    "an existing sandbox: sbx create is never run"
+
+  OUT="$(STUB_EXISTING="ralph-xy" create_with clone)"; ST=$?
+  assert_eq "$ST" 0 "a missing sandbox is created"
+  assert_contains "$(cat "$WORK/create.log")" "create --clone --name ralph-x claude /repo" \
+    "with --clone in clone mode"
+  rm -f "$WORK/create.log"
+  STUB_EXISTING="" create_with mount >/dev/null
+  assert_missing "$(cat "$WORK/create.log")" "--clone" "and without it in mount mode"
+
+  OUT="$(STUB_EXISTING="" STUB_CREATE=fail create_with clone)"; ST=$?
+  assert_eq "$ST" 1 "a create that fails, leaving no sandbox, is an error"
+  assert_contains "$OUT" "could not create sandbox 'ralph-x'" "and says so"
+  assert_contains "$OUT" "no space left on device" "with what sbx said"
+fi
+
 if case_is "the sandbox adapters sign in to Docker with a token, only when asked to"; then
   # A stub `sbx` that records how it was called, so this needs no Docker account and the
   # token can be checked for the one property that matters: it is on stdin, not in argv.
@@ -981,6 +1026,7 @@ if case_is "a rerun with no stall marker refuses rather than rescuing, and delet
     run_ralph "$repo" run batch --unlimited
   assert_eq "$ST" 20 "no marker: refuses and stops for a human"
   assert_contains "$OUT" "Refusing to sync" "says why"
+  assert_contains "$OUT" "--adopt-dirty" "and names the flag that would review it instead"
   assert_contains "$OUT" "git add -A && git commit -m 'wip:" "and prints the recovery note"
   assert_eq "$(git -C "$repo" rev-parse HEAD)" "$head_before" "nothing was committed"
   [ -f "$log" ] && fail "no agent turn of any kind may run" || pass
@@ -1054,6 +1100,121 @@ if case_is "a marker is removed once the tree is clean, and a salvaged stall lea
   RALPH_FAKE_BEHAVIOUR=dirty:land run_ralph "$repo" run batch --unlimited
   assert_eq "$ST" 0 "a salvaged stall finishes the batch"
   [ -e "$repo/batch/.ralph-stall-marker" ] && fail "a salvaged stall records no marker" || pass
+fi
+
+# A run stopped part-way through a turn — a usage limit, or Ctrl-C — with the turn's work
+# uncommitted. The marker written before the turn is what lets the next run review it. Prints
+# the repo; the first argument is the fake behaviour that stops it.
+stopped_mid_turn_repo() {
+  local repo
+  repo="$(make_repo 2 "$2")"
+  RALPH_FAKE_BEHAVIOUR="$1" run_ralph "$repo" run batch --unlimited >/dev/null 2>&1
+  printf '%s' "$repo"
+}
+
+# The whole round trip for one way of stopping: the stop leaves a marker beside the dirty
+# tree, and a plain rerun reviews it, commits it as wip and carries on.
+check_stopped_mid_turn_resumes() {    # check_stopped_mid_turn_resumes FAKE_BEHAVIOUR
+    local stop="$1" repo marker base log first
+    repo="$(make_repo 2 "$stop-repo")"
+    marker="$repo/batch/.ralph-stall-marker"
+    base="$(git -C "$repo" rev-parse HEAD)"
+
+    RALPH_FAKE_BEHAVIOUR="$stop" run_ralph "$repo" run batch --unlimited
+    assert_eq "$ST" 10 "$stop: the run pauses, resumable"
+    [ -f "$marker" ] && pass || fail "$stop: the turn's marker is left behind"
+    assert_contains "$(cat "$marker" 2>/dev/null)" "batch/issues/01-ticket.md" "$stop: it names the ticket"
+    assert_contains "$(cat "$marker" 2>/dev/null)" "$base" "$stop: and the base ref"
+    [ -n "$(git -C "$repo" status --porcelain)" ] && pass || fail "$stop: the work is still uncommitted"
+
+    # "Just rerun it", as the footer says — no flag, no override.
+    log="$WORK/$stop-prompts.txt"
+    RALPH_FAKE_PROMPT_LOG="$log" RALPH_FAKE_BEHAVIOUR=land \
+      run_ralph "$repo" run batch --unlimited
+    assert_eq "$ST" 0 "$stop: the rerun finishes the batch"
+    assert_eq "$(done_count "$repo")" "2" "$stop: both tickets land"
+    assert_contains "$OUT" "reviewed and salvaged by a checkpoint turn" "$stop: the rescue is announced"
+    assert_missing "$OUT" "Refusing to sync" "$stop: no refusal"
+    assert_contains "$(git -C "$repo" log --format=%s)" "wip: batch/issues/01-ticket.md" \
+      "$stop: the leftover work was committed as wip"
+    [ -e "$marker" ] && fail "$stop: the marker is gone" || pass
+    assert_eq "$(git -C "$repo" status --porcelain)" "" "$stop: the tree ends clean"
+    assert_contains "$OUT" "iterations run:        2" "$stop: the review turn spends no iteration"
+    first="$(awk '/^===== fake prompt checkpoint /{f=1;next} /^===== fake prompt /{f=0} f' "$log")"
+    assert_contains "$first" "REVIEW CHECKPOINT TURN" "$stop: it was the review turn, not the stall's"
+    assert_contains "$first" "do not run builds, tests" "$stop: which reads the diff only"
+}
+
+if case_is "a run paused by a usage limit mid-turn is reviewed and continued by the next run"; then
+  check_stopped_mid_turn_resumes limit-dirty
+fi
+
+if case_is "a run interrupted mid-turn is reviewed and continued by the next run"; then
+  check_stopped_mid_turn_resumes interrupt-dirty
+fi
+
+if case_is "a turn that ends cleanly, or pauses with a clean tree, leaves no marker"; then
+  repo="$(make_repo 2 no-marker-clean-repo)"
+  run_ralph "$repo" run batch 1
+  assert_eq "$ST" 10 "a landed iteration pauses on the budget"
+  [ -e "$repo/batch/.ralph-stall-marker" ] && fail "a landed turn leaves no marker" || pass
+
+  RALPH_FAKE_BEHAVIOUR=limit run_ralph "$repo" run batch --unlimited
+  assert_eq "$ST" 10 "a usage limit with nothing written pauses"
+  [ -e "$repo/batch/.ralph-stall-marker" ] && fail "a clean limit leaves no marker" || pass
+fi
+
+if case_is "a review turn that refuses the leftover work stops for a human and leaves it alone"; then
+  repo="$(stopped_mid_turn_repo limit-dirty review-rejects-repo)"
+  marker="$repo/batch/.ralph-stall-marker"
+  [ -f "$marker" ] && pass || fail "the stopped turn left a marker"
+  head_before="$(git -C "$repo" rev-parse HEAD)"
+  dirty_before="$(git -C "$repo" status --porcelain)"
+
+  RALPH_FAKE_BEHAVIOUR=land RALPH_FAKE_CHECKPOINT_BEHAVIOUR=reject \
+    run_ralph "$repo" run batch --unlimited
+  assert_eq "$ST" 20 "a refusal stops for a human"
+  assert_contains "$OUT" "refused to commit" "says the review refused"
+  assert_contains "$OUT" "changes outside the ticket's scope" "with the reviewer's reasons"
+  assert_contains "$OUT" "git add -A && git commit -m 'wip:" "and the recovery note"
+  assert_eq "$(git -C "$repo" rev-parse HEAD)" "$head_before" "nothing was committed"
+  assert_eq "$(git -C "$repo" status --porcelain)" "$dirty_before" "the tree is untouched"
+  assert_eq "$(done_count "$repo")" "0" "the ticket's own turn never ran"
+  [ -e "$marker" ] && fail "a refusal retires the marker, so a rerun does not pay for it again" || pass
+
+  # ...so a plain rerun now refuses, and names the flag that would review it anyway.
+  log="$WORK/review-rejects-prompts.txt"
+  RALPH_ALLOW_DIRTY=1 RALPH_FAKE_PROMPT_LOG="$log" RALPH_FAKE_BEHAVIOUR=land \
+    run_ralph "$repo" run batch --unlimited
+  assert_eq "$ST" 20 "the rerun refuses"
+  assert_contains "$OUT" "Refusing to sync" "says why"
+  assert_contains "$OUT" "--adopt-dirty" "and offers --adopt-dirty"
+  [ -f "$log" ] && fail "no agent turn of any kind may run" || pass
+fi
+
+if case_is "--adopt-dirty reviews and commits a dirty tree no marker vouches for"; then
+  repo="$(stalled_repo adopt-dirty-repo)"
+  rm -f "$repo/batch/.ralph-stall-marker"
+  [ -n "$(git -C "$repo" status --porcelain)" ] && pass || fail "the tree is dirty and unmarked"
+
+  # No RALPH_ALLOW_DIRTY: the flag is the operator vouching for the tree, preflight included.
+  log="$WORK/adopt-dirty-prompts.txt"
+  RALPH_FAKE_PROMPT_LOG="$log" RALPH_FAKE_BEHAVIOUR=land \
+    run_ralph "$repo" run batch --unlimited --adopt-dirty
+  assert_eq "$ST" 0 "the adopted tree is reviewed and the batch finishes"
+  assert_contains "$OUT" "--adopt-dirty says" "it says why it trusted the tree"
+  assert_contains "$OUT" "reviewed and salvaged by a checkpoint turn" "the rescue is announced"
+  assert_contains "$(git -C "$repo" log --format=%s)" "wip: batch/issues/01-ticket.md" \
+    "the adopted work was committed as wip"
+  assert_eq "$(done_count "$repo")" "2" "both tickets land"
+  first="$(awk '/^===== fake prompt checkpoint /{f=1;next} /^===== fake prompt /{f=0} f' "$log")"
+  assert_contains "$first" "REVIEW CHECKPOINT TURN" "through the review turn"
+
+  # On a clean tree the flag changes nothing.
+  repo="$(make_repo 1 adopt-clean-repo)"
+  run_ralph "$repo" run batch --adopt-dirty
+  assert_eq "$ST" 0 "a clean tree runs as usual under --adopt-dirty"
+  assert_missing "$OUT" "earlier run" "and no rescue is attempted"
 fi
 
 if case_is "--live draws what the agent is doing, and only that"; then

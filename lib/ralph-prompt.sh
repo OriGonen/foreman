@@ -51,6 +51,51 @@ Stop as soon as the commit and the progress entry exist. Do nothing else.
 EOF
 }
 
+# ---------------------------------------------------------------------------
+# The review checkpoint prompt — the start-of-run variant. An EARLIER run stopped part-way
+# through a turn (a usage limit, Ctrl-C, a closed terminal, or a stall it could not salvage)
+# and left work uncommitted; nobody has looked at it since, and unlike the mid-run stall the
+# turn that wrote it may have been cut off mid-file. So this turn reads the diff against the
+# ticket before committing it, and may refuse.
+#
+# Reading only: interrupted work usually fails its checks, so running them would be paid for
+# and say little, and the next iteration runs them anyway. A refusal is a sentinel line in
+# the reply, not a file — on the clone sandbox a file written in the clone never comes back.
+# "CHECKPOINT TURN" stays in the first line: the fake adapter recognises the turn by it.
+# ---------------------------------------------------------------------------
+RALPH_REVIEW_REJECTED_SENTINEL="RALPH_REVIEW: REJECTED"
+
+ralph_review_checkpoint_prompt() {    # ralph_review_checkpoint_prompt TICKET BASE
+  local ticket="$1" base="$2"
+  cat <<EOF
+This is a REVIEW CHECKPOINT TURN, not a continuation of ${ticket}. An earlier run stopped
+part-way through this ticket — a usage limit, an interrupt, or a turn that ran out of room —
+and left its work sitting uncommitted in the tree. It may have been cut off mid-edit. Your
+job is to judge that work by reading it, and then either preserve it or refuse it. Do not
+write, edit, fix or finish any of the ticket's implementation, and do not run builds, tests
+or checks: the work is expected to be unfinished, and the next turn verifies it.
+
+1. Read ${ticket}, then \`git status\` and \`git diff ${base}\` (include untracked files).
+2. Decide whether this is work on ${ticket}. REFUSE it only for a clear red flag:
+   - changes plainly outside the ticket's scope (unrelated files or features);
+   - secrets or credentials (keys, tokens, passwords, .env contents);
+   - mass deletion, or content that is garbage rather than code or prose.
+   Incomplete, rough or broken work is NOT a red flag — that is what a checkpoint is for.
+3. If you refuse: commit nothing, change nothing, and end your reply with exactly one line:
+   ${RALPH_REVIEW_REJECTED_SENTINEL}: <the reasons, on one line>
+   Then stop.
+4. Otherwise append an entry to ${PROGRESS_FILE} describing what the diff contains, ending
+   in a 'Remaining:' list of what is left. Include what you noticed reading it: truncated
+   files, stubs, TODOs, half-written functions. You did not do this work — write only what
+   the diff shows, never what you guess was intended.
+5. Commit everything as-is, the progress entry included: \`git add -A && git commit -m
+   'wip: ${ticket} — remaining: <short summary of what is left>'\`. $(exec_commit_note)
+6. Do not touch the '${RALPH_STATUS_LINE}' line — this ticket has not landed.
+
+Stop as soon as the commit exists, or the refusal line is written.
+EOF
+}
+
 BASE_REF="${BASE_REF:-$(git rev-parse HEAD)}"
 
 # The commit the agent's work is REVIEWED against. Normally this iteration's BASE_REF, and

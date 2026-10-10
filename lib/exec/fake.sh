@@ -15,6 +15,11 @@
 #     error    exit non-zero with an error payload
 #     transient  exit non-zero with an overloaded_error payload (the loop should retry)
 #     limit    print a usage-limit string instead of JSON (the loop should pause)
+#     limit-dirty  a usage limit that lands part-way through the ticket: writes an
+#              uncommitted file first, then hits the limit. The loop should pause, leaving
+#              the marker for the next run's review turn
+#     interrupt-dirty  Ctrl-C part-way through the ticket: writes an uncommitted file,
+#              then sends the loop SIGINT, as the terminal would. The same pause.
 #     session-limit  the same event as the CLI words it today — valid JSON whose reply is
 #              "You've hit your session limit · resets 4:50pm (...)", with no epoch and no
 #              "usage limit reached" anywhere. The loop should pause on this too.
@@ -58,12 +63,14 @@
 # signature) is a SECOND, separate turn within the same iteration, recognised here by a
 # sentinel phrase in the prompt itself — the real prompt-assembly path, not a side channel.
 # It never consumes a slot of RALPH_FAKE_BEHAVIOUR's list; its own scripted outcome is:
-#   RALPH_FAKE_CHECKPOINT_BEHAVIOUR   commit (default), fail, or discard
+#   RALPH_FAKE_CHECKPOINT_BEHAVIOUR   commit (default), fail, discard, or reject
 #     commit   stage and commit whatever is dirty, as `wip: <ticket> — remaining: the rest`
 #     fail     leave the tree exactly as it was — still dirty, nothing committed
 #     discard  clean the tree WITHOUT committing — simulates a checkpoint turn that
 #              mishandles the diff instead of preserving it; the loop must tell this apart
 #              from `fail` (work still there) rather than reporting both as "uncommitted"
+#     reject   leave the tree as it was and end the reply with the review turn's refusal
+#              line — what a REVIEW checkpoint turn (a start-of-run rescue) does on a red flag
 
 # shellcheck source=_common.sh
 source "$RALPH_EXEC_DIR/_common.sh"
@@ -178,6 +185,9 @@ _fake_checkpoint() {
     fail)
       _fake_payload success false "could not commit the checkpoint"
       ;;
+    reject)
+      _fake_payload success false "Read the diff.\n${RALPH_REVIEW_REJECTED_SENTINEL:-RALPH_REVIEW: REJECTED}: changes outside the ticket's scope"
+      ;;
     discard)
       git checkout -q -- . >/dev/null 2>&1
       git clean -qfd >/dev/null 2>&1
@@ -248,6 +258,19 @@ exec_run() {
     limit)
       printf 'Claude AI usage limit reached|%s\n' "$(( $(date +%s) + 3600 ))"
       return 1
+      ;;
+    limit-dirty)
+      printf 'half-written by the fake adapter (call %s)\n' "$call" >> .ralph-fake-leftover
+      printf 'Claude AI usage limit reached|%s\n' "$(( $(date +%s) + 3600 ))"
+      return 1
+      ;;
+    interrupt-dirty)
+      # $$ is the loop's own PID inside this pipeline's subshell. Its trap runs once the
+      # pipeline returns, exactly as with a real Ctrl-C during a turn.
+      printf 'half-written by the fake adapter (call %s)\n' "$call" >> .ralph-fake-leftover
+      kill -INT $$
+      printf 'claude: interrupted\n'
+      return 130
       ;;
     session-limit)
       # The same 5-hour window, as the current CLI actually words it under --print: no epoch
