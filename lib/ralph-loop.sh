@@ -63,7 +63,7 @@
 #                             shows the iteration count and the live view as they change.
 #
 # OTHER KNOBS (all settable in ralph.conf; the environment wins over it)
-#   RALPH_MODEL=sonnet            RALPH_EFFORT=high
+#   RALPH_MODEL=claude-sonnet-5-5 RALPH_EFFORT=high
 #   RALPH_TICKET_ATTEMPTS=2        unproductive tries per ticket in one run before stopping
 #   RALPH_MAX_CONTINUATIONS=5      consecutive iterations that may commit progress on one
 #                                  ticket without landing it before stopping for a human

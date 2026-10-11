@@ -240,7 +240,7 @@ is a smaller job than writing code, so point it at something cheaper without tou
 tickets run on:
 
 ```bash
-RALPH_ORDERING_MODEL=claude-haiku-4-5 ralph order .scratch/my-batch
+RALPH_ORDERING_MODEL=haiku ralph order .scratch/my-batch
 ```
 
 (or set `RALPH_ORDERING_MODEL` in the batch's `ralph.conf` to make that the default). Effort

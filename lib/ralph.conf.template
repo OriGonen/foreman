@@ -44,8 +44,10 @@
 # ---------------------------------------------------------------------------
 # The agent
 # ---------------------------------------------------------------------------
-# `sonnet` follows the latest Sonnet; pin a full id such as claude-sonnet-5-5 to freeze it.
-#RALPH_MODEL=sonnet
+# Defaults to a pinned full id, not the `sonnet` alias: the alias is resolved by the claude
+# CLI that runs the call, and the one inside the sandbox can be older than the host's and
+# resolve it to an older Sonnet.
+#RALPH_MODEL=claude-sonnet-5-5
 #RALPH_EFFORT=high
 # The default depends on RALPH_EXEC: bypassPermissions in the sandbox modes, where the
 # container is the boundary and the gate protects nothing it does not, and acceptEdits in
@@ -53,7 +55,7 @@
 #RALPH_PERMISSION_MODE=
 # The one-off `ralph order` pass (run automatically by `ralph init`) defaults to
 # RALPH_MODEL above. Point it at something cheaper without touching what tickets run on:
-#RALPH_ORDERING_MODEL=sonnet
+#RALPH_ORDERING_MODEL=haiku
 
 # Extra arguments passed through to `claude`, as a bash array.
 #

@@ -1471,6 +1471,26 @@ if case_is "the permission mode defaults to what the execution mode needs"; then
   assert_contains "$OUT" "Perms:   manual" "and the environment beats ralph.conf"
 fi
 
+if case_is "the model defaults to a pinned full id, and ralph.conf and the environment still override it"; then
+  # A full id, not the `sonnet` alias: the alias is resolved by the claude CLI that runs the
+  # call, and the sandbox's can be older than the host's. dry-run reports the effective model
+  # for the same reason it reports the permission mode — `fake` never invokes `claude`.
+  repo="$(make_repo 1 model-repo)"
+
+  run_ralph "$repo" dry-run batch
+  assert_eq "$ST" 0 "dry-run exits 0"
+  assert_contains "$OUT" "Model:   claude-sonnet-5-5 " "the default is the pinned full id"
+  assert_missing "$OUT" "Model:   sonnet" "not the alias"
+
+  printf 'RALPH_MODEL=claude-opus-5-5\n' >> "$repo/batch/ralph.conf"
+  git -C "$repo" commit --quiet -am "explicit model"
+  run_ralph "$repo" dry-run batch
+  assert_contains "$OUT" "Model:   claude-opus-5-5 " "a RALPH_MODEL in ralph.conf beats the default"
+
+  RALPH_MODEL=haiku run_ralph "$repo" dry-run batch
+  assert_contains "$OUT" "Model:   haiku " "and the environment beats ralph.conf"
+fi
+
 if case_is "doctor flags a local batch whose agent could never commit"; then
   repo="$WORK/perm-doctor-repo"
   mkdir -p "$repo/batch/issues"

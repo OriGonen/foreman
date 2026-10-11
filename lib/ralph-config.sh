@@ -353,9 +353,10 @@ RALPH_SANDBOX_PROBE="${RALPH_SANDBOX_PROBE:-}"
 RALPH_SKIP_SANDBOX_PROBE="${RALPH_SKIP_SANDBOX_PROBE:-0}"
 
 # --- the agent -------------------------------------------------------------
-# `sonnet` is an alias the claude CLI resolves to the latest Sonnet, so the default follows new
-# releases. Pin a full id (e.g. claude-sonnet-5-5) in ralph.conf to stop that.
-RALPH_MODEL="${RALPH_MODEL:-sonnet}"
+# The default is a full model id, not the `sonnet` alias: the alias is resolved by whichever
+# claude CLI runs the call, and the CLI inside the sandbox can be older than the host's and
+# resolve it to an older Sonnet. Bumping the id is a deliberate edit here.
+RALPH_MODEL="${RALPH_MODEL:-claude-sonnet-5-5}"
 RALPH_EFFORT="${RALPH_EFFORT:-high}"
 # RALPH_PERMISSION_MODE is deliberately NOT defaulted here: the default depends on where the
 # agent runs, and the adapter that knows is not loaded until the validation section below.
