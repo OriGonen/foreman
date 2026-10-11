@@ -929,6 +929,62 @@ STUB
   assert_contains "$OUT" "no space left on device" "with what sbx said"
 fi
 
+if case_is "the clone's dirty check honours the .gitignore of the commit it is about to sync to"; then
+  # The real sandbox adapter against a real clone: a stub `sbx` that runs `exec NAME sh -c`
+  # inside $STUB_CLONE, so every git command is the one the sandbox would run.
+  stub="$WORK/sbxdirty-bin"; mkdir -p "$stub"
+  cat > "$stub/sbx" <<'STUB'
+#!/bin/bash
+[ "$1" = exec ] && [ "$3" = sh ] && [ "$4" = -c ] || exit 1
+cd "$STUB_CLONE" && sh -c "$5"
+STUB
+  chmod +x "$stub/sbx"
+  host="$WORK/dirty-host"; clone="$WORK/dirty-clone"
+  rm -rf "$host" "$clone"
+  git init -q "$host"
+  printf 'build/\n' > "$host/.gitignore"; printf 'fun main() {}\n' > "$host/Main.kt"
+  git -C "$host" add -A 2>/dev/null; git -C "$host" -c user.name=t -c user.email=t@t commit -qm init 2>/dev/null
+  git clone -q "$host" "$clone"
+  # What a Gradle build leaves behind, before anyone has thought to ignore it.
+  mkdir -p "$clone/.kotlin/sessions"; printf 'x\n' > "$clone/.kotlin/sessions/s.salive"
+  dirty_against() {    # dirty_against [TARGET] — prints dirty or clean
+    PATH="$stub:$PATH" STUB_CLONE="$clone" RALPH_SANDBOX=ralph-x RALPH_EXEC_DIR="$RALPH_HOME/lib/exec" \
+      bash -c '
+        warn() { printf "%s\n" "$*" >&2; }
+        source "$1/lib/exec/sandbox.sh"
+        shift
+        if exec_tree_dirty "$@"; then echo dirty; else echo clean; fi
+      ' _ "$RALPH_HOME" "$@" 2>&1
+  }
+
+  assert_eq "$(dirty_against "$(git -C "$host" rev-parse HEAD)")" dirty \
+    "an untracked cache nobody ignores yet is dirty"
+
+  # The operator ignores it on the host. The clone is still on the old commit.
+  printf 'build/\n.kotlin/\n' > "$host/.gitignore"
+  git -C "$host" -c user.name=t -c user.email=t@t commit -qam "ignore .kotlin/" 2>/dev/null
+  target="$(git -C "$host" rev-parse HEAD)"
+  assert_eq "$(dirty_against "$target")" clean \
+    "once the target commit ignores it, it no longer blocks the sync"
+  assert_eq "$(dirty_against)" dirty "without a target, the clone's own rules still apply"
+
+  printf 'class New\n' > "$clone/New.kt"
+  assert_eq "$(dirty_against "$target")" dirty \
+    "an untracked source file is still dirty: the sync's clean would delete it"
+  rm -f "$clone/New.kt"
+  printf 'fun main() { println() }\n' > "$clone/Main.kt"
+  assert_eq "$(dirty_against "$target")" dirty "a modified tracked file is still dirty"
+  git -C "$clone" checkout -q -- Main.kt
+
+  # And the sync that now goes ahead leaves the cache alone: it is ignored at the target.
+  PATH="$stub:$PATH" STUB_CLONE="$clone" RALPH_SANDBOX=ralph-x RALPH_EXEC_DIR="$RALPH_HOME/lib/exec" \
+    bash -c 'warn() { :; }; source "$1/lib/exec/sandbox.sh"; exec_sync_down "$2"' _ "$RALPH_HOME" "$target"
+  assert_eq "$(git -C "$clone" rev-parse HEAD)" "$target" "the sync then reaches the target"
+  assert_eq "$([ -e "$clone/.kotlin/sessions/s.salive" ] && echo kept || echo wiped)" kept \
+    "and keeps the now-ignored cache"
+  assert_eq "$(dirty_against "$target")" clean "leaving a clean clone"
+fi
+
 if case_is "the sandbox adapters sign in to Docker with a token, only when asked to"; then
   # A stub `sbx` that records how it was called, so this needs no Docker account and the
   # token can be checked for the one property that matters: it is on stdin, not in argv.

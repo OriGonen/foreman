@@ -1045,13 +1045,13 @@ while true; do
   if [ "$START_OF_RUN_CHECKED" -eq 0 ]; then
     START_OF_RUN_CHECKED=1
     rescue_why=""
-    if [ -e "$STALL_MARKER_FILE" ] && ! exec_tree_dirty; then
+    if [ -e "$STALL_MARKER_FILE" ] && ! exec_tree_dirty "$(git rev-parse HEAD)"; then
       # Clean: someone rescued it by hand, or nothing was ever there. Either way the
       # marker no longer vouches for anything.
       rm -f "$STALL_MARKER_FILE"
     elif [ -e "$STALL_MARKER_FILE" ] && stall_marker_matches "$TICKET_FILE"; then
       rescue_why=marker
-    elif [ "$ADOPT_DIRTY" -eq 1 ] && exec_tree_dirty; then
+    elif [ "$ADOPT_DIRTY" -eq 1 ] && exec_tree_dirty "$(git rev-parse HEAD)"; then
       rescue_why=adopted
     elif [ -e "$STALL_MARKER_FILE" ]; then
       # Dirty, and the marker does not vouch for it: another batch's stall, a stall from
@@ -1183,8 +1183,10 @@ while true; do
 
   # Ask before touching anything: on the clone-based sandbox, syncing is a hard reset plus
   # a wipe of untracked files, and rerunning is the most natural response to any stop there
-  # is. Refuse rather than destroy work nobody has looked at yet.
-  if exec_tree_dirty; then
+  # is. Refuse rather than destroy work nobody has looked at yet. Asked against BASE_REF, so
+  # a file the commit being synced to ignores (a build cache the operator has just added to
+  # .gitignore) is not mistaken for work: the sync would leave it alone anyway.
+  if exec_tree_dirty "$BASE_REF"; then
     warn ""
     warn "The agent's tree already has uncommitted changes in it. Refusing to sync over them."
     if [ "$STALL_MARKER_UNTRUSTED" -eq 1 ]; then

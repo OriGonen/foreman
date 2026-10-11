@@ -67,11 +67,31 @@ exec_sync_down() {
   fi
 }
 
-# Read-only: is the sandbox's clone dirty right now? No side effects — unlike exec_collect,
-# it never bundles or brings commits back. What the loop asks before every exec_sync_down,
-# so a hard reset never runs over work nobody has looked at yet.
+# Read-only: is the sandbox's clone dirty right now? No side effects on the work — unlike
+# exec_collect, it never bundles or brings commits back. What the loop asks before every
+# exec_sync_down, so a hard reset never runs over work nobody has looked at yet.
+#
+# Given TARGET, the commit the sync is about to reset to, an untracked file that TARGET's
+# root .gitignore ignores does not count. The clone's own ignore rules are those of the
+# commit it was last synced to, so without this a build cache the operator has since
+# ignored on the host (`.kotlin/`, say) blocks the very sync that would deliver the rule —
+# on every rerun, for good. Nothing is lost by it: `git clean -fd` without -x leaves files
+# the target ignores where they are. Fetching first is what makes TARGET readable here;
+# it moves no branch and touches no file, and exec_sync_down fetches again anyway.
 exec_tree_dirty() {
-  [ -n "$(_sbx_sh 'git status --porcelain 2>/dev/null' 2>/dev/null | tr -d '\r')" ]
+  local target="${1:-}"
+  if [ -z "$target" ]; then
+    [ -n "$(_sbx_sh 'git status --porcelain 2>/dev/null' 2>/dev/null | tr -d '\r')" ]
+    return
+  fi
+  [ -n "$(_sbx_sh "
+    git fetch --quiet origin >/dev/null 2>&1
+    git status --porcelain --untracked-files=no 2>/dev/null | head -1
+    ex=\$(mktemp)
+    git show $target:.gitignore > \"\$ex\" 2>/dev/null
+    git ls-files --others --exclude-standard --exclude-from=\"\$ex\" 2>/dev/null | head -1
+    rm -f \"\$ex\"
+  " 2>/dev/null | tr -d '\r')" ]
 }
 
 exec_collect() {

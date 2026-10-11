@@ -517,7 +517,9 @@ uncommitted work is the loop's own. The sandbox is per *repository*, so a dirty 
 another batch's stall or your own session inside it, and committing that blind, under
 whichever ticket this run picked first, is exactly the unreviewed commit the loop refuses to
 make. With no marker, or one that does not match, the run refuses to sync and prints the
-recovery note instead. If you know the work is the next ticket's, `ralph run --adopt-dirty`
+recovery note instead. "Dirty" is judged by the `.gitignore` of the commit the run is about
+to sync to, not the clone's older one, so a build cache you have just ignored here (Kotlin's
+`.kotlin/`, say) does not block the sync that delivers the rule. If you know the work is the next ticket's, `ralph run --adopt-dirty`
 sends it through the same review turn without a marker. The marker is disposable: deleting it
 by hand is always safe and costs only the automatic rescue, and it is removed as soon as the
 tree is clean, a checkpoint succeeds, or a reviewer refuses the work. It is only written where
