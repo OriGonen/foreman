@@ -716,6 +716,8 @@ if case_is "the credentials reader finds a name in the file, and an environment 
   lookup() {
     bash -c 'source "$1/lib/ralph-credentials.sh"; ralph_credential "$2"' _ "$RALPH_HOME" "$1" 2>&1
   }
+  # The operator's own values would beat the file and answer every lookup below.
+  unset RALPH_DOCKER_USERNAME RALPH_DOCKER_PAT RALPH_CLAUDE_TOKEN
   creds="$WORK/creds-env"
   export RALPH_CREDENTIALS_FILE="$creds"
 
