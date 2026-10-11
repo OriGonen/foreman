@@ -402,7 +402,8 @@ the real backstop.
 take. Claude Code's Bash tool stops a call at 10 minutes unless told otherwise, and a full
 test suite can outgrow that; an agent that cannot run a check in the foreground backgrounds
 it, and a one-shot turn never hears back. Ralph starts `claude` with `BASH_MAX_TIMEOUT_MS`
-set to this, and the prompt tells the agent the limit and to never background a check.
+set to this, and the prompt tells the agent the limit, to never background a check, and to
+commit as `wip:` before it starts the long ones.
 
 ### Permissions — `RALPH_PERMISSION_MODE` and `RALPH_CLAUDE_ARGS`
 
@@ -489,12 +490,13 @@ A `DONE_` batch is also skipped when `<batch>` is omitted, so `ralph status` on 
 the one unfinished batch rather than complaining that two directories have a `ralph.conf`.
 (The prefix is read from the environment for this, since no batch's `ralph.conf` is known yet.)
 
-A turn that ends cleanly and uncommitted, with the ticket unflipped and HEAD exactly where it
-started, is a **stall** — the shape of a turn that simply ran out of room before reaching its
-own checkpoint step. Rather than stopping, the loop runs a short **checkpoint turn**: a
-single-purpose agent turn that commits what is there as `wip:` on its first command, then
-reads the diff and writes a `Remaining:` note, without continuing the ticket's own work. That
-converts the stall into a
+A turn that ends cleanly with the ticket unflipped and work left uncommitted is a **stall** —
+the shape of a turn that simply ran out of room before reaching its own checkpoint step. HEAD
+may have moved: the prompt asks for a `wip:` commit before the long checks, so a turn that
+stalls during them has committed some of its work already. Rather than stopping, the loop runs
+a short **checkpoint turn**: a single-purpose agent turn that commits what is there as `wip:`
+on its first command, then reads the diff and writes a `Remaining:` note, without continuing
+the ticket's own work. That converts the stall into a
 progression, and the same ticket continues on the next iteration. Only when the checkpoint
 turn *also* cannot commit does the run stop, for the same reason it always did. See
 `docs/adr/0001-checkpoint-turn-over-session-resume.md`.

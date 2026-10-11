@@ -12,6 +12,9 @@
 #     land     flip the ticket's status line to the done word and commit it
 #     noop     succeed, change nothing — the ticket does not land
 #     dirty    write an uncommitted file and leave it there
+#     commit-dirty  commit part of the work as `wip:` (as the prompt asks before the long
+#              checks), then write more and leave that uncommitted — a turn that stalled
+#              during its verification step, HEAD already moved
 #     error    exit non-zero with an error payload
 #     transient  exit non-zero with an overloaded_error payload (the loop should retry)
 #     limit    print a usage-limit string instead of JSON (the loop should pause)
@@ -250,6 +253,14 @@ exec_run() {
       # which git sees as no change at all, and the loop as nothing to stall on.
       printf 'left behind by the fake adapter (call %s)\n' "$call" >> .ralph-fake-leftover
       _fake_payload success false "left the tree dirty"
+      ;;
+    commit-dirty)
+      printf 'committed before verifying (call %s)\n' "$call" >> .ralph-fake-partial
+      git add -A >/dev/null 2>&1
+      git -c user.name=ralph-fake -c user.email=fake@ralph.invalid \
+        commit --quiet -m "wip: $ticket — verifying" >/dev/null 2>&1
+      printf 'a fix made while verifying (call %s)\n' "$call" >> .ralph-fake-leftover
+      _fake_payload success false "Pausing here until the background test run reports back."
       ;;
     error)
       _fake_payload error_during_execution true "something went wrong"

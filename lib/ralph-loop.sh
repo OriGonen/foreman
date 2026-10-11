@@ -882,7 +882,7 @@ run_checkpoint_turn() {    # run_checkpoint_turn [stall|review]
   # separate calls in this seam, so "run the agent without syncing first" needs no new
   # adapter function — three of the four adapters have a no-op exec_sync_down anyway.
   local checkpoint_prompt checkpoint_started_at checkpoint_agent_status checkpoint_result
-  local checkpoint_sync_failed=0 checkpoint_max_turns
+  local checkpoint_sync_failed=0 checkpoint_max_turns checkpoint_head_before
   local -a checkpoint_args_saved
   CHECKPOINT_REJECTION=""
   if [ "$mode" = review ]; then
@@ -893,6 +893,10 @@ run_checkpoint_turn() {    # run_checkpoint_turn [stall|review]
     checkpoint_max_turns=$CHECKPOINT_MAX_TURNS
   fi
   checkpoint_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  # What "committed something" is measured against. Not BASE_REF: a stalled turn may have
+  # committed part of its work before it stopped, and a checkpoint that then discards the
+  # rest must not read as one that salvaged it.
+  checkpoint_head_before="$(git rev-parse HEAD)"
   # Guarded expansion, same as RALPH_CLAUDE_ARGS's other two call sites (local.sh,
   # _sbx.sh): under bash < 4.4 and `set -u`, expanding an array that is declared but
   # empty still raises "unbound variable" without the `+` guard.
@@ -928,7 +932,7 @@ run_checkpoint_turn() {    # run_checkpoint_turn [stall|review]
 
   if [ "$checkpoint_sync_failed" -eq 1 ]; then
     CHECKPOINT_OUTCOME=stranded
-  elif [ "$EXEC_DIRTY" -eq 0 ] && [ "$HEAD_REF" != "$BASE_REF" ]; then
+  elif [ "$EXEC_DIRTY" -eq 0 ] && [ "$HEAD_REF" != "$checkpoint_head_before" ]; then
     CHECKPOINT_OUTCOME=salvaged
   elif [ "$EXEC_DIRTY" -eq 0 ]; then
     CHECKPOINT_OUTCOME=discarded
@@ -1367,14 +1371,15 @@ while true; do
   # 4. The tree was left dirty. Never auto-commit: that would be committing work no one
   #    reviewed, under a ticket that may not have finished.
   if [ "$dirty" -eq 1 ]; then
-    # A STALL: the turn ended cleanly, nothing reported an error, the ticket is unflipped,
-    # and HEAD never moved — the exact signature of a turn that ran out of room before
-    # reaching its own checkpoint step (prompt step 5), rather than one that failed.
+    # A STALL: the turn ended cleanly, nothing reported an error, and the ticket is
+    # unflipped — the signature of a turn that ran out of room before reaching its own
+    # checkpoint step (prompt step 5), rather than one that failed. HEAD may have moved: the
+    # prompt asks for a `wip:` commit before the long checks, so a turn that stalls during
+    # them has committed some of its work and left the rest — its fixes — uncommitted.
     # Salvage it with a checkpoint turn: a short, single-purpose turn that commits the diff
     # as `wip:` and hands off, converting the stall into a progression the loop already
     # knows how to continue. See docs/adr/0001-checkpoint-turn-over-session-resume.md.
-    if [ "$agent_status" -eq 0 ] && [ "$is_error" != "1" ] && [ "$flipped" -eq 0 ] &&
-       [ "$HEAD_REF" = "$BASE_REF" ]; then
+    if [ "$agent_status" -eq 0 ] && [ "$is_error" != "1" ] && [ "$flipped" -eq 0 ]; then
       # The stalled turn just run is itself what may have pushed the run past a budget —
       # discovering a stall is only possible AFTER the turn that stalled, so the budget
       # check that gated its start could not have known. Note it (using the same tests as
@@ -1429,8 +1434,9 @@ while true; do
       # adapter-correct recovery note the original stall would have printed.
       #
       # And it is the one moment the loop can say, for a later run to rely on, that this
-      # dirty tree is its own unfinished business — see "The stall marker" above.
-      write_stall_marker "$TICKET_FILE" "$BASE_REF"
+      # dirty tree is its own unfinished business — see "The stall marker" above. Against
+      # HEAD as it is now, which is past BASE_REF if the stalled turn committed part of it.
+      write_stall_marker "$TICKET_FILE" "$HEAD_REF"
       warn ""
       warn "$TICKET_FILE left uncommitted changes behind, and the checkpoint turn could not"
       warn "commit them either. Stopping so you can look."
@@ -1440,8 +1446,8 @@ while true; do
       break
     fi
 
-    # Dirty for some other reason — not the stall's exact signature (an error was reported,
-    # the ticket flipped anyway, or HEAD moved but something was still left uncommitted). No
+    # Dirty for some other reason — not the stall's signature (an error was reported, or the
+    # ticket flipped with something still left uncommitted). No
     # checkpoint turn: it exists only for the stall it was built for. Stop, as always.
     warn ""
     warn "$TICKET_FILE left uncommitted changes behind. Stopping so you can look."

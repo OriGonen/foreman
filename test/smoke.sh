@@ -684,12 +684,59 @@ if case_is "a checkpoint turn that discards the diff is not mistaken for one tha
   assert_eq "$(git -C "$repo" log --oneline | wc -l)" "1" "nothing new was committed"
 fi
 
+if case_is "a turn that commits part of its work and then stalls is salvaged too"; then
+  # The prompt asks for a wip: commit before the long checks, so a turn that stalls DURING
+  # them has HEAD moved and its fixes uncommitted. That is still a stall, not a dirty stop.
+  repo="$(make_repo 2 commit-stall-repo)"
+  log="$WORK/commit-stall-prompts.txt"
+  RALPH_FAKE_PROMPT_LOG="$log" RALPH_FAKE_BEHAVIOUR=commit-dirty:land \
+    run_ralph "$repo" run batch --unlimited
+
+  assert_eq "$ST" 0 "the batch still finishes"
+  assert_contains "$OUT" "stalled" "the stall is named as such"
+  assert_contains "$OUT" "salvaged by a checkpoint turn" "and salvaged"
+  assert_missing "$OUT" "Stopping so you can look" "not stopped as a plain dirty tree"
+  assert_eq "$(done_count "$repo")" "2" "both tickets land"
+  subjects="$(git -C "$repo" log --format=%s)"
+  assert_contains "$subjects" "verifying" "the turn's own wip commit is kept"
+  assert_contains "$subjects" "remaining: the rest" "and the checkpoint's follows it"
+  assert_contains "$(cat "$log")" "CHECKPOINT TURN" "a checkpoint turn ran"
+fi
+
+if case_is "a checkpoint that discards a partly committed stall is not mistaken for a salvage"; then
+  # HEAD moved during the stalled turn, so HEAD != base after the checkpoint even though the
+  # checkpoint itself committed nothing. Measured against HEAD before the checkpoint, it is
+  # the discard it is.
+  repo="$(make_repo 2 commit-stall-discard-repo)"
+  RALPH_FAKE_BEHAVIOUR=commit-dirty RALPH_FAKE_CHECKPOINT_BEHAVIOUR=discard \
+    run_ralph "$repo" run batch --unlimited
+
+  assert_eq "$ST" 20 "stops for a human"
+  assert_contains "$OUT" "is gone" "says the uncommitted part is gone"
+  assert_missing "$OUT" "salvaged by a checkpoint turn" "never reported as salvaged"
+fi
+
+if case_is "a partly committed stall the checkpoint cannot commit leaves a marker the rerun trusts"; then
+  repo="$(make_repo 2 commit-stall-fail-repo)"
+  marker="$repo/batch/.ralph-stall-marker"
+  RALPH_FAKE_BEHAVIOUR=commit-dirty RALPH_FAKE_CHECKPOINT_BEHAVIOUR=fail \
+    run_ralph "$repo" run batch --unlimited
+  assert_eq "$ST" 20 "stops for a human"
+  assert_contains "$(cat "$marker" 2>/dev/null)" "base_ref=$(git -C "$repo" rev-parse HEAD)" \
+    "the marker vouches for HEAD as the stalled turn left it, past the base"
+
+  RALPH_FAKE_BEHAVIOUR=land run_ralph "$repo" run batch --unlimited
+  assert_eq "$ST" 0 "a plain rerun reviews it and finishes"
+  assert_eq "$(git -C "$repo" status --porcelain)" "" "the tree ends clean"
+fi
+
 if case_is "the verify step gives the command time limit and forbids backgrounding"; then
   repo="$(make_repo 1 command-timeout-repo)"
   run_ralph "$repo" dry-run batch
   assert_contains "$OUT" "up to 60 minutes" "the default limit is named"
   assert_contains "$OUT" "at most 3600000 ms" "with the Bash tool's timeout in ms"
   assert_contains "$OUT" "Never background a check" "backgrounding is ruled out"
+  assert_contains "$OUT" "wip: <ticket> — verifying" "and the work is committed before verifying"
   assert_missing "$OUT" "__COMMAND_TIMEOUT" "no marker is left behind"
 
   RALPH_COMMAND_TIMEOUT_MINUTES=90 run_ralph "$repo" dry-run batch

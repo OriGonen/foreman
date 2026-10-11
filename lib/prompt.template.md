@@ -44,7 +44,12 @@ adding to it and hand off.
 
 ## 3. Verify
 
-Once the ticket is done, run the project's full checks:
+Once the ticket is done, commit it as it stands — `wip: <ticket> — verifying` — before you
+run anything long. A long check is where a turn most often ends without warning, and the
+commit means it cannot take the work with it. Fixes and the landing commit in step 5 follow
+as further commits; do not amend or squash this one.
+
+Then run the project's full checks:
 __VERIFY_BLOCK__
 
 Run every one of them in the foreground and wait for it to finish. One command may run for

@@ -75,9 +75,10 @@ gets the next iteration.
 _Avoid_: Partial, incomplete, WIP (as a verb)
 
 **Stalled**:
-The turn ended cleanly with the ticket unflipped, HEAD unmoved, and its work sitting
-uncommitted in the tree: it ran out of room before reaching its own checkpoint step. The
-loop's response is a checkpoint turn.
+The turn ended cleanly with the ticket unflipped and work sitting uncommitted in the tree:
+it ran out of room before reaching its own checkpoint step. HEAD may have moved — a turn
+that commits before its long checks and stalls during them is still stalled. The loop's
+response is a checkpoint turn.
 _Avoid_: Dirty, timed out, ran out of context (that is a different, reported condition)
 
 **Checkpoint turn**:
