@@ -628,6 +628,10 @@ if case_is "a stall is salvaged by a checkpoint turn and the ticket continues"; 
   assert_contains "$cp" "$base" "and diffs against the stalled turn's own base"
   assert_contains "$cp" "Remaining:" "and asks for the handoff note"
   assert_contains "$cp" "do not write, edit, or plan any more" "and not to continue the work"
+  # A real one spent all its turns reading the diff a file at a time and never committed.
+  assert_contains "$cp" "Your FIRST command is exactly:
+   git add -A && git commit" "it commits on its first command, before reading anything"
+  assert_contains "$cp" ".kotlin/" "and takes build output and caches back out"
 
   # The next real turn on this ticket is told it is continuing, same as a deliberate handoff
   # — but with the stall variant of the notice, not the deliberate one.
@@ -1166,7 +1170,7 @@ if case_is "a review checkpoint gets a higher turn limit than a stall checkpoint
   assert_eq "$ST" 0 "the stalled batch finishes"
   args="$(awk '/^===== fake prompt checkpoint /{getline; print; exit}' "$log")"
   assert_contains "$args" "--max-turns" "the checkpoint is given a turn limit"
-  assert_eq "${args##*--max-turns }" "6" "a stall checkpoint is capped at 6 turns"
+  assert_eq "${args##*--max-turns }" "10" "a stall checkpoint is capped at 10 turns"
   args="$(awk '/^===== fake prompt 2 /{getline; print; exit}' "$log")"
   assert_missing "$args" "--max-turns" "and the next ordinary turn does not inherit the cap"
 

@@ -81,9 +81,9 @@ loop's response is a checkpoint turn.
 _Avoid_: Dirty, timed out, ran out of context (that is a different, reported condition)
 
 **Checkpoint turn**:
-A short, single-purpose turn the loop runs in response to a stall: read the uncommitted
-diff, commit it as `wip:`, and write the `Remaining:` list. It never continues the
-ticket's work. It converts a stall into a progression.
+A short, single-purpose turn the loop runs in response to a stall: commit the uncommitted
+work as `wip:` first, then read the diff and write the `Remaining:` list. It never
+continues the ticket's work. It converts a stall into a progression.
 _Avoid_: Salvage run, auto-commit, rescue
 
 **Review turn**:

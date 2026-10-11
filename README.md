@@ -486,8 +486,9 @@ the one unfinished batch rather than complaining that two directories have a `ra
 A turn that ends cleanly and uncommitted, with the ticket unflipped and HEAD exactly where it
 started, is a **stall** — the shape of a turn that simply ran out of room before reaching its
 own checkpoint step. Rather than stopping, the loop runs a short **checkpoint turn**: a
-single-purpose agent turn that reads the diff, commits it as `wip:`, and writes a
-`Remaining:` note, without continuing the ticket's own work. That converts the stall into a
+single-purpose agent turn that commits what is there as `wip:` on its first command, then
+reads the diff and writes a `Remaining:` note, without continuing the ticket's own work. That
+converts the stall into a
 progression, and the same ticket continues on the next iteration. Only when the checkpoint
 turn *also* cannot commit does the run stop, for the same reason it always did. See
 `docs/adr/0001-checkpoint-turn-over-session-resume.md`.

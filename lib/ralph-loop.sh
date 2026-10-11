@@ -219,13 +219,16 @@ continuation_cap_reached() {
 # narrow by its prompt plus a low turn limit rather than by a tool allowlist — both sbx
 # adapters default to a permission mode that bypasses the gate, where an allowlist plausibly
 # does not bite at all. The two modes get different limits because they do different
-# amounts of reading. A stall checkpoint commits blind: stage, write the handoff, commit, so
-# a handful of turns is plenty. A review checkpoint (the start-of-run rescue, see
+# amounts of reading. A stall checkpoint commits blind, on its very first command, and only
+# then reads the diff to write the handoff — so even a turn that wastes calls has saved the
+# work. 10 rather than the 6 it had: a real stall checkpoint spent all 6 reading one file at
+# a time and never reached its commit, and a few spare turns cost cents next to the
+# iteration they rescue. A review checkpoint (the start-of-run rescue, see
 # docs/adr/0002-in-flight-marker-and-review-turn.md) must first read the ticket, the diff
 # and every new file before it can judge the work, and on a large leftover diff 6 turns ran
 # out before the commit. Neither is a ralph.conf knob, on purpose: see
 # docs/adr/0001-checkpoint-turn-over-session-resume.md.
-CHECKPOINT_MAX_TURNS=6
+CHECKPOINT_MAX_TURNS=10
 REVIEW_CHECKPOINT_MAX_TURNS=20
 
 # 0 means "no limit" for every budget, which reads badly printed bare.

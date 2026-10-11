@@ -39,15 +39,25 @@ ran out of room and ended with its work sitting uncommitted in the tree. Your on
 preserve that work — do not write, edit, or plan any more of the ticket's own implementation,
 and do not investigate whether it is correct.
 
-1. Run \`git diff ${base}\` (or \`git status\` for a per-file view) to see what is there.
-2. Commit it as-is: \`git commit -m 'wip: ${ticket} — remaining: <short summary of what is
-   left>'\`. $(exec_commit_note)
-3. Append an entry to ${PROGRESS_FILE} describing what the diff contains, ending in a
+1. Commit first, before you look at anything. Your FIRST command is exactly:
+   git add -A && git commit -q -m 'wip: ${ticket} — remaining: see ${PROGRESS_FILE}' && git show --stat --format= HEAD
+   $(exec_commit_note)
+   This turn has only a few tool calls. Reading the diff before committing is how a
+   checkpoint turn runs out of them with nothing saved.
+2. If that listing includes build output or tool caches (\`build/\`, \`.kotlin/\`,
+   \`node_modules/\`, \`__pycache__/\` and the like), take them back out with
+   \`git rm -r -q --cached <dir> && git commit -q --amend --no-edit\`. Do not edit .gitignore.
+3. Now look at what you committed: \`git diff ${base} --stat\`, then \`git diff ${base}\`. Open
+   a file on its own only if that output was truncated.
+4. Append an entry to ${PROGRESS_FILE} describing what the diff contains, ending in a
    'Remaining:' list of what is left. You did not do this work and were not told why it was
    done this way — write only what the diff shows, never what you guess was intended.
-4. Do not touch the '${RALPH_STATUS_LINE}' line — this ticket has not landed.
+5. Commit the entry: \`git add -A && git commit -m 'wip: ${ticket} — remaining: <short summary
+   of what is left>'\`. If git says there is nothing to commit, the progress file is not
+   tracked here, and the commit from step 1 is enough.
+6. Do not touch the '${RALPH_STATUS_LINE}' line — this ticket has not landed.
 
-Stop as soon as the commit and the progress entry exist. Do nothing else.
+Stop as soon as step 5 is done. Do nothing else.
 EOF
 }
 
