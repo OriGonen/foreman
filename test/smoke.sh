@@ -684,6 +684,46 @@ if case_is "a checkpoint turn that discards the diff is not mistaken for one tha
   assert_eq "$(git -C "$repo" log --oneline | wc -l)" "1" "nothing new was committed"
 fi
 
+if case_is "the verify step gives the command time limit and forbids backgrounding"; then
+  repo="$(make_repo 1 command-timeout-repo)"
+  run_ralph "$repo" dry-run batch
+  assert_contains "$OUT" "up to 60 minutes" "the default limit is named"
+  assert_contains "$OUT" "at most 3600000 ms" "with the Bash tool's timeout in ms"
+  assert_contains "$OUT" "Never background a check" "backgrounding is ruled out"
+  assert_missing "$OUT" "__COMMAND_TIMEOUT" "no marker is left behind"
+
+  RALPH_COMMAND_TIMEOUT_MINUTES=90 run_ralph "$repo" dry-run batch
+  assert_contains "$OUT" "up to 90 minutes" "the limit comes from the setting"
+  assert_contains "$OUT" "at most 5400000 ms" "and so does the ms figure"
+
+  for bad in 0 abc; do
+    RALPH_COMMAND_TIMEOUT_MINUTES=$bad run_ralph "$repo" dry-run batch
+    assert_eq "$ST" 1 "RALPH_COMMAND_TIMEOUT_MINUTES=$bad is refused"
+    assert_contains "$OUT" "RALPH_COMMAND_TIMEOUT_MINUTES must be" "and says why ($bad)"
+  done
+fi
+
+if case_is "both real adapters lift the agent's Bash time limit to the setting"; then
+  # Neither can be run for real here, so each exec_run is called against a stub that prints
+  # how it was invoked: `claude` for local, `sbx` for the two sandbox modes.
+  stub="$WORK/agent-env-bin"; mkdir -p "$stub"
+  printf '#!/bin/sh\necho "BASH_MAX_TIMEOUT_MS=$BASH_MAX_TIMEOUT_MS"\n' > "$stub/claude"
+  printf '#!/bin/sh\necho "sbx $*"\n' > "$stub/sbx"
+  chmod +x "$stub/claude" "$stub/sbx"
+  run_for() {
+    PATH="$stub:$PATH" RALPH_COMMAND_TIMEOUT_MINUTES=45 bash -c '
+      RALPH_TOOL_DIR="$1/lib"
+      source "$1/lib/ralph-exec.sh" && ralph_exec_load "$2" >/dev/null 2>&1 || exit 9
+      RALPH_SANDBOX=ralph-env-test RALPH_MODEL=m RALPH_EFFORT=e RALPH_PERMISSION_MODE=p
+      exec_run "the prompt" </dev/null
+    ' _ "$RALPH_HOME" "$1"
+  }
+  assert_contains "$(run_for local)" "BASH_MAX_TIMEOUT_MS=2700000" "local: claude sees the raised limit"
+  out="$(run_for sandbox)"
+  assert_contains "$out" "sbx exec ralph-env-test env BASH_MAX_TIMEOUT_MS=2700000 claude" \
+    "sandbox: claude inside the container is started with it"
+fi
+
 if case_is "the dirty-tree recovery note matches the mode actually in force"; then
   # Askable of a mode without running it, the same way ralph_exec_required_tool already is —
   # so this asserts each adapter's wording directly rather than only by triggering a real

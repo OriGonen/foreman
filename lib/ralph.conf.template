@@ -159,3 +159,9 @@ RALPH_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)")
 # What the prompt tells the agent to work well inside. Not enforced anywhere — the CLI has
 # no such flag — it is the number the agent is asked to judge itself against.
 #RALPH_CONTEXT_BUDGET_TOKENS=200000
+
+# How long one shell command the agent runs may take, in minutes. Claude Code's own cap is
+# 10, which a full test suite can outgrow — and an agent that cannot run a check in the
+# foreground backgrounds it, then ends its turn waiting for a result nothing will deliver.
+# Raise it if your slowest check takes longer than this.
+#RALPH_COMMAND_TIMEOUT_MINUTES=60

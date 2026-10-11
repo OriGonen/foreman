@@ -18,7 +18,7 @@ exec_describe() { printf 'local'; }
 
 exec_run() {
   ralph_exec_format_args
-  claude \
+  env "$(ralph_exec_agent_env)" claude \
     --model "$RALPH_MODEL" --effort "$RALPH_EFFORT" --permission-mode "$RALPH_PERMISSION_MODE" \
     ${RALPH_CLAUDE_ARGS+"${RALPH_CLAUDE_ARGS[@]}"} \
     --print "${RALPH_EXEC_FORMAT_ARGS[@]}" -p "$1"

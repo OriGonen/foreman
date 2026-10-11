@@ -389,6 +389,12 @@ RALPH_CONTEXT_BUDGET_TOKENS="${RALPH_CONTEXT_BUDGET_TOKENS:-200000}"
 # the loop stops for a human. Five chunks is not a retry problem; it is a mis-sized ticket,
 # and splitting it is a decision only a human can make.
 RALPH_MAX_CONTINUATIONS="${RALPH_MAX_CONTINUATIONS:-5}"
+# How long one shell command the agent runs may take. Claude Code's Bash tool caps a call at
+# 10 minutes by default, and a full test suite that outgrows that cannot be run in the
+# foreground at all — so the agent backgrounds it, and in a one-shot --print turn nothing
+# ever wakes it when the result is ready. The adapters raise the cap (BASH_MAX_TIMEOUT_MS)
+# to this, and the prompt tells the agent the number.
+RALPH_COMMAND_TIMEOUT_MINUTES="${RALPH_COMMAND_TIMEOUT_MINUTES:-60}"
 
 # --- validation ------------------------------------------------------------
 # A valid RALPH_EXEC is one with an adapter file in lib/exec/. There is deliberately no
@@ -428,5 +434,10 @@ for _ralph_int in RALPH_TICKET_ATTEMPTS RALPH_MAX_MINUTES RALPH_PROGRESS_TAIL_BY
   fi
 done
 unset _ralph_int
+# Not 0 = "no limit" like the budgets: a zero cap would leave the agent no command at all.
+if ! [[ "$RALPH_COMMAND_TIMEOUT_MINUTES" =~ ^[1-9][0-9]*$ ]]; then
+  echo "ralph: RALPH_COMMAND_TIMEOUT_MINUTES must be a whole number of minutes, at least 1 (got '$RALPH_COMMAND_TIMEOUT_MINUTES')" >&2
+  return 1 2>/dev/null || exit 1
+fi
 
 export RALPH_BATCH="$BATCH_DIR"

@@ -47,10 +47,17 @@ adding to it and hand off.
 Once the ticket is done, run the project's full checks:
 __VERIFY_BLOCK__
 
-Run every one of them in the foreground and wait for it to finish, however long it takes.
-This session is a single non-interactive turn — there is no later turn for a backgrounded
-command to deliver its result into, so a check you background is a check whose outcome you
-will never see, and the turn ends with the ticket neither verified nor landed.
+Run every one of them in the foreground and wait for it to finish. One command may run for
+up to __COMMAND_TIMEOUT__ minutes in this session: give the Bash tool a `timeout` long enough for
+the check (at most __COMMAND_TIMEOUT_MS__ ms), and do not wrap the command in a shorter `timeout`
+of your own. Never background a check — no `&`, no `nohup`, no `run_in_background`. This
+session is a single non-interactive turn: nothing will ever wake you when a background
+command finishes, so a check you background is a check whose outcome you will never see, and
+the turn ends with the ticket neither verified nor landed.
+
+If a check cannot finish inside that limit even on its own, run it in parts that each can
+(per module, per task, per test directory) rather than backgrounding it, and add nothing to
+it that it does not need, such as a `clean`.
 
 They must pass. Fix real failures. Never delete a test, weaken an assertion, or skip a
 test to get green — if a test looks wrong, say so in __PROGRESS_FILE__ and leave it

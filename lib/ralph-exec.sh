@@ -130,3 +130,15 @@ ralph_exec_format_args() {
     RALPH_EXEC_FORMAT_ARGS=(--output-format json)
   fi
 }
+
+# The environment the agent's `claude` runs with, as a NAME=value word for an adapter to put
+# after `env`. `env` rather than an exported variable because under the sbx adapters the
+# claude process is inside the container, where nothing exported here reaches.
+#
+# BASH_MAX_TIMEOUT_MS lifts the Bash tool's own 10-minute cap on one call to
+# RALPH_COMMAND_TIMEOUT_MINUTES, so a check that outgrows ten minutes can still run in the
+# foreground — the only place a one-shot turn ever sees its result. It only raises the
+# ceiling; the agent still asks for a long timeout per call, as the prompt tells it to.
+ralph_exec_agent_env() {
+  printf 'BASH_MAX_TIMEOUT_MS=%s\n' "$(( ${RALPH_COMMAND_TIMEOUT_MINUTES:-60} * 60000 ))"
+}

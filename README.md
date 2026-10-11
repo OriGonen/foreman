@@ -398,6 +398,12 @@ remaining: run at N=96` is better history than a squash that hides the three pas
 judge itself against. Nothing enforces it; the CLI has no such flag, and `--autocompact` is
 the real backstop.
 
+`RALPH_COMMAND_TIMEOUT_MINUTES` (default 60) is how long one shell command the agent runs may
+take. Claude Code's Bash tool stops a call at 10 minutes unless told otherwise, and a full
+test suite can outgrow that; an agent that cannot run a check in the foreground backgrounds
+it, and a one-shot turn never hears back. Ralph starts `claude` with `BASH_MAX_TIMEOUT_MS`
+set to this, and the prompt tells the agent the limit and to never background a check.
+
 ### Permissions — `RALPH_PERMISSION_MODE` and `RALPH_CLAUDE_ARGS`
 
 `claude --print` has **nobody to ask**. Anything that would raise a permission prompt is
