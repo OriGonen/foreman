@@ -75,7 +75,10 @@ job is to judge that work by reading it, and then either preserve it or refuse i
 write, edit, fix or finish any of the ticket's implementation, and do not run builds, tests
 or checks: the work is expected to be unfinished, and the next turn verifies it.
 
-1. Read ${ticket}, then \`git status\` and \`git diff ${base}\` (include untracked files).
+1. Read ${ticket}. Then run \`git add -N .\` (intent-to-add: it lists untracked files in the
+   index as empty placeholders, staging no content) and \`git diff ${base}\`, which now shows
+   new and modified files together in one output. Open a file separately only if that diff
+   output was truncated.
 2. Decide whether this is work on ${ticket}. REFUSE it only for a clear red flag:
    - changes plainly outside the ticket's scope (unrelated files or features);
    - secrets or credentials (keys, tokens, passwords, .env contents);
