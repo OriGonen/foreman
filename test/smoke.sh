@@ -1155,6 +1155,34 @@ if case_is "a run interrupted mid-turn is reviewed and continued by the next run
   check_stopped_mid_turn_resumes interrupt-dirty
 fi
 
+# The two checkpoint modes have different turn limits: a stall commits blind, a review must
+# read the ticket, the diff and the new files first. The fake adapter logs the args each call
+# was given, the --max-turns a real adapter would pass to claude.
+if case_is "a review checkpoint gets a higher turn limit than a stall checkpoint"; then
+  repo="$(make_repo 2 max-turns-stall-repo)"
+  log="$WORK/max-turns-stall-prompts.txt"
+  RALPH_FAKE_PROMPT_LOG="$log" RALPH_FAKE_BEHAVIOUR=dirty:land \
+    run_ralph "$repo" run batch --unlimited
+  assert_eq "$ST" 0 "the stalled batch finishes"
+  args="$(awk '/^===== fake prompt checkpoint /{getline; print; exit}' "$log")"
+  assert_contains "$args" "--max-turns" "the checkpoint is given a turn limit"
+  assert_eq "${args##*--max-turns }" "6" "a stall checkpoint is capped at 6 turns"
+  args="$(awk '/^===== fake prompt 2 /{getline; print; exit}' "$log")"
+  assert_missing "$args" "--max-turns" "and the next ordinary turn does not inherit the cap"
+
+  repo="$(stopped_mid_turn_repo limit-dirty max-turns-review-repo)"
+  log="$WORK/max-turns-review-prompts.txt"
+  RALPH_FAKE_PROMPT_LOG="$log" RALPH_FAKE_BEHAVIOUR=land \
+    run_ralph "$repo" run batch --unlimited
+  assert_eq "$ST" 0 "the reviewed batch finishes"
+  assert_contains "$(cat "$log")" "REVIEW CHECKPOINT TURN" "a review checkpoint ran"
+  args="$(awk '/^===== fake prompt checkpoint /{getline; print; exit}' "$log")"
+  assert_contains "$args" "--max-turns" "the checkpoint is given a turn limit"
+  assert_eq "${args##*--max-turns }" "20" "a review checkpoint is capped at 20 turns"
+  args="$(awk '/^===== fake prompt 1 /{getline; print; exit}' "$log")"
+  assert_missing "$args" "--max-turns" "and the first ordinary turn does not inherit the cap"
+fi
+
 if case_is "a turn that ends cleanly, or pauses with a clean tree, leaves no marker"; then
   repo="$(make_repo 2 no-marker-clean-repo)"
   run_ralph "$repo" run batch 1

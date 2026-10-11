@@ -216,11 +216,17 @@ continuation_cap_reached() {
 }
 
 # A checkpoint turn is a short salvage, not a second attempt at the ticket, so it is kept
-# narrow by its prompt plus this low turn limit rather than by a tool allowlist — both sbx
+# narrow by its prompt plus a low turn limit rather than by a tool allowlist — both sbx
 # adapters default to a permission mode that bypasses the gate, where an allowlist plausibly
-# does not bite at all. Not a ralph.conf knob on purpose: see
+# does not bite at all. The two modes get different limits because they do different
+# amounts of reading. A stall checkpoint commits blind: stage, write the handoff, commit, so
+# a handful of turns is plenty. A review checkpoint (the start-of-run rescue, see
+# docs/adr/0002-in-flight-marker-and-review-turn.md) must first read the ticket, the diff
+# and every new file before it can judge the work, and on a large leftover diff 6 turns ran
+# out before the commit. Neither is a ralph.conf knob, on purpose: see
 # docs/adr/0001-checkpoint-turn-over-session-resume.md.
 CHECKPOINT_MAX_TURNS=6
+REVIEW_CHECKPOINT_MAX_TURNS=20
 
 # 0 means "no limit" for every budget, which reads badly printed bare.
 budget_label() {
@@ -873,20 +879,22 @@ run_checkpoint_turn() {    # run_checkpoint_turn [stall|review]
   # separate calls in this seam, so "run the agent without syncing first" needs no new
   # adapter function — three of the four adapters have a no-op exec_sync_down anyway.
   local checkpoint_prompt checkpoint_started_at checkpoint_agent_status checkpoint_result
-  local checkpoint_sync_failed=0
+  local checkpoint_sync_failed=0 checkpoint_max_turns
   local -a checkpoint_args_saved
   CHECKPOINT_REJECTION=""
   if [ "$mode" = review ]; then
     checkpoint_prompt="$(ralph_review_checkpoint_prompt "$TICKET_FILE" "$BASE_REF")"
+    checkpoint_max_turns=$REVIEW_CHECKPOINT_MAX_TURNS
   else
     checkpoint_prompt="$(ralph_checkpoint_prompt "$TICKET_FILE" "$BASE_REF")"
+    checkpoint_max_turns=$CHECKPOINT_MAX_TURNS
   fi
   checkpoint_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   # Guarded expansion, same as RALPH_CLAUDE_ARGS's other two call sites (local.sh,
   # _sbx.sh): under bash < 4.4 and `set -u`, expanding an array that is declared but
   # empty still raises "unbound variable" without the `+` guard.
   checkpoint_args_saved=(${RALPH_CLAUDE_ARGS+"${RALPH_CLAUDE_ARGS[@]}"})
-  RALPH_CLAUDE_ARGS+=(--max-turns "$CHECKPOINT_MAX_TURNS")
+  RALPH_CLAUDE_ARGS+=(--max-turns "$checkpoint_max_turns")
   # A checkpoint turn killed part-way is still uncommitted work a rerun should review.
   mark_turn_in_flight
   exec_run "$checkpoint_prompt" "$TICKET_FILE" </dev/null |

@@ -53,7 +53,9 @@
 #              through ralph-keys.sh --apply, so everything but the terminal read is real.
 #   RALPH_FAKE_SLEEP       seconds each call takes before acting. Default 0. For trying the
 #              + / - keys by hand, which need an iteration long enough to press them in.
-#   RALPH_FAKE_PROMPT_LOG  file to append each prompt to, with a separator. Optional.
+#   RALPH_FAKE_PROMPT_LOG  file to append each prompt to, with a separator. Optional. The
+#              line after the separator is `args:` and the RALPH_CLAUDE_ARGS the call was
+#              given — what a real adapter would pass to claude, e.g. a checkpoint's --max-turns.
 #   RALPH_FAKE_COST       reported cost per iteration in USD. Default 0.01.
 #
 # The behaviour may also be a `:`-separated list — `noop:land` lands on the second
@@ -219,7 +221,9 @@ exec_run() {
 
   if [ -n "${RALPH_FAKE_PROMPT_LOG:-}" ]; then
     { printf '===== fake prompt %s (%s) =====\n' "$label" "$ticket"
-      printf '%s\n' "$prompt"; } >> "$RALPH_FAKE_PROMPT_LOG"
+      printf 'args:'
+      printf ' %s' ${RALPH_CLAUDE_ARGS+"${RALPH_CLAUDE_ARGS[@]}"}
+      printf '\n%s\n' "$prompt"; } >> "$RALPH_FAKE_PROMPT_LOG"
   fi
 
   if [ "$label" = checkpoint ]; then
