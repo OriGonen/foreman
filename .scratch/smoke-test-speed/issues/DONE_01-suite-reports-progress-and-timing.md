@@ -20,7 +20,7 @@ committed, so the tree is clean.
 - [x] Timing uses bash's own clock and adds no processes per case
 - [x] Filtering by case name still works, and progress counts only the selected cases
 - [x] Pass/fail counts, failure messages and the exit status mean exactly what they did before
-- [x] `INT`, `TERM` and `HUP` trigger the same cleanup as `EXIT`; `RALPH_KEEP_FIXTURES=1` still keeps the fixtures
+- [x] `INT`, `TERM` and `HUP` trigger the same cleanup as `EXIT`; `FOREMAN_KEEP_FIXTURES=1` still keeps the fixtures
 - [x] Verified by hand: an interrupted run leaves no fixture directory behind
 - [x] The header comment of the suite describes the new output
 - [x] No existing assertion is edited, and `bash test/smoke.sh` passes in full; the closing note records `Full smoke suite: N passed in Mm Ss`
@@ -31,7 +31,7 @@ committed, so the tree is clean.
 
 - A pre-scan counts the selected cases off the file's own `if case_is "…"; then` lines (87 of 87 match), so `[n/total]` counts only what the filter selects. Timing uses `EPOCHREALTIME`, `printf -v` and arithmetic: no process per case. One `sort | head` runs once at the end for the slowest-10 list.
 - The old `N passed, M failed` line is unchanged; `N passed in Mm Ss` follows it. The exit status is still the last command's.
-- `INT`, `TERM` and `HUP` now `exit` with 130, 143 and 129, which runs the `EXIT` cleanup. Verified by hand: each signal sent mid-run left no `ralph-smoke-*` directory under a scratch `TMPDIR`, and with `RALPH_KEEP_FIXTURES=1` the directory was kept.
+- `INT`, `TERM` and `HUP` now `exit` with 130, 143 and 129, which runs the `EXIT` cleanup. Verified by hand: each signal sent mid-run left no `foreman-smoke-*` directory under a scratch `TMPDIR`, and with `FOREMAN_KEEP_FIXTURES=1` the directory was kept.
 - A signal that arrives mid-case takes effect when that case's current command returns (Ctrl-C also reaches the command). The header says so.
 - The code review (standards and spec) found nothing blocking. Known limit: the case count depends on every case keeping the `if case_is "…"; then` form.
 

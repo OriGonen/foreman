@@ -1,5 +1,5 @@
 #!/bin/bash
-# RALPH_EXEC=sandbox — the default. The agent runs on a PRIVATE CLONE inside the sandbox
+# FOREMAN_EXEC=sandbox — the default. The agent runs on a PRIVATE CLONE inside the sandbox
 # (`sbx create --clone`), not on this working tree.
 #
 # That is not a preference. A bind-mounted Windows workspace hands a Linux container the
@@ -21,9 +21,9 @@
 # is a race. `sbx cp` starts the sandbox itself and finishes in one command.
 
 # shellcheck source=_sbx.sh
-source "$RALPH_EXEC_DIR/_sbx.sh"
+source "$FOREMAN_EXEC_DIR/_sbx.sh"
 
-exec_describe() { printf 'sandbox (sandbox %s)' "$RALPH_SANDBOX"; }
+exec_describe() { printf 'sandbox (sandbox %s)' "$FOREMAN_SANDBOX"; }
 
 exec_prepare() {
   _sbx_create clone || return 1
@@ -31,9 +31,9 @@ exec_prepare() {
   # A sandbox left over from the other arrangement is the single most expensive mistake
   # available here: it looks fine and fails every iteration *after* paying for the work.
   if ! _sbx_is_clone_mode; then
-    warn_preflight "sandbox '$RALPH_SANDBOX' exists but has no $_SBX_SOURCE_MOUNT in it —"
+    warn_preflight "sandbox '$FOREMAN_SANDBOX' exists but has no $_SBX_SOURCE_MOUNT in it —"
     warn "           it is not a clone sandbox. Recreate it:"
-    warn "             sbx rm --force $RALPH_SANDBOX"
+    warn "             sbx rm --force $FOREMAN_SANDBOX"
     warn "           (If \`sbx\` is signed out, run \`sbx login\` first.)"
     return 1
   fi
@@ -42,12 +42,12 @@ exec_prepare() {
   # of a repo that already has a GitHub (or other) origin keeps that URL, so left alone this
   # would fetch GitHub and reset to a commit that may never have been pushed there.
   if ! _sbx_point_origin_at_source; then
-    warn_preflight "could not point '$RALPH_SANDBOX''s origin at $_SBX_SOURCE_MOUNT."
+    warn_preflight "could not point '$FOREMAN_SANDBOX''s origin at $_SBX_SOURCE_MOUNT."
     warn "           Its origin is currently:"
     warn "             $(_sbx_sh 'git remote get-url origin 2>/dev/null' 2>/dev/null | tr -d '\r')"
     warn "           and exec_sync_down fetches from origin every iteration, so this must"
     warn "           point at the host mount, not some other remote. Inspect with:"
-    warn "             sbx exec $RALPH_SANDBOX git remote -v"
+    warn "             sbx exec $FOREMAN_SANDBOX git remote -v"
     return 1
   fi
 
@@ -113,23 +113,23 @@ _sbx_sync_up() {
   local base="$1" sb_head="$2"
 
   rm -f "$BUNDLE_FILE"
-  if ! _sbx_sh "rm -f /tmp/ralph-iter.bundle && git bundle create /tmp/ralph-iter.bundle ${base}..HEAD" >/dev/null 2>&1; then
+  if ! _sbx_sh "rm -f /tmp/foreman-iter.bundle && git bundle create /tmp/foreman-iter.bundle ${base}..HEAD" >/dev/null 2>&1; then
     warn "   could not bundle the sandbox's commits"
     return 1
   fi
-  if ! sbx cp "$RALPH_SANDBOX:/tmp/ralph-iter.bundle" "$BUNDLE_FILE" </dev/null >/dev/null 2>&1; then
+  if ! sbx cp "$FOREMAN_SANDBOX:/tmp/foreman-iter.bundle" "$BUNDLE_FILE" </dev/null >/dev/null 2>&1; then
     warn "   could not copy the bundle out of the sandbox"
     return 1
   fi
-  if ! git fetch --quiet "$BUNDLE_FILE" "HEAD:refs/ralph/incoming" 2>/dev/null; then
+  if ! git fetch --quiet "$BUNDLE_FILE" "HEAD:refs/foreman/incoming" 2>/dev/null; then
     warn "   bundle did not contain a fetchable ref"
     return 1
   fi
-  if ! git merge --quiet --ff-only refs/ralph/incoming >/dev/null 2>&1; then
+  if ! git merge --quiet --ff-only refs/foreman/incoming >/dev/null 2>&1; then
     warn "   could not fast-forward onto the sandbox's commits (diverged?)"
     return 1
   fi
-  git update-ref -d refs/ralph/incoming 2>/dev/null || true
+  git update-ref -d refs/foreman/incoming 2>/dev/null || true
   rm -f "$BUNDLE_FILE"
 
   [ "$(git rev-parse HEAD)" = "$sb_head" ]
@@ -139,7 +139,7 @@ exec_show_dirty() {
   _sbx_sh 'git status --short' >&2
   warn ""
   warn "They are in the sandbox's clone, not in this repo, and rerunning would reset"
-  warn "the clone over them. Inspect with: sbx exec $RALPH_SANDBOX git diff"
+  warn "the clone over them. Inspect with: sbx exec $FOREMAN_SANDBOX git diff"
 }
 
 exec_recovery_note() {
@@ -154,10 +154,10 @@ exec_recovery_note() {
 exec_dirty_recovery_note() {
   local base="$1" ticket="$2" batch="$3"
   printf '%s\n' \
-    "  sbx exec $RALPH_SANDBOX git add -A" \
-    "  sbx exec $RALPH_SANDBOX git commit -m 'wip: $ticket — remaining: <what is left>'"
+    "  sbx exec $FOREMAN_SANDBOX git add -A" \
+    "  sbx exec $FOREMAN_SANDBOX git commit -m 'wip: $ticket — remaining: <what is left>'"
   _sbx_recover_bundle_lines "$base"
-  printf '  %s run %s\n' "$RALPH_INVOKE" "$batch"
+  printf '  %s run %s\n' "$FOREMAN_INVOKE" "$batch"
 }
 
 # Only this arrangement makes an uncommitted change a *lost* change.

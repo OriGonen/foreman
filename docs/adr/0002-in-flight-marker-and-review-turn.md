@@ -28,7 +28,7 @@ Two changes close that gap:
   stops for a human with the reasons, the tree untouched and the marker removed, so a rerun
   does not pay for the same refusal again.
 
-`ralph run --adopt-dirty` sends a dirty tree no marker vouches for through the same review
+`foreman run --adopt-dirty` sends a dirty tree no marker vouches for through the same review
 turn, on the operator's word that it is the next ticket's work.
 
 ## Considered options

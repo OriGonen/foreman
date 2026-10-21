@@ -25,7 +25,7 @@ every rerun while the ticket is waiting — says it was sent back and points at 
   saying what it waits for). Otherwise a human ticket renamed `DONE_` and then sent back would
   be a `DONE_` file waiting on a human. When a check ticket lands, the loop renames the ticket
   it checks too.
-- At the start of every `ralph run`, before picking a ticket, the loop renames any ticket that
+- At the start of every `foreman run`, before picking a ticket, the loop renames any ticket that
   is done, fully ticked and not yet prefixed — this is how a human-finished ticket gets its
   prefix. Skipped entirely on a dirty tree: a rename commit would move HEAD and break the stall
   marker's match, losing the automatic rescue of stalled work. Never in `status` or `dry-run`.
@@ -34,7 +34,7 @@ every rerun while the ticket is waiting — says it was sent back and points at 
 either side.
 
 Full design: `.scratch/human-tickets/plan.md` — "The ticket formats" (resolution, sending
-back), and the `ralph-human.sh` and `ralph-loop.sh` sections (rename rule, after a check
+back), and the `foreman-human.sh` and `foreman-loop.sh` sections (rename rule, after a check
 ticket lands, start-of-run rename sweep, in-loop gate).
 
 **Acceptance criteria:**
@@ -49,6 +49,6 @@ ticket lands, start-of-run rename sweep, in-loop gate).
       the run says what it waits for
 - [x] When the check ticket lands, both it and its human ticket are `DONE_`-prefixed
 - [x] The start-of-run sweep renames a done, fully ticked, unprefixed ticket, and makes no
-      commit on a dirty tree (`RALPH_ALLOW_DIRTY=1` plus an uncommitted file)
+      commit on a dirty tree (`FOREMAN_ALLOW_DIRTY=1` plus an uncommitted file)
 - [x] `Checks:` resolves whether either side carries the `DONE_` prefix
 - [x] New smoke cases cover the above, and `bash test/smoke.sh` passes in full

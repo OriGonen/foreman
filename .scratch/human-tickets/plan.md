@@ -2,18 +2,18 @@
 
 ## The gap
 
-ralph knows two kinds of ticket: done, and not done. A ticket whose status line reads
+foreman knows two kinds of ticket: done, and not done. A ticket whose status line reads
 `**Status:** ready-for-human` is "not done", so the loop hands it to an agent like any other.
-The agent then either fails it (exit 20 after `RALPH_TICKET_ATTEMPTS` wasted turns — the
+The agent then either fails it (exit 20 after `FOREMAN_TICKET_ATTEMPTS` wasted turns — the
 right place to stop, reached the expensive way) or, worse, fakes the human's part and flips
-it. `ralph order` weighs dependencies, but has no idea that one kind of ticket stops the
+it. `foreman order` weighs dependencies, but has no idea that one kind of ticket stops the
 loop dead, so it has no reason to push that ticket late. And nothing checks what the human
 did before agent work builds on it.
 
 ## What this adds
 
 1. **Human tickets** — marked on their own status line, `**Status:** ready-for-human`
-   (`RALPH_HUMAN_WORD`, derived `RALPH_HUMAN_PATTERN`; an empty word disables the feature).
+   (`FOREMAN_HUMAN_WORD`, derived `FOREMAN_HUMAN_PATTERN`; an empty word disables the feature).
 2. **The gate.** Whenever the NEXT ticket in the order is a human ticket, the loop stops
    before spending anything — before the sandbox starts, before any budget check, before any
    sync — and exits **30**, naming the ticket and the handoff file to fill in. Rerunning
@@ -21,22 +21,22 @@ did before agent work builds on it.
    even ones that do not depend on it: the order is trusted.
 3. **Resume is unchanged.** The human does the work, fills in the handoff file, commits, sets
    the status line to `done`, commits, and reruns. The status lines stay the only resume state.
-4. **Handoff files and check tickets** — written at planning time, read by ralph for free:
+4. **Handoff files and check tickets** — written at planning time, read by foreman for free:
    every human ticket names a handoff file the human fills in, and is immediately followed by
    an ordinary agent ticket that `Checks:` it and sends it back if the handoff falls short.
 5. **The rename is the loop's.** Finished tickets are renamed `DONE_` by the loop at no token
    cost — a human ticket only once its check ticket has passed.
-6. **Visibility.** `ralph status` and `ralph dry-run` mark every human ticket, say where the
+6. **Visibility.** `foreman status` and `foreman dry-run` mark every human ticket, say where the
    next stop is, and warn about a human ticket that is missing its handoff file or check
    ticket.
-7. **Ordering.** `ralph order` places each human ticket as late as its dependents allow, with
+7. **Ordering.** `foreman order` places each human ticket as late as its dependents allow, with
    its check ticket immediately after it.
 8. **A planning skill** that writes human tickets, handoff templates and check tickets.
 
 ## Decisions (settled with the owner — do not revisit)
 
 - **`Blocked by:` is not parsed by the loop.** The order is the single source of truth for
-  sequencing; `ralph order`'s agent already reads each ticket in full, `Blocked by:` lines
+  sequencing; `foreman order`'s agent already reads each ticket in full, `Blocked by:` lines
   included.
 - **Only the next ticket is checked.** The loop never looks past a human ticket to find
   runnable work behind it.
@@ -76,7 +76,7 @@ Check ticket (immediately follows its human ticket in the order):
 Resolution rules — one implementation, used everywhere:
 
 - **`Checks:`** is a ticket file NAME. It resolves to the batch ticket (from
-  `ralph-next.sh --all`) whose basename, with any `RALPH_DONE_PREFIX` stripped, equals it
+  `foreman-next.sh --all`) whose basename, with any `FOREMAN_DONE_PREFIX` stripped, equals it
   (also with the prefix stripped). No match → unresolved (a warning, see below).
 - **`Handoff:`** is a path, resolved like an order.md entry: as given if it exists, else
   relative to the batch directory.
@@ -84,7 +84,7 @@ Resolution rules — one implementation, used everywhere:
   `^\(\*\*\)\?Handoff:\(\*\*\)\? *` — the value is the rest of the line, trimmed.
 
 The handoff directory must not be scanned as tickets. It is not, by default:
-`RALPH_ISSUES_DIRS` defaults to `issues`, and even `RALPH_ISSUES_DIRS=.` scans with
+`FOREMAN_ISSUES_DIRS` defaults to `issues`, and even `FOREMAN_ISSUES_DIRS=.` scans with
 `-maxdepth 1`, so `handoff/` beside `issues/` is never picked up.
 
 **Sending back.** A check ticket that finds the handoff inadequate does not do dependent
@@ -98,49 +98,49 @@ earlier in the order and no longer done), so the gate stops the run.
 
 ## Precedence
 
-A ticket is classified in this order: **done** (matches `RALPH_DONE_PATTERN`) → **human**
-(matches `RALPH_HUMAN_PATTERN`) → **agent** (anything else).
+A ticket is classified in this order: **done** (matches `FOREMAN_DONE_PATTERN`) → **human**
+(matches `FOREMAN_HUMAN_PATTERN`) → **agent** (anything else).
 
 Within the loop, at the top of each iteration: **pick → human gate → stall-marker start-of-run
 check → attempt/budget checks → …**. The gate comes before the budget checks on purpose: with
-`ralph run batch 1` landing ticket 14, the next pick is human ticket 15, and "waiting on a
+`foreman run batch 1` landing ticket 14, the next pick is human ticket 15, and "waiting on a
 human" is the truer reason to stop — a rerun with more budget would hit the gate anyway.
 
 ---
 
 ## Changes, file by file
 
-### `lib/ralph-config.sh`
+### `lib/foreman-config.sh`
 
-Next to `RALPH_DONE_WORD` / `RALPH_DONE_PATTERN` (around line 147):
+Next to `FOREMAN_DONE_WORD` / `FOREMAN_DONE_PATTERN` (around line 147):
 
-- `RALPH_HUMAN_WORD="${RALPH_HUMAN_WORD-ready-for-human}"` — `${VAR-default}`, so setting it
-  empty in ralph.conf switches human tickets off.
-- `RALPH_HUMAN_PATTERN`: if unset, derive it the same way the done pattern is derived:
-  `^<escaped RALPH_STATUS_LINE> *<RALPH_HUMAN_WORD>`; empty when the word is empty. Factor the
+- `FOREMAN_HUMAN_WORD="${FOREMAN_HUMAN_WORD-ready-for-human}"` — `${VAR-default}`, so setting it
+  empty in foreman.conf switches human tickets off.
+- `FOREMAN_HUMAN_PATTERN`: if unset, derive it the same way the done pattern is derived:
+  `^<escaped FOREMAN_STATUS_LINE> *<FOREMAN_HUMAN_WORD>`; empty when the word is empty. Factor the
   existing `sed` escaping of the status line into one helper used by both derivations.
 
-### `lib/ralph-human.sh` (new)
+### `lib/foreman-human.sh` (new)
 
-Sourced by `ralph-loop.sh` and `ralph-order.sh` after `ralph-config.sh`. The one place that
+Sourced by `foreman-loop.sh` and `foreman-order.sh` after `foreman-config.sh`. The one place that
 knows what a human ticket, a check ticket and a handoff file are. Functions:
 
-- `ralph_ticket_needs_human TICKET` — not done, and matches `RALPH_HUMAN_PATTERN`.
-- `ralph_ticket_field TICKET NAME` — prints the trimmed value of a `NAME:` line, or nothing.
-- `ralph_handoff_path TICKET` — the resolved `Handoff:` path, or nothing.
-- `ralph_checked_ticket CHECK_TICKET` — the resolved ticket its `Checks:` names, or nothing
+- `foreman_ticket_needs_human TICKET` — not done, and matches `FOREMAN_HUMAN_PATTERN`.
+- `foreman_ticket_field TICKET NAME` — prints the trimmed value of a `NAME:` line, or nothing.
+- `foreman_handoff_path TICKET` — the resolved `Handoff:` path, or nothing.
+- `foreman_checked_ticket CHECK_TICKET` — the resolved ticket its `Checks:` names, or nothing
   (return 1 if it has a `Checks:` line that does not resolve).
-- `ralph_pending_checker TICKET` — prints a NOT-done ticket whose `Checks:` resolves to
+- `foreman_pending_checker TICKET` — prints a NOT-done ticket whose `Checks:` resolves to
   TICKET, if any. Used by the rename rule.
-- `ralph_was_sent_back TICKET` — prints the check ticket name from its LAST
+- `foreman_was_sent_back TICKET` — prints the check ticket name from its LAST
   `## Sent back by …` heading, if any.
-- `ralph_human_warnings` — prints the warnings below, one per line, prefixed `warning: `,
-  over `ralph-next.sh --all` in order. Always returns 0.
+- `foreman_human_warnings` — prints the warnings below, one per line, prefixed `warning: `,
+  over `foreman-next.sh --all` in order. Always returns 0.
 
 Each function greps; none calls a model. Keep them small and flat — this is lookup, not
 policy.
 
-### Warnings (`ralph_human_warnings`)
+### Warnings (`foreman_human_warnings`)
 
 Evaluated over the ordered ticket list:
 
@@ -154,18 +154,18 @@ Evaluated over the ordered ticket list:
    it `done` it no longer matches the human pattern, and the warning must not change meaning.
 4. `warning: <check> Checks: <name>, which is not a ticket in this batch` — unresolved.
 
-When `RALPH_HUMAN_PATTERN` is empty, warnings 1–2 are skipped; 3–4 still apply.
+When `FOREMAN_HUMAN_PATTERN` is empty, warnings 1–2 are skipped; 3–4 still apply.
 
-### `lib/ralph-next.sh`
+### `lib/foreman-next.sh`
 
 No behaviour change. Update the header comment: "next" is still the first not-done ticket,
 human or not; the loop decides what a human ticket at the head of the order means.
 
-### `lib/ralph-loop.sh`
+### `lib/foreman-loop.sh`
 
 **Header.** Add `30  waiting on a human — the next ticket is a human ticket` to EXIT CODES,
-`RALPH_HUMAN_WORD` to OTHER KNOBS, and a sentence under RESUMING. Add
-`EXIT_WAITING_ON_HUMAN=30` beside the other exit constants. Source `ralph-human.sh`.
+`FOREMAN_HUMAN_WORD` to OTHER KNOBS, and a sentence under RESUMING. Add
+`EXIT_WAITING_ON_HUMAN=30` beside the other exit constants. Source `foreman-human.sh`.
 
 **`human_ticket_note TICKET`** — one function, used by every place that stops at the gate. To
 stderr (stdout in `status`):
@@ -176,19 +176,19 @@ stderr (stdout in `status`):
 [↩ It was sent back by <check ticket>: read '## Sent back by <check ticket>' at the
    bottom of it.]
 
-It is marked '<RALPH_STATUS_LINE> <RALPH_HUMAN_WORD>': no agent is given it, and no ticket
+It is marked '<FOREMAN_STATUS_LINE> <FOREMAN_HUMAN_WORD>': no agent is given it, and no ticket
 after it runs until it is done. It is your turn now:
 
   1. Do what the ticket asks.
   2. Fill in every section of <handoff path>.
   3. Commit your work and the handoff file.
-  4. Set its status line to '<RALPH_STATUS_LINE> done', tick its boxes, and commit.
-  5. Rerun:  <RALPH_INVOKE> run <batch><resume args>
+  4. Set its status line to '<FOREMAN_STATUS_LINE> done', tick its boxes, and commit.
+  5. Rerun:  <FOREMAN_INVOKE> run <batch><resume args>
 
 Rerunning before step 4 stops here again, and costs nothing.
 ```
 
-- The `↩` paragraph only when `ralph_was_sent_back` finds a heading AND the ticket is
+- The `↩` paragraph only when `foreman_was_sent_back` finds a heading AND the ticket is
   currently a human ticket (which it is, whenever this note prints).
 - Step 2 only when the ticket has a resolvable `Handoff:`; renumber the rest otherwise.
 - `<resume args>` is the same `" N"` / `" --unlimited"` the paused footer already builds —
@@ -196,11 +196,11 @@ Rerunning before step 4 stops here again, and costs nothing.
 
 **Rename rule.** Change `mark_ticket_done_on_disk` so it also returns early (with a note:
 `   note: <ticket> waits for <checker> before it is marked done`) when
-`ralph_pending_checker` finds a not-done ticket that `Checks:` it. Without this, a human
+`foreman_pending_checker` finds a not-done ticket that `Checks:` it. Without this, a human
 ticket renamed `DONE_` and then sent back would be a `DONE_` file waiting on a human.
 
 **After a check ticket lands** (the existing "5. The ticket landed." branch): after
-`mark_ticket_done_on_disk "$TICKET_FILE"`, if `ralph_checked_ticket "$TICKET_FILE"` resolves,
+`mark_ticket_done_on_disk "$TICKET_FILE"`, if `foreman_checked_ticket "$TICKET_FILE"` resolves,
 call `mark_ticket_done_on_disk` on that ticket too — the human ticket is now done and
 verified.
 
@@ -218,7 +218,7 @@ verified.
 
 **Pre-run gate**, after the "Nothing to do" check:
 
-- `dry-run`: still exits 0. If `ralph_ticket_needs_human "$next_ticket"`, print the marked
+- `dry-run`: still exits 0. If `foreman_ticket_needs_human "$next_ticket"`, print the marked
   plan (below), then `Would stop before <ticket>: it is a human ticket. No prompt would be
   sent.`, and skip the prompt.
 - `run`: if the next ticket is human, call `human_ticket_note` and `exit 30` — before the run
@@ -228,11 +228,11 @@ verified.
 per-ticket counter reset, the stall-marker check and the budget checks:
 
 ```bash
-if ralph_ticket_needs_human "$TICKET_FILE"; then
+if foreman_ticket_needs_human "$TICKET_FILE"; then
   # The previous iteration was this ticket's check, and it sent it back. The iteration
   # itself was reported as "progressed" (HEAD moved, check ticket unflipped); say what it was.
   if [ -n "$CURRENT_TICKET" ] &&
-     [ "$(ralph_checked_ticket "$CURRENT_TICKET")" = "$TICKET_FILE" ]; then
+     [ "$(foreman_checked_ticket "$CURRENT_TICKET")" = "$TICKET_FILE" ]; then
     say "   ↩ sent back to a human by $(basename "$CURRENT_TICKET")"
   fi
   HUMAN_TICKET="$TICKET_FILE"
@@ -274,15 +274,15 @@ warning: ...
   it]`, the list, then `human_ticket_note` to stdout.
 - The "The loop will run N ticket(s), then stop at …" line only when a human ticket remains
   and is not next.
-- `ralph_human_warnings` output last, after a blank line, only if non-empty. Exit 0 always.
+- `foreman_human_warnings` output last, after a blank line, only if non-empty. Exit 0 always.
 - With no human or check tickets, the output is exactly what it is today.
 
 `dry-run`'s "Would run, in this order:" uses the same marked listing — one shared function,
 `print_remaining_marked` — and prints the warnings too.
 
-### `lib/ralph-order.sh`
+### `lib/foreman-order.sh`
 
-- Source `ralph-human.sh`. Build the human-ticket list with `ralph_ticket_needs_human`, and
+- Source `foreman-human.sh`. Build the human-ticket list with `foreman_ticket_needs_human`, and
   note whether any ticket has a `Checks:` line.
 - Change the "weighing three things" sentence so priority is explicit: **dependencies, then
   human-ticket placement (and check-ticket adjacency), then importance, then load.**
@@ -313,10 +313,10 @@ warning: ...
 
 - Always add: "A ticket's `Blocked by:` line, when it has one, is an explicit dependency:
   honour it exactly."
-- After a successful agent call, print `ralph_human_warnings` output (if any) after the
+- After a successful agent call, print `foreman_human_warnings` output (if any) after the
   "review it" line. Exit status unchanged.
 
-### `lib/ralph.conf.template`
+### `lib/foreman.conf.template`
 
 In the Tickets section, after the done-word block:
 
@@ -326,16 +326,16 @@ In the Tickets section, after the done-word block:
 # it until the person sets it to done. Give it a '**Handoff:** <file>' line naming the file
 # the person fills in, and follow it with a check ticket ('**Checks:** <its file name>').
 # Set empty to treat every ticket as an agent's.
-#RALPH_HUMAN_WORD=ready-for-human
-#RALPH_HUMAN_PATTERN='^\*\*Status:\*\* *ready-for-human'
+#FOREMAN_HUMAN_WORD=ready-for-human
+#FOREMAN_HUMAN_PATTERN='^\*\*Status:\*\* *ready-for-human'
 ```
 
-### `lib/ralph-init.sh`
+### `lib/foreman-init.sh`
 
 The prose it writes into a fresh `order.md` (line ~117) says a "ticket that must not run
 until a human has done something" belongs in prose. Replace with: mark a human step as its
 own ticket with `**Status:** ready-for-human`, a `**Handoff:**` file and a check ticket;
-`ralph order` places them, and the loop stops there.
+`foreman order` places them, and the loop stops there.
 
 ---
 
@@ -344,10 +344,10 @@ own ticket with `**Status:** ready-for-human`, a `**Handoff:**` file and a check
 Settled with the owner on 2026-09-27; the full design is ticket 06
 (`issues/06-a-skill-writes-followup-tickets-and-handoff-files.md`). In short:
 
-- **`ralph-human-followup-tickets`**, at `skills/ralph-human-followup-tickets/SKILL.md` in this
+- **`foreman-human-followup-tickets`**, at `skills/foreman-human-followup-tickets/SKILL.md` in this
   repo (writer and reader change together), user-invoked, written following
   `writing-for-agents`.
-- It runs after `to-tickets`, usually before `ralph init`, and works only from the batch on
+- It runs after `to-tickets`, usually before `foreman init`, and works only from the batch on
   disk. A human ticket is one whose status line already carries the human label: the skill
   never classifies, splits, re-statuses or renumbers a ticket, and never edits another
   ticket's `Blocked by:`. So the "split mixed tickets" and "mark human tickets" steps once
@@ -356,8 +356,8 @@ Settled with the owner on 2026-09-27; the full design is ticket 06
   handoff file (never overwritten), and a followup ticket `<NN>a-followup-<slug>.md` — so
   re-running it is safe. Warnings 1 and 2 point at it.
 - The label words come from the repo's `docs/agents/triage-labels.md` when it exists; the
-  skill tells the user the `ralph.conf` line when `RALPH_HUMAN_WORD` differs.
-- `install.sh` copies it into `~/.claude/skills/` with a marker file; `ralph doctor` warns when
+  skill tells the user the `foreman.conf` line when `FOREMAN_HUMAN_WORD` differs.
+- `install.sh` copies it into `~/.claude/skills/` with a marker file; `foreman doctor` warns when
   the copy is stale.
 - Ticket 07 (human) and 07a (its followup ticket) have the owner try it on a real batch.
 
@@ -392,11 +392,11 @@ Settled with the owner on 2026-09-27; the full design is ticket 06
   - "Setting up a batch": a "Human tickets" subsection — the two ticket formats, the handoff
     file, sending back, and the human → check → consume pattern with the owner-review
     example split into 15 (human) / 16 (check) / 17 (apply the tuning).
-  - "Ordering": how `ralph order` places human tickets and keeps check tickets adjacent.
+  - "Ordering": how `foreman order` places human tickets and keeps check tickets adjacent.
   - "Pausing and resuming": exit **30** — what it means, that rerunning stops again for free,
     how it differs from 10 and 20; the start-of-run rename sweep and why a human ticket is
     renamed only after its check.
-  - The quick-start `ralph status` comment: "what is left, what is next, where a human is
+  - The quick-start `foreman status` comment: "what is left, what is next, where a human is
     needed".
   - Install: the skill.
 
@@ -428,7 +428,7 @@ Cases:
    check ticket; with `HANDOFF=none`; with a `Handoff:` naming a missing file; check ticket
    not adjacent (order.md puts another ticket between); `Checks:` naming no ticket.
 5. **run stops before spending anything.** #1 human: `run batch --unlimited` exits 30; no new
-   commits; no `ralph-runs.jsonl` rows; `RALPH_FAKE_PROMPT_LOG` empty; output names the
+   commits; no `foreman-runs.jsonl` rows; `FOREMAN_FAKE_PROMPT_LOG` empty; output names the
    ticket, the handoff path and the rerun command.
 6. **run stops mid-batch.** 5 tickets, #3 human, #4 checks it, `--unlimited`: exits 30;
    tickets 1–2 landed; 4–5 never prompted; the run log ends with
@@ -441,17 +441,17 @@ Cases:
    `done` (boxes ticked), commit, `run batch 1`: the start-of-run sweep does NOT rename #3
    (#4 still checks it; the "waits for" note appears); #4 lands; now #3 AND #4 are both
    `DONE_`-prefixed.
-10. **a check ticket sends it back.** Like 9, but `RALPH_FAKE_BEHAVIOUR=send-back` for #4:
+10. **a check ticket sends it back.** Like 9, but `FOREMAN_FAKE_BEHAVIOUR=send-back` for #4:
     exits 30; output has `↩ sent back to a human by 04-ticket.md` and the note's "sent back
     by" paragraph; #3 is `ready-for-human`, unprefixed, with the `## Sent back by` section;
     #5 never ran. A plain rerun prints the "sent back by" paragraph again.
 11. **the sweep leaves a dirty tree alone.** A done-but-unrenamed ticket plus an uncommitted
-    file and `RALPH_ALLOW_DIRTY=1`: no rename commit.
+    file and `FOREMAN_ALLOW_DIRTY=1`: no rename commit.
 12. **dry-run at a human ticket.** Exits 0, says "Would stop before", no `=== prompt that
     would be sent` block.
-13. **the word is configurable and can be switched off.** `RALPH_HUMAN_WORD=needs-owner` stops
-    on that status; `RALPH_HUMAN_WORD=` hands a `ready-for-human` ticket to the agent.
-14. **`ralph order` tells the agent.** A stub `claude` first on `PATH` writes its `-p`
+13. **the word is configurable and can be switched off.** `FOREMAN_HUMAN_WORD=needs-owner` stops
+    on that status; `FOREMAN_HUMAN_WORD=` hands a `ready-for-human` ticket to the agent.
+14. **`foreman order` tells the agent.** A stub `claude` first on `PATH` writes its `-p`
     argument to a file and prints `{"total_cost_usd":0}`. With #2 human and #3 checks #2: the
     prompt has `HUMAN TICKETS` with #2's path and `CHECK TICKETS`. With neither: both
     sections absent. Warnings are printed after ordering when #2 has no check ticket.
@@ -459,23 +459,23 @@ Cases:
 Run the whole suite (`bash test/smoke.sh`), not just the new cases — the status rework, the
 gate and the rename rule sit on paths every existing case goes through.
 
-## Suggested commits (one ticket each, if run through ralph)
+## Suggested commits (one ticket each, if run through foreman)
 
-1. **Human tickets and the gate.** Config, `ralph-human.sh` (needs-human, fields, handoff
+1. **Human tickets and the gate.** Config, `foreman-human.sh` (needs-human, fields, handoff
    path, sent-back), loop gate (pre-run, in-loop, footer, exit 30), `human_ticket_note`,
    dry-run stop. Tests 5–8, 12, 13.
 2. **Check tickets and the rename.** `Checks:` resolution, pending-checker rename rule, rename
    after a check lands, start-of-run sweep, `send-back` fake behaviour, "↩ sent back" line.
    Tests 9–11.
-3. **Status and warnings.** Marked listing for status and dry-run, `ralph_human_warnings`.
+3. **Status and warnings.** Marked listing for status and dry-run, `foreman_human_warnings`.
    Tests 1–4.
-4. **Ordering.** `ralph order` prompt sections and warnings. Test 14.
+4. **Ordering.** `foreman order` prompt sections and warnings. Test 14.
 5. **Docs.** README, CONTEXT.md, conf template, init prose, loop header.
 6. **The planning skill** and its install — ticket 06; then 07/07a, trying it for real.
 
 ## Done when
 
-- [ ] A `ready-for-human` ticket at the head of the order stops `ralph run` with exit 30
+- [ ] A `ready-for-human` ticket at the head of the order stops `foreman run` with exit 30
       before the sandbox starts, before budgets, and before any prompt is sent
 - [ ] A run reaching one mid-batch stops there with exit 30 and runs nothing after it
 - [ ] The exit-30 message names the ticket's handoff file, and says when it was sent back
@@ -484,13 +484,13 @@ gate and the rename rule sit on paths every existing case goes through.
       human ticket unprefixed and carrying a `## Sent back by` note
 - [ ] A human ticket is renamed `DONE_` only once its check ticket has landed; renames never
       happen on a dirty tree
-- [ ] `ralph status` and `ralph dry-run` mark human and check tickets and say where the next
+- [ ] `foreman status` and `foreman dry-run` mark human and check tickets and say where the next
       stop is
-- [ ] The four warnings print from `ralph status`, `ralph dry-run` and `ralph order`, and
+- [ ] The four warnings print from `foreman status`, `foreman dry-run` and `foreman order`, and
       never change an exit code
-- [ ] `ralph order`'s prompt places human tickets as late as their dependents allow, with
+- [ ] `foreman order`'s prompt places human tickets as late as their dependents allow, with
       each check ticket immediately after its human ticket
-- [ ] `RALPH_HUMAN_WORD` is configurable and empty disables human tickets
+- [ ] `FOREMAN_HUMAN_WORD` is configurable and empty disables human tickets
 - [ ] The planning skill adds each human ticket's handoff file and followup ticket, and
       `install.sh` installs it
 - [ ] README, CONTEXT.md, conf template and init prose describe all of the above

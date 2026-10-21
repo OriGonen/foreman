@@ -1,4 +1,4 @@
-# 06: `ralph setup claude` and the full guided flow
+# 06: `foreman setup claude` and the full guided flow
 
 **Status:** ready-for-agent
 
@@ -6,8 +6,8 @@
 
 **What to build:**
 
-`ralph setup claude` takes the operator from "no Claude token" to a saved one the sandbox
-accepts, and plain `ralph setup` walks through both steps.
+`foreman setup claude` takes the operator from "no Claude token" to a saved one the sandbox
+accepts, and plain `foreman setup` walks through both steps.
 
 The Claude step checks `claude` is on PATH and tells the operator to run `claude setup-token`
 in another terminal. That opens a browser and prints a long-lived token, which can't be
@@ -15,10 +15,10 @@ captured reliably, so it is pasted. The prompt is hidden. The token is **tested 
 through the same step the sandbox preflight runs (ticket 03) and saved only on success. Use
 the wording ticket 02's handoff settled on (setup-token vs API key).
 
-Plain `ralph setup` runs Docker, then Claude, and skips a step whose credentials are already
+Plain `foreman setup` runs Docker, then Claude, and skips a step whose credentials are already
 present and working. It ends with a summary: the file path, which keys are set (masked
 `…ab12`), a reminder that the file is plaintext and outside every repo, and the next command
-(`ralph run …`).
+(`foreman run …`).
 
 See `.scratch/credentials-setup/spec.md`.
 

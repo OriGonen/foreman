@@ -9,11 +9,11 @@ The smoke suite now runs for over an hour. It used to take about 30-40 minutes.
 The time is not spent in the tests' logic. It is spent creating processes.
 
 - On this machine every process spawn costs 0.15-0.25s, against about 1ms on Linux.
-- A single `ralph status` call on a 3-ticket repo takes about 30s. It does no work
+- A single `foreman status` call on a 3-ticket repo takes about 30s. It does no work
   beyond reading a few files.
-- The suite makes about 125 `run_ralph` calls and about 80 `make_repo` calls, so the
+- The suite makes about 125 `run_foreman` calls and about 80 `make_repo` calls, so the
   per-call cost multiplies into an hour.
-- Two things made it worse over time: the suite gained cases, and each `ralph` call
+- Two things made it worse over time: the suite gained cases, and each `foreman` call
   got more expensive as features were added.
 
 ## Measurements
@@ -25,13 +25,13 @@ The time is not spent in the tests' logic. It is spent creating processes.
 | `echo a \| grep a` | 0.19s |
 | `git rev-parse HEAD`, 20 in a loop | 5.3s (about 0.26s each) |
 | `make_repo 3` (fixture: init, config, commit) | 2.5s |
-| `ralph status batch` on a 3-ticket repo | 28-30s |
+| `foreman status batch` on a 3-ticket repo | 28-30s |
 | `bash test/smoke.sh "status and dry-run"` (1 case, 11 assertions) | 68s |
 
-`ralph status` time was split roughly 9s user, 14s sys, 30s wall. The high `sys`
+`foreman status` time was split roughly 9s user, 14s sys, 30s wall. The high `sys`
 share points at process creation and file access, not computation.
 
-### Where one `ralph status` call spends its spawns
+### Where one `foreman status` call spends its spawns
 
 A trace of one call (`SHELLOPTS=xtrace`) showed about 1,900 executed shell lines.
 The external commands and subshells in it:
@@ -43,8 +43,8 @@ The external commands and subshells in it:
 | `sed` | 12 (+6) | escaping a path for a pattern; trimming whitespace |
 | `git rev-parse --show-toplevel` | 12 | same answer every time |
 | `git rev-parse --show-prefix` | 6 | same answer every time |
-| `grep -qU $'\r'` on `ralph.conf` | 6 | same file checked repeatedly |
-| `_ralph_path` calls | 36 | helper that likely spawns inside `$(...)` |
+| `grep -qU $'\r'` on `foreman.conf` | 6 | same file checked repeatedly |
+| `_foreman_path` calls | 36 | helper that likely spawns inside `$(...)` |
 | `cd` | 50 | cheap, but each often sits inside a `$(...)` subshell |
 
 `$(...)` command substitutions are forks too, so the real spawn count is higher than
@@ -58,7 +58,7 @@ checks.
 
 Both factors grew together. From git history:
 
-| Commit | `smoke.sh` lines | cases | `ralph-loop.sh` lines | all `lib/*.sh` lines |
+| Commit | `smoke.sh` lines | cases | `foreman-loop.sh` lines | all `lib/*.sh` lines |
 |---|---|---|---|---|
 | `67d2dae` (early Sep) | 601 | 36 | 665 | 2,613 |
 | `6bfd498` | 954 | 49 | 1,037 | 3,150 |
@@ -81,14 +81,14 @@ Other contributing factors, not measured here:
 - 41+ fixture repos are created per run, each with `git init`, `config` x3, `add`,
   `commit`.
 - Stale fixture directories from earlier aborted runs sit in `/tmp`
-  (9 `ralph-smoke-*` directories, some from 2026-09-07). They are harmless but
+  (9 `foreman-smoke-*` directories, some from 2026-09-07). They are harmless but
   suggest runs are being interrupted or killed, which loses the whole run.
 
 ## Recommendations
 
 Ordered by payoff per effort. Options 1 and 2 together are the recommended plan.
 
-### 1. Reduce process spawns in the `ralph` libraries (highest payoff)
+### 1. Reduce process spawns in the `foreman` libraries (highest payoff)
 
 This speeds up the tests and real use on Windows. Specific changes:
 
@@ -97,9 +97,9 @@ This speeds up the tests and real use on Windows. Specific changes:
   with a `while read` loop or by capturing the file into a variable and matching with
   `[[ ... =~ ... ]]`. This replaces the repeated `grep -q` per ticket.
 - Cache `git rev-parse --show-toplevel` and `--show-prefix` in variables on first use.
-- Check `ralph.conf` for CR characters once per call, not 6 times.
-- Avoid `$(_ralph_path ...)`-style helpers that spawn; have them set a variable instead
-  (`_ralph_path_var out "$path"`).
+- Check `foreman.conf` for CR characters once per call, not 6 times.
+- Avoid `$(_foreman_path ...)`-style helpers that spawn; have them set a variable instead
+  (`_foreman_path_var out "$path"`).
 - Replace the `sed` path-escaping with bash parameter expansion, or avoid the
   pattern altogether by comparing strings.
 
@@ -124,7 +124,7 @@ Each case builds its own fixture repo under `$WORK`, so cases are independent.
 Expected effect: 4-8x on a multi-core machine. It stacks with option 1.
 
 Risk: any case that shares state (a fixed path, a fixed port, the real `$HOME`, a
-shared `RALPH_KEEP_FIXTURES` directory) will become flaky. The install cases that
+shared `FOREMAN_KEEP_FIXTURES` directory) will become flaky. The install cases that
 set `INSTALL_HOME` / `INSTALL_CONFIG` / `INSTALL_BIN` need checking first.
 
 ### 3. Run the suite where spawns are cheap
@@ -133,7 +133,7 @@ Run under WSL2 or in a Linux container. Spawns there cost about 1ms, so the suit
 should drop from over an hour to a couple of minutes with no code changes. This is the
 cheapest thing to try first and gives a baseline for how much of the time is
 Windows-specific. Caveat: WSL must run the repo from its own filesystem
-(`~/ralph`), not from `/mnt/c`, or file access is slow again.
+(`~/foreman`), not from `/mnt/c`, or file access is slow again.
 
 ### 4. Split into a fast tier and a full tier
 
@@ -159,7 +159,7 @@ This lowers the everyday cost immediately but does not fix the underlying slowne
 
 - Add a timing line per case (start and end epoch, printed at the end) so the slowest
   cases are visible without profiling. Bash's `SECONDS` is enough.
-- Clean up the stale `/tmp/ralph-smoke-*` directories, and make the `EXIT` trap robust
+- Clean up the stale `/tmp/foreman-smoke-*` directories, and make the `EXIT` trap robust
   to being killed.
 - Print progress as cases run, so a long run does not look hung. During this
   investigation there was no way to tell a slow run from a stuck one.

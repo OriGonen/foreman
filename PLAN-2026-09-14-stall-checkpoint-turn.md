@@ -14,11 +14,11 @@ same spirit as `IMPLEMENTATION-PLAN-2026-09-08.md`.
 
 ## The gap
 
-`ralph-loop.sh` already distinguishes two endings for a turn that did not land its ticket:
+`foreman-loop.sh` already distinguishes two endings for a turn that did not land its ticket:
 
 1. **Progressed** (`:557-572`) — the agent committed a WIP checkpoint of its own accord
    before the turn ended. Not a failure; the same ticket gets the next iteration, capped
-   by `RALPH_MAX_CONTINUATIONS`.
+   by `FOREMAN_MAX_CONTINUATIONS`.
 2. **Stalled** (`:517-535`, branch 4) — the turn ran out of room *before* it reached its
    own checkpoint step. Nothing is committed, so there is nothing safe to build on, and
    the loop stops with `EXIT_NEEDS_HUMAN`.
@@ -40,7 +40,7 @@ protect.
 
 ### The bug (confirmed, reproduced 2026-09-12 against `365609e`)
 
-Under `RALPH_EXEC=sandbox` (the default), the stop prints `exec_show_dirty`'s
+Under `FOREMAN_EXEC=sandbox` (the default), the stop prints `exec_show_dirty`'s
 adapter-correct text (`lib/exec/sandbox.sh:111-116`):
 
 ```
@@ -49,19 +49,19 @@ adapter-correct text (`lib/exec/sandbox.sh:111-116`):
  M tests/verify_js_node.js
 
 They are in the sandbox's clone, not in this repo, and rerunning would reset
-the clone over them. Inspect with: sbx exec ralph-pixel-diffusion git diff
+the clone over them. Inspect with: sbx exec foreman-pixel-diffusion git diff
 ```
 
-— and then, immediately after, the unconditional follow-up at `ralph-loop.sh:525-532`:
+— and then, immediately after, the unconditional follow-up at `foreman-loop.sh:525-532`:
 
 ```
 git add -A && git commit -m 'wip: ... — remaining: <what is left>'
-ralph run .scratch/emergent-crowd-motion
+foreman run .scratch/emergent-crowd-motion
 ```
 
 Run as printed from the host shell, `git add -A` finds nothing — the host tree is clean,
 the changes are in the clone — so the commit is a silent no-op, and the following
-`ralph run` calls `exec_sync_down`, which hard-resets the clone and destroys the work.
+`foreman run` calls `exec_sync_down`, which hard-resets the clone and destroys the work.
 Both blocks are printed by the same stop, in the same voice, one after the other, and
 contradict each other.
 
@@ -77,7 +77,7 @@ where the dirty tree *is* the host repo and `git add -A && git commit` is exactl
   `sandbox-mount`; both sbx adapters print the bundle transport that `_sbx_sync_up`
   already uses internally — commit inside the sandbox, bundle, `sbx cp`, `git fetch`,
   `git merge --ff-only`.
-- `ralph-loop.sh:525-532` calls the adapter instead of hardcoding one mode's text.
+- `foreman-loop.sh:525-532` calls the adapter instead of hardcoding one mode's text.
 - **`exec_sync_down` refuses over a dirty tree** rather than resetting it, and says why.
 
 The two halves are one change: the stop tells the truth, *and* a user who ignores the text
@@ -110,12 +110,12 @@ see the ADR.
 
 ### The prompt
 
-Assembled inline in `ralph-prompt.sh` (no second template — it has four variable parts).
+Assembled inline in `foreman-prompt.sh` (no second template — it has four variable parts).
 It instructs the turn to read the diff since `BASE_REF`, commit it as
 `wip: <ticket> — remaining: …`, append a `progress.txt` entry ending in a `Remaining:`
 list, and **not** to continue the ticket's work. The `progress.txt` entry is load-bearing,
 not decorative: it is what the next iteration reads through the existing
-`RALPH_CONTINUATION` notice.
+`FOREMAN_CONTINUATION` notice.
 
 ### Accounting
 
@@ -125,10 +125,10 @@ not decorative: it is what the next iteration reads through the existing
 | `RUN_COST` | **incremented** — it is money |
 | `ATTEMPTS_ON_CURRENT` | **reset**, same as a progression: a stall is not an unproductive attempt |
 | `STALLS_ON_CURRENT` | new counter, **display and telemetry only** |
-| `RALPH_MAX_CONTINUATIONS` | the **single** budget, fed by stalls and progressions alike |
-| `ralph-runs.jsonl` | its own row, distinguished by a new `kind: "checkpoint"` field |
+| `FOREMAN_MAX_CONTINUATIONS` | the **single** budget, fed by stalls and progressions alike |
+| `foreman-runs.jsonl` | its own row, distinguished by a new `kind: "checkpoint"` field |
 
-No `RALPH_MAX_STALLS`. Two caps would mean a ticket could burn five continuations *and*
+No `FOREMAN_MAX_STALLS`. Two caps would mean a ticket could burn five continuations *and*
 three stalls with no single number bounding it.
 
 The cap message at `:562-570` currently reads "*has progressed N times without landing*",
@@ -139,7 +139,7 @@ size problem, split the ticket — is right either way.
 ### Budgets
 
 The budget checks run *before* an iteration (`:373-386`), but a stall is discovered
-*after* one. A stalled turn that pushed `RUN_COST` past `RALPH_MAX_COST_USD` still gets
+*after* one. A stalled turn that pushed `RUN_COST` past `FOREMAN_MAX_COST_USD` still gets
 its checkpoint turn: a budget limits how much work to commission, not whether to keep work
 already paid for. The overshoot is one short turn bounded by `--max-turns`, and the
 alternative is a stop whose printed instructions ask the user to do by hand precisely what
@@ -148,20 +148,20 @@ exceeding the budget is not a mystery.
 
 ### The next iteration's notice
 
-`RALPH_CONTINUATION` already fires (a stall feeds the same counter), but its text —
+`FOREMAN_CONTINUATION` already fires (a stall feeds the same counter), but its text —
 "*a previous iteration did part of the work and committed it*" — overstates how
 well-understood the handoff is. After a stall the `Remaining:` list was reconstructed from
 the diff by a turn that never saw the reasoning. The stall variant should say both:
 
 - the handoff was reconstructed from the diff, so it describes what is *there*, not what
   was planned;
-- the previous turn ran out of room — the same signal `RALPH_CONTEXT_RETRY` carries at
-  `ralph-prompt.sh:203`, prompting the same correct response: work smaller, commit sooner.
+- the previous turn ran out of room — the same signal `FOREMAN_CONTEXT_RETRY` carries at
+  `foreman-prompt.sh:203`, prompting the same correct response: work smaller, commit sooner.
 
 ### Tests
 
 `fake.sh` detects the checkpoint prompt by a sentinel phrase, so the test exercises the
-real prompt-assembly path rather than a side channel. `RALPH_FAKE_BEHAVIOUR=dirty` then
+real prompt-assembly path rather than a side channel. `FOREMAN_FAKE_BEHAVIOUR=dirty` then
 drives the whole stall → checkpoint → continue path end to end. A second behaviour covers
 a checkpoint turn that **fails to commit**, because that is the branch which falls through
 to the stop — and an untested stop is how the commit-1 bug survived this long.
@@ -180,13 +180,13 @@ unconditionally at the top of **every** iteration, including the first of a fres
 
 The hazard that the in-run case does not have: at run start, nobody knows who left the
 tree dirty. The sandbox is **per-repository, not per-batch**
-(`RALPH_SANDBOX="ralph-$(basename "$REPO_ROOT")"`, `ralph-config.sh:242`), so a dirty
+(`FOREMAN_SANDBOX="foreman-$(basename "$REPO_ROOT")"`, `foreman-config.sh:242`), so a dirty
 clone may be another batch's stall or a human's own `sbx exec` session. Committing that
 blind, under whatever ticket this run happened to pick first, is exactly the unreviewed
 commit the loop has always refused.
 
-**The marker.** `.ralph-stall` in the batch directory — disposable, same class as
-`.ralph-iter.bundle` (`ralph-config.sh:235`) — holding the ticket path, the base ref, and
+**The marker.** `.foreman-stall` in the batch directory — disposable, same class as
+`.foreman-iter.bundle` (`foreman-config.sh:235`) — holding the ticket path, the base ref, and
 the sandbox name. Written when a stall's checkpoint turn fails or the run ends stalled;
 checked before the first `exec_sync_down` of a run; deleted the moment a checkpoint turn
 succeeds or the tree comes back clean.
@@ -199,7 +199,7 @@ another's clone. Absence of the marker is always safe: it means "refuse and prin
 note", which is commit 1's behaviour.
 
 This is the one place the toolkit's "holds no state" rule bends. It bends the same way
-`.ralph-iter.bundle` already does — a disposable file in the batch directory, never a
+`.foreman-iter.bundle` already does — a disposable file in the batch directory, never a
 registry, and safe to delete at any time.
 
 ---
@@ -215,7 +215,7 @@ For the record, since the superseded plan treated the first of those as unknown:
 docs confirm `claude -p "<prompt>" --resume <session_id>` is supported, that the prompt is
 appended as a new user turn, that `--fork-session` exists and mints a new session id, and
 that without it the JSON payload's `session_id` equals the resumed id — which would make
-`ralph-record.cjs:233` log the same id for every resumed turn. Compaction under `--print`
+`foreman-record.cjs:233` log the same id for every resumed turn. Compaction under `--print`
 remains undocumented either way, which is the one that mattered.
 
 One optional hardening check: whether `--disallowed-tools` still bites under

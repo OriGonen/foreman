@@ -1,0 +1,80 @@
+#!/bin/bash
+# foreman — a loop that implements one ticket per iteration, in whatever repository you are
+# standing in. The toolkit is installed once per machine and holds no state of its own;
+# everything that differs between batches lives in the batch directory.
+#
+#   foreman init    <batch> [--force] [--no-order]   scaffold a batch, then order it
+#   foreman order   <batch>                have an agent (re-)order the tickets
+#   foreman status  [batch]                what is left, what is next            (free)
+#   foreman dry-run [batch]                the plan and the exact prompt         (free)
+#   foreman run     [batch] [<n>|--unlimited] [--live] [--adopt-dirty]  one iteration by default
+#   foreman next    [batch] [--list|--count|--all|--unordered]  the run order    (free)
+#   foreman report  [batch] [--by-ticket|--failures] what it cost               (free)
+#   foreman doctor  [--fix]                is this repo (and this machine) ready (free)
+#   foreman convert [<project>] [--dry-run]  move a project from ralph to foreman
+#   foreman help | foreman version
+#
+# <batch> is any directory in the current repository holding tickets and a foreman.conf.
+# It may be omitted when exactly one directory in the repo has one.
+#
+# Everything after the subcommand is passed through untouched, so the environment still
+# wins over a batch's foreman.conf:
+#
+#   FOREMAN_MAX_COST_USD=25 foreman run .scratch/my-batch
+#
+# See $FOREMAN_HOME/README.md for the whole picture.
+set -uo pipefail
+
+# The directory above this script's, from the shell: `dirname` would be a process, and `${x%/*}`
+# alone is wrong for a bare name and for a file in `/`.
+#
+# foreman.cmd hands bash a Windows path (C:\...\bin\foreman), which has no '/' to strip, so
+# backslashes are turned into slashes first; otherwise this resolves against the cwd.
+_self="${BASH_SOURCE[0]//\\//}"
+FOREMAN_HOME="${_self%/*}"; [ "$FOREMAN_HOME" != "$_self" ] || FOREMAN_HOME=.
+FOREMAN_HOME="$(cd "${FOREMAN_HOME:-/}/.." && pwd)"
+export FOREMAN_HOME
+
+# How the messages below the dispatcher should tell the user to invoke us. Exported so
+# that foreman-config.sh and everything it feeds can name the command rather than a path.
+export FOREMAN_INVOKE="${FOREMAN_INVOKE:-foreman}"
+
+LIB="$FOREMAN_HOME/lib"
+
+# The header comment above IS the help text: lines 2-24, with the leading '# ' stripped
+# and $FOREMAN_HOME expanded so the README reference is a path you can actually open.
+usage() {
+  awk 'NR==1 { next } !/^#/ { exit } { sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}" |
+    sed "s|\$FOREMAN_HOME|$FOREMAN_HOME|g"
+}
+
+version() {
+  local rev
+  rev="$(git -C "$FOREMAN_HOME" rev-parse --short HEAD 2>/dev/null)" || rev="unknown"
+  printf 'foreman %s\n%s\n' "$rev" "$FOREMAN_HOME"
+}
+
+# Splitting the batch argument out from the flags is what lets `foreman status --help` and
+# `foreman run .scratch/b 5` both work while the loop keeps its own single-argument shape.
+cmd="${1:-help}"
+[ $# -gt 0 ] && shift
+
+case "$cmd" in
+  init)      exec bash "$LIB/foreman-init.sh" "$@" ;;
+  order)     exec bash "$LIB/foreman-order.sh" "$@" ;;
+  run)       exec bash "$LIB/foreman-loop.sh" "$@" ;;
+  status)    exec bash "$LIB/foreman-loop.sh" "$@" --status ;;
+  dry-run)   exec bash "$LIB/foreman-loop.sh" "$@" --dry-run ;;
+  next)      exec bash "$LIB/foreman-next.sh" "$@" ;;
+  report)    exec node "$LIB/foreman-report.cjs" "$@" ;;
+  doctor)    exec bash "$LIB/foreman-doctor.sh" "$@" ;;
+  convert)   exec node "$LIB/foreman-convert.cjs" "$@" ;;
+  help|--help|-h)        usage; exit 0 ;;
+  version|--version|-V)  version; exit 0 ;;
+  '')        usage; exit 1 ;;
+  *)
+    printf 'foreman: unknown command '\''%s'\''\n\n' "$cmd" >&2
+    usage >&2
+    exit 1
+    ;;
+esac

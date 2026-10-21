@@ -32,7 +32,7 @@ from Git Bash), and why plain `bash` may not do.
       `/proc/version` seam, not a real WSL), and `bash test/smoke.sh` passes in full
 
 **Note:** `install.sh` detects WSL from `WSL_DISTRO_NAME` or `microsoft` in `/proc/version`
-(`RALPH_PROC_VERSION` is the test seam for the latter) and prints a warning, at the top of every
+(`FOREMAN_PROC_VERSION` is the test seam for the latter) and prints a warning, at the top of every
 mode except `--help`, naming `$HOME` and the Git Bash command. Nothing else changed. The README's
 Install section gained the PowerShell command and the reason a plain `bash` may not do. New smoke
 case: "install.sh warns under WSL, ...".

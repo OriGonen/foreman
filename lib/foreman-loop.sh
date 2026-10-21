@@ -1,23 +1,23 @@
 #!/bin/bash
 #
-# Ralph: one ticket per iteration.
+# Foreman: one ticket per iteration.
 #
-#   ralph run     <batch>              # run one iteration
-#   ralph run     <batch> 5            # run at most 5 iterations
-#   ralph run     <batch> --unlimited  # run until done or a budget stops it
-#   ralph run     <batch> --live       # show what the agent is doing, as it does it
-#   ralph run     <batch> --adopt-dirty  # review and commit uncommitted work left in the
+#   foreman run     <batch>              # run one iteration
+#   foreman run     <batch> 5            # run at most 5 iterations
+#   foreman run     <batch> --unlimited  # run until done or a budget stops it
+#   foreman run     <batch> --live       # show what the agent is doing, as it does it
+#   foreman run     <batch> --adopt-dirty  # review and commit uncommitted work left in the
 #                                        # agent's tree, then continue (see RESUMING)
-#   ralph status  <batch>              # what is left, what is next
-#   ralph dry-run <batch>              # print the plan and the next prompt
+#   foreman status  <batch>              # what is left, what is next
+#   foreman dry-run <batch>              # print the plan and the next prompt
 #
-# <batch> is any directory IN THE CURRENT REPOSITORY holding tickets and a ralph.conf —
-# see the toolkit's README.md and ralph-init.sh. Nothing about a batch is shared with any
+# <batch> is any directory IN THE CURRENT REPOSITORY holding tickets and a foreman.conf —
+# see the toolkit's README.md and foreman-init.sh. Nothing about a batch is shared with any
 # other batch: its order, its progress notes and its run logs all live in its own
 # directory. This toolkit is stateless and lives outside the repository it works on.
-# If exactly one directory in the repo has a ralph.conf, <batch> may be omitted.
+# If exactly one directory in the repo has a foreman.conf, <batch> may be omitted.
 #
-# WHERE THE WORK HAPPENS  (RALPH_EXEC, set per batch in ralph.conf)
+# WHERE THE WORK HAPPENS  (FOREMAN_EXEC, set per batch in foreman.conf)
 #   sandbox        the agent runs on a private clone inside an `sbx` sandbox and each
 #                  iteration's commits are brought back as a git bundle. The default,
 #                  and the only mode that survives a host/container native-module split
@@ -27,18 +27,18 @@
 #   fake           no agent at all — the loop, driven by a script. See lib/exec/fake.sh.
 #
 # This loop knows none of that. Each mode is an adapter in lib/exec/ satisfying the
-# interface in ralph-exec.sh, and every `exec_*` call below crosses that seam.
+# interface in foreman-exec.sh, and every `exec_*` call below crosses that seam.
 #
 # RESUMING
 #   Just run it again. There is no state file and nothing to clean up: each iteration
 #   commits the ticket's flipped Status line together with its code, so the last commit
 #   and the resume point can never disagree. Whether the loop stopped on a budget, on a
 #   usage limit, on Ctrl-C, or because the machine died, the next run starts at the first
-#   ticket that has not landed. See ralph-next.sh.
+#   ticket that has not landed. See foreman-next.sh.
 #
 #   The one exception is a run that stopped part-way through a turn — a usage limit,
 #   Ctrl-C, a dead terminal, or a stall the checkpoint turn could not salvage — leaving work
-#   uncommitted. Every agent turn writes a disposable marker (.ralph-stall-marker) in the
+#   uncommitted. Every agent turn writes a disposable marker (.foreman-stall-marker) in the
 #   batch directory first and removes it once the turn is dealt with. A rerun that finds the
 #   tree dirty and the marker matching runs a REVIEW turn before syncing: an agent reads the
 #   diff against the ticket, commits it as wip: if it is the ticket's work, and refuses it
@@ -54,31 +54,31 @@
 #   never on a dirty tree, and never a ticket whose followup ticket has not landed.
 #
 # BUDGETS (all optional; 0 or unset means no limit)
-#   RALPH_MAX_COST_USD=25     pause before an iteration that would take the run over $25
-#   RALPH_MAX_MINUTES=180     pause before an iteration once 180 minutes have elapsed
+#   FOREMAN_MAX_COST_USD=25     pause before an iteration that would take the run over $25
+#   FOREMAN_MAX_MINUTES=180     pause before an iteration once 180 minutes have elapsed
 #   <iterations> argument     pause after this many iterations (default: 1)
 #   --unlimited               no iteration cap; only cost/time budgets stop it
-#   + / - while it runs       one more / one fewer iteration (on a terminal; see ralph-keys.sh)
+#   + / - while it runs       one more / one fewer iteration (on a terminal; see foreman-keys.sh)
 #   L while it runs           live view on / off, as --live (on a terminal). The bottom row
 #                             shows the iteration count and the live view as they change.
 #
-# OTHER KNOBS (all settable in ralph.conf; the environment wins over it)
-#   RALPH_MODEL=claude-sonnet-5-5 RALPH_EFFORT=high
-#   RALPH_TICKET_ATTEMPTS=2        unproductive tries per ticket in one run before stopping
-#   RALPH_MAX_CONTINUATIONS=5      consecutive iterations that may commit progress on one
+# OTHER KNOBS (all settable in foreman.conf; the environment wins over it)
+#   FOREMAN_MODEL=claude-sonnet-5-5 FOREMAN_EFFORT=high
+#   FOREMAN_TICKET_ATTEMPTS=2        unproductive tries per ticket in one run before stopping
+#   FOREMAN_MAX_CONTINUATIONS=5      consecutive iterations that may commit progress on one
 #                                  ticket without landing it before stopping for a human
-#   RALPH_CONTEXT_BUDGET_TOKENS=200000   what the prompt tells the agent to work inside
-#   RALPH_HUMAN_WORD=ready-for-human     a ticket whose status line carries this word is a
+#   FOREMAN_CONTEXT_BUDGET_TOKENS=200000   what the prompt tells the agent to work inside
+#   FOREMAN_HUMAN_WORD=ready-for-human     a ticket whose status line carries this word is a
 #                                  HUMAN ticket: only a person can do it, so the loop stops
 #                                  before it (exit 30). Set it empty to turn that off.
-#   RALPH_ALLOW_DIRTY=1            skip the clean-tree preflight (not the per-iteration
+#   FOREMAN_ALLOW_DIRTY=1            skip the clean-tree preflight (not the per-iteration
 #                                  refusal to sync over a dirty tree — that one has no
 #                                  override, on purpose: it is what makes a rerun safe)
-#   RALPH_SANDBOX=<name>           sandbox to create/reattach to
-#   RALPH_SKIP_SANDBOX_PROBE=1     skip the batch's sandbox readiness probe and its setup
-#   RALPH_DOCKER_USERNAME / RALPH_DOCKER_PAT   (sandbox modes; the environment, else the
-#                                  credentials file ~/.config/ralph/env or $RALPH_CREDENTIALS_FILE —
-#                                  never ralph.conf) sign in to Docker with this access token
+#   FOREMAN_SANDBOX=<name>           sandbox to create/reattach to
+#   FOREMAN_SKIP_SANDBOX_PROBE=1     skip the batch's sandbox readiness probe and its setup
+#   FOREMAN_DOCKER_USERNAME / FOREMAN_DOCKER_PAT   (sandbox modes; the environment, else the
+#                                  credentials file ~/.config/foreman/env or $FOREMAN_CREDENTIALS_FILE —
+#                                  never foreman.conf) sign in to Docker with this access token
 #                                  before each run, so an expired `sbx` session never waits
 #                                  on a browser
 #
@@ -92,9 +92,9 @@
 #
 set -uo pipefail
 
-# This file's directory, from the shell and not `dirname` (see ralph-config.sh).
-RALPH_TOOL_DIR="${BASH_SOURCE[0]%/*}"; [ "$RALPH_TOOL_DIR" != "${BASH_SOURCE[0]}" ] || RALPH_TOOL_DIR=.
-RALPH_TOOL_DIR="$(cd "${RALPH_TOOL_DIR:-/}" && pwd)"
+# This file's directory, from the shell and not `dirname` (see foreman-config.sh).
+FOREMAN_TOOL_DIR="${BASH_SOURCE[0]%/*}"; [ "$FOREMAN_TOOL_DIR" != "${BASH_SOURCE[0]}" ] || FOREMAN_TOOL_DIR=.
+FOREMAN_TOOL_DIR="$(cd "${FOREMAN_TOOL_DIR:-/}" && pwd)"
 
 EXIT_DONE=0
 EXIT_PAUSED=10
@@ -117,39 +117,39 @@ while [ $# -gt 0 ]; do
     --status)    MODE=status ;;
     --dry-run)   MODE=dry-run ;;
     --unlimited) MAX_ITERATIONS=0 ;;
-    # Exported rather than set, so it lands in ralph-config.sh's environment snapshot and
-    # beats a RALPH_STREAM in the batch's ralph.conf — the same precedence every other knob
+    # Exported rather than set, so it lands in foreman-config.sh's environment snapshot and
+    # beats a FOREMAN_STREAM in the batch's foreman.conf — the same precedence every other knob
     # has. It has to be a real flag: the parser below rejects any unknown `-*`.
-    --live)      export RALPH_STREAM=1 ;;
+    --live)      export FOREMAN_STREAM=1 ;;
     --adopt-dirty) ADOPT_DIRTY=1 ;;
     --help|-h)   show_help; exit 0 ;;
-    -*)          echo "Usage: ${RALPH_INVOKE:-ralph} run [<batch>] [<iterations>|--unlimited] [--live] [--adopt-dirty]" >&2; exit 1 ;;
+    -*)          echo "Usage: ${FOREMAN_INVOKE:-foreman} run [<batch>] [<iterations>|--unlimited] [--live] [--adopt-dirty]" >&2; exit 1 ;;
     *)
       if [[ "$1" =~ ^[0-9]+$ ]]; then
         MAX_ITERATIONS="$1"
-      elif [ -z "${RALPH_BATCH:-}" ] || [ "${RALPH_BATCH_FROM_ARG:-0}" = 0 ]; then
-        export RALPH_BATCH="$1" RALPH_BATCH_FROM_ARG=1
+      elif [ -z "${FOREMAN_BATCH:-}" ] || [ "${FOREMAN_BATCH_FROM_ARG:-0}" = 0 ]; then
+        export FOREMAN_BATCH="$1" FOREMAN_BATCH_FROM_ARG=1
       else
-        echo "ralph: more than one batch given ('$RALPH_BATCH' and '$1')" >&2
+        echo "foreman: more than one batch given ('$FOREMAN_BATCH' and '$1')" >&2
         exit 1
       fi
       ;;
   esac
   shift
 done
-unset RALPH_BATCH_FROM_ARG
+unset FOREMAN_BATCH_FROM_ARG
 
-# shellcheck source=ralph-config.sh
-source "$RALPH_TOOL_DIR/ralph-config.sh" || exit 1
-# shellcheck source=ralph-human.sh
-source "$RALPH_TOOL_DIR/ralph-human.sh" || exit 1
-# shellcheck source=ralph-ui.sh
-source "$RALPH_TOOL_DIR/ralph-ui.sh" || exit 1
+# shellcheck source=foreman-config.sh
+source "$FOREMAN_TOOL_DIR/foreman-config.sh" || exit 1
+# shellcheck source=foreman-human.sh
+source "$FOREMAN_TOOL_DIR/foreman-human.sh" || exit 1
+# shellcheck source=foreman-ui.sh
+source "$FOREMAN_TOOL_DIR/foreman-ui.sh" || exit 1
 
-MAX_COST="$RALPH_MAX_COST_USD"
-MAX_MINUTES="$RALPH_MAX_MINUTES"
-TICKET_ATTEMPTS="$RALPH_TICKET_ATTEMPTS"
-MAX_CONTINUATIONS="$RALPH_MAX_CONTINUATIONS"
+MAX_COST="$FOREMAN_MAX_COST_USD"
+MAX_MINUTES="$FOREMAN_MAX_MINUTES"
+TICKET_ATTEMPTS="$FOREMAN_TICKET_ATTEMPTS"
+MAX_CONTINUATIONS="$FOREMAN_MAX_CONTINUATIONS"
 
 # ---------------------------------------------------------------------------
 # Small helpers
@@ -163,7 +163,7 @@ fsub() { awk -v a="$1" -v b="$2" 'BEGIN { printf "%.6f", a - b }'; }
 fge()  { awk -v a="$1" -v b="$2" 'BEGIN { exit !(a + 0 >= b + 0) }'; }
 fgt()  { awk -v a="$1" -v b="$2" 'BEGIN { exit !(a + 0 >  b + 0) }'; }
 
-# Pull one key out of a ralph-record.cjs verdict file. Fixed keys, sanitized values —
+# Pull one key out of a foreman-record.cjs verdict file. Fixed keys, sanitized values —
 # nothing derived from model output is ever eval'd.
 verdict_get() {
   local file="$1" key="$2" line
@@ -196,7 +196,7 @@ accumulate_usage() {
 }
 
 # Shared by a deliberate handoff and a stall a checkpoint turn salvaged: both feed the one
-# continuation cap (RALPH_MAX_CONTINUATIONS), because a ticket that alternates between the
+# continuation cap (FOREMAN_MAX_CONTINUATIONS), because a ticket that alternates between the
 # two shapes of "committed but not landed" must still be bounded by a single number. Prints
 # the stop and returns 0 once the cap is reached; returns 1 (nothing printed) otherwise.
 #
@@ -226,7 +226,7 @@ continuation_cap_reached() {
 # iteration they rescue. A review checkpoint (the start-of-run rescue, see
 # docs/adr/0002-in-flight-marker-and-review-turn.md) must first read the ticket, the diff
 # and every new file before it can judge the work, and on a large leftover diff 6 turns ran
-# out before the commit. Neither is a ralph.conf knob, on purpose: see
+# out before the commit. Neither is a foreman.conf knob, on purpose: see
 # docs/adr/0001-checkpoint-turn-over-session-resume.md.
 CHECKPOINT_MAX_TURNS=10
 REVIEW_CHECKPOINT_MAX_TURNS=20
@@ -238,12 +238,12 @@ budget_label() {
 }
 
 tree_is_dirty() { [ -n "$(git status --porcelain)" ]; }
-ticket_is_done() { ralph_ticket_is_done "$1"; }
+ticket_is_done() { foreman_ticket_is_done "$1"; }
 
 # ---------------------------------------------------------------------------
 # Marking a finished ticket's file
 #
-# A landed ticket whose checklist is fully ticked is renamed to ${RALPH_DONE_PREFIX}<name>
+# A landed ticket whose checklist is fully ticked is renamed to ${FOREMAN_DONE_PREFIX}<name>
 # and the rename committed, so a directory listing shows what is finished. Both halves of
 # "complete" are required: the status line says the agent believes it is done, the boxes say
 # what it actually checked off. A ticket with the one and not the other keeps its name.
@@ -252,7 +252,7 @@ ticket_is_done() { ralph_ticket_is_done "$1"; }
 # the sort of thing that goes wrong quietly inside a turn.
 #
 # A ticket that a not-done followup ticket still `Checks:` keeps its name until that followup
-# lands (see ralph-human.sh), and landing a followup ticket renames the ticket it checked as
+# lands (see foreman-human.sh), and landing a followup ticket renames the ticket it checked as
 # well. A run also sweeps for done tickets at its start — that is how a ticket set to done by
 # hand gets its prefix.
 #
@@ -263,26 +263,26 @@ ticket_has_unchecked_boxes() { grep -q '^[[:space:]]*[-*+][[:space:]][[:space:]]
 
 mark_ticket_done_on_disk() {    # mark_ticket_done_on_disk TICKET
   local ticket="$1" base dir renamed pending
-  [ -n "$RALPH_DONE_PREFIX" ] || return 0
+  [ -n "$FOREMAN_DONE_PREFIX" ] || return 0
   base="${ticket##*/}"
-  case "$base" in "$RALPH_DONE_PREFIX"*) return 0 ;; esac
+  case "$base" in "$FOREMAN_DONE_PREFIX"*) return 0 ;; esac
   [ -f "$ticket" ] && ticket_is_done "$ticket" || return 0
 
   if ticket_has_unchecked_boxes "$ticket"; then
-    warn_note "$ticket is '$RALPH_DONE_WORD' but has unchecked boxes — leaving its name alone"
+    warn_note "$ticket is '$FOREMAN_DONE_WORD' but has unchecked boxes — leaving its name alone"
     return 0
   fi
 
   # A ticket its followup ticket has not yet verified stays as it is: a human ticket renamed
   # and then sent back would be a finished-looking file waiting on a person.
-  pending="$(ralph_pending_checker "$ticket")"
+  pending="$(foreman_pending_checker "$ticket")"
   if [ -n "$pending" ]; then
     warn_note "$ticket waits for $pending before it is marked done"
     return 0
   fi
 
-  _ralph_dirname dir "$ticket"
-  renamed="$dir/$RALPH_DONE_PREFIX$base"
+  _foreman_dirname dir "$ticket"
+  renamed="$dir/$FOREMAN_DONE_PREFIX$base"
   if [ -e "$renamed" ]; then
     warn_note "$renamed already exists — not renaming $ticket"
     return 0
@@ -293,7 +293,7 @@ mark_ticket_done_on_disk() {    # mark_ticket_done_on_disk TICKET
     return 0
   fi
   # Only the two paths: a bare `git commit` would sweep up anything else staged, which
-  # RALPH_ALLOW_DIRTY makes possible.
+  # FOREMAN_ALLOW_DIRTY makes possible.
   if ! git commit --quiet -m "chore: mark $base done" -- "$ticket" "$renamed" >/dev/null 2>&1; then
     git mv -- "$renamed" "$ticket" >/dev/null 2>&1
     warn_note "could not commit the rename of $ticket — left it as is"
@@ -303,25 +303,25 @@ mark_ticket_done_on_disk() {    # mark_ticket_done_on_disk TICKET
 }
 
 # The same for the batch directory, once every ticket in it is done: .scratch/foo becomes
-# .scratch/${RALPH_DONE_PREFIX}foo, renamed and committed on its own. One prefix knob covers
+# .scratch/${FOREMAN_DONE_PREFIX}foo, renamed and committed on its own. One prefix knob covers
 # both; empty turns both off. Only called when the run has finished the batch — last thing a
 # run does, since its footer is still being written into the directory — or found nothing left
 # to do. Anything that names the batch afterwards needs the new path.
 #
 # Never fatal, for the same reason as the ticket version. A batch with tracked files modified
-# or staged keeps its name: the pathspec commit would sweep them in, which RALPH_ALLOW_DIRTY
+# or staged keeps its name: the pathspec commit would sweep them in, which FOREMAN_ALLOW_DIRTY
 # makes possible. Untracked and ignored files (the run log, progress.txt) just travel with
 # the directory.
 mark_batch_done_on_disk() {
   local base dir renamed
-  [ -n "$RALPH_DONE_PREFIX" ] || return 0
+  [ -n "$FOREMAN_DONE_PREFIX" ] || return 0
   [ "$BATCH_DIR" != "." ] || return 0
-  _ralph_basename base "$BATCH_DIR"
-  case "$base" in "$RALPH_DONE_PREFIX"*) return 0 ;; esac
+  _foreman_basename base "$BATCH_DIR"
+  case "$base" in "$FOREMAN_DONE_PREFIX"*) return 0 ;; esac
 
-  _ralph_dirname dir "$BATCH_DIR"
-  renamed="$dir/$RALPH_DONE_PREFIX$base"
-  [ "$dir" != "." ] || renamed="$RALPH_DONE_PREFIX$base"
+  _foreman_dirname dir "$BATCH_DIR"
+  renamed="$dir/$FOREMAN_DONE_PREFIX$base"
+  [ "$dir" != "." ] || renamed="$FOREMAN_DONE_PREFIX$base"
   if [ -e "$renamed" ]; then
     warn_note "$renamed already exists — not renaming $BATCH_DIR"
     return 0
@@ -343,11 +343,11 @@ mark_batch_done_on_disk() {
   say_event ok "batch marked done" "$renamed"
 }
 
-# `ralph next`, asked in-process: the config is already loaded, and a child `bash ralph-next.sh`
+# `foreman next`, asked in-process: the config is already loaded, and a child `bash foreman-next.sh`
 # would source it all again for every question. Same modes, same output, same status (0, 1 for
 # nothing left, 2 for a malformed batch). A snapshot of the list, when one is held, answers
-# without listing the batch again — see ralph-tickets.sh for when to hold and release one.
-next_sh() { ralph_next_answer "${1:-next}"; }
+# without listing the batch again — see foreman-tickets.sh for when to hold and release one.
+next_sh() { foreman_next_answer "${1:-next}"; }
 
 # The remaining tickets, numbered exactly as plain `nl -w3 -s'  '` would, but with a human
 # ticket marked `[HUMAN]` and a followup ticket marked `[CHECKS <name>]` — the one listing
@@ -359,11 +359,11 @@ print_remaining_marked() {    # print_remaining_marked < ticket-list
     [ -n "$ticket" ] || continue
     n=$((n + 1))
     mark=""
-    ralph_ticket_status "$ticket"
-    if [ "$_RALPH_TICKET_HUMAN" = 1 ]; then
+    foreman_ticket_status "$ticket"
+    if [ "$_FOREMAN_TICKET_HUMAN" = 1 ]; then
       ui_paint mark 1 warn "[HUMAN]"; mark="   $mark"
-    elif [ -n "$_RALPH_TICKET_CHECKS" ]; then
-      ui_paint mark 1 muted "[CHECKS $_RALPH_TICKET_CHECKS]"; mark="   $mark"
+    elif [ -n "$_FOREMAN_TICKET_CHECKS" ]; then
+      ui_paint mark 1 muted "[CHECKS $_FOREMAN_TICKET_CHECKS]"; mark="   $mark"
     fi
     printf -v line '%3d  %s%s' "$n" "${ticket##*/}" "$mark"
     say "$line"
@@ -375,7 +375,7 @@ human_tickets_remaining() {
   local count=0 ticket
   while IFS= read -r ticket; do
     [ -n "$ticket" ] || continue
-    ralph_ticket_needs_human "$ticket" && count=$((count + 1))
+    foreman_ticket_needs_human "$ticket" && count=$((count + 1))
   done < <(next_sh --list)
   printf '%s' "$count"
 }
@@ -385,9 +385,9 @@ resume_args() {
   local live=""
   if [ "$MAX_ITERATIONS" -gt 0 ]; then printf ' %s' "$MAX_ITERATIONS"; else printf ' --unlimited'; fi
   # The live view as the run ended, when L turned it on: --live only adds, and a run that
-  # started live (flag or ralph.conf) will start live again without being told.
+  # started live (flag or foreman.conf) will start live again without being told.
   [ -n "${RUN_CTL_DIR:-}" ] && read -r live 2>/dev/null < "$RUN_CTL_DIR/live"
-  [ "$live" != 1 ] || [ "$RALPH_STREAM" = 1 ] || printf ' --live'
+  [ "$live" != 1 ] || [ "$FOREMAN_STREAM" = 1 ] || printf ' --live'
 }
 
 # What a run says wherever it stops at a human ticket — before it starts, when it gets there
@@ -395,16 +395,16 @@ resume_args() {
 # to stdout; callers that want stderr redirect.
 human_ticket_note() {    # human_ticket_note TICKET
   local ticket="$1" handoff n=1 done_step sent_back_by
-  handoff="$(ralph_handoff_path "$ticket")"
+  handoff="$(foreman_handoff_path "$ticket")"
   say_rule "$ticket is a human ticket. The loop stops here."
   say ""
-  sent_back_by="$(ralph_was_sent_back "$ticket")"
+  sent_back_by="$(foreman_was_sent_back "$ticket")"
   if [ -n "$sent_back_by" ]; then
     say "↩ It was sent back by $sent_back_by: read '## Sent back by $sent_back_by' at the"
     say "   bottom of it."
     say ""
   fi
-  say "It is marked '$RALPH_STATUS_LINE $RALPH_HUMAN_WORD': no agent is given it, and no ticket"
+  say "It is marked '$FOREMAN_STATUS_LINE $FOREMAN_HUMAN_WORD': no agent is given it, and no ticket"
   say "after it runs until it is done. It is your turn now:"
   say ""
   say "  $n. Do what the ticket asks."; n=$((n + 1))
@@ -412,9 +412,9 @@ human_ticket_note() {    # human_ticket_note TICKET
     say "  $n. Fill in every section of $handoff."; n=$((n + 1))
   fi
   say "  $n. Commit your work${handoff:+ and the handoff file}."; n=$((n + 1))
-  say "  $n. Set its status line to '$RALPH_STATUS_LINE done', tick its boxes, and commit."
+  say "  $n. Set its status line to '$FOREMAN_STATUS_LINE done', tick its boxes, and commit."
   done_step=$n; n=$((n + 1))
-  say "  $n. Rerun:  $RALPH_INVOKE run $BATCH_DIR$(resume_args)"
+  say "  $n. Rerun:  $FOREMAN_INVOKE run $BATCH_DIR$(resume_args)"
   say ""
   say "Rerunning before step $done_step stops here again, and costs nothing."
 }
@@ -445,7 +445,7 @@ stall_marker_get() {
 }
 
 write_stall_marker() {    # write_stall_marker TICKET BASE
-  printf 'ticket=%s\nbase_ref=%s\nsandbox=%s\n' "$1" "$2" "$RALPH_SANDBOX" > "$STALL_MARKER_FILE" ||
+  printf 'ticket=%s\nbase_ref=%s\nsandbox=%s\n' "$1" "$2" "$FOREMAN_SANDBOX" > "$STALL_MARKER_FILE" ||
     warn_note "could not record the stall, so a rerun will refuse rather than rescue it"
 }
 
@@ -453,7 +453,7 @@ write_stall_marker() {    # write_stall_marker TICKET BASE
 # Ctrl-C, a closed terminal, a dead machine — leaves the marker behind to vouch for the tree
 # it leaves. Removed once the turn's result has been dealt with (see the main loop).
 #
-# Only where the marker is gitignored, as ralph init and ralph doctor arrange: the agent's
+# Only where the marker is gitignored, as foreman init and foreman doctor arrange: the agent's
 # `git add -A` runs while it exists, and in a mode where the agent works in this tree an
 # unignored marker would be swept into the ticket's commit. Without the ignore line a run
 # simply has no in-flight marker, and a stop mid-turn is refused as it always was.
@@ -469,7 +469,7 @@ mark_turn_in_flight() {
 stall_marker_matches() {    # stall_marker_matches TICKET
   [ -f "$STALL_MARKER_FILE" ] || return 1
   [ -n "$1" ] || return 1
-  [ "$(stall_marker_get sandbox)" = "$RALPH_SANDBOX" ] || return 1
+  [ "$(stall_marker_get sandbox)" = "$FOREMAN_SANDBOX" ] || return 1
   [ "$(stall_marker_get base_ref)" = "$(git rev-parse HEAD)" ] || return 1
   [ "$(stall_marker_get ticket)" = "$1" ]
 }
@@ -478,9 +478,9 @@ stall_marker_matches() {    # stall_marker_matches TICKET
 # The exec adapter: everything about where the agent runs and how its commits get here.
 # Loaded once, after `say`/`warn` exist so the adapter can print through them.
 # ---------------------------------------------------------------------------
-# shellcheck source=ralph-exec.sh
-source "$RALPH_TOOL_DIR/ralph-exec.sh" || exit 1
-ralph_exec_load "$RALPH_EXEC" || exit 1
+# shellcheck source=foreman-exec.sh
+source "$FOREMAN_TOOL_DIR/foreman-exec.sh" || exit 1
+foreman_exec_load "$FOREMAN_EXEC" || exit 1
 
 # ---------------------------------------------------------------------------
 # Status / dry-run modes exit before anything is spent
@@ -495,14 +495,14 @@ progress_line() {
 }
 
 if [ "$MODE" = "status" ]; then
-  say_tag accent "Batch:" "$BATCH_DIR${RALPH_BATCH_NAME:+ ($RALPH_BATCH_NAME)}"
+  say_tag accent "Batch:" "$BATCH_DIR${FOREMAN_BATCH_NAME:+ ($FOREMAN_BATCH_NAME)}"
   # Nothing here changes a ticket, so the list is worked out once and every question below is
   # answered from it.
-  ralph_tickets_hold || exit 1
+  foreman_tickets_hold || exit 1
   progress_line || exit 1
   say ""
   if next_ticket=$(next_sh); then
-    if ralph_ticket_needs_human "$next_ticket"; then
+    if foreman_ticket_needs_human "$next_ticket"; then
       ui_paint human_flag 1 warn "[HUMAN — the loop will not run until you do it]"
       say_tag accent "Next:" "${next_ticket##*/}   $human_flag"
     else
@@ -512,14 +512,14 @@ if [ "$MODE" = "status" ]; then
     say "Remaining, in order:"
     next_sh --list | print_remaining_marked
     say ""
-    if ralph_ticket_needs_human "$next_ticket"; then
+    if foreman_ticket_needs_human "$next_ticket"; then
       human_ticket_note "$next_ticket"
     else
       human_ticket=""
       pos=0
       while IFS= read -r t; do
         pos=$((pos + 1))
-        if ralph_ticket_needs_human "$t"; then human_ticket="$t"; break; fi
+        if foreman_ticket_needs_human "$t"; then human_ticket="$t"; break; fi
       done < <(next_sh --list)
       if [ -n "$human_ticket" ]; then
         say "The loop will run $((pos - 1)) ticket(s), then stop at ${human_ticket##*/} for a human."
@@ -528,7 +528,7 @@ if [ "$MODE" = "status" ]; then
   else
     say "Nothing left — every ticket in this batch is done."
   fi
-  warnings="$(ralph_human_warnings)"
+  warnings="$(foreman_human_warnings)"
   if [ -n "$warnings" ]; then
     say ""
     printf '%s\n' "$warnings"
@@ -550,7 +550,7 @@ done
 if [ "$MODE" = "run" ]; then
   exec_tool="$(exec_required_tool)"
   if [ -n "$exec_tool" ] && ! command -v "$exec_tool" >/dev/null 2>&1; then
-    warn_preflight "'$exec_tool' is not on PATH (RALPH_EXEC=$RALPH_EXEC)"
+    warn_preflight "'$exec_tool' is not on PATH (FOREMAN_EXEC=$FOREMAN_EXEC)"
     preflight_failed=1
   fi
   exec_preflight || preflight_failed=1
@@ -560,7 +560,7 @@ fi
 
 # Validates every ticket path and fails loudly on a typo. It also holds the list for the
 # questions the rest of the preflight asks, which change nothing.
-ralph_tickets_hold || preflight_failed=1
+foreman_tickets_hold || preflight_failed=1
 
 # A dirty tree poisons the per-iteration review base: BASE_REF is HEAD, so anything
 # already modified gets reviewed as though this ticket wrote it.
@@ -568,11 +568,11 @@ ralph_tickets_hold || preflight_failed=1
 # Not when the stall marker vouches for it: that tree is about to be checkpointed before any
 # iteration starts (see "Start of run" in the loop), so it is not the reviewer's problem.
 # Nor under --adopt-dirty, which asks for exactly that checkpoint without a marker.
-if [ "$RALPH_ALLOW_DIRTY" != "1" ] && [ "$ADOPT_DIRTY" != "1" ] && tree_is_dirty &&
+if [ "$FOREMAN_ALLOW_DIRTY" != "1" ] && [ "$ADOPT_DIRTY" != "1" ] && tree_is_dirty &&
    ! stall_marker_matches "$(next_sh 2>/dev/null)"; then
   warn_preflight "the working tree is dirty. Commit or set aside first, so this"
   warn "           iteration's review sees only what this iteration wrote."
-  warn "           Override with RALPH_ALLOW_DIRTY=1."
+  warn "           Override with FOREMAN_ALLOW_DIRTY=1."
   git status --short >&2
   preflight_failed=1
 fi
@@ -585,11 +585,11 @@ fi
 # a rename commit would move HEAD and break stall_marker_matches, losing the automatic rescue.
 # Only in a run — status and dry-run never commit.
 if [ "$MODE" = "run" ] && ! tree_is_dirty; then
-  ralph_tickets_release    # the renames below change the list
+  foreman_tickets_release    # the renames below change the list
   while IFS= read -r swept; do
     mark_ticket_done_on_disk "$swept"
   done < <(next_sh --all)
-  ralph_tickets_hold || exit 1    # the start-up questions below, on the list as it now stands
+  foreman_tickets_hold || exit 1    # the start-up questions below, on the list as it now stands
 fi
 # Whatever list is held here serves the start-up questions only: the loop releases it before
 # its first pass, since every iteration can change the list.
@@ -605,7 +605,7 @@ elif [ "$pick_status" -ne 0 ]; then
   exit 1
 fi
 
-if [ "$MODE" = "run" ] && ralph_ticket_needs_human "$next_ticket"; then
+if [ "$MODE" = "run" ] && foreman_ticket_needs_human "$next_ticket"; then
   # Before the run log header, before exec_prepare: nothing starts and nothing is recorded,
   # so rerunning until the person is done costs exactly nothing.
   human_ticket_note "$next_ticket" >&2
@@ -618,20 +618,20 @@ if [ "$MODE" = "dry-run" ]; then
   say ""
   say "Would run, in this order:"
   next_sh --list | print_remaining_marked
-  dry_run_warnings="$(ralph_human_warnings)"
+  dry_run_warnings="$(foreman_human_warnings)"
   if [ -n "$dry_run_warnings" ]; then
     say ""
     printf '%s\n' "$dry_run_warnings"
   fi
   say ""
   say "Exec:    $(exec_describe)"
-  say "Model:   $RALPH_MODEL   Effort: $RALPH_EFFORT"
+  say "Model:   $FOREMAN_MODEL   Effort: $FOREMAN_EFFORT"
   # The effective permission mode, which is a per-mode default unless the batch set one —
   # and the only place outside a real `claude` call where you can see which one won.
-  say "Perms:   $RALPH_PERMISSION_MODE"
+  say "Perms:   $FOREMAN_PERMISSION_MODE"
   # The other decision `fake` cannot exercise, for the same reason: it never invokes `claude`
   # and so never chooses an --output-format.
-  if [ "$RALPH_STREAM" = "1" ]; then
+  if [ "$FOREMAN_STREAM" = "1" ]; then
     say "Live:    on (stream-json; file writes and shell commands drawn to stderr)"
   else
     say "Live:    off (json; add --live to watch the iteration)"
@@ -640,16 +640,16 @@ if [ "$MODE" = "dry-run" ]; then
   say "Logs:    $RUN_JSONL"
   say "         $RUN_LOG"
   say ""
-  if ralph_ticket_needs_human "$next_ticket"; then
+  if foreman_ticket_needs_human "$next_ticket"; then
     say "Would stop before $next_ticket: it is a human ticket. No prompt would be sent."
     exit 0
   fi
   say "=== prompt that would be sent for $next_ticket ==="
   TICKET_FILE="$next_ticket"
   BASE_REF=$(git rev-parse HEAD)
-  # shellcheck source=ralph-prompt.sh
-  source "$RALPH_TOOL_DIR/ralph-prompt.sh"
-  printf '%s\n' "$RALPH_PROMPT"
+  # shellcheck source=foreman-prompt.sh
+  source "$FOREMAN_TOOL_DIR/foreman-prompt.sh"
+  printf '%s\n' "$FOREMAN_PROMPT"
   say "=== end prompt (nothing was sent; no sandbox was started) ==="
   exit 0
 fi
@@ -682,14 +682,14 @@ VERDICT_FILE="$(mktemp)"
 # because exec_run is now the head of a pipeline rather than a command substitution — see
 # the call site for why that matters.
 PAYLOAD_FILE="$(mktemp)"
-# What the key reader (ralph-keys.sh) and this loop share: `budget` and `live`, which the
+# What the key reader (foreman-keys.sh) and this loop share: `budget` and `live`, which the
 # reader owns once they are seeded here, `iteration`, which only this loop writes, `screen`,
 # the status bar's size, and `activity`, what the agent is doing for the live view's row.
-# See refresh_budget and ralph-keys.sh.
+# See refresh_budget and foreman-keys.sh.
 RUN_CTL_DIR="$(mktemp -d)"
 printf '%s\n' "$MAX_ITERATIONS" > "$RUN_CTL_DIR/budget"
 printf '0\n' > "$RUN_CTL_DIR/iteration"
-printf '%s\n' "$RALPH_STREAM" > "$RUN_CTL_DIR/live"
+printf '%s\n' "$FOREMAN_STREAM" > "$RUN_CTL_DIR/live"
 KEYS_PID=""
 SAVED_STTY=""
 on_exit() {
@@ -723,10 +723,10 @@ refresh_budget() {
 }
 
 # The one thing that differs between a plain run and a watched one, on this side of the
-# seam. ralph-stream.cjs is in the pipeline either way — in plain mode it is a pass-through
+# seam. foreman-stream.cjs is in the pipeline either way — in plain mode it is a pass-through
 # — so there is one code path here rather than two.
 #
-# On a terminal the L key can turn the view on or off at any moment (ralph-keys.sh), so the
+# On a terminal the L key can turn the view on or off at any moment (foreman-keys.sh), so the
 # agent always reports in stream-json there. With a status bar (stderr a terminal too, and
 # tall enough) the filter only writes down what the agent is doing, and the key reader draws
 # it above the bar: one process drawing, so the two can never trip over each other. Without
@@ -739,17 +739,17 @@ if [ -t 0 ] && [ -t 2 ] && [ "${TERM:-}" != dumb ]; then
 fi
 STREAM_ARGS=()
 if [ -t 0 ]; then
-  export RALPH_LIVE_KEY=1
+  export FOREMAN_LIVE_KEY=1
   if [ "$BAR_ROWS" -gt 0 ]; then
     STREAM_ARGS=(--activity-file "$RUN_CTL_DIR/activity")
   else
     STREAM_ARGS=(--live-file "$RUN_CTL_DIR/live")
   fi
-elif [ "$RALPH_STREAM" = "1" ]; then
+elif [ "$FOREMAN_STREAM" = "1" ]; then
   STREAM_ARGS=(--live)
 fi
-# The ticker is drawn by a node process that cannot see ralph.conf, so the one colour decision
-# (ralph-ui.sh, for stderr, which is where it draws) is made here and handed over as a flag.
+# The ticker is drawn by a node process that cannot see foreman.conf, so the one colour decision
+# (foreman-ui.sh, for stderr, which is where it draws) is made here and handed over as a flag.
 [ "${#STREAM_ARGS[@]}" -gt 0 ] && ui_color_on 2 && STREAM_ARGS+=(--color)
 
 # Ctrl-C should end the run between iterations rather than half-way through one. The trap
@@ -766,19 +766,19 @@ on_interrupt() {
 }
 trap on_interrupt INT TERM
 
-_ralph_dirname _jsonl_dir "$RUN_JSONL"
-_ralph_dirname _log_dir "$RUN_LOG"
+_foreman_dirname _jsonl_dir "$RUN_JSONL"
+_foreman_dirname _log_dir "$RUN_LOG"
 mkdir -p "$_jsonl_dir" "$_log_dir"
 unset _jsonl_dir _log_dir
 log_append ""
 log_append "#############################################################################"
 log_append "# run $RUN_ID started $RUN_STARTED_AT"
-log_append "# batch=$BATCH_DIR exec=$RALPH_EXEC model=$RALPH_MODEL effort=$RALPH_EFFORT"
+log_append "# batch=$BATCH_DIR exec=$FOREMAN_EXEC model=$FOREMAN_MODEL effort=$FOREMAN_EFFORT"
 log_append "# budgets: cost=$(budget_label "$MAX_COST" '$') time=$(budget_label "$MAX_MINUTES" '' m) iterations=$(budget_label "$MAX_ITERATIONS")"
 log_append "# head at start: $(git rev-parse HEAD)"
 log_append "#############################################################################"
 
-say "run $RUN_ID  ·  $BATCH_DIR  ·  $RALPH_EXEC  ·  model $RALPH_MODEL  ·  effort $RALPH_EFFORT"
+say "run $RUN_ID  ·  $BATCH_DIR  ·  $FOREMAN_EXEC  ·  model $FOREMAN_MODEL  ·  effort $FOREMAN_EFFORT"
 progress_line
 say ""
 
@@ -793,19 +793,19 @@ exec_prepare || exit 1
 # `&` /dev/null.
 #
 # With a status bar (see STREAM_ARGS), the bottom row becomes the bar the reader draws
-# (ralph-ui.sh), and the row above it the live view while that is on. The hint line goes
+# (foreman-ui.sh), and the row above it the live view while that is on. The hint line goes
 # first, so it scrolls with the rest of the header.
 if [ -t 0 ]; then
   SAVED_STTY="$(stty -g 2>/dev/null)"
   say "keys: + one more iteration  ·  - one fewer  ·  L live view on/off"
   say ""
   if [ "$BAR_ROWS" -gt 0 ]; then
-    _kept=1; [ "$RALPH_STREAM" != 1 ] || _kept=2
+    _kept=1; [ "$FOREMAN_STREAM" != 1 ] || _kept=2
     printf '%s %s %s\n' "$BAR_ROWS" "$BAR_COLS" "$_kept" > "$RUN_CTL_DIR/screen"
     ui_bar_rows "$BAR_ROWS" 0 "$_kept"
     unset _kept
   fi
-  bash "$RALPH_TOOL_DIR/ralph-keys.sh" "$RUN_CTL_DIR" $$ <&0 &
+  bash "$FOREMAN_TOOL_DIR/foreman-keys.sh" "$RUN_CTL_DIR" $$ <&0 &
   KEYS_PID=$!
 fi
 
@@ -871,11 +871,11 @@ checkpoint_discarded_note() {
 #              in CHECKPOINT_REJECTION
 run_checkpoint_turn() {    # run_checkpoint_turn [stall|review]
   local mode="${1:-stall}"
-  # ralph-prompt.sh defines ralph_checkpoint_prompt; the loop sources it per iteration, so
+  # foreman-prompt.sh defines foreman_checkpoint_prompt; the loop sources it per iteration, so
   # before the first iteration it has not been loaded yet.
-  if ! declare -F ralph_review_checkpoint_prompt >/dev/null 2>&1; then
-    # shellcheck source=ralph-prompt.sh
-    source "$RALPH_TOOL_DIR/ralph-prompt.sh"
+  if ! declare -F foreman_review_checkpoint_prompt >/dev/null 2>&1; then
+    # shellcheck source=foreman-prompt.sh
+    source "$FOREMAN_TOOL_DIR/foreman-prompt.sh"
   fi
 
   # Deliberately NOT preceded by exec_sync_down. exec_run and exec_sync_down are already
@@ -886,10 +886,10 @@ run_checkpoint_turn() {    # run_checkpoint_turn [stall|review]
   local -a checkpoint_args_saved
   CHECKPOINT_REJECTION=""
   if [ "$mode" = review ]; then
-    checkpoint_prompt="$(ralph_review_checkpoint_prompt "$TICKET_FILE" "$BASE_REF")"
+    checkpoint_prompt="$(foreman_review_checkpoint_prompt "$TICKET_FILE" "$BASE_REF")"
     checkpoint_max_turns=$REVIEW_CHECKPOINT_MAX_TURNS
   else
-    checkpoint_prompt="$(ralph_checkpoint_prompt "$TICKET_FILE" "$BASE_REF")"
+    checkpoint_prompt="$(foreman_checkpoint_prompt "$TICKET_FILE" "$BASE_REF")"
     checkpoint_max_turns=$CHECKPOINT_MAX_TURNS
   fi
   checkpoint_started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -897,19 +897,19 @@ run_checkpoint_turn() {    # run_checkpoint_turn [stall|review]
   # committed part of its work before it stopped, and a checkpoint that then discards the
   # rest must not read as one that salvaged it.
   checkpoint_head_before="$(git rev-parse HEAD)"
-  # Guarded expansion, same as RALPH_CLAUDE_ARGS's other two call sites (local.sh,
+  # Guarded expansion, same as FOREMAN_CLAUDE_ARGS's other two call sites (local.sh,
   # _sbx.sh): under bash < 4.4 and `set -u`, expanding an array that is declared but
   # empty still raises "unbound variable" without the `+` guard.
-  checkpoint_args_saved=(${RALPH_CLAUDE_ARGS+"${RALPH_CLAUDE_ARGS[@]}"})
-  RALPH_CLAUDE_ARGS+=(--max-turns "$checkpoint_max_turns")
+  checkpoint_args_saved=(${FOREMAN_CLAUDE_ARGS+"${FOREMAN_CLAUDE_ARGS[@]}"})
+  FOREMAN_CLAUDE_ARGS+=(--max-turns "$checkpoint_max_turns")
   # A checkpoint turn killed part-way is still uncommitted work a rerun should review.
   mark_turn_in_flight
   exec_run "$checkpoint_prompt" "$TICKET_FILE" </dev/null |
-    node "$RALPH_TOOL_DIR/ralph-stream.cjs" ${STREAM_ARGS+"${STREAM_ARGS[@]}"} > "$PAYLOAD_FILE"
+    node "$FOREMAN_TOOL_DIR/foreman-stream.cjs" ${STREAM_ARGS+"${STREAM_ARGS[@]}"} > "$PAYLOAD_FILE"
   checkpoint_agent_status=${PIPESTATUS[0]}
   checkpoint_result=$(cat "$PAYLOAD_FILE")
   rm -f "$RUN_CTL_DIR/activity"
-  RALPH_CLAUDE_ARGS=(${checkpoint_args_saved+"${checkpoint_args_saved[@]}"})
+  FOREMAN_CLAUDE_ARGS=(${checkpoint_args_saved+"${checkpoint_args_saved[@]}"})
 
   # Bring back whatever the checkpoint turn committed (only the clone-based sandbox has
   # any transporting to do here) and see whether it actually rescued the work.
@@ -920,7 +920,7 @@ run_checkpoint_turn() {    # run_checkpoint_turn [stall|review]
   # salvaged — so per-iteration cost/duration figures are not distorted by a second turn
   # hidden inside them, and a human reading the log can tell the two apart.
   : > "$VERDICT_FILE"
-  printf '%s' "$checkpoint_result" | node "$RALPH_TOOL_DIR/ralph-record.cjs" \
+  printf '%s' "$checkpoint_result" | node "$FOREMAN_TOOL_DIR/foreman-record.cjs" \
     --jsonl "$RUN_JSONL" --log "$RUN_LOG" --verdict "$VERDICT_FILE" \
     --run-id "$RUN_ID" --iteration "$ITERATIONS_RUN" --ticket "$TICKET_FILE" \
     --batch "$BATCH_DIR" --kind checkpoint \
@@ -950,7 +950,7 @@ run_checkpoint_turn() {    # run_checkpoint_turn [stall|review]
 }
 
 # The reasons a review checkpoint turn gave for refusing, from the refusal line at the end of
-# its reply (ralph-prompt.sh's RALPH_REVIEW_REJECTED_SENTINEL). Prints them and succeeds when
+# its reply (foreman-prompt.sh's FOREMAN_REVIEW_REJECTED_SENTINEL). Prints them and succeeds when
 # there is such a line; fails when there is none. The payload is the result object, or — in
 # the live view — stream-json ending in it; anything unparseable is searched as plain text.
 review_rejection_reasons() {    # review_rejection_reasons PAYLOAD_FILE
@@ -972,7 +972,7 @@ review_rejection_reasons() {    # review_rejection_reasons PAYLOAD_FILE
     const last = hits[hits.length - 1];
     const reasons = last.slice(last.indexOf(sentinel) + sentinel.length).replace(/^[\s:\u2014-]+/, "").trim();
     console.log(reasons || "(no reasons given)");
-  ' "$1" "$RALPH_REVIEW_REJECTED_SENTINEL"
+  ' "$1" "$FOREMAN_REVIEW_REJECTED_SENTINEL"
 }
 
 while true; do
@@ -983,7 +983,7 @@ while true; do
 
   # The last iteration may have landed, renamed or reordered tickets: whatever list was held
   # before it is not to be trusted, and nothing below holds a new one.
-  ralph_tickets_release
+  foreman_tickets_release
 
   # Not `if ! TICKET_FILE=$(...)`: after a `!` negation bash reports the *inverted* status
   # in $?, so the "nothing left" case (exit 1) would read as 0 and be mistaken for a
@@ -996,7 +996,7 @@ while true; do
       say "Every ticket in $BATCH_DIR is done."
       FINAL_STATUS="$EXIT_DONE"
     else
-      warn "ralph next failed with status $pick_status"
+      warn "foreman next failed with status $pick_status"
       FINAL_STATUS=1
     fi
     break
@@ -1007,11 +1007,11 @@ while true; do
   # and the truer reason to stop is that a person is needed — a rerun with more budget would
   # hit this gate anyway. Only the NEXT ticket is looked at; the order is trusted, so runnable
   # work behind a human ticket is never sought.
-  if ralph_ticket_needs_human "$TICKET_FILE"; then
+  if foreman_ticket_needs_human "$TICKET_FILE"; then
     # The previous iteration was this ticket's followup, and it sent it back. That iteration was
     # reported as progress (HEAD moved, the followup ticket is unflipped); say what it really was.
-    if [ -n "$CURRENT_TICKET" ] && [ "$(ralph_checked_ticket "$CURRENT_TICKET")" = "$TICKET_FILE" ]; then
-      _ralph_basename _sent_back_by "$CURRENT_TICKET"
+    if [ -n "$CURRENT_TICKET" ] && [ "$(foreman_checked_ticket "$CURRENT_TICKET")" = "$TICKET_FILE" ]; then
+      _foreman_basename _sent_back_by "$CURRENT_TICKET"
       say_event sentback "sent back to a human by $_sent_back_by"
     fi
     HUMAN_TICKET="$TICKET_FILE"
@@ -1197,7 +1197,7 @@ while true; do
     warn ""
     warn "If they are $TICKET_FILE's work, rerun with --adopt-dirty to have an agent review"
     warn "them and commit them as a checkpoint:"
-    warn "  $RALPH_INVOKE run $BATCH_DIR$(resume_args) --adopt-dirty"
+    warn "  $FOREMAN_INVOKE run $BATCH_DIR$(resume_args) --adopt-dirty"
     warn "Or keep them as a checkpoint by hand and rerun to continue:"
     exec_dirty_recovery_note "$BASE_REF" "$TICKET_FILE" "$BATCH_DIR" >&2
     FINAL_STATUS="$EXIT_NEEDS_HUMAN"
@@ -1216,24 +1216,24 @@ while true; do
   # A previous attempt on THIS ticket ran out of context. Say so — working smaller is the
   # one change that might make the difference on a second pass, and a fresh context on its
   # own will not produce it.
-  RALPH_CONTEXT_RETRY=0
-  [ "$ATTEMPTS_ON_CURRENT" -gt 1 ] && [ "$PREV_CONTEXT_EXHAUSTED" = "1" ] && RALPH_CONTEXT_RETRY=1
+  FOREMAN_CONTEXT_RETRY=0
+  [ "$ATTEMPTS_ON_CURRENT" -gt 1 ] && [ "$PREV_CONTEXT_EXHAUSTED" = "1" ] && FOREMAN_CONTEXT_RETRY=1
 
   # A previous iteration handed this ticket off part-finished. Tell the prompt, and give it
   # the ticket's own first base to review against rather than this iteration's.
-  RALPH_CONTINUATION=0
-  [ "$CONTINUATIONS_ON_CURRENT" -gt 0 ] && RALPH_CONTINUATION=1
+  FOREMAN_CONTINUATION=0
+  [ "$CONTINUATIONS_ON_CURRENT" -gt 0 ] && FOREMAN_CONTINUATION=1
 
   # That handoff was a checkpoint turn salvaging a stall, not a deliberate one: the
   # `Remaining:` list it wrote was reconstructed from the diff by a turn that never saw the
   # reasoning behind it, and the turn that produced the diff ran out of room. Say both.
-  RALPH_STALL_CONTINUATION=0
-  [ "$RALPH_CONTINUATION" = "1" ] && [ "$LAST_CONTINUATION_STALLED" = "1" ] && RALPH_STALL_CONTINUATION=1
+  FOREMAN_STALL_CONTINUATION=0
+  [ "$FOREMAN_CONTINUATION" = "1" ] && [ "$LAST_CONTINUATION_STALLED" = "1" ] && FOREMAN_STALL_CONTINUATION=1
 
-  RALPH_REVIEW_BASE="$TICKET_BASE_REF"
+  FOREMAN_REVIEW_BASE="$TICKET_BASE_REF"
 
-  # shellcheck source=ralph-prompt.sh
-  source "$RALPH_TOOL_DIR/ralph-prompt.sh"
+  # shellcheck source=foreman-prompt.sh
+  source "$FOREMAN_TOOL_DIR/foreman-prompt.sh"
 
   # `${PIPESTATUS[0]}` is load-bearing: `set -o pipefail` is on, so a plain `$?` here would
   # conflate the filter's status with the agent's, and every branch below turns on the
@@ -1241,11 +1241,11 @@ while true; do
   # order — is untouched by whether the run is being watched.
   #
   # The agent gets /dev/null for stdin, never the terminal: the prompt goes in with `-p`, and
-  # an agent holding the terminal can swallow the keys meant for ralph-keys.sh or switch the
+  # an agent holding the terminal can swallow the keys meant for foreman-keys.sh or switch the
   # terminal's mode under it. Same for the checkpoint turn.
   mark_turn_in_flight
-  exec_run "$RALPH_PROMPT" "$TICKET_FILE" </dev/null |
-    node "$RALPH_TOOL_DIR/ralph-stream.cjs" ${STREAM_ARGS+"${STREAM_ARGS[@]}"} > "$PAYLOAD_FILE"
+  exec_run "$FOREMAN_PROMPT" "$TICKET_FILE" </dev/null |
+    node "$FOREMAN_TOOL_DIR/foreman-stream.cjs" ${STREAM_ARGS+"${STREAM_ARGS[@]}"} > "$PAYLOAD_FILE"
   agent_status=${PIPESTATUS[0]}
   result=$(cat "$PAYLOAD_FILE")
   # The live view's row goes blank until the next agent starts, rather than showing a clock
@@ -1269,7 +1269,7 @@ while true; do
 
   # Always record, including on failure — a failed iteration is exactly the one worth
   # having in the log later.
-  printf '%s' "$result" | node "$RALPH_TOOL_DIR/ralph-record.cjs" \
+  printf '%s' "$result" | node "$FOREMAN_TOOL_DIR/foreman-record.cjs" \
     --jsonl "$RUN_JSONL" --log "$RUN_LOG" --verdict "$VERDICT_FILE" \
     --run-id "$RUN_ID" --iteration "$ITERATIONS_RUN" --ticket "$TICKET_FILE" \
     --batch "$BATCH_DIR" \
@@ -1326,11 +1326,11 @@ while true; do
     warn ""
     warn "$TICKET_FILE was not attempted: the agent could not authenticate (its login has"
     warn "expired or was revoked). Retrying cannot help, so the run stops here."
-    case "$RALPH_EXEC" in
+    case "$FOREMAN_EXEC" in
       sandbox|sandbox-mount)
         warn "Sign in again inside the sandbox, then rerun:"
-        warn "  sbx run --name $RALPH_SANDBOX      (then /login if it does not prompt)"
-        warn "If that does not take, \`sbx rm --force $RALPH_SANDBOX\` and let ralph recreate it."
+        warn "  sbx run --name $FOREMAN_SANDBOX      (then /login if it does not prompt)"
+        warn "If that does not take, \`sbx rm --force $FOREMAN_SANDBOX\` and let foreman recreate it."
         ;;
       *)
         warn "Sign in again with \`claude\` (then /login), and rerun."
@@ -1362,9 +1362,9 @@ while true; do
     warn "allowlist is denied outright — including the \`git commit\` this prompt asks for,"
     warn "after the ticket's work has been done and paid for."
     warn ""
-    warn "Add this line to $RALPH_CONF, then rerun:"
-    warn "  RALPH_CLAUDE_ARGS=(--allowed-tools \"Bash(git add:*)\" \"Bash(git commit:*)\")"
-    warn "(Or set RALPH_PERMISSION_MODE=bypassPermissions there if you want no gate at all.)"
+    warn "Add this line to $FOREMAN_CONF, then rerun:"
+    warn "  FOREMAN_CLAUDE_ARGS=(--allowed-tools \"Bash(git add:*)\" \"Bash(git commit:*)\")"
+    warn "(Or set FOREMAN_PERMISSION_MODE=bypassPermissions there if you want no gate at all.)"
     exec_show_dirty
     FINAL_STATUS="$EXIT_NEEDS_HUMAN"
     break
@@ -1466,7 +1466,7 @@ while true; do
     fi
     say_event ok "landed" "$(git log -1 --format=%h "$HEAD_REF")"
     # Resolved before the rename: it is read from this ticket's own file, which the rename moves.
-    checked_ticket="$(ralph_checked_ticket "$TICKET_FILE")"
+    checked_ticket="$(foreman_checked_ticket "$TICKET_FILE")"
     mark_ticket_done_on_disk "$TICKET_FILE"
     # A followup ticket landing is the human ticket's verification: it is done for good now.
     [ -z "$checked_ticket" ] || mark_ticket_done_on_disk "$checked_ticket"
@@ -1526,7 +1526,7 @@ while true; do
     warn "$TICKET_FILE ran out of context on its last attempt. That usually means the ticket is"
     warn "too large for one iteration — split it into smaller tickets rather than rerunning as-is."
   else
-    warn "$TICKET_FILE is still not '$RALPH_DONE_WORD' after $ATTEMPTS_ON_CURRENT attempt(s)."
+    warn "$TICKET_FILE is still not '$FOREMAN_DONE_WORD' after $ATTEMPTS_ON_CURRENT attempt(s)."
   fi
   warn "Read the tail of $RUN_LOG and of $PROGRESS_FILE, then either fix it by hand or"
   warn "adjust the ticket. Rerun to continue from here."
@@ -1598,7 +1598,7 @@ case "$FINAL_STATUS" in
       say "Next up:  $remaining"
       log_append "# next up: $remaining"
     fi
-    say "Resume:   $RALPH_INVOKE run $BATCH_DIR$(resume_args)"
+    say "Resume:   $FOREMAN_INVOKE run $BATCH_DIR$(resume_args)"
     say "          (nothing to restore — the tickets' Status lines are the resume point)"
     ;;
   "$EXIT_WAITING_ON_HUMAN")

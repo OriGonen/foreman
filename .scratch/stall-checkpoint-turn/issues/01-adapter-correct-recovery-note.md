@@ -53,7 +53,7 @@ header comment and by `exec_collect`'s dirty check, which for that mode runs `gi
 on the host directly, not inside the sandbox). Telling the operator to bundle, `sbx cp`,
 fetch and merge something that never left would be actively misleading, not just verbose.
 A background `/code-review` pass reproduced this by running
-`ralph_exec_dirty_recovery_note sandbox-mount ...` directly and confirmed the wrong text
+`foreman_exec_dirty_recovery_note sandbox-mount ...` directly and confirmed the wrong text
 came out. Fixed so `sandbox-mount` gets the same plain advice as `local`/`fake` via
 `_common.sh`, and only `sandbox` (the actual clone adapter) gets the transport text, now
 shared with the pre-existing stranded-work note via a `_sbx_recover_bundle_lines` helper

@@ -63,23 +63,23 @@ The loop still never auto-commits. An agent commits; the checkpoint turn is an a
 
 ## Comments
 
-Implemented in `lib/ralph-loop.sh` (branch 4 of the per-iteration decision tree),
-`lib/ralph-prompt.sh` (`ralph_checkpoint_prompt`, a function rather than top-level code —
+Implemented in `lib/foreman-loop.sh` (branch 4 of the per-iteration decision tree),
+`lib/foreman-prompt.sh` (`foreman_checkpoint_prompt`, a function rather than top-level code —
 called only when a turn actually stalled), and `lib/exec/fake.sh` (checkpoint prompts
 recognised by the `CHECKPOINT TURN` sentinel phrase, with their own
-`RALPH_FAKE_CHECKPOINT_BEHAVIOUR` independent of `RALPH_FAKE_BEHAVIOUR`'s turn-by-turn list).
+`FOREMAN_FAKE_CHECKPOINT_BEHAVIOUR` independent of `FOREMAN_FAKE_BEHAVIOUR`'s turn-by-turn list).
 
 The stall signature is tightened beyond the old dirty-tree stop's check: it now also
 requires `HEAD_REF = BASE_REF`, matching `CONTEXT.md`'s definition exactly (a turn that
 partially committed and left the rest dirty is a different, ambiguous case, and still just
 stops).
 
-The checkpoint turn is run via the same `exec_run` / `ralph-stream.cjs` pipeline as the main
-turn, with `RALPH_CLAUDE_ARGS` extended with `--max-turns 6` for just that one call and
+The checkpoint turn is run via the same `exec_run` / `foreman-stream.cjs` pipeline as the main
+turn, with `FOREMAN_CLAUDE_ARGS` extended with `--max-turns 6` for just that one call and
 restored immediately after — no new adapter function, and the array push/pop uses the same
-guarded `${RALPH_CLAUDE_ARGS+"${RALPH_CLAUDE_ARGS[@]}"}` expansion the other two call sites
+guarded `${FOREMAN_CLAUDE_ARGS+"${FOREMAN_CLAUDE_ARGS[@]}"}` expansion the other two call sites
 use (a background `/code-review` pass caught an unguarded expansion here, which would raise
-"unbound variable" under `set -u` on bash < 4.4 whenever `RALPH_CLAUDE_ARGS` is left at its
+"unbound variable" under `set -u` on bash < 4.4 whenever `FOREMAN_CLAUDE_ARGS` is left at its
 empty default). Success/failure is read from git state after `exec_collect`, not from the
 checkpoint turn's own exit code — robust regardless of why a real turn's `claude` process
 did or didn't succeed.
@@ -95,7 +95,7 @@ The same review pass also found two more real issues, both fixed:
   branch as one that genuinely failed to commit — but a tree that WAS dirty going in and
   comes back clean with HEAD unmoved can only mean something discarded the diff, not that
   nothing happened. Given its own branch and message ("...is gone... nothing to recover"),
-  covered by `RALPH_FAKE_CHECKPOINT_BEHAVIOUR=discard` and its own smoke case.
+  covered by `FOREMAN_FAKE_CHECKPOINT_BEHAVIOUR=discard` and its own smoke case.
 
 `continuation_cap_reached()` is factored out of the pre-existing progression branch so the
 salvaged-stall path could share it verbatim rather than duplicate the cap message.
@@ -103,6 +103,6 @@ salvaged-stall path could share it verbatim rather than duplicate the cap messag
 Two pre-existing smoke cases changed behaviour under this ticket, since `dirty` is exactly
 the loop's stall signature: "a dirty tree stops the run and is never auto-committed" and
 "syncing refuses over a dirty tree rather than resetting it" now both force
-`RALPH_FAKE_CHECKPOINT_BEHAVIOUR=fail` to keep exercising an unsalvageable stall rather than
+`FOREMAN_FAKE_CHECKPOINT_BEHAVIOUR=fail` to keep exercising an unsalvageable stall rather than
 the (now default) salvaged one; the salvaged path gets its own new case. Full smoke suite:
 193 passed, 0 failed.

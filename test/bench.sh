@@ -1,13 +1,13 @@
 #!/bin/bash
-# Benchmark for `ralph status` — a measuring instrument, not a test: it asserts nothing and
+# Benchmark for `foreman status` — a measuring instrument, not a test: it asserts nothing and
 # is not part of the smoke suite. It builds its own 3-ticket batch on the `fake` adapter,
-# times `ralph status` on it over several runs, then traces one call and breaks its spawns
+# times `foreman status` on it over several runs, then traces one call and breaks its spawns
 # down by command, so a change that removes a spawn can be shown to have done so.
 #
 #   bash test/bench.sh            5 timed runs, then the spawn breakdown
 #   bash test/bench.sh 10         10 timed runs
 #
-# Under Git Bash a run of `ralph status` takes tens of seconds, so the default takes a few
+# Under Git Bash a run of `foreman status` takes tens of seconds, so the default takes a few
 # minutes. There is no warm-up: the first run includes any cold-cache cost, and is shown.
 #
 # Output is plain text, for pasting into a ticket: each run's seconds and the median, then
@@ -15,8 +15,8 @@
 # command substitutions — sorted by count, with a total. An external command inside a
 # subshell counts in both rows (`$(grep …)` is one subshell and one grep), so the total is
 # spawn events, not distinct processes. Builtins and functions are not spawns; a subshell
-# that runs no traced command of its own is not seen, so the count is a floor. ralph is run
-# as `bash bin/ralph`, so the numbers do not depend on its executable bit.
+# that runs no traced command of its own is not seen, so the count is a floor. foreman is run
+# as `bash bin/foreman`, so the numbers do not depend on its executable bit.
 #
 # The fixture lives under $TMPDIR and is removed on exit, on Ctrl-C, and when the run is
 # terminated or its terminal closes. Runs under Git Bash and under WSL alike (bash 4+; the
@@ -24,8 +24,8 @@
 set -uo pipefail
 
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-RALPH_HOME="$(cd "$TEST_DIR/.." && pwd)"
-RALPH="$RALPH_HOME/bin/ralph"
+FOREMAN_HOME="$(cd "$TEST_DIR/.." && pwd)"
+FOREMAN="$FOREMAN_HOME/bin/foreman"
 
 RUNS=5
 case "${1:-}" in
@@ -35,7 +35,7 @@ case "${1:-}" in
      else printf 'usage: bash test/bench.sh [runs]\n' >&2; exit 2; fi ;;
 esac
 
-WORK="$(mktemp -d "${TMPDIR:-/tmp}/ralph-bench-XXXXXX")"
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/foreman-bench-XXXXXX")"
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
 trap 'exit 130' INT
@@ -64,7 +64,7 @@ secs_text() { printf -v SECS_TEXT '%d.%02d' $(($1 / 1000)) $(( ($1 % 1000) / 10 
 # --- timing -----------------------------------------------------------------
 platform="$OSTYPE"
 [ -n "${WSL_DISTRO_NAME:-}" ] && platform="$platform (WSL: $WSL_DISTRO_NAME)"
-printf 'Benchmark: ralph status on a 3-ticket batch (fake adapter)\n'
+printf 'Benchmark: foreman status on a 3-ticket batch (fake adapter)\n'
 printf 'Platform:  %s, bash %s\n\n' "$platform" "$BASH_VERSION"
 
 # Standing in the repo, and sending output to a file, keep the timed span to the call itself:
@@ -74,7 +74,7 @@ TIMES=()
 printf 'Timing, %d runs:\n' "$RUNS"
 for ((n = 1; n <= RUNS; n++)); do
   now_ms; start=$NOW_MS
-  bash "$RALPH" status batch > "$WORK/out" 2>&1
+  bash "$FOREMAN" status batch > "$WORK/out" 2>&1
   st=$?
   now_ms
   ms=$((NOW_MS - start))
@@ -93,16 +93,16 @@ printf '  median: %7s s\n' "$SECS_TEXT"
 
 # --- spawn trace ------------------------------------------------------------
 # One more call with xtrace on, every line stamped with the PID and subshell depth of the
-# shell that ran it, sent to its own file so no redirection inside ralph can swallow it.
+# shell that ran it, sent to its own file so no redirection inside foreman can swallow it.
 TRACE="$WORK/trace"
 env SHELLOPTS=xtrace BASH_XTRACEFD=9 PS4='+ ${BASHPID} ${BASH_SUBSHELL} ' \
-  bash "$RALPH" status batch 9> "$TRACE" > /dev/null 2>&1
+  bash "$FOREMAN" status batch 9> "$TRACE" > /dev/null 2>&1
 
-# What is not a spawn: builtins, keywords, and the functions ralph itself defines.
+# What is not a spawn: builtins, keywords, and the functions foreman itself defines.
 declare -A NOT_SPAWN=()
 for w in $(compgen -b) $(compgen -k) '((' '[[' ']]'; do NOT_SPAWN[$w]=1; done
 fn_re='^[[:space:]]*(function[[:space:]]+)?([A-Za-z_][A-Za-z0-9_:.-]*)[[:space:]]*\(\)'
-for f in "$RALPH" "$RALPH_HOME"/lib/*.sh "$RALPH_HOME"/lib/exec/*.sh; do
+for f in "$FOREMAN" "$FOREMAN_HOME"/lib/*.sh "$FOREMAN_HOME"/lib/exec/*.sh; do
   while IFS= read -r line; do
     [[ $line =~ $fn_re ]] && NOT_SPAWN[${BASH_REMATCH[2]}]=1
   done < "$f"
@@ -151,7 +151,7 @@ while IFS= read -r line; do
   BY_CMD[$cmd]=$(( ${BY_CMD[$cmd]:-0} + 1 ))
 done < "$TRACE"
 
-printf '\nSpawns in one `ralph status batch` call (traced):\n'
+printf '\nSpawns in one `foreman status batch` call (traced):\n'
 if [ "$lines" = 0 ]; then
   printf '  no trace captured — this bash did not honour BASH_XTRACEFD for the child shells\n'
   exit 0

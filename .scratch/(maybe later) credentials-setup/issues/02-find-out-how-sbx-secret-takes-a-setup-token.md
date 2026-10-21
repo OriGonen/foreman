@@ -13,13 +13,13 @@ read-only, and they touch real secrets, so you try them and write the answers in
 handoff file.
 
 1. Run `claude setup-token` and keep the token somewhere safe (not in any repo).
-2. Scoped first: `sbx secret set anthropic --sandbox ralph-tldw`, paste the token, then run
+2. Scoped first: `sbx secret set anthropic --sandbox foreman-tldw`, paste the token, then run
    an agent in that sandbox. Does it authenticate and bill against the subscription?
    If not, does an Anthropic API key in the same slot work instead?
 3. Run `sbx secret set anthropic` again while one exists. Does it overwrite silently,
    prompt, or fail? Same question for the global (unscoped) secret, and when the existing
    one is `(oauth configured)`.
-4. Change the global secret and restart the existing `ralph-tldw` sandbox. Does it pick up
+4. Change the global secret and restart the existing `foreman-tldw` sandbox. Does it pick up
    the new value?
 5. Does the custom secret `ANTHROPIC_API_KEY` → `openrouter.ai` interfere with any of the
    above?

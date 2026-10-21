@@ -1,13 +1,13 @@
 #!/bin/bash
 # End-to-end tests for the loop, driven by the `fake` exec adapter — no sandbox, no model,
-# no money. Each case builds a throwaway repo with a batch of tickets in it, runs ralph
+# no money. Each case builds a throwaway repo with a batch of tickets in it, runs foreman
 # against it, and asserts on the exit code, what landed, and what the run log says.
 #
 #   bash test/smoke.sh            run everything
 #   bash test/smoke.sh dirty      run the cases whose name contains "dirty"
-#   RALPH_SMOKE_JOBS=1 bash test/smoke.sh
+#   FOREMAN_SMOKE_JOBS=1 bash test/smoke.sh
 #                                 one case at a time (the default is one per core; see below)
-#   bash test/bench.sh            not a test: times `ralph status` and counts its spawns
+#   bash test/bench.sh            not a test: times `foreman status` and counts its spawns
 #                                 (see the header of test/bench.sh)
 #
 # Output: each selected case announces itself as `[position/total] name` and ends with its
@@ -19,7 +19,7 @@
 #
 # Parallel cases: this file is two programs. Run by a person it is the runner: it builds the
 # fixture template, then starts one case process per selected case — this same file, told
-# which case to run — keeping at most RALPH_SMOKE_JOBS going at once (default: one per
+# which case to run — keeping at most FOREMAN_SMOKE_JOBS going at once (default: one per
 # logical core; under Git Bash process creation stops scaling there). A case process writes
 # its output to a buffer file and its counts to a result file, both under the run's work
 # directory; the runner replays the buffers in case order, each whole, so the log reads as a
@@ -33,15 +33,21 @@
 # process. The runner builds the template before any case starts and nothing writes to it.
 #
 # The fixtures live under $TMPDIR and are removed on exit, on Ctrl-C, and when the run is
-# terminated or its terminal closes — unless RALPH_KEEP_FIXTURES=1. Those signals stop the
+# terminated or its terminal closes — unless FOREMAN_KEEP_FIXTURES=1. Those signals stop the
 # case processes too, with everything they started, before the directory goes. (A hard kill
 # cannot be trapped.)
 set -uo pipefail
 
 TEST_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-RALPH_HOME="$(cd "$TEST_DIR/.." && pwd)"
-RALPH="$RALPH_HOME/bin/ralph"
+FOREMAN_HOME="$(cd "$TEST_DIR/.." && pwd)"
+FOREMAN="$FOREMAN_HOME/bin/foreman"
 SELF="$TEST_DIR/${BASH_SOURCE[0]##*/}"
+
+# legacy: a machine set up before the rename may still export RALPH_* (a `setx` of
+# RALPH_DOCKER_USERNAME, say). Foreman would honour it, and warn, in every case; no case
+# expects that, so none inherits it.
+_smoke_legacy=$(compgen -v RALPH_)
+[ -z "$_smoke_legacy" ] || unset $_smoke_legacy
 
 # Set only by the runner, on a case process: the case's name, its position, and the work
 # directory it shares with the runner.
@@ -58,16 +64,16 @@ if [ -n "$CASE_WANTED" ]; then
   trap 'exit 129' HUP
 else
   FILTER="${1:-}"
-  JOBS="${RALPH_SMOKE_JOBS:-${NUMBER_OF_PROCESSORS:-$(nproc 2>/dev/null)}}"
+  JOBS="${FOREMAN_SMOKE_JOBS:-${NUMBER_OF_PROCESSORS:-$(nproc 2>/dev/null)}}"
   JOBS="${JOBS:-4}"
   if ! [[ $JOBS =~ ^[1-9][0-9]*$ ]]; then
-    printf 'usage: RALPH_SMOKE_JOBS must be a positive number, not "%s"\n' "$JOBS" >&2
+    printf 'usage: FOREMAN_SMOKE_JOBS must be a positive number, not "%s"\n' "$JOBS" >&2
     exit 2
   fi
-  WORK="$(mktemp -d "${TMPDIR:-/tmp}/ralph-smoke-XXXXXX")"
-  # No case may read the operator's real credentials file (~/.config/ralph/env): a case that
-  # wants one points RALPH_CREDENTIALS_FILE at its own. Case processes inherit this.
-  export RALPH_CREDENTIALS_FILE="$WORK/no-such-credentials-file"
+  WORK="$(mktemp -d "${TMPDIR:-/tmp}/foreman-smoke-XXXXXX")"
+  # No case may read the operator's real credentials file (~/.config/foreman/env): a case that
+  # wants one points FOREMAN_CREDENTIALS_FILE at its own. Case processes inherit this.
+  export FOREMAN_CREDENTIALS_FILE="$WORK/no-such-credentials-file"
   JOB_PIDS=()
   # Stops the case processes still running — each leads a process group of its own, so the
   # signal reaches everything it started — then removes the directory. Windows keeps a
@@ -83,7 +89,7 @@ else
   cleanup() {
     local try
     { stop_cases TERM; wait; } 2>/dev/null    # not the shell's "Terminated" notices
-    [ "${RALPH_KEEP_FIXTURES:-0}" = 1 ] && return
+    [ "${FOREMAN_KEEP_FIXTURES:-0}" = 1 ] && return
     for try in 1 2 3 4 5 6; do
       rm -rf "$WORK" 2>/dev/null
       [ -e "$WORK" ] || return 0
@@ -151,10 +157,10 @@ make_repo() {
   printf '%s' "$WORK/$name"
 }
 
-# Run ralph in $1 with the rest as arguments. Captures stdout+stderr in $OUT, status in $ST.
-run_ralph() {
+# Run foreman in $1 with the rest as arguments. Captures stdout+stderr in $OUT, status in $ST.
+run_foreman() {
   local repo="$1"; shift
-  OUT="$(cd "$repo" && "$RALPH" "$@" 2>&1)"
+  OUT="$(cd "$repo" && "$FOREMAN" "$@" 2>&1)"
   ST=$?
 }
 
@@ -299,7 +305,7 @@ fi
 if case_is "status and dry-run spend nothing and need no runner"; then
   repo="$(make_repo 3 status-repo)"
 
-  run_ralph "$repo" status batch
+  run_foreman "$repo" status batch
   assert_eq "$ST" 0 "status exits 0"
   assert_contains "$OUT" "Tickets done: 0 / 3" "status counts the tickets"
   assert_contains "$OUT" "Next: 01-ticket.md" "status names the next ticket"
@@ -307,7 +313,7 @@ if case_is "status and dry-run spend nothing and need no runner"; then
   assert_missing "$OUT" "human tickets remaining" "and no human-ticket count"
   assert_missing "$OUT" "warning:" "and no warnings — this batch has neither kind of ticket"
 
-  run_ralph "$repo" dry-run batch
+  run_foreman "$repo" dry-run batch
   assert_eq "$ST" 0 "dry-run exits 0"
   assert_contains "$OUT" "Exec:    fake (no agent is run)" "dry-run describes the adapter"
   assert_contains "$OUT" "=== end prompt" "dry-run prints the prompt"
@@ -317,7 +323,7 @@ fi
 
 if case_is "one iteration is the default, and it lands one ticket"; then
   repo="$(make_repo 3 default-repo)"
-  run_ralph "$repo" run batch
+  run_foreman "$repo" run batch
 
   assert_eq "$ST" 10 "stops paused on the iteration budget"
   assert_contains "$OUT" "iteration budget reached (1)" "says why it paused"
@@ -327,7 +333,7 @@ fi
 
 if case_is "+ during a run adds an iteration"; then
   repo="$(make_repo 3 keys-plus-repo)"
-  RALPH_FAKE_KEYS=+ run_ralph "$repo" run batch 1
+  FOREMAN_FAKE_KEYS=+ run_foreman "$repo" run batch 1
 
   assert_eq "$ST" 10 "still stops paused on the iteration budget"
   assert_contains "$OUT" "iteration budget reached (2)" "the budget it stopped on is the new one"
@@ -335,7 +341,7 @@ if case_is "+ during a run adds an iteration"; then
   assert_contains "$OUT" "── iteration 2 of 2" "the header shows the new budget"
   assert_contains "$OUT" "⌨ iterations: 1 of 2" "the key press is acknowledged"
   assert_contains "$OUT" "run batch 2" "the resume command carries the new budget"
-  assert_contains "$(cat "$repo/batch/ralph-runs.log")" "# iteration budget changed: 1 → 2 (after iteration 1)" \
+  assert_contains "$(cat "$repo/batch/foreman-runs.log")" "# iteration budget changed: 1 → 2 (after iteration 1)" \
     "the run log records the change"
   # A run whose stdin is not a terminal starts no reader, and says nothing about keys.
   assert_missing "$OUT" "keys: +" "no key hint without a terminal"
@@ -343,14 +349,14 @@ fi
 
 if case_is "- during a run removes an iteration, never below the one running"; then
   repo="$(make_repo 3 keys-minus-repo)"
-  RALPH_FAKE_KEYS=- run_ralph "$repo" run batch 3
+  FOREMAN_FAKE_KEYS=- run_foreman "$repo" run batch 3
   assert_eq "$ST" 10 "stops paused on the iteration budget"
   assert_contains "$OUT" "iteration budget reached (2)" "one fewer than asked for"
   assert_eq "$(done_count "$repo")" "2" "two tickets landed"
   assert_contains "$OUT" "── iteration 1 of 3" "the first header shows the budget it started with"
 
   repo="$(make_repo 3 keys-floor-repo)"
-  RALPH_FAKE_KEYS=--- run_ralph "$repo" run batch 3
+  FOREMAN_FAKE_KEYS=--- run_foreman "$repo" run batch 3
   assert_contains "$OUT" "iteration budget reached (1)" "three presses floor at the iteration running"
   assert_eq "$(done_count "$repo")" "1" "that iteration still finishes"
   assert_contains "$OUT" "⌨ stops after this iteration (1 of 1)" "says the run stops after it"
@@ -358,21 +364,21 @@ fi
 
 if case_is "- on an unlimited run stops it after the iteration running"; then
   repo="$(make_repo 3 keys-unlimited-repo)"
-  RALPH_FAKE_KEYS=- run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_KEYS=- run_foreman "$repo" run batch --unlimited
 
   assert_eq "$ST" 10 "pauses rather than finishing the batch"
   assert_eq "$(done_count "$repo")" "1" "one ticket landed"
   assert_contains "$OUT" "── iteration 1  ·" "an unlimited header has no 'of'"
   assert_contains "$OUT" "iteration budget reached (1)" "says why it paused"
   assert_contains "$OUT" "run batch 1" "the resume command names the budget it ended with"
-  assert_contains "$(cat "$repo/batch/ralph-runs.log")" "# iteration budget changed: unlimited → 1" \
+  assert_contains "$(cat "$repo/batch/foreman-runs.log")" "# iteration budget changed: unlimited → 1" \
     "the run log records the change"
 fi
 
-if case_is "ralph-keys.sh --apply: the floor and unlimited"; then
+if case_is "foreman-keys.sh --apply: the floor and unlimited"; then
   ctl="$WORK/keys-ctl"
   mkdir -p "$ctl"
-  keys() { OUT="$(bash "$RALPH_HOME/lib/ralph-keys.sh" --apply "$1" "$ctl" 2>&1)"; read -r budget < "$ctl/budget"; }
+  keys() { OUT="$(bash "$FOREMAN_HOME/lib/foreman-keys.sh" --apply "$1" "$ctl" 2>&1)"; read -r budget < "$ctl/budget"; }
 
   printf '0\n' > "$ctl/budget"; printf '2\n' > "$ctl/iteration"
   keys +
@@ -403,7 +409,7 @@ if case_is "ralph-keys.sh --apply: the floor and unlimited"; then
   assert_eq "$budget" 1 "L leaves the budget alone"
 fi
 
-if case_is "ralph-stream.cjs --live-file draws only while the file says on"; then
+if case_is "foreman-stream.cjs --live-file draws only while the file says on"; then
   # What L switches between: the agent reports in stream-json either way, the payload is the
   # result object either way, and only the drawing follows the file.
   live_file="$WORK/stream-live"
@@ -411,7 +417,7 @@ if case_is "ralph-stream.cjs --live-file draws only while the file says on"; the
 {"type":"result","subtype":"success","total_cost_usd":0.01}'
   stream() {
     local err="$WORK/stream-err"
-    OUT="$(printf '%s\n' "$events" | node "$RALPH_HOME/lib/ralph-stream.cjs" --live-file "$live_file" 2>"$err")"
+    OUT="$(printf '%s\n' "$events" | node "$FOREMAN_HOME/lib/foreman-stream.cjs" --live-file "$live_file" 2>"$err")"
     ERR="$(cat "$err")"
   }
 
@@ -427,14 +433,14 @@ if case_is "ralph-stream.cjs --live-file draws only while the file says on"; the
   assert_missing "$ERR" "src/drawn.js" "no file reads as off"
 fi
 
-if case_is "ralph-stream.cjs --activity-file writes down, never draws"; then
+if case_is "foreman-stream.cjs --activity-file writes down, never draws"; then
   # With a status bar the key reader draws the live view, so the filter must not touch the
   # terminal: two processes drawing on one screen is what left lines behind.
   activity="$WORK/stream-activity"
   err="$WORK/stream-activity-err"
   OUT="$(printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"npm test"}}]}}' \
     '{"type":"result","subtype":"success","total_cost_usd":0.01}' |
-    node "$RALPH_HOME/lib/ralph-stream.cjs" --activity-file "$activity" 2>"$err")"
+    node "$FOREMAN_HOME/lib/foreman-stream.cjs" --activity-file "$activity" 2>"$err")"
   assert_eq "$(cat "$err")" "" "nothing on stderr"
   assert_eq "$OUT" '{"type":"result","subtype":"success","total_cost_usd":0.01}' "the payload is the result object"
   read -r epoch label < "$activity"
@@ -442,7 +448,7 @@ if case_is "ralph-stream.cjs --activity-file writes down, never draws"; then
   if [[ "$epoch" =~ ^[0-9]{10}$ ]]; then pass; else fail "the start is in epoch seconds: got '$epoch'"; fi
 fi
 
-if case_is "ralph-keys.sh --text: the live view's line never wraps"; then
+if case_is "foreman-keys.sh --text: the live view's line never wraps"; then
   ctl="$WORK/text-ctl"
   mkdir -p "$ctl"
   printf '3\n' > "$ctl/budget"; printf '1\n' > "$ctl/iteration"; printf '1\n' > "$ctl/live"
@@ -450,7 +456,7 @@ if case_is "ralph-keys.sh --text: the live view's line never wraps"; then
   printf -v now '%(%s)T' -1
   printf '%s %s\n' "$((now - 75))" "$long" > "$ctl/activity"
   text() {
-    OUT="$(RALPH_COLOR=never bash "$RALPH_HOME/lib/ralph-keys.sh" --text "$ctl" "$1")"
+    OUT="$(FOREMAN_COLOR=never bash "$FOREMAN_HOME/lib/foreman-keys.sh" --text "$ctl" "$1")"
     BAR="${OUT%%$'\n'*}" TICKER=""
     [[ "$OUT" != *$'\n'* ]] || TICKER="${OUT#*$'\n'}"
   }
@@ -473,7 +479,7 @@ fi
 
 if case_is "--unlimited runs the batch to completion"; then
   repo="$(make_repo 3 unlimited-repo)"
-  run_ralph "$repo" run batch --unlimited
+  run_foreman "$repo" run batch --unlimited
 
   assert_eq "$ST" 0 "exits 0 when every ticket is done"
   assert_contains "$OUT" "Every ticket in batch is done." "says the batch is finished"
@@ -484,17 +490,17 @@ fi
 
 if case_is "resuming picks up at the first ticket that has not landed"; then
   repo="$(make_repo 3 resume-repo)"
-  run_ralph "$repo" run batch 2
+  run_foreman "$repo" run batch 2
   assert_eq "$(done_count "$repo")" "2" "two landed in the first run"
 
-  run_ralph "$repo" run batch --unlimited
+  run_foreman "$repo" run batch --unlimited
   assert_contains "$OUT" "batch/issues/03-ticket.md" "the second run starts at ticket 3"
   assert_eq "$(done_count "$repo")" "3" "the batch finishes"
 fi
 
 if case_is "a ticket that does not land stops the run for a human"; then
   repo="$(make_repo 2 noop-repo)"
-  RALPH_FAKE_BEHAVIOUR=noop run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_BEHAVIOUR=noop run_foreman "$repo" run batch --unlimited
 
   assert_eq "$ST" 20 "exits needs-a-human"
   assert_contains "$OUT" "is still not 'implemented'" "names the stuck ticket"
@@ -503,7 +509,7 @@ fi
 
 if case_is "a transient failure is retried within the run"; then
   repo="$(make_repo 2 retry-repo)"
-  RALPH_FAKE_BEHAVIOUR=transient:land run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_BEHAVIOUR=transient:land run_foreman "$repo" run batch --unlimited
 
   assert_contains "$OUT" "(attempt 2)" "the same ticket is attempted twice"
   assert_eq "$(done_count "$repo")" "2" "both tickets land in the end"
@@ -511,10 +517,10 @@ fi
 
 if case_is "attempts are capped per ticket"; then
   repo="$(make_repo 2 attempts-repo)"
-  RALPH_TICKET_ATTEMPTS=3 RALPH_FAKE_BEHAVIOUR=transient run_ralph "$repo" run batch --unlimited
+  FOREMAN_TICKET_ATTEMPTS=3 FOREMAN_FAKE_BEHAVIOUR=transient run_foreman "$repo" run batch --unlimited
 
   assert_eq "$ST" 20 "gives up rather than looping"
-  assert_contains "$OUT" "after 3 attempt(s)" "stops at RALPH_TICKET_ATTEMPTS"
+  assert_contains "$OUT" "after 3 attempt(s)" "stops at FOREMAN_TICKET_ATTEMPTS"
   assert_missing "$OUT" "(attempt 4)" "never makes a fourth attempt"
 fi
 
@@ -523,7 +529,7 @@ if case_is "a crash with no signal at all is not retried"; then
   # nor a context signal is indistinguishable from a logic failure, and a blind second
   # attempt at one of those costs a whole iteration to learn nothing.
   repo="$(make_repo 2 crash-repo)"
-  RALPH_FAKE_BEHAVIOUR=crash run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_BEHAVIOUR=crash run_foreman "$repo" run batch --unlimited
 
   assert_eq "$ST" 20 "stops rather than retrying"
   assert_missing "$OUT" "(attempt 2)" "makes no second attempt"
@@ -533,8 +539,8 @@ fi
 if case_is "running out of context is retried even when no JSON came back"; then
   repo="$(make_repo 2 ctx-retry-repo)"
   log="$WORK/ctx-prompts.txt"
-  RALPH_FAKE_PROMPT_LOG="$log" RALPH_FAKE_BEHAVIOUR=context:land \
-    run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_PROMPT_LOG="$log" FOREMAN_FAKE_BEHAVIOUR=context:land \
+    run_foreman "$repo" run batch --unlimited
 
   assert_contains "$OUT" "(attempt 2)" "retried despite the unparseable payload"
   assert_contains "$OUT" "out of context" "says what it saw"
@@ -550,7 +556,7 @@ fi
 
 if case_is "a ticket too big for one context is diagnosed, not just failed"; then
   repo="$(make_repo 2 ctx-stuck-repo)"
-  RALPH_TICKET_ATTEMPTS=2 RALPH_FAKE_BEHAVIOUR=context run_ralph "$repo" run batch --unlimited
+  FOREMAN_TICKET_ATTEMPTS=2 FOREMAN_FAKE_BEHAVIOUR=context run_foreman "$repo" run batch --unlimited
 
   assert_eq "$ST" 20 "gives up after the attempts"
   assert_contains "$OUT" "too large for one iteration" "says what is actually wrong"
@@ -561,11 +567,11 @@ if case_is "a real context payload is not mistaken for a transient one"; then
   # The real payload carries "api_error_status", whose field NAME contains the transient
   # pattern 'api_error'. Classification order is the only thing keeping these apart.
   repo="$(make_repo 2 ctx-json-repo)"
-  RALPH_TICKET_ATTEMPTS=1 RALPH_FAKE_BEHAVIOUR=context-json run_ralph "$repo" run batch --unlimited
+  FOREMAN_TICKET_ATTEMPTS=1 FOREMAN_FAKE_BEHAVIOUR=context-json run_foreman "$repo" run batch --unlimited
 
   assert_eq "$ST" 20 "stops for a human"
   assert_contains "$OUT" "too large for one iteration" "diagnosed as a context failure"
-  runlog="$(cat "$repo/batch/ralph-runs.log")"
+  runlog="$(cat "$repo/batch/foreman-runs.log")"
   assert_contains "$runlog" "CONTEXT EXHAUSTED SIGNAL DETECTED" "recorded as context exhaustion"
   assert_missing "$runlog" "TRANSIENT ERROR SIGNAL DETECTED" "and not as a transient error"
 fi
@@ -574,13 +580,13 @@ if case_is "an expired agent login stops the run at once, named, with no retry";
   # The payload carries "api_error_status": 401, which would read as transient and earn a
   # free second attempt. It must be classified as an auth failure instead.
   repo="$(make_repo 2 auth-repo)"
-  RALPH_TICKET_ATTEMPTS=3 RALPH_FAKE_BEHAVIOUR=auth:land run_ralph "$repo" run batch --unlimited
+  FOREMAN_TICKET_ATTEMPTS=3 FOREMAN_FAKE_BEHAVIOUR=auth:land run_foreman "$repo" run batch --unlimited
 
   assert_eq "$ST" 20 "stops for a human"
   assert_missing "$OUT" "(attempt 2)" "makes no second attempt"
   assert_contains "$OUT" "could not authenticate" "names the cause on the terminal"
   assert_eq "$(done_count "$repo")" "0" "nothing landed"
-  runlog="$(cat "$repo/batch/ralph-runs.log")"
+  runlog="$(cat "$repo/batch/foreman-runs.log")"
   assert_contains "$runlog" "AUTH FAILURE SIGNAL DETECTED" "recorded as an auth failure"
   assert_missing "$runlog" "TRANSIENT ERROR SIGNAL DETECTED" "and not as a transient error"
 fi
@@ -591,8 +597,8 @@ if case_is "a dirty tree stops the run and is never auto-committed"; then
   # the checkpoint to fail too is what still exercises this stop — and the failure path is
   # the one an untested stop let rot before (ticket 01's wrong recovery text).
   repo="$(make_repo 2 dirty-repo)"
-  RALPH_FAKE_BEHAVIOUR=dirty RALPH_FAKE_CHECKPOINT_BEHAVIOUR=fail \
-    run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_BEHAVIOUR=dirty FOREMAN_FAKE_CHECKPOINT_BEHAVIOUR=fail \
+    run_foreman "$repo" run batch --unlimited
 
   assert_eq "$ST" 20 "exits needs-a-human"
   assert_contains "$OUT" "stalled" "the stall is named as such"
@@ -611,8 +617,8 @@ if case_is "a stall is salvaged by a checkpoint turn and the ticket continues"; 
   repo="$(make_repo 2 stall-repo)"
   log="$WORK/stall-prompts.txt"
   base="$(git -C "$repo" rev-parse HEAD)"
-  RALPH_FAKE_PROMPT_LOG="$log" RALPH_FAKE_BEHAVIOUR=dirty:land \
-    run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_PROMPT_LOG="$log" FOREMAN_FAKE_BEHAVIOUR=dirty:land \
+    run_foreman "$repo" run batch --unlimited
 
   assert_eq "$ST" 0 "the batch still finishes"
   assert_contains "$OUT" "stalled" "the stall is named as such"
@@ -622,7 +628,7 @@ if case_is "a stall is salvaged by a checkpoint turn and the ticket continues"; 
     "the checkpoint's own commit is in the history"
 
   # The real checkpoint prompt is what the fake adapter saw — a sentinel phrase, not a side
-  # channel — and it never consumed a slot of RALPH_FAKE_BEHAVIOUR's list.
+  # channel — and it never consumed a slot of FOREMAN_FAKE_BEHAVIOUR's list.
   cp="$(awk '/^===== fake prompt checkpoint /{f=1;next} /^===== fake prompt /{f=0} f' "$log")"
   assert_contains "$cp" "CHECKPOINT TURN" "the checkpoint prompt is recognisable"
   assert_contains "$cp" "$base" "and diffs against the stalled turn's own base"
@@ -651,8 +657,8 @@ if case_is "a stall discovered after the cost budget was reached still gets salv
   # anyway (ticket 06): a budget limits what to commission, not whether to keep work already
   # paid for. --unlimited, so nothing but the budget stops the run.
   repo="$(make_repo 2 salvage-cost-repo)"
-  RALPH_FAKE_COST=0.02 RALPH_MAX_COST_USD=0.01 RALPH_FAKE_BEHAVIOUR=dirty \
-    run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_COST=0.02 FOREMAN_MAX_COST_USD=0.01 FOREMAN_FAKE_BEHAVIOUR=dirty \
+    run_foreman "$repo" run batch --unlimited
 
   assert_eq "$ST" 10 "still pauses — on the cost budget, not stopped for a human"
   assert_contains "$OUT" "stalled" "the stall is still named as such"
@@ -674,8 +680,8 @@ if case_is "a checkpoint turn that discards the diff is not mistaken for one tha
   # outcome than leaving it dirty, and deserves a message that does not imply the work is
   # still there to inspect.
   repo="$(make_repo 2 stall-discard-repo)"
-  RALPH_FAKE_BEHAVIOUR=dirty RALPH_FAKE_CHECKPOINT_BEHAVIOUR=discard \
-    run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_BEHAVIOUR=dirty FOREMAN_FAKE_CHECKPOINT_BEHAVIOUR=discard \
+    run_foreman "$repo" run batch --unlimited
 
   assert_eq "$ST" 20 "stops for a human"
   assert_contains "$OUT" "is gone" "says plainly that the work is gone"
@@ -689,8 +695,8 @@ if case_is "a turn that commits part of its work and then stalls is salvaged too
   # them has HEAD moved and its fixes uncommitted. That is still a stall, not a dirty stop.
   repo="$(make_repo 2 commit-stall-repo)"
   log="$WORK/commit-stall-prompts.txt"
-  RALPH_FAKE_PROMPT_LOG="$log" RALPH_FAKE_BEHAVIOUR=commit-dirty:land \
-    run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_PROMPT_LOG="$log" FOREMAN_FAKE_BEHAVIOUR=commit-dirty:land \
+    run_foreman "$repo" run batch --unlimited
 
   assert_eq "$ST" 0 "the batch still finishes"
   assert_contains "$OUT" "stalled" "the stall is named as such"
@@ -708,8 +714,8 @@ if case_is "a checkpoint that discards a partly committed stall is not mistaken 
   # checkpoint itself committed nothing. Measured against HEAD before the checkpoint, it is
   # the discard it is.
   repo="$(make_repo 2 commit-stall-discard-repo)"
-  RALPH_FAKE_BEHAVIOUR=commit-dirty RALPH_FAKE_CHECKPOINT_BEHAVIOUR=discard \
-    run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_BEHAVIOUR=commit-dirty FOREMAN_FAKE_CHECKPOINT_BEHAVIOUR=discard \
+    run_foreman "$repo" run batch --unlimited
 
   assert_eq "$ST" 20 "stops for a human"
   assert_contains "$OUT" "is gone" "says the uncommitted part is gone"
@@ -718,35 +724,35 @@ fi
 
 if case_is "a partly committed stall the checkpoint cannot commit leaves a marker the rerun trusts"; then
   repo="$(make_repo 2 commit-stall-fail-repo)"
-  marker="$repo/batch/.ralph-stall-marker"
-  RALPH_FAKE_BEHAVIOUR=commit-dirty RALPH_FAKE_CHECKPOINT_BEHAVIOUR=fail \
-    run_ralph "$repo" run batch --unlimited
+  marker="$repo/batch/.foreman-stall-marker"
+  FOREMAN_FAKE_BEHAVIOUR=commit-dirty FOREMAN_FAKE_CHECKPOINT_BEHAVIOUR=fail \
+    run_foreman "$repo" run batch --unlimited
   assert_eq "$ST" 20 "stops for a human"
   assert_contains "$(cat "$marker" 2>/dev/null)" "base_ref=$(git -C "$repo" rev-parse HEAD)" \
     "the marker vouches for HEAD as the stalled turn left it, past the base"
 
-  RALPH_FAKE_BEHAVIOUR=land run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_BEHAVIOUR=land run_foreman "$repo" run batch --unlimited
   assert_eq "$ST" 0 "a plain rerun reviews it and finishes"
   assert_eq "$(git -C "$repo" status --porcelain)" "" "the tree ends clean"
 fi
 
 if case_is "the verify step gives the command time limit and forbids backgrounding"; then
   repo="$(make_repo 1 command-timeout-repo)"
-  run_ralph "$repo" dry-run batch
+  run_foreman "$repo" dry-run batch
   assert_contains "$OUT" "up to 60 minutes" "the default limit is named"
   assert_contains "$OUT" "at most 3600000 ms" "with the Bash tool's timeout in ms"
   assert_contains "$OUT" "Never background a check" "backgrounding is ruled out"
   assert_contains "$OUT" "wip: <ticket> — verifying" "and the work is committed before verifying"
   assert_missing "$OUT" "__COMMAND_TIMEOUT" "no marker is left behind"
 
-  RALPH_COMMAND_TIMEOUT_MINUTES=90 run_ralph "$repo" dry-run batch
+  FOREMAN_COMMAND_TIMEOUT_MINUTES=90 run_foreman "$repo" dry-run batch
   assert_contains "$OUT" "up to 90 minutes" "the limit comes from the setting"
   assert_contains "$OUT" "at most 5400000 ms" "and so does the ms figure"
 
   for bad in 0 abc; do
-    RALPH_COMMAND_TIMEOUT_MINUTES=$bad run_ralph "$repo" dry-run batch
-    assert_eq "$ST" 1 "RALPH_COMMAND_TIMEOUT_MINUTES=$bad is refused"
-    assert_contains "$OUT" "RALPH_COMMAND_TIMEOUT_MINUTES must be" "and says why ($bad)"
+    FOREMAN_COMMAND_TIMEOUT_MINUTES=$bad run_foreman "$repo" dry-run batch
+    assert_eq "$ST" 1 "FOREMAN_COMMAND_TIMEOUT_MINUTES=$bad is refused"
+    assert_contains "$OUT" "FOREMAN_COMMAND_TIMEOUT_MINUTES must be" "and says why ($bad)"
   done
 fi
 
@@ -758,30 +764,30 @@ if case_is "both real adapters lift the agent's Bash time limit to the setting";
   printf '#!/bin/sh\necho "sbx $*"\n' > "$stub/sbx"
   chmod +x "$stub/claude" "$stub/sbx"
   run_for() {
-    PATH="$stub:$PATH" RALPH_COMMAND_TIMEOUT_MINUTES=45 bash -c '
-      RALPH_TOOL_DIR="$1/lib"
-      source "$1/lib/ralph-exec.sh" && ralph_exec_load "$2" >/dev/null 2>&1 || exit 9
-      RALPH_SANDBOX=ralph-env-test RALPH_MODEL=m RALPH_EFFORT=e RALPH_PERMISSION_MODE=p
+    PATH="$stub:$PATH" FOREMAN_COMMAND_TIMEOUT_MINUTES=45 bash -c '
+      FOREMAN_TOOL_DIR="$1/lib"
+      source "$1/lib/foreman-exec.sh" && foreman_exec_load "$2" >/dev/null 2>&1 || exit 9
+      FOREMAN_SANDBOX=foreman-env-test FOREMAN_MODEL=m FOREMAN_EFFORT=e FOREMAN_PERMISSION_MODE=p
       exec_run "the prompt" </dev/null
-    ' _ "$RALPH_HOME" "$1"
+    ' _ "$FOREMAN_HOME" "$1"
   }
   assert_contains "$(run_for local)" "BASH_MAX_TIMEOUT_MS=2700000" "local: claude sees the raised limit"
   out="$(run_for sandbox)"
-  assert_contains "$out" "sbx exec ralph-env-test env BASH_MAX_TIMEOUT_MS=2700000 claude" \
+  assert_contains "$out" "sbx exec foreman-env-test env BASH_MAX_TIMEOUT_MS=2700000 claude" \
     "sandbox: claude inside the container is started with it"
 fi
 
 if case_is "the dirty-tree recovery note matches the mode actually in force"; then
-  # Askable of a mode without running it, the same way ralph_exec_required_tool already is —
+  # Askable of a mode without running it, the same way foreman_exec_required_tool already is —
   # so this asserts each adapter's wording directly rather than only by triggering a real
   # stall under that mode (expensive or impossible for the two that need a real sandbox).
   note_for() {
     bash -c '
-      source "$1/lib/ralph-exec.sh"
-      RALPH_SANDBOX="ralph-note-test"
-      RALPH_INVOKE="ralph"
-      ralph_exec_dirty_recovery_note "$2" deadbeef batch/issues/01-ticket.md batch
-    ' _ "$RALPH_HOME" "$1"
+      source "$1/lib/foreman-exec.sh"
+      FOREMAN_SANDBOX="foreman-note-test"
+      FOREMAN_INVOKE="foreman"
+      foreman_exec_dirty_recovery_note "$2" deadbeef batch/issues/01-ticket.md batch
+    ' _ "$FOREMAN_HOME" "$1"
   }
 
   # sandbox-mount bind-mounts this working tree — the same filesystem, not a copy — so an
@@ -795,8 +801,8 @@ if case_is "the dirty-tree recovery note matches the mode actually in force"; th
   done
 
   note="$(note_for sandbox)"
-  assert_contains "$note" "sbx exec ralph-note-test git commit" "sandbox: commit inside the sandbox"
-  assert_contains "$note" "sbx cp ralph-note-test:" "sandbox: and transport the commit back out"
+  assert_contains "$note" "sbx exec foreman-note-test git commit" "sandbox: commit inside the sandbox"
+  assert_contains "$note" "sbx cp foreman-note-test:" "sandbox: and transport the commit back out"
   assert_contains "$note" "run batch" "sandbox: then rerun"
   assert_missing "$note" "git add -A && git commit -m 'wip:" "sandbox: never the host-commit line"
 fi
@@ -805,33 +811,33 @@ if case_is "the credentials reader finds a name in the file, and an environment 
   # lookup NAME — the reader's answer, run the way every caller runs it: sourced, in a
   # subshell, so nothing it does can leak into this test.
   lookup() {
-    bash -c 'source "$1/lib/ralph-credentials.sh"; ralph_credential "$2"' _ "$RALPH_HOME" "$1" 2>&1
+    bash -c 'source "$1/lib/foreman-credentials.sh"; foreman_credential "$2"' _ "$FOREMAN_HOME" "$1" 2>&1
   }
   # The operator's own values would beat the file and answer every lookup below.
-  unset RALPH_DOCKER_USERNAME RALPH_DOCKER_PAT RALPH_CLAUDE_TOKEN
+  unset FOREMAN_DOCKER_USERNAME FOREMAN_DOCKER_PAT FOREMAN_CLAUDE_TOKEN
   creds="$WORK/creds-env"
-  export RALPH_CREDENTIALS_FILE="$creds"
+  export FOREMAN_CREDENTIALS_FILE="$creds"
 
   # A missing file yields empty, not an error.
-  OUT="$(lookup RALPH_DOCKER_USERNAME)"; ST=$?
+  OUT="$(lookup FOREMAN_DOCKER_USERNAME)"; ST=$?
   assert_eq "$ST" 0 "missing file: succeeds"
   assert_eq "$OUT" "" "missing file: empty"
 
   printf '%s\r\n' \
     '# the operator'"'"'s keys' \
     '' \
-    'RALPH_DOCKER_USERNAME=someone' \
-    'RALPH_DOCKER_PAT="dckr_pat_quoted"' \
-    "RALPH_CLAUDE_TOKEN='sk-ant-single'" \
+    'FOREMAN_DOCKER_USERNAME=someone' \
+    'FOREMAN_DOCKER_PAT="dckr_pat_quoted"' \
+    "FOREMAN_CLAUDE_TOKEN='sk-ant-single'" \
     '   # an indented comment' \
     'WITH_EQUALS=a=b=c' \
     'WITH_SPACE = spaced value  ' \
     'EMPTY=' > "$creds"
   printf 'LAST_LINE_NO_NEWLINE=tail' >> "$creds"
 
-  assert_eq "$(lookup RALPH_DOCKER_USERNAME)" "someone" "a name present only in the file is found"
-  assert_eq "$(lookup RALPH_DOCKER_PAT)" "dckr_pat_quoted" "CRLF endings and double quotes are stripped"
-  assert_eq "$(lookup RALPH_CLAUDE_TOKEN)" "sk-ant-single" "single quotes are stripped"
+  assert_eq "$(lookup FOREMAN_DOCKER_USERNAME)" "someone" "a name present only in the file is found"
+  assert_eq "$(lookup FOREMAN_DOCKER_PAT)" "dckr_pat_quoted" "CRLF endings and double quotes are stripped"
+  assert_eq "$(lookup FOREMAN_CLAUDE_TOKEN)" "sk-ant-single" "single quotes are stripped"
   assert_eq "$(lookup WITH_EQUALS)" "a=b=c" "the value is everything after the first ="
   assert_eq "$(lookup WITH_SPACE)" "spaced value" "blanks around the name and value are trimmed"
   assert_eq "$(lookup LAST_LINE_NO_NEWLINE)" "tail" "a last line without a newline is read"
@@ -840,45 +846,45 @@ if case_is "the credentials reader finds a name in the file, and an environment 
   assert_eq "$(lookup '# the operator')" "" "a comment is not a name"
 
   # The real environment wins over the file; an empty variable does not mask the file.
-  OUT="$(RALPH_DOCKER_USERNAME=from-env lookup RALPH_DOCKER_USERNAME)"
+  OUT="$(FOREMAN_DOCKER_USERNAME=from-env lookup FOREMAN_DOCKER_USERNAME)"
   assert_eq "$OUT" "from-env" "an environment variable beats the file"
-  OUT="$(RALPH_DOCKER_USERNAME= lookup RALPH_DOCKER_USERNAME)"
+  OUT="$(FOREMAN_DOCKER_USERNAME= lookup FOREMAN_DOCKER_USERNAME)"
   assert_eq "$OUT" "someone" "an empty environment variable does not hide the file's value"
 
-  # RALPH_CREDENTIALS_FILE moves the file; without it the file is ~/.config/ralph/env.
-  printf 'RALPH_DOCKER_USERNAME=elsewhere\n' > "$WORK/other-creds"
-  OUT="$(RALPH_CREDENTIALS_FILE="$WORK/other-creds" lookup RALPH_DOCKER_USERNAME)"
-  assert_eq "$OUT" "elsewhere" "RALPH_CREDENTIALS_FILE moves the file"
-  mkdir -p "$WORK/creds-home/.config/ralph"
-  printf 'RALPH_DOCKER_USERNAME=from-home\n' > "$WORK/creds-home/.config/ralph/env"
-  OUT="$(unset RALPH_CREDENTIALS_FILE; HOME="$WORK/creds-home" lookup RALPH_DOCKER_USERNAME)"
-  assert_eq "$OUT" "from-home" "by default the file is ~/.config/ralph/env"
-  OUT="$(unset RALPH_CREDENTIALS_FILE; HOME="$WORK/creds-home" bash -c \
-    'source "$1/lib/ralph-credentials.sh"; ralph_credentials_file' _ "$RALPH_HOME")"
-  assert_eq "$OUT" "$WORK/creds-home/.config/ralph/env" "the resolved path is available to callers"
+  # FOREMAN_CREDENTIALS_FILE moves the file; without it the file is ~/.config/foreman/env.
+  printf 'FOREMAN_DOCKER_USERNAME=elsewhere\n' > "$WORK/other-creds"
+  OUT="$(FOREMAN_CREDENTIALS_FILE="$WORK/other-creds" lookup FOREMAN_DOCKER_USERNAME)"
+  assert_eq "$OUT" "elsewhere" "FOREMAN_CREDENTIALS_FILE moves the file"
+  mkdir -p "$WORK/creds-home/.config/foreman"
+  printf 'FOREMAN_DOCKER_USERNAME=from-home\n' > "$WORK/creds-home/.config/foreman/env"
+  OUT="$(unset FOREMAN_CREDENTIALS_FILE; HOME="$WORK/creds-home" lookup FOREMAN_DOCKER_USERNAME)"
+  assert_eq "$OUT" "from-home" "by default the file is ~/.config/foreman/env"
+  OUT="$(unset FOREMAN_CREDENTIALS_FILE; HOME="$WORK/creds-home" bash -c \
+    'source "$1/lib/foreman-credentials.sh"; foreman_credentials_file' _ "$FOREMAN_HOME")"
+  assert_eq "$OUT" "$WORK/creds-home/.config/foreman/env" "the resolved path is available to callers"
 
   # Parsed as data, never sourced: nothing in the file may run.
   rm -f "$WORK/PWNED"
   printf '%s\n' \
-    "RALPH_DOCKER_PAT=\$(touch $WORK/PWNED)" \
+    "FOREMAN_DOCKER_PAT=\$(touch $WORK/PWNED)" \
     "touch $WORK/PWNED" \
-    "RALPH_CLAUDE_TOKEN=\`touch $WORK/PWNED\`" \
+    "FOREMAN_CLAUDE_TOKEN=\`touch $WORK/PWNED\`" \
     "x[\$(touch $WORK/PWNED)]=1" \
     "FOO=bar; touch $WORK/PWNED" > "$creds"
-  assert_eq "$(lookup RALPH_DOCKER_PAT)" "\$(touch $WORK/PWNED)" "shell code in a value is returned as text"
+  assert_eq "$(lookup FOREMAN_DOCKER_PAT)" "\$(touch $WORK/PWNED)" "shell code in a value is returned as text"
   assert_eq "$(lookup FOO)" "bar; touch $WORK/PWNED" "a trailing command is part of the value"
-  lookup RALPH_CLAUDE_TOKEN >/dev/null
+  lookup FOREMAN_CLAUDE_TOKEN >/dev/null
   lookup "x[\$(touch $WORK/PWNED)]" >/dev/null
-  RALPH_DOCKER_PAT= lookup 'a[$(touch '"$WORK"'/PWNED)]' >/dev/null
+  FOREMAN_DOCKER_PAT= lookup 'a[$(touch '"$WORK"'/PWNED)]' >/dev/null
   assert_eq "$([ -e "$WORK/PWNED" ] && echo executed || echo inert)" "inert" "no line of the file was executed"
 
   # A UTF-8 byte-order mark, as Windows editors write one, does not hide the first name.
-  printf '\xEF\xBB\xBFRALPH_DOCKER_USERNAME=with-bom\r\nSECOND=ok\r\n' > "$creds"
-  assert_eq "$(lookup RALPH_DOCKER_USERNAME)" "with-bom" "a byte-order mark on the first line is ignored"
+  printf '\xEF\xBB\xBFFOREMAN_DOCKER_USERNAME=with-bom\r\nSECOND=ok\r\n' > "$creds"
+  assert_eq "$(lookup FOREMAN_DOCKER_USERNAME)" "with-bom" "a byte-order mark on the first line is ignored"
   assert_eq "$(lookup SECOND)" "ok" "and the lines after it are unaffected"
 
   # The mask shows only the last four characters, and nothing at all of a short value.
-  mask() { bash -c 'source "$1/lib/ralph-credentials.sh"; ralph_mask "$2"' _ "$RALPH_HOME" "$1"; }
+  mask() { bash -c 'source "$1/lib/foreman-credentials.sh"; foreman_mask "$2"' _ "$FOREMAN_HOME" "$1"; }
   assert_eq "$(mask dckr_pat_abcdef1234)" "…1234" "a token is masked to …last4"
   assert_eq "$(mask short)" "…" "a short value shows nothing of itself"
   assert_eq "$(mask '')" "" "an empty value has no mask"
@@ -898,26 +904,26 @@ esac
 STUB
   chmod +x "$stub/sbx"
   create_with() {    # create_with clone|mount
-    PATH="$stub:$PATH" STUB_LOG="$WORK/create.log" RALPH_SANDBOX=ralph-x REPO_ROOT=/repo \
+    PATH="$stub:$PATH" STUB_LOG="$WORK/create.log" FOREMAN_SANDBOX=foreman-x REPO_ROOT=/repo \
       bash -c '
         say() { printf "%s\n" "$*" >&2; }
         warn() { printf "%s\n" "$*" >&2; }
         warn_preflight() { warn "preflight: $*"; }
         source "$1/lib/exec/_sbx.sh"
         _sbx_create "$2"
-      ' _ "$RALPH_HOME" "$1" 2>&1
+      ' _ "$FOREMAN_HOME" "$1" 2>&1
   }
 
   rm -f "$WORK/create.log"
-  OUT="$(STUB_EXISTING="other ralph-x" create_with clone)"; ST=$?
+  OUT="$(STUB_EXISTING="other foreman-x" create_with clone)"; ST=$?
   assert_eq "$ST" 0 "an existing sandbox: succeeds"
   assert_eq "$OUT" "" "an existing sandbox: says nothing at all"
   assert_eq "$([ -e "$WORK/create.log" ] && echo called || echo not-called)" "not-called" \
     "an existing sandbox: sbx create is never run"
 
-  OUT="$(STUB_EXISTING="ralph-xy" create_with clone)"; ST=$?
+  OUT="$(STUB_EXISTING="foreman-xy" create_with clone)"; ST=$?
   assert_eq "$ST" 0 "a missing sandbox is created"
-  assert_contains "$(cat "$WORK/create.log")" "create --clone --name ralph-x claude /repo" \
+  assert_contains "$(cat "$WORK/create.log")" "create --clone --name foreman-x claude /repo" \
     "with --clone in clone mode"
   rm -f "$WORK/create.log"
   STUB_EXISTING="" create_with mount >/dev/null
@@ -925,7 +931,7 @@ STUB
 
   OUT="$(STUB_EXISTING="" STUB_CREATE=fail create_with clone)"; ST=$?
   assert_eq "$ST" 1 "a create that fails, leaving no sandbox, is an error"
-  assert_contains "$OUT" "could not create sandbox 'ralph-x'" "and says so"
+  assert_contains "$OUT" "could not create sandbox 'foreman-x'" "and says so"
   assert_contains "$OUT" "no space left on device" "with what sbx said"
 fi
 
@@ -948,13 +954,13 @@ STUB
   # What a Gradle build leaves behind, before anyone has thought to ignore it.
   mkdir -p "$clone/.kotlin/sessions"; printf 'x\n' > "$clone/.kotlin/sessions/s.salive"
   dirty_against() {    # dirty_against [TARGET] — prints dirty or clean
-    PATH="$stub:$PATH" STUB_CLONE="$clone" RALPH_SANDBOX=ralph-x RALPH_EXEC_DIR="$RALPH_HOME/lib/exec" \
+    PATH="$stub:$PATH" STUB_CLONE="$clone" FOREMAN_SANDBOX=foreman-x FOREMAN_EXEC_DIR="$FOREMAN_HOME/lib/exec" \
       bash -c '
         warn() { printf "%s\n" "$*" >&2; }
         source "$1/lib/exec/sandbox.sh"
         shift
         if exec_tree_dirty "$@"; then echo dirty; else echo clean; fi
-      ' _ "$RALPH_HOME" "$@" 2>&1
+      ' _ "$FOREMAN_HOME" "$@" 2>&1
   }
 
   assert_eq "$(dirty_against "$(git -C "$host" rev-parse HEAD)")" dirty \
@@ -977,8 +983,8 @@ STUB
   git -C "$clone" checkout -q -- Main.kt
 
   # And the sync that now goes ahead leaves the cache alone: it is ignored at the target.
-  PATH="$stub:$PATH" STUB_CLONE="$clone" RALPH_SANDBOX=ralph-x RALPH_EXEC_DIR="$RALPH_HOME/lib/exec" \
-    bash -c 'warn() { :; }; source "$1/lib/exec/sandbox.sh"; exec_sync_down "$2"' _ "$RALPH_HOME" "$target"
+  PATH="$stub:$PATH" STUB_CLONE="$clone" FOREMAN_SANDBOX=foreman-x FOREMAN_EXEC_DIR="$FOREMAN_HOME/lib/exec" \
+    bash -c 'warn() { :; }; source "$1/lib/exec/sandbox.sh"; exec_sync_down "$2"' _ "$FOREMAN_HOME" "$target"
   assert_eq "$(git -C "$clone" rev-parse HEAD)" "$target" "the sync then reaches the target"
   assert_eq "$([ -e "$clone/.kotlin/sessions/s.salive" ] && echo kept || echo wiped)" kept \
     "and keeps the now-ignored cache"
@@ -1003,37 +1009,37 @@ STUB
         warn_preflight() { warn "preflight: $*"; }
         source "$1/lib/exec/_sbx.sh"
         _sbx_login
-      ' _ "$RALPH_HOME" 2>&1
+      ' _ "$FOREMAN_HOME" 2>&1
   }
   rm -f "$WORK/login.args" "$WORK/login.stdin"
 
   # Neither variable set: nothing changes from before — sbx is not even called.
-  unset RALPH_DOCKER_USERNAME RALPH_DOCKER_PAT
+  unset FOREMAN_DOCKER_USERNAME FOREMAN_DOCKER_PAT
   OUT="$(login_with)"; ST=$?
   assert_eq "$ST" 0 "no variables: succeeds"
   assert_eq "$([ -e "$WORK/login.args" ] && echo called || echo not-called)" "not-called" \
     "no variables: sbx login is not run"
 
-  OUT="$(RALPH_DOCKER_USERNAME=someone login_with)"
+  OUT="$(FOREMAN_DOCKER_USERNAME=someone login_with)"
   assert_eq "$([ -e "$WORK/login.args" ] && echo called || echo not-called)" "not-called" \
     "a username without a token: still not run"
 
-  OUT="$(RALPH_DOCKER_USERNAME=someone RALPH_DOCKER_PAT=SECRET-TOKEN-123 login_with)"; ST=$?
+  OUT="$(FOREMAN_DOCKER_USERNAME=someone FOREMAN_DOCKER_PAT=SECRET-TOKEN-123 login_with)"; ST=$?
   assert_eq "$ST" 0 "both set: succeeds"
   assert_contains "$(cat "$WORK/login.args")" "login --username someone --password-stdin" \
     "logs in non-interactively"
   assert_missing "$(cat "$WORK/login.args")" "SECRET-TOKEN-123" "the token is not on the command line"
   assert_eq "$(cat "$WORK/login.stdin")" "SECRET-TOKEN-123" "the token arrives on stdin"
 
-  OUT="$(RALPH_DOCKER_USERNAME=someone RALPH_DOCKER_PAT=SECRET-TOKEN-123 STUB_EXIT=1 login_with)"
+  OUT="$(FOREMAN_DOCKER_USERNAME=someone FOREMAN_DOCKER_PAT=SECRET-TOKEN-123 STUB_EXIT=1 login_with)"
   assert_contains "$OUT" "could not sign in to Docker" "a rejected token is reported"
   assert_contains "$OUT" "unauthorized: bad token" "with what sbx said"
   assert_missing "$OUT" "SECRET-TOKEN-123" "and never echoes the token"
 
   # The same login from the credentials file, with nothing in the environment.
   creds="$WORK/login-creds"
-  export RALPH_CREDENTIALS_FILE="$creds"
-  printf '%s\r\n' '# docker' 'RALPH_DOCKER_USERNAME=filed-user' 'RALPH_DOCKER_PAT="FILE-TOKEN-456"' > "$creds"
+  export FOREMAN_CREDENTIALS_FILE="$creds"
+  printf '%s\r\n' '# docker' 'FOREMAN_DOCKER_USERNAME=filed-user' 'FOREMAN_DOCKER_PAT="FILE-TOKEN-456"' > "$creds"
   rm -f "$WORK/login.args" "$WORK/login.stdin"
   OUT="$(login_with)"; ST=$?
   assert_eq "$ST" 0 "file only: succeeds"
@@ -1044,7 +1050,7 @@ STUB
   assert_missing "$OUT" "FILE-TOKEN-456" "file only: and is never printed"
 
   # The environment wins over the file, name by name.
-  OUT="$(RALPH_DOCKER_PAT=ENV-TOKEN-789 login_with)"; ST=$?
+  OUT="$(FOREMAN_DOCKER_PAT=ENV-TOKEN-789 login_with)"; ST=$?
   assert_contains "$(cat "$WORK/login.args")" "login --username filed-user" \
     "the file supplies the name the environment lacks"
   assert_eq "$(cat "$WORK/login.stdin")" "ENV-TOKEN-789" "an environment token beats the file's"
@@ -1056,7 +1062,7 @@ STUB
   assert_missing "$OUT" "FILE-TOKEN-456" "file only: a rejection never echoes the token"
 
   # A file with only half the pair is the same as no file: sbx is not called.
-  printf 'RALPH_DOCKER_USERNAME=filed-user\n' > "$creds"
+  printf 'FOREMAN_DOCKER_USERNAME=filed-user\n' > "$creds"
   rm -f "$WORK/login.args" "$WORK/login.stdin"
   OUT="$(login_with)"; ST=$?
   assert_eq "$ST" 0 "a file with a username only: succeeds"
@@ -1064,7 +1070,7 @@ STUB
     "a file with a username only: sbx login is not run"
 
   # The token is read, never exported: a child of the login does not inherit it.
-  printf 'RALPH_DOCKER_USERNAME=filed-user\nRALPH_DOCKER_PAT=FILE-TOKEN-456\n' > "$creds"
+  printf 'FOREMAN_DOCKER_USERNAME=filed-user\nFOREMAN_DOCKER_PAT=FILE-TOKEN-456\n' > "$creds"
   cat > "$stub/sbx" <<'STUB'
 #!/bin/bash
 printf '%s\n' "$*" > "$STUB_ARGS"
@@ -1079,7 +1085,7 @@ if case_is "syncing refuses over a dirty tree rather than resetting it"; then
   repo="$(make_repo 2 refuse-sync-repo)"
 
   # A clean tree syncs exactly as before, with no extra output.
-  run_ralph "$repo" run batch 1
+  run_foreman "$repo" run batch 1
   assert_eq "$ST" 10 "clean tree: the iteration runs and pauses on the iteration budget"
   assert_eq "$(done_count "$repo")" "1" "clean tree: the ticket landed"
   assert_missing "$OUT" "Refusing to sync" "clean tree: no refusal text"
@@ -1088,8 +1094,8 @@ if case_is "syncing refuses over a dirty tree rather than resetting it"; then
   # that would normally salvage a stall to fail too, so the tree is still dirty for the
   # rerun below to find. (The salvage path itself is covered by "a stall is salvaged by a
   # checkpoint turn and the ticket continues".)
-  RALPH_FAKE_BEHAVIOUR=dirty RALPH_FAKE_CHECKPOINT_BEHAVIOUR=fail \
-    run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_BEHAVIOUR=dirty FOREMAN_FAKE_CHECKPOINT_BEHAVIOUR=fail \
+    run_foreman "$repo" run batch --unlimited
   assert_eq "$ST" 20 "the unsalvaged stall stops for a human"
   head_after_stall="$(git -C "$repo" rev-parse HEAD)"
   commits_after_stall="$(git -C "$repo" log --oneline | wc -l)"
@@ -1097,14 +1103,14 @@ if case_is "syncing refuses over a dirty tree rather than resetting it"; then
   # The unsalvaged stall above left a marker, which a rerun would (rightly) trust and act
   # on — that path has its own cases below. Deleting the marker by hand is always safe, and
   # is exactly how to reach the refusal this case is about: a dirty tree nobody can vouch for.
-  rm -f "$repo/batch/.ralph-stall-marker"
+  rm -f "$repo/batch/.foreman-stall-marker"
 
-  # Rerunning is the natural response to any stop. RALPH_ALLOW_DIRTY=1 only waives the
+  # Rerunning is the natural response to any stop. FOREMAN_ALLOW_DIRTY=1 only waives the
   # PREFLIGHT gate on the review base (a different concern); it must not waive this
   # refusal, which exists so that "just rerun it" can never destroy the tree.
   log="$WORK/refuse-sync-prompts.txt"
-  RALPH_ALLOW_DIRTY=1 RALPH_FAKE_PROMPT_LOG="$log" RALPH_FAKE_BEHAVIOUR=land \
-    run_ralph "$repo" run batch --unlimited
+  FOREMAN_ALLOW_DIRTY=1 FOREMAN_FAKE_PROMPT_LOG="$log" FOREMAN_FAKE_BEHAVIOUR=land \
+    run_foreman "$repo" run batch --unlimited
   assert_eq "$ST" 20 "rerun over a dirty tree refuses rather than resetting"
   assert_contains "$OUT" "Refusing to sync" "says why it refused"
   assert_contains "$OUT" "git add -A && git commit -m 'wip:" "prints the mode's recovery note"
@@ -1120,29 +1126,29 @@ fi
 stalled_repo() {
   local repo
   repo="$(make_repo 2 "$1")"
-  RALPH_FAKE_BEHAVIOUR=dirty RALPH_FAKE_CHECKPOINT_BEHAVIOUR=fail \
-    run_ralph "$repo" run batch >/dev/null 2>&1
+  FOREMAN_FAKE_BEHAVIOUR=dirty FOREMAN_FAKE_CHECKPOINT_BEHAVIOUR=fail \
+    run_foreman "$repo" run batch >/dev/null 2>&1
   printf '%s' "$repo"
 }
 
 if case_is "a rerun salvages the stalled work its own previous run left behind"; then
   repo="$(make_repo 2 rerun-salvage-repo)"
-  marker="$repo/batch/.ralph-stall-marker"
+  marker="$repo/batch/.foreman-stall-marker"
   base="$(git -C "$repo" rev-parse HEAD)"
 
-  RALPH_FAKE_BEHAVIOUR=dirty RALPH_FAKE_CHECKPOINT_BEHAVIOUR=fail \
-    run_ralph "$repo" run batch
+  FOREMAN_FAKE_BEHAVIOUR=dirty FOREMAN_FAKE_CHECKPOINT_BEHAVIOUR=fail \
+    run_foreman "$repo" run batch
   assert_eq "$ST" 20 "the unsalvaged stall stops for a human"
   [ -f "$marker" ] && pass || fail "the unsalvaged stall records a marker"
   assert_contains "$(cat "$marker" 2>/dev/null)" "batch/issues/01-ticket.md" "it names the ticket"
   assert_contains "$(cat "$marker" 2>/dev/null)" "$base" "and the base ref"
-  assert_contains "$(cat "$marker" 2>/dev/null)" "ralph-rerun-salvage-repo" "and the sandbox"
+  assert_contains "$(cat "$marker" 2>/dev/null)" "foreman-rerun-salvage-repo" "and the sandbox"
   [ -n "$(git -C "$repo" status --porcelain)" ] && pass || fail "the work is still uncommitted"
 
-  # No RALPH_ALLOW_DIRTY here: "just rerun it" has to be true as typed.
+  # No FOREMAN_ALLOW_DIRTY here: "just rerun it" has to be true as typed.
   log="$WORK/rerun-salvage-prompts.txt"
-  RALPH_FAKE_PROMPT_LOG="$log" RALPH_FAKE_BEHAVIOUR=land \
-    run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_PROMPT_LOG="$log" FOREMAN_FAKE_BEHAVIOUR=land \
+    run_foreman "$repo" run batch --unlimited
   assert_eq "$ST" 0 "the rerun finishes the batch"
   assert_eq "$(done_count "$repo")" "2" "both tickets land"
   assert_contains "$OUT" "salvaged by a checkpoint turn" "the rescue is announced"
@@ -1165,14 +1171,14 @@ fi
 
 if case_is "a rerun with no stall marker refuses rather than rescuing, and deleting the marker is safe"; then
   repo="$(stalled_repo rerun-no-marker-repo)"
-  marker="$repo/batch/.ralph-stall-marker"
+  marker="$repo/batch/.foreman-stall-marker"
   [ -f "$marker" ] && pass || fail "the stall left a marker to delete"
   rm -f "$marker"
 
   head_before="$(git -C "$repo" rev-parse HEAD)"
   log="$WORK/rerun-no-marker-prompts.txt"
-  RALPH_ALLOW_DIRTY=1 RALPH_FAKE_PROMPT_LOG="$log" RALPH_FAKE_BEHAVIOUR=land \
-    run_ralph "$repo" run batch --unlimited
+  FOREMAN_ALLOW_DIRTY=1 FOREMAN_FAKE_PROMPT_LOG="$log" FOREMAN_FAKE_BEHAVIOUR=land \
+    run_foreman "$repo" run batch --unlimited
   assert_eq "$ST" 20 "no marker: refuses and stops for a human"
   assert_contains "$OUT" "Refusing to sync" "says why"
   assert_contains "$OUT" "--adopt-dirty" "and names the flag that would review it instead"
@@ -1182,7 +1188,7 @@ if case_is "a rerun with no stall marker refuses rather than rescuing, and delet
   [ -n "$(git -C "$repo" status --porcelain)" ] && pass || fail "the work is untouched"
 
   # Without the override the preflight has its say first, exactly as it always did.
-  run_ralph "$repo" run batch
+  run_foreman "$repo" run batch
   assert_eq "$ST" 1 "a dirty tree nobody vouches for still fails the preflight"
 fi
 
@@ -1192,7 +1198,7 @@ if case_is "a marker that does not match the dirty tree is never trusted"; then
   # per repository, so a dirty tree may be another batch's stall or a human's own session.
   for field in sandbox base_ref ticket; do
     repo="$(stalled_repo "rerun-mismatch-$field-repo")"
-    marker="$repo/batch/.ralph-stall-marker"
+    marker="$repo/batch/.foreman-stall-marker"
     case "$field" in
       sandbox)  sed -i 's|^sandbox=.*|sandbox=some-other-sandbox|' "$marker" ;;
       base_ref) sed -i 's|^base_ref=.*|base_ref=0000000000000000000000000000000000000000|' "$marker" ;;
@@ -1201,8 +1207,8 @@ if case_is "a marker that does not match the dirty tree is never trusted"; then
 
     head_before="$(git -C "$repo" rev-parse HEAD)"
     log="$WORK/rerun-mismatch-$field-prompts.txt"
-    RALPH_ALLOW_DIRTY=1 RALPH_FAKE_PROMPT_LOG="$log" RALPH_FAKE_BEHAVIOUR=land \
-      run_ralph "$repo" run batch --unlimited
+    FOREMAN_ALLOW_DIRTY=1 FOREMAN_FAKE_PROMPT_LOG="$log" FOREMAN_FAKE_BEHAVIOUR=land \
+      run_foreman "$repo" run batch --unlimited
     assert_eq "$ST" 20 "$field mismatch: refuses"
     assert_contains "$OUT" "Refusing to sync" "$field mismatch: says why"
     assert_eq "$(git -C "$repo" rev-parse HEAD)" "$head_before" "$field mismatch: nothing committed"
@@ -1213,11 +1219,11 @@ fi
 
 if case_is "a rerun whose rescue fails stops for a human and keeps the marker"; then
   repo="$(stalled_repo rerun-rescue-fails-repo)"
-  marker="$repo/batch/.ralph-stall-marker"
+  marker="$repo/batch/.foreman-stall-marker"
   head_before="$(git -C "$repo" rev-parse HEAD)"
 
-  RALPH_FAKE_BEHAVIOUR=land RALPH_FAKE_CHECKPOINT_BEHAVIOUR=fail \
-    run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_BEHAVIOUR=land FOREMAN_FAKE_CHECKPOINT_BEHAVIOUR=fail \
+    run_foreman "$repo" run batch --unlimited
   assert_eq "$ST" 20 "a rescue that cannot commit stops for a human"
   assert_contains "$OUT" "could not" "and says the checkpoint turn failed"
   assert_contains "$OUT" "git add -A && git commit -m 'wip:" "with the adapter's recovery note"
@@ -1226,7 +1232,7 @@ if case_is "a rerun whose rescue fails stops for a human and keeps the marker"; 
   [ -f "$marker" ] && pass || fail "the stall is still unsalvaged, so it is still marked"
 
   # ...which is what makes the next rerun's rescue possible once the cause is fixed.
-  RALPH_FAKE_BEHAVIOUR=land run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_BEHAVIOUR=land run_foreman "$repo" run batch --unlimited
   assert_eq "$ST" 0 "a later rerun rescues it"
   assert_eq "$(done_count "$repo")" "2" "and finishes the batch"
   [ -e "$marker" ] && fail "the marker is gone" || pass
@@ -1234,21 +1240,21 @@ fi
 
 if case_is "a marker is removed once the tree is clean, and a salvaged stall leaves none"; then
   repo="$(stalled_repo rerun-clean-repo)"
-  marker="$repo/batch/.ralph-stall-marker"
+  marker="$repo/batch/.foreman-stall-marker"
 
   # The operator rescues it by hand, as the recovery note says, and reruns.
   git -C "$repo" add -A
   git -C "$repo" commit --quiet -m "wip: by hand"
-  RALPH_FAKE_BEHAVIOUR=land run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_BEHAVIOUR=land run_foreman "$repo" run batch --unlimited
   assert_eq "$ST" 0 "a hand-rescued tree runs normally"
   assert_missing "$OUT" "Refusing to sync" "no refusal"
   [ -e "$marker" ] && fail "a clean tree retires the marker" || pass
 
   # A stall the checkpoint turn DID salvage was never left unsalvaged, so it never marks.
   repo="$(make_repo 2 salvaged-no-marker-repo)"
-  RALPH_FAKE_BEHAVIOUR=dirty:land run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_BEHAVIOUR=dirty:land run_foreman "$repo" run batch --unlimited
   assert_eq "$ST" 0 "a salvaged stall finishes the batch"
-  [ -e "$repo/batch/.ralph-stall-marker" ] && fail "a salvaged stall records no marker" || pass
+  [ -e "$repo/batch/.foreman-stall-marker" ] && fail "a salvaged stall records no marker" || pass
 fi
 
 # A run stopped part-way through a turn — a usage limit, or Ctrl-C — with the turn's work
@@ -1257,7 +1263,7 @@ fi
 stopped_mid_turn_repo() {
   local repo
   repo="$(make_repo 2 "$2")"
-  RALPH_FAKE_BEHAVIOUR="$1" run_ralph "$repo" run batch --unlimited >/dev/null 2>&1
+  FOREMAN_FAKE_BEHAVIOUR="$1" run_foreman "$repo" run batch --unlimited >/dev/null 2>&1
   printf '%s' "$repo"
 }
 
@@ -1266,10 +1272,10 @@ stopped_mid_turn_repo() {
 check_stopped_mid_turn_resumes() {    # check_stopped_mid_turn_resumes FAKE_BEHAVIOUR
     local stop="$1" repo marker base log first
     repo="$(make_repo 2 "$stop-repo")"
-    marker="$repo/batch/.ralph-stall-marker"
+    marker="$repo/batch/.foreman-stall-marker"
     base="$(git -C "$repo" rev-parse HEAD)"
 
-    RALPH_FAKE_BEHAVIOUR="$stop" run_ralph "$repo" run batch --unlimited
+    FOREMAN_FAKE_BEHAVIOUR="$stop" run_foreman "$repo" run batch --unlimited
     assert_eq "$ST" 10 "$stop: the run pauses, resumable"
     [ -f "$marker" ] && pass || fail "$stop: the turn's marker is left behind"
     assert_contains "$(cat "$marker" 2>/dev/null)" "batch/issues/01-ticket.md" "$stop: it names the ticket"
@@ -1278,8 +1284,8 @@ check_stopped_mid_turn_resumes() {    # check_stopped_mid_turn_resumes FAKE_BEHA
 
     # "Just rerun it", as the footer says — no flag, no override.
     log="$WORK/$stop-prompts.txt"
-    RALPH_FAKE_PROMPT_LOG="$log" RALPH_FAKE_BEHAVIOUR=land \
-      run_ralph "$repo" run batch --unlimited
+    FOREMAN_FAKE_PROMPT_LOG="$log" FOREMAN_FAKE_BEHAVIOUR=land \
+      run_foreman "$repo" run batch --unlimited
     assert_eq "$ST" 0 "$stop: the rerun finishes the batch"
     assert_eq "$(done_count "$repo")" "2" "$stop: both tickets land"
     assert_contains "$OUT" "reviewed and salvaged by a checkpoint turn" "$stop: the rescue is announced"
@@ -1308,8 +1314,8 @@ fi
 if case_is "a review checkpoint gets a higher turn limit than a stall checkpoint"; then
   repo="$(make_repo 2 max-turns-stall-repo)"
   log="$WORK/max-turns-stall-prompts.txt"
-  RALPH_FAKE_PROMPT_LOG="$log" RALPH_FAKE_BEHAVIOUR=dirty:land \
-    run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_PROMPT_LOG="$log" FOREMAN_FAKE_BEHAVIOUR=dirty:land \
+    run_foreman "$repo" run batch --unlimited
   assert_eq "$ST" 0 "the stalled batch finishes"
   args="$(awk '/^===== fake prompt checkpoint /{getline; print; exit}' "$log")"
   assert_contains "$args" "--max-turns" "the checkpoint is given a turn limit"
@@ -1319,8 +1325,8 @@ if case_is "a review checkpoint gets a higher turn limit than a stall checkpoint
 
   repo="$(stopped_mid_turn_repo limit-dirty max-turns-review-repo)"
   log="$WORK/max-turns-review-prompts.txt"
-  RALPH_FAKE_PROMPT_LOG="$log" RALPH_FAKE_BEHAVIOUR=land \
-    run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_PROMPT_LOG="$log" FOREMAN_FAKE_BEHAVIOUR=land \
+    run_foreman "$repo" run batch --unlimited
   assert_eq "$ST" 0 "the reviewed batch finishes"
   assert_contains "$(cat "$log")" "REVIEW CHECKPOINT TURN" "a review checkpoint ran"
   args="$(awk '/^===== fake prompt checkpoint /{getline; print; exit}' "$log")"
@@ -1332,24 +1338,24 @@ fi
 
 if case_is "a turn that ends cleanly, or pauses with a clean tree, leaves no marker"; then
   repo="$(make_repo 2 no-marker-clean-repo)"
-  run_ralph "$repo" run batch 1
+  run_foreman "$repo" run batch 1
   assert_eq "$ST" 10 "a landed iteration pauses on the budget"
-  [ -e "$repo/batch/.ralph-stall-marker" ] && fail "a landed turn leaves no marker" || pass
+  [ -e "$repo/batch/.foreman-stall-marker" ] && fail "a landed turn leaves no marker" || pass
 
-  RALPH_FAKE_BEHAVIOUR=limit run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_BEHAVIOUR=limit run_foreman "$repo" run batch --unlimited
   assert_eq "$ST" 10 "a usage limit with nothing written pauses"
-  [ -e "$repo/batch/.ralph-stall-marker" ] && fail "a clean limit leaves no marker" || pass
+  [ -e "$repo/batch/.foreman-stall-marker" ] && fail "a clean limit leaves no marker" || pass
 fi
 
 if case_is "a review turn that refuses the leftover work stops for a human and leaves it alone"; then
   repo="$(stopped_mid_turn_repo limit-dirty review-rejects-repo)"
-  marker="$repo/batch/.ralph-stall-marker"
+  marker="$repo/batch/.foreman-stall-marker"
   [ -f "$marker" ] && pass || fail "the stopped turn left a marker"
   head_before="$(git -C "$repo" rev-parse HEAD)"
   dirty_before="$(git -C "$repo" status --porcelain)"
 
-  RALPH_FAKE_BEHAVIOUR=land RALPH_FAKE_CHECKPOINT_BEHAVIOUR=reject \
-    run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_BEHAVIOUR=land FOREMAN_FAKE_CHECKPOINT_BEHAVIOUR=reject \
+    run_foreman "$repo" run batch --unlimited
   assert_eq "$ST" 20 "a refusal stops for a human"
   assert_contains "$OUT" "refused to commit" "says the review refused"
   assert_contains "$OUT" "changes outside the ticket's scope" "with the reviewer's reasons"
@@ -1361,8 +1367,8 @@ if case_is "a review turn that refuses the leftover work stops for a human and l
 
   # ...so a plain rerun now refuses, and names the flag that would review it anyway.
   log="$WORK/review-rejects-prompts.txt"
-  RALPH_ALLOW_DIRTY=1 RALPH_FAKE_PROMPT_LOG="$log" RALPH_FAKE_BEHAVIOUR=land \
-    run_ralph "$repo" run batch --unlimited
+  FOREMAN_ALLOW_DIRTY=1 FOREMAN_FAKE_PROMPT_LOG="$log" FOREMAN_FAKE_BEHAVIOUR=land \
+    run_foreman "$repo" run batch --unlimited
   assert_eq "$ST" 20 "the rerun refuses"
   assert_contains "$OUT" "Refusing to sync" "says why"
   assert_contains "$OUT" "--adopt-dirty" "and offers --adopt-dirty"
@@ -1371,13 +1377,13 @@ fi
 
 if case_is "--adopt-dirty reviews and commits a dirty tree no marker vouches for"; then
   repo="$(stalled_repo adopt-dirty-repo)"
-  rm -f "$repo/batch/.ralph-stall-marker"
+  rm -f "$repo/batch/.foreman-stall-marker"
   [ -n "$(git -C "$repo" status --porcelain)" ] && pass || fail "the tree is dirty and unmarked"
 
-  # No RALPH_ALLOW_DIRTY: the flag is the operator vouching for the tree, preflight included.
+  # No FOREMAN_ALLOW_DIRTY: the flag is the operator vouching for the tree, preflight included.
   log="$WORK/adopt-dirty-prompts.txt"
-  RALPH_FAKE_PROMPT_LOG="$log" RALPH_FAKE_BEHAVIOUR=land \
-    run_ralph "$repo" run batch --unlimited --adopt-dirty
+  FOREMAN_FAKE_PROMPT_LOG="$log" FOREMAN_FAKE_BEHAVIOUR=land \
+    run_foreman "$repo" run batch --unlimited --adopt-dirty
   assert_eq "$ST" 0 "the adopted tree is reviewed and the batch finishes"
   assert_contains "$OUT" "--adopt-dirty says" "it says why it trusted the tree"
   assert_contains "$OUT" "reviewed and salvaged by a checkpoint turn" "the rescue is announced"
@@ -1389,7 +1395,7 @@ if case_is "--adopt-dirty reviews and commits a dirty tree no marker vouches for
 
   # On a clean tree the flag changes nothing.
   repo="$(make_repo 1 adopt-clean-repo)"
-  run_ralph "$repo" run batch --adopt-dirty
+  run_foreman "$repo" run batch --adopt-dirty
   assert_eq "$ST" 0 "a clean tree runs as usual under --adopt-dirty"
   assert_missing "$OUT" "earlier run" "and no rescue is attempted"
 fi
@@ -1400,7 +1406,7 @@ if case_is "--live draws what the agent is doing, and only that"; then
   # the traffic and say nothing about progress.
   # Two tickets, one iteration: the second is what the dry-run below has left to plan for.
   repo="$(make_repo 2 live-repo)"
-  RALPH_FAKE_BEHAVIOUR=stream run_ralph "$repo" run batch --live
+  FOREMAN_FAKE_BEHAVIOUR=stream run_foreman "$repo" run batch --live
 
   assert_contains "$OUT" "Write src/foo.js" "a file write is drawn"
   assert_contains "$OUT" "Bash npm test" "and a shell command"
@@ -1412,9 +1418,9 @@ if case_is "--live draws what the agent is doing, and only that"; then
 
   # Which --output-format the adapter would ask for is the other decision `fake` cannot
   # exercise, so dry-run reports the state that decides it.
-  run_ralph "$repo" dry-run batch
+  run_foreman "$repo" dry-run batch
   assert_contains "$OUT" "Live:    off" "dry-run says a plain run is not watched"
-  run_ralph "$repo" dry-run batch --live
+  run_foreman "$repo" dry-run batch --live
   assert_contains "$OUT" "Live:    on" "and that a --live one is"
 fi
 
@@ -1425,9 +1431,9 @@ if case_is "a --live run that produces no result object still says what it saw";
   # recorder only dumps a raw payload when there is one, leaving the human with "payload was
   # not valid JSON" and nothing to read. The tail is what keeps that diagnosable.
   repo="$(make_repo 1 live-noresult)"
-  RALPH_FAKE_BEHAVIOUR=stream-no-result run_ralph "$repo" run batch --live
+  FOREMAN_FAKE_BEHAVIOUR=stream-no-result run_foreman "$repo" run batch --live
 
-  runlog="$(cat "$repo/batch/ralph-runs.log")"
+  runlog="$(cat "$repo/batch/foreman-runs.log")"
   assert_contains "$runlog" "RAW PAYLOAD" "the log dumps what did arrive"
   assert_contains "$runlog" "SANDBOX-ERROR-SENTINEL" "including the error the sandbox printed"
   assert_contains "$OUT" "printed no result object" "and the run says so as it happens"
@@ -1440,9 +1446,9 @@ if case_is "--live changes nothing about the verdict or the recorded usage"; the
   plain="$(make_repo 2 live-equiv-plain)"
   lively="$(make_repo 2 live-equiv-live)"
 
-  RALPH_FAKE_COST=0.25 run_ralph "$plain" run batch --unlimited
+  FOREMAN_FAKE_COST=0.25 run_foreman "$plain" run batch --unlimited
   plain_out="$OUT"; plain_st="$ST"
-  RALPH_FAKE_COST=0.25 run_ralph "$lively" run batch --unlimited --live
+  FOREMAN_FAKE_COST=0.25 run_foreman "$lively" run batch --unlimited --live
   assert_eq "$ST" "$plain_st" "the same exit status"
   assert_eq "$(done_count "$lively")" "$(done_count "$plain")" "the same tickets land"
 
@@ -1458,8 +1464,8 @@ if case_is "a ticket that hands off part-finished is continued, not failed"; the
   repo="$(make_repo 2 partial-repo)"
   log="$WORK/partial-prompts.txt"
   base="$(git -C "$repo" rev-parse HEAD)"
-  RALPH_FAKE_PROMPT_LOG="$log" RALPH_FAKE_BEHAVIOUR=partial-turn:land \
-    run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_PROMPT_LOG="$log" FOREMAN_FAKE_BEHAVIOUR=partial-turn:land \
+    run_foreman "$repo" run batch --unlimited
 
   assert_contains "$OUT" "⋯ progressed" "the checkpoint reads as progress"
   assert_missing "$OUT" "is still not 'implemented'" "and not as a failure"
@@ -1479,16 +1485,16 @@ if case_is "a ticket that hands off part-finished is continued, not failed"; the
   assert_missing "$p2" "reconstructed" "the deliberate-handoff notice is unchanged"
   assert_missing "$p2" "ran out of room" "and does not carry the stall's context-retry framing"
 
-  run_ralph "$repo" report DONE_batch
+  run_foreman "$repo" report DONE_batch
   assert_contains "$OUT" "progressed 1" "the report counts it as its own outcome"
-  run_ralph "$repo" report DONE_batch --failures
+  run_foreman "$repo" report DONE_batch --failures
   assert_contains "$OUT" "every recorded iteration landed" "and does not flag it as a problem"
 fi
 
 if case_is "a ticket that never stops chunking is called mis-sized"; then
   repo="$(make_repo 2 continuation-cap-repo)"
-  RALPH_MAX_CONTINUATIONS=3 RALPH_FAKE_BEHAVIOUR=partial-turn \
-    run_ralph "$repo" run batch --unlimited
+  FOREMAN_MAX_CONTINUATIONS=3 FOREMAN_FAKE_BEHAVIOUR=partial-turn \
+    run_foreman "$repo" run batch --unlimited
 
   assert_eq "$ST" 20 "stops for a human rather than chunking forever"
   assert_contains "$OUT" "has needed 3 extra turns without landing" "counts the continuations"
@@ -1502,8 +1508,8 @@ if case_is "a ticket that never stops stalling hits the same cap, broken down as
   # stall budget — but the message must not call a ticket that only ever stalled
   # "progressed".
   repo="$(make_repo 2 stall-cap-repo)"
-  RALPH_MAX_CONTINUATIONS=2 RALPH_FAKE_BEHAVIOUR=dirty \
-    run_ralph "$repo" run batch --unlimited
+  FOREMAN_MAX_CONTINUATIONS=2 FOREMAN_FAKE_BEHAVIOUR=dirty \
+    run_foreman "$repo" run batch --unlimited
 
   assert_eq "$ST" 20 "stops for a human rather than salvaging forever"
   assert_contains "$OUT" "has needed 2 extra turns without landing" "counts the stalls as continuations too"
@@ -1514,8 +1520,8 @@ fi
 
 if case_is "a progressed iteration does not consume a ticket's attempts"; then
   repo="$(make_repo 2 progress-attempts-repo)"
-  RALPH_TICKET_ATTEMPTS=2 RALPH_FAKE_BEHAVIOUR=partial-turn:noop \
-    run_ralph "$repo" run batch --unlimited
+  FOREMAN_TICKET_ATTEMPTS=2 FOREMAN_FAKE_BEHAVIOUR=partial-turn:noop \
+    run_foreman "$repo" run batch --unlimited
 
   assert_eq "$ST" 20 "the unproductive iteration stops the run"
   assert_contains "$OUT" "after 1 attempt(s)" "only the unproductive one was counted"
@@ -1523,7 +1529,7 @@ fi
 
 if case_is "a stalled iteration does not consume a ticket's attempts"; then
   repo="$(make_repo 2 stall-attempts-repo)"
-  RALPH_FAKE_BEHAVIOUR=dirty:noop run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_BEHAVIOUR=dirty:noop run_foreman "$repo" run batch --unlimited
 
   assert_eq "$ST" 20 "the unproductive iteration after the salvage stops the run"
   assert_contains "$OUT" "salvaged by a checkpoint turn" "the stall itself was salvaged, not attempted"
@@ -1533,8 +1539,8 @@ fi
 
 if case_is "a checkpoint turn is recorded as its own row and its cost is in the run total"; then
   repo="$(make_repo 2 checkpoint-cost-repo)"
-  RALPH_FAKE_COST=0.10 RALPH_FAKE_BEHAVIOUR=dirty:land \
-    run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_COST=0.10 FOREMAN_FAKE_BEHAVIOUR=dirty:land \
+    run_foreman "$repo" run batch --unlimited
 
   assert_eq "$ST" 0 "the batch still finishes"
   assert_eq "$(done_count "$repo")" "2" "both tickets land"
@@ -1544,27 +1550,27 @@ if case_is "a checkpoint turn is recorded as its own row and its cost is in the 
   assert_contains "$OUT" "iterations run:        3" "the checkpoint turn does not advance the iteration count"
   assert_contains "$OUT" "cost (USD, reported):  \$0.400000" "but its cost is folded into the run total"
 
-  jsonl="$repo/DONE_batch/ralph-runs.jsonl"
+  jsonl="$repo/DONE_batch/foreman-runs.jsonl"
   assert_eq "$(grep -c . "$jsonl")" "4" "all 4 turns are recorded"
   assert_eq "$(grep -c '"kind":"checkpoint"' "$jsonl")" "1" "one of them is its own, distinguishable row"
 
-  run_ralph "$repo" report DONE_batch
+  run_foreman "$repo" report DONE_batch
   assert_contains "$OUT" "stalled 1" "the report counts the stall as its own outcome"
   assert_contains "$OUT" "checkpoint turns 1" "and the checkpoint as its own bucket"
   assert_contains "$OUT" '$0.4000' "totalling all 4 turns' cost"
 
-  run_ralph "$repo" report DONE_batch --failures
+  run_foreman "$repo" report DONE_batch --failures
   assert_contains "$OUT" "every recorded iteration landed" "a salvaged stall is not flagged as a failure"
 fi
 
 if case_is "the prompt tells the agent how to hand a ticket off"; then
   repo="$(make_repo 1 handoff-prompt-repo)"
-  printf 'RALPH_CONTEXT_BUDGET_TOKENS=123456\n' >> "$repo/batch/ralph.conf"
+  printf 'FOREMAN_CONTEXT_BUDGET_TOKENS=123456\n' >> "$repo/batch/foreman.conf"
   git -C "$repo" commit --quiet -am "context budget"
 
-  run_ralph "$repo" dry-run batch
+  run_foreman "$repo" dry-run batch
   assert_eq "$ST" 0 "dry-run exits 0"
-  assert_contains "$OUT" "123456 tokens of context" "the budget comes from ralph.conf"
+  assert_contains "$OUT" "123456 tokens of context" "the budget comes from foreman.conf"
   assert_contains "$OUT" "wip: <ticket>" "the handoff names the commit shape"
   assert_contains "$OUT" "Remaining:" "and the note it has to leave"
   assert_missing "$OUT" "__CONTEXT_BUDGET__" "the marker is not left behind"
@@ -1576,11 +1582,11 @@ if case_is "a denied tool call names permissions, not the dirty tree it caused";
   # tree is dirty as a CONSEQUENCE; before this the dirty branch won and the terminal never
   # mentioned permissions at all.
   repo="$(make_repo 2 permdenied-repo)"
-  RALPH_FAKE_BEHAVIOUR=permission-denied run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_BEHAVIOUR=permission-denied run_foreman "$repo" run batch --unlimited
 
   assert_eq "$ST" 20 "exits needs-a-human"
   assert_contains "$OUT" "stopped by a permission denial" "names the real cause"
-  assert_contains "$OUT" 'Bash(git commit:*)' "and the exact ralph.conf line that fixes it"
+  assert_contains "$OUT" 'Bash(git commit:*)' "and the exact foreman.conf line that fixes it"
   assert_missing "$OUT" "left uncommitted changes behind" "not reported as a plain dirty tree"
   # The stall branch sits BELOW this one: a denied `git commit` dirties the tree as a
   # consequence, and a checkpoint turn salvaging it would report the symptom, never the
@@ -1588,7 +1594,7 @@ if case_is "a denied tool call names permissions, not the dirty tree it caused";
   assert_missing "$OUT" "stalled" "and no checkpoint turn is attempted either"
   assert_eq "$(git -C "$repo" log --oneline | wc -l)" "1" "committed nothing"
 
-  runlog="$(cat "$repo/batch/ralph-runs.log")"
+  runlog="$(cat "$repo/batch/foreman-runs.log")"
   assert_contains "$runlog" "PERMISSION DENIED SIGNAL DETECTED" "recorded as its own signal"
 fi
 
@@ -1598,44 +1604,44 @@ if case_is "the permission mode defaults to what the execution mode needs"; then
   # the gate only costs a paid iteration; on a real machine `local` keeps its gate.
   repo="$(make_repo 1 perms-repo)"
 
-  printf 'RALPH_EXEC=local\n' >> "$repo/batch/ralph.conf"
+  printf 'FOREMAN_EXEC=local\n' >> "$repo/batch/foreman.conf"
   git -C "$repo" commit --quiet -am "local mode"
-  run_ralph "$repo" dry-run batch
+  run_foreman "$repo" dry-run batch
   assert_eq "$ST" 0 "dry-run exits 0"
   assert_contains "$OUT" "Perms:   acceptEdits" "local keeps the permission gate"
 
-  printf 'RALPH_EXEC=sandbox\n' >> "$repo/batch/ralph.conf"
+  printf 'FOREMAN_EXEC=sandbox\n' >> "$repo/batch/foreman.conf"
   git -C "$repo" commit --quiet -am "sandbox mode"
-  run_ralph "$repo" dry-run batch
+  run_foreman "$repo" dry-run batch
   assert_contains "$OUT" "Perms:   bypassPermissions" "a sandbox mode does not"
 
-  printf 'RALPH_PERMISSION_MODE=plan\n' >> "$repo/batch/ralph.conf"
+  printf 'FOREMAN_PERMISSION_MODE=plan\n' >> "$repo/batch/foreman.conf"
   git -C "$repo" commit --quiet -am "explicit mode"
-  run_ralph "$repo" dry-run batch
+  run_foreman "$repo" dry-run batch
   assert_contains "$OUT" "Perms:   plan" "an explicit setting beats the default"
 
-  RALPH_PERMISSION_MODE=manual run_ralph "$repo" dry-run batch
-  assert_contains "$OUT" "Perms:   manual" "and the environment beats ralph.conf"
+  FOREMAN_PERMISSION_MODE=manual run_foreman "$repo" dry-run batch
+  assert_contains "$OUT" "Perms:   manual" "and the environment beats foreman.conf"
 fi
 
-if case_is "the model defaults to a pinned full id, and ralph.conf and the environment still override it"; then
+if case_is "the model defaults to a pinned full id, and foreman.conf and the environment still override it"; then
   # A full id, not the `sonnet` alias: the alias is resolved by the claude CLI that runs the
   # call, and the sandbox's can be older than the host's. dry-run reports the effective model
   # for the same reason it reports the permission mode — `fake` never invokes `claude`.
   repo="$(make_repo 1 model-repo)"
 
-  run_ralph "$repo" dry-run batch
+  run_foreman "$repo" dry-run batch
   assert_eq "$ST" 0 "dry-run exits 0"
   assert_contains "$OUT" "Model:   claude-sonnet-5-5 " "the default is the pinned full id"
   assert_missing "$OUT" "Model:   sonnet" "not the alias"
 
-  printf 'RALPH_MODEL=claude-opus-5-5\n' >> "$repo/batch/ralph.conf"
+  printf 'FOREMAN_MODEL=claude-opus-5-5\n' >> "$repo/batch/foreman.conf"
   git -C "$repo" commit --quiet -am "explicit model"
-  run_ralph "$repo" dry-run batch
-  assert_contains "$OUT" "Model:   claude-opus-5-5 " "a RALPH_MODEL in ralph.conf beats the default"
+  run_foreman "$repo" dry-run batch
+  assert_contains "$OUT" "Model:   claude-opus-5-5 " "a FOREMAN_MODEL in foreman.conf beats the default"
 
-  RALPH_MODEL=haiku run_ralph "$repo" dry-run batch
-  assert_contains "$OUT" "Model:   haiku " "and the environment beats ralph.conf"
+  FOREMAN_MODEL=haiku run_foreman "$repo" dry-run batch
+  assert_contains "$OUT" "Model:   haiku " "and the environment beats foreman.conf"
 fi
 
 if case_is "doctor flags a local batch whose agent could never commit"; then
@@ -1643,22 +1649,22 @@ if case_is "doctor flags a local batch whose agent could never commit"; then
   mkdir -p "$repo/batch/issues"
   git -C "$repo" init --quiet
   printf '# Ticket 1\n\n**Status:** todo\n' > "$repo/batch/issues/01-ticket.md"
-  printf 'RALPH_EXEC=local\n' > "$repo/batch/ralph.conf"
+  printf 'FOREMAN_EXEC=local\n' > "$repo/batch/foreman.conf"
 
-  run_ralph "$repo" doctor
+  run_foreman "$repo" doctor
   assert_eq "$ST" 1 "doctor reports something to fix"
   assert_contains "$OUT" "no way for the agent to commit" "says what is wrong"
   assert_contains "$OUT" 'Bash(git add:*)' "and the line to add"
 
-  printf 'RALPH_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)")\n' \
-    >> "$repo/batch/ralph.conf"
-  run_ralph "$repo" doctor
+  printf 'FOREMAN_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)")\n' \
+    >> "$repo/batch/foreman.conf"
+  run_foreman "$repo" doctor
   assert_missing "$OUT" "no way for the agent to commit" "and is satisfied once it is there"
 fi
 
 if case_is "a usage limit pauses the run"; then
   repo="$(make_repo 3 limit-repo)"
-  RALPH_FAKE_BEHAVIOUR=limit run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_BEHAVIOUR=limit run_foreman "$repo" run batch --unlimited
 
   assert_eq "$ST" 10 "exits paused, not stopped"
   assert_contains "$OUT" "usage limit reached" "says why"
@@ -1671,7 +1677,7 @@ if case_is "a session limit pauses the run and says when it resets"; then
   # the branch order and the run stopped as "left uncommitted changes" — the real cause, and
   # the reset time, appearing nowhere in the terminal.
   repo="$(make_repo 3 session-limit-repo)"
-  RALPH_FAKE_BEHAVIOUR=session-limit run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_BEHAVIOUR=session-limit run_foreman "$repo" run batch --unlimited
 
   assert_eq "$ST" 10 "exits paused, not stopped"
   assert_contains "$OUT" "usage limit reached" "reads as a limit, not a mystery stop"
@@ -1681,7 +1687,7 @@ fi
 
 if case_is "the cost budget stops the run before spending over it"; then
   repo="$(make_repo 5 cost-repo)"
-  RALPH_FAKE_COST=0.50 RALPH_MAX_COST_USD=1 run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_COST=0.50 FOREMAN_MAX_COST_USD=1 run_foreman "$repo" run batch --unlimited
 
   assert_eq "$ST" 10 "pauses on the cost budget"
   assert_contains "$OUT" "cost budget reached" "says why"
@@ -1689,25 +1695,25 @@ if case_is "the cost budget stops the run before spending over it"; then
   assert_missing "$OUT" "overshot to salvage" "nothing stalled here, so no salvage note"
 fi
 
-if case_is "the run is recorded for ralph report"; then
+if case_is "the run is recorded for foreman report"; then
   repo="$(make_repo 2 report-repo)"
-  RALPH_FAKE_COST=0.25 run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_COST=0.25 run_foreman "$repo" run batch --unlimited
 
-  assert_eq "$(grep -c . "$repo/DONE_batch/ralph-runs.jsonl")" "2" "one record per iteration"
+  assert_eq "$(grep -c . "$repo/DONE_batch/foreman-runs.jsonl")" "2" "one record per iteration"
 
-  run_ralph "$repo" report DONE_batch
+  run_foreman "$repo" report DONE_batch
   assert_eq "$ST" 0 "report reads the log"
   assert_contains "$OUT" "iterations 2  ·  landed 2" "report agrees with the run"
   assert_contains "$OUT" '$0.5000' "report totals the cost"
 
-  run_ralph "$repo" report DONE_batch --failures
+  run_foreman "$repo" report DONE_batch --failures
   assert_contains "$OUT" "every recorded iteration landed" "nothing is flagged"
 fi
 
 if case_is "the prompt carries the ticket, the order file and the progress tail"; then
   repo="$(make_repo 2 prompt-repo)"
   log="$WORK/prompts.txt"
-  RALPH_FAKE_PROMPT_LOG="$log" run_ralph "$repo" run batch 1
+  FOREMAN_FAKE_PROMPT_LOG="$log" run_foreman "$repo" run batch 1
 
   prompts="$(cat "$log")"
   assert_contains "$prompts" "@batch/issues/01-ticket.md" "the ticket is attached"
@@ -1722,16 +1728,16 @@ fi
 
 if case_is "an unknown exec mode is rejected before anything runs"; then
   repo="$(make_repo 1 badexec-repo)"
-  RALPH_EXEC=nonesuch run_ralph "$repo" run batch
+  FOREMAN_EXEC=nonesuch run_foreman "$repo" run batch
 
   assert_eq "$ST" 1 "refuses to start"
-  assert_contains "$OUT" "RALPH_EXEC must be one of:" "lists the modes that exist"
+  assert_contains "$OUT" "FOREMAN_EXEC must be one of:" "lists the modes that exist"
   assert_contains "$OUT" "fake" "the list is generated from lib/exec/"
 fi
 
 if case_is "doctor asks the adapter what this repo needs"; then
   repo="$(make_repo 1 doctor-repo)"
-  run_ralph "$repo" doctor
+  run_foreman "$repo" doctor
 
   assert_eq "$ST" 0 "a fake batch needs no runner on PATH"
   assert_contains "$OUT" "0 of 1 done" "the batch is listed with its progress"
@@ -1741,7 +1747,7 @@ fi
 if case_is "init scaffolds a batch from its own ticket list"; then
   repo="$(make_repo 2 init-repo)"
   rm -f "$repo/batch/order.md"
-  run_ralph "$repo" init batch --no-order
+  run_foreman "$repo" init batch --no-order
 
   assert_eq "$ST" 0 "init exits 0"
   order="$(cat "$repo/batch/order.md")"
@@ -1752,7 +1758,7 @@ if case_is "init scaffolds a batch from its own ticket list"; then
   assert_contains "$OUT" "created  batch/progress.txt" "progress.txt is scaffolded"
 fi
 
-if case_is "init and --unordered honour RALPH_ISSUES_DIRS"; then
+if case_is "init and --unordered honour FOREMAN_ISSUES_DIRS"; then
   # The bug this fixes: init used to scan a hard-coded `issues/`, so a batch whose conf
   # points elsewhere was scaffolded from an empty directory.
   repo="$WORK/issuesdir-repo"
@@ -1762,14 +1768,14 @@ if case_is "init and --unordered honour RALPH_ISSUES_DIRS"; then
   printf '# Spec %s\n\n**Status:** todo\n' 1 > "$repo/batch/specs/01-spec.md"
   printf '# Spec %s\n\n**Status:** todo\n' 2 > "$repo/batch/specs/02-spec.md"
   printf '# not a ticket\n' > "$repo/batch/specs/README.md"
-  printf 'RALPH_EXEC=fake\nRALPH_ISSUES_DIRS="specs"\n' > "$repo/batch/ralph.conf"
+  printf 'FOREMAN_EXEC=fake\nFOREMAN_ISSUES_DIRS="specs"\n' > "$repo/batch/foreman.conf"
 
-  run_ralph "$repo" next batch --unordered
+  run_foreman "$repo" next batch --unordered
   assert_eq "$ST" 0 "--unordered exits 0"
   assert_contains "$OUT" "batch/specs/01-spec.md" "it finds the specs directory"
   assert_missing "$OUT" "README.md" "it applies the exclusion list"
 
-  run_ralph "$repo" init batch --no-order
+  run_foreman "$repo" init batch --no-order
   order="$(cat "$repo/batch/order.md")"
   assert_contains "$order" "batch/specs/01-spec.md" "init scaffolds from specs, not issues"
   assert_contains "$order" "batch/specs/02-spec.md" "and lists all of them"
@@ -1783,31 +1789,31 @@ if case_is "--unordered ignores an existing order.md"; then
     echo 'batch/issues/03-ticket.md'
     echo '<!-- ORDER:END -->'; } > "$repo/batch/order.md"
 
-  run_ralph "$repo" next batch --all
+  run_foreman "$repo" next batch --all
   assert_eq "$OUT" "batch/issues/03-ticket.md" "--all follows the order file"
 
-  run_ralph "$repo" next batch --unordered
+  run_foreman "$repo" next batch --unordered
   assert_contains "$OUT" "batch/issues/01-ticket.md" "--unordered sees tickets the order file omits"
   assert_eq "$(printf '%s\n' "$OUT" | grep -c .)" "3" "and sees all of them"
 fi
 
 if case_is "a && in a check command survives into the prompt"; then
   # Bash's ${var//pat/repl} treats & in the replacement as "the text that matched" — a
-  # RALPH_TEST_CMD containing && used to render as two copies of __VERIFY_BLOCK__'s own
+  # FOREMAN_TEST_CMD containing && used to render as two copies of __VERIFY_BLOCK__'s own
   # marker text instead of the command. dry-run exits before exec_prepare, so no sandbox
   # is touched.
   repo="$(make_repo 1 ampersand-repo)"
-  printf 'RALPH_TEST_CMD="node a.js && node b.js"\n' >> "$repo/batch/ralph.conf"
+  printf 'FOREMAN_TEST_CMD="node a.js && node b.js"\n' >> "$repo/batch/foreman.conf"
   git -C "$repo" commit --quiet -am "add test cmd"
 
-  run_ralph "$repo" dry-run batch
+  run_foreman "$repo" dry-run batch
   assert_eq "$ST" 0 "dry-run exits 0"
   assert_contains "$OUT" "node a.js && node b.js" "the command survives verbatim"
   assert_missing "$OUT" "__VERIFY_BLOCK__" "the marker is not left behind"
 fi
 
-if case_is "RALPH_ISSUES_DIRS='.' means the batch directory, not the repo root"; then
-  # A relative RALPH_ISSUES_DIRS entry used to resolve against the repo root first, so "."
+if case_is "FOREMAN_ISSUES_DIRS='.' means the batch directory, not the repo root"; then
+  # A relative FOREMAN_ISSUES_DIRS entry used to resolve against the repo root first, so "."
   # meant the repo's own top level rather than the batch directory.
   repo="$WORK/dot-issues-repo"
   mkdir -p "$repo/batch"
@@ -1816,46 +1822,46 @@ if case_is "RALPH_ISSUES_DIRS='.' means the batch directory, not the repo root";
   printf '# decoy repo-root file\n' > "$repo/CLAUDE.md"
   printf '# Ticket 1\n\n**Status:** todo\n' > "$repo/batch/01-ticket.md"
   printf '# Ticket 2\n\n**Status:** todo\n' > "$repo/batch/02-ticket.md"
-  printf 'RALPH_EXEC=fake\nRALPH_ISSUES_DIRS="."\n' > "$repo/batch/ralph.conf"
+  printf 'FOREMAN_EXEC=fake\nFOREMAN_ISSUES_DIRS="."\n' > "$repo/batch/foreman.conf"
 
-  run_ralph "$repo" next batch --unordered
+  run_foreman "$repo" next batch --unordered
   assert_eq "$ST" 0 "--unordered exits 0"
   assert_contains "$OUT" "01-ticket.md" "it lists the first ticket"
   assert_contains "$OUT" "02-ticket.md" "and the second"
   assert_missing "$OUT" "CLAUDE.md" "it does not pick up the repo-root decoy"
 fi
 
-if case_is "a batch whose tickets are not where RALPH_ISSUES_DIRS looks says where it looked"; then
+if case_is "a batch whose tickets are not where FOREMAN_ISSUES_DIRS looks says where it looked"; then
   repo="$WORK/misplaced-tickets-repo"
   mkdir -p "$repo/batch"
   git -C "$repo" init --quiet
   git -C "$repo" config core.autocrlf false
   printf '# Ticket 1\n\n**Status:** todo\n' > "$repo/batch/01-ticket.md"
-  printf 'RALPH_EXEC=fake\n' > "$repo/batch/ralph.conf"
+  printf 'FOREMAN_EXEC=fake\n' > "$repo/batch/foreman.conf"
 
-  run_ralph "$repo" status batch
+  run_foreman "$repo" status batch
   assert_contains "$OUT" "batch/issues" "names the resolved (default) issues path"
   assert_contains "$OUT" "(missing)" "and says it does not exist"
-  assert_contains "$OUT" 'RALPH_ISSUES_DIRS="."' "suggests the one-line fix"
+  assert_contains "$OUT" 'FOREMAN_ISSUES_DIRS="."' "suggests the one-line fix"
 fi
 
 if case_is "--unordered is quiet about an empty batch, the other modes are not"; then
   repo="$WORK/empty-repo"
   mkdir -p "$repo/batch/issues"
   git -C "$repo" init --quiet
-  printf 'RALPH_EXEC=fake\n' > "$repo/batch/ralph.conf"
+  printf 'FOREMAN_EXEC=fake\n' > "$repo/batch/foreman.conf"
 
-  run_ralph "$repo" next batch --unordered
+  run_foreman "$repo" next batch --unordered
   assert_eq "$ST" 0 "--unordered exits 0 on an empty batch"
   assert_eq "$OUT" "" "and prints nothing"
 
-  run_ralph "$repo" next batch --count
+  run_foreman "$repo" next batch --count
   assert_eq "$ST" 2 "--count still calls an empty batch malformed"
 fi
 
 if case_is "a landed ticket with every box ticked is renamed DONE_"; then
   repo="$(make_repo 2 done-rename-repo)"
-  run_ralph "$repo" run batch --unlimited
+  run_foreman "$repo" run batch --unlimited
   assert_eq "$ST" 0 "the batch finishes"
   d="$repo/DONE_batch/issues"
   [ -f "$d/DONE_01-ticket.md" ] && [ -f "$d/DONE_02-ticket.md" ] && pass || fail "both tickets carry the prefix"
@@ -1865,9 +1871,9 @@ if case_is "a landed ticket with every box ticked is renamed DONE_"; then
   assert_contains "$(git -C "$repo" log --format=%s)" "chore: mark 01-ticket.md done" "as its own commit"
   assert_eq "$(done_count "$repo")" "2" "renamed tickets still count as done"
 
-  run_ralph "$repo" next DONE_batch --count
+  run_foreman "$repo" next DONE_batch --count
   assert_eq "$OUT" "2 2" "--count agrees"
-  run_ralph "$repo" run DONE_batch
+  run_foreman "$repo" run DONE_batch
   assert_eq "$ST" 0 "a rerun has nothing left to do and renames nothing further"
 fi
 
@@ -1877,7 +1883,7 @@ if case_is "a ticket with an unticked box, or not yet done, keeps its name"; the
   printf '# Ticket 2\n\n**Status:** todo\n\n- [x] one\n* [X] two\n' > "$repo/batch/issues/02-ticket.md"
   git -C "$repo" commit --quiet -am "boxes"
 
-  run_ralph "$repo" run batch --unlimited
+  run_foreman "$repo" run batch --unlimited
   d="$repo/DONE_batch/issues"
   [ -f "$d/01-ticket.md" ] && pass || fail "unticked box: the name is kept"
   assert_contains "$OUT" "unchecked boxes" "and says why"
@@ -1885,7 +1891,7 @@ if case_is "a ticket with an unticked box, or not yet done, keeps its name"; the
   assert_eq "$(git -C "$repo" status --porcelain)" "" "tree clean"
 
   repo="$(make_repo 1 done-rename-noop-repo)"
-  RALPH_FAKE_BEHAVIOUR=noop run_ralph "$repo" run batch 1
+  FOREMAN_FAKE_BEHAVIOUR=noop run_foreman "$repo" run batch 1
   [ -f "$repo/batch/issues/01-ticket.md" ] && pass || fail "a ticket that did not land is never renamed"
 fi
 
@@ -1898,25 +1904,25 @@ if case_is "an order.md written before the rename still finds the renamed ticket
     echo '<!-- ORDER:END -->'; } > "$repo/batch/order.md"
   git -C "$repo" add -A; git -C "$repo" commit --quiet -m order
 
-  run_ralph "$repo" run batch 1
+  run_foreman "$repo" run batch 1
   [ -f "$repo/batch/issues/DONE_03-ticket.md" ] && pass || fail "ticket 3 ran first and was renamed"
-  run_ralph "$repo" next batch --all
+  run_foreman "$repo" next batch --all
   assert_eq "$(printf '%s\n' "$OUT" | head -1)" "batch/issues/DONE_03-ticket.md" "order.md resolves the renamed file"
-  run_ralph "$repo" next batch
+  run_foreman "$repo" next batch
   assert_eq "$OUT" "batch/issues/01-ticket.md" "and the next ticket is still 01"
 fi
 
 if case_is "renamed tickets keep their place in filename order"; then
   repo="$(make_repo 3 done-rename-sort-repo)"
   git -C "$repo" mv batch/issues/01-ticket.md batch/issues/DONE_01-ticket.md
-  run_ralph "$repo" next batch --all
+  run_foreman "$repo" next batch --all
   assert_eq "$(printf '%s\n' "$OUT" | head -1)" "batch/issues/DONE_01-ticket.md" "DONE_01 sorts as 01"
   assert_eq "$(printf '%s\n' "$OUT" | tail -1)" "batch/issues/03-ticket.md" "and 03 is still last"
 fi
 
-if case_is "RALPH_DONE_PREFIX empty leaves ticket files alone"; then
+if case_is "FOREMAN_DONE_PREFIX empty leaves ticket files alone"; then
   repo="$(make_repo 1 done-rename-off-repo)"
-  RALPH_DONE_PREFIX= run_ralph "$repo" run batch --unlimited
+  FOREMAN_DONE_PREFIX= run_foreman "$repo" run batch --unlimited
   assert_eq "$ST" 0 "the batch finishes"
   [ -f "$repo/batch/issues/01-ticket.md" ] && pass || fail "the ticket kept its name"
   [ -d "$repo/batch" ] && pass || fail "and so did the batch"
@@ -1924,16 +1930,16 @@ fi
 
 if case_is "a finished batch directory is renamed with the done prefix"; then
   repo="$(make_repo 2 done-batch-repo)"
-  run_ralph "$repo" run batch --unlimited
+  run_foreman "$repo" run batch --unlimited
   assert_eq "$ST" 0 "the batch finishes"
   [ -d "$repo/DONE_batch" ] && [ ! -e "$repo/batch" ] && pass || fail "batch became DONE_batch"
   assert_contains "$OUT" "batch marked done  ·  DONE_batch" "the rename is announced"
   assert_eq "$(git -C "$repo" log -1 --format=%s)" "chore: mark batch batch done" "the rename is the last commit"
   assert_eq "$(git -C "$repo" status --porcelain)" "" "and the tree is clean"
-  [ -f "$repo/DONE_batch/ralph-runs.log" ] && pass || fail "the run log moved with the directory"
+  [ -f "$repo/DONE_batch/foreman-runs.log" ] && pass || fail "the run log moved with the directory"
   [ -f "$repo/DONE_batch/issues/DONE_02-ticket.md" ] && pass || fail "the tickets are inside"
 
-  run_ralph "$repo" run DONE_batch
+  run_foreman "$repo" run DONE_batch
   assert_eq "$ST" 0 "running the renamed batch is still a finished batch"
   assert_contains "$OUT" "Nothing to do" "says there is nothing to do"
   assert_missing "$OUT" "batch marked done" "and does not rename it again"
@@ -1942,29 +1948,29 @@ fi
 
 if case_is "commands with no batch argument skip finished batches"; then
   repo="$(make_repo 1 done-batch-skip-repo)"
-  run_ralph "$repo" run batch --unlimited
+  run_foreman "$repo" run batch --unlimited
   assert_eq "$ST" 0 "the batch finishes and becomes DONE_batch"
 
-  run_ralph "$repo" status
+  run_foreman "$repo" status
   [ "$ST" != 0 ] && pass || fail "a repo whose only batch is finished has no batch to default to"
-  assert_contains "$OUT" "no unfinished ralph.conf batch" "and says why"
+  assert_contains "$OUT" "no unfinished foreman.conf batch" "and says why"
 
   # A second, unfinished batch becomes the only candidate — the finished one does not make it ambiguous.
   mkdir -p "$repo/other/issues"
-  cp "$repo/DONE_batch/ralph.conf" "$repo/other/ralph.conf"
+  cp "$repo/DONE_batch/foreman.conf" "$repo/other/foreman.conf"
   printf '# Ticket 1\n\n**Status:** ready-for-agent\n\n- [ ] one\n' > "$repo/other/issues/01-ticket.md"
   git -C "$repo" add other && git -C "$repo" commit --quiet -m "another batch"
-  run_ralph "$repo" status
+  run_foreman "$repo" status
   assert_eq "$ST" 0 "status picks the unfinished batch"
   assert_contains "$OUT" "01-ticket.md" "and lists its ticket"
 
-  run_ralph "$repo" status DONE_batch
+  run_foreman "$repo" status DONE_batch
   assert_eq "$ST" 0 "a finished batch can still be named"
 fi
 
-if case_is "RALPH_DONE_PREFIX empty leaves the batch directory alone"; then
+if case_is "FOREMAN_DONE_PREFIX empty leaves the batch directory alone"; then
   repo="$(make_repo 1 done-batch-off-repo)"
-  RALPH_DONE_PREFIX= run_ralph "$repo" run batch --unlimited
+  FOREMAN_DONE_PREFIX= run_foreman "$repo" run batch --unlimited
   assert_eq "$ST" 0 "the batch finishes"
   [ -d "$repo/batch" ] && [ ! -e "$repo/DONE_batch" ] && pass || fail "the batch kept its name"
   assert_missing "$OUT" "batch marked done" "and nothing is announced"
@@ -1982,19 +1988,19 @@ if case_is "a batch with a tracked modification keeps its name"; then
 ' > "$repo/batch/issues/01-ticket.md"
   git -C "$repo" commit --quiet -am "01 done by hand"
   printf '# edited by hand
-' >> "$repo/batch/ralph.conf"
-  RALPH_ALLOW_DIRTY=1 run_ralph "$repo" run batch
+' >> "$repo/batch/foreman.conf"
+  FOREMAN_ALLOW_DIRTY=1 run_foreman "$repo" run batch
   assert_eq "$ST" 0 "nothing to do is a success"
   [ -d "$repo/batch" ] && [ ! -e "$repo/DONE_batch" ] && pass || fail "the batch kept its name"
   assert_contains "$OUT" "has uncommitted changes — leaving its name alone" "says why"
-  assert_contains "$(git -C "$repo" status --porcelain)" "ralph.conf" "the edit is still uncommitted"
+  assert_contains "$(git -C "$repo" status --porcelain)" "foreman.conf" "the edit is still uncommitted"
 fi
 
 if case_is "a batch finished by hand is renamed on the next run"; then
   repo="$(make_repo 1 done-batch-hand-repo)"
   printf '# Ticket 1\n\n**Status:** implemented\n\n- [x] one\n' > "$repo/batch/issues/01-ticket.md"
   git -C "$repo" commit --quiet -am "01 done by hand"
-  run_ralph "$repo" run batch
+  run_foreman "$repo" run batch
   assert_eq "$ST" 0 "nothing to do is a success"
   assert_contains "$OUT" "Nothing to do" "says so"
   [ -d "$repo/DONE_batch" ] && [ ! -e "$repo/batch" ] && pass || fail "batch became DONE_batch"
@@ -2003,7 +2009,7 @@ fi
 
 if case_is "the usage line shows minutes beside seconds"; then
   repo="$(make_repo 1 usage-minutes-repo)"
-  run_ralph "$repo" run batch --unlimited
+  run_foreman "$repo" run batch --unlimited
   assert_contains "$OUT" "1.2s (0.0m)" "the fake adapter's 1200 ms"
 fi
 
@@ -2012,9 +2018,9 @@ if case_is "a ticket marked done counts as done, like an implemented one"; then
   printf '# Ticket 1\n\n**Status:** done\n\n- [x] one\n' > "$repo/batch/issues/01-ticket.md"
   git -C "$repo" commit --quiet -am "01 done by hand"
 
-  run_ralph "$repo" next batch --count
+  run_foreman "$repo" next batch --count
   assert_eq "$OUT" "1 2" "done is counted like implemented"
-  run_ralph "$repo" next batch
+  run_foreman "$repo" next batch
   assert_eq "$OUT" "batch/issues/02-ticket.md" "and skipped when picking the next ticket"
 fi
 
@@ -2044,7 +2050,7 @@ finish_human_ticket() {
   git -C "$repo" commit --quiet -am "ticket $n done by hand"
 }
 
-runs_rows() { grep -c . "$1/batch/ralph-runs.jsonl" 2>/dev/null || printf 0; }
+runs_rows() { grep -c . "$1/batch/foreman-runs.jsonl" 2>/dev/null || printf 0; }
 
 if case_is "a human ticket at the head of the order stops the run before anything is spent"; then
   repo="$(make_repo 3 human-head-repo)"
@@ -2052,11 +2058,11 @@ if case_is "a human ticket at the head of the order stops the run before anythin
   head="$(git -C "$repo" rev-parse HEAD)"
   log="$WORK/human-head-prompts.txt"
 
-  RALPH_FAKE_PROMPT_LOG="$log" run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_PROMPT_LOG="$log" run_foreman "$repo" run batch --unlimited
   assert_eq "$ST" 30 "exits waiting-on-a-human"
   assert_eq "$(git -C "$repo" rev-parse HEAD)" "$head" "no new commits"
-  [ -e "$repo/batch/ralph-runs.jsonl" ] && fail "no run-log rows were written" || pass
-  [ -e "$repo/batch/ralph-runs.log" ] && fail "and no run log at all" || pass
+  [ -e "$repo/batch/foreman-runs.jsonl" ] && fail "no run-log rows were written" || pass
+  [ -e "$repo/batch/foreman-runs.log" ] && fail "and no run log at all" || pass
   [ -e "$log" ] && fail "no prompt was sent" || pass
   assert_contains "$OUT" "batch/issues/01-ticket.md is a human ticket" "names the ticket"
   assert_contains "$OUT" "batch/handoff/01-ticket.md" "names its handoff file"
@@ -2069,7 +2075,7 @@ if case_is "a human ticket with no handoff file is named without one"; then
   repo="$(make_repo 2 human-nohandoff-repo)"
   make_human_ticket "$repo" 1 none
 
-  run_ralph "$repo" run batch
+  run_foreman "$repo" run batch
   assert_eq "$ST" 30 "still stops"
   assert_missing "$OUT" "Fill in every section" "there is no handoff step to give"
   assert_contains "$OUT" "  2. Commit your work." "and the steps renumber"
@@ -2081,14 +2087,14 @@ if case_is "a run that reaches a human ticket mid-batch lands what is before it 
   make_human_ticket "$repo" 3
   log="$WORK/human-mid-prompts.txt"
 
-  RALPH_FAKE_PROMPT_LOG="$log" run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_PROMPT_LOG="$log" run_foreman "$repo" run batch --unlimited
   assert_eq "$ST" 30 "exits waiting-on-a-human"
   assert_eq "$(done_count "$repo")" "2" "tickets 1 and 2 landed"
   assert_contains "$OUT" "tickets landed:        2" "the usual footer is printed"
   assert_contains "$OUT" "batch/issues/03-ticket.md is a human ticket" "then the note"
   assert_eq "$(grep -c '^===== fake prompt' "$log")" "2" "only the two agent tickets were prompted"
   assert_missing "$(cat "$log")" "04-ticket.md" "nothing after the human ticket was prompted"
-  assert_contains "$(tail -3 "$repo/batch/ralph-runs.log")" \
+  assert_contains "$(tail -3 "$repo/batch/foreman-runs.log")" \
     "# stopped: waiting on a human — batch/issues/03-ticket.md" "the run log says why it stopped"
   assert_eq "$(git -C "$repo" status --porcelain)" "" "the tree is clean"
 fi
@@ -2097,7 +2103,7 @@ if case_is "the human gate is checked before the iteration budget"; then
   repo="$(make_repo 2 human-budget-repo)"
   make_human_ticket "$repo" 2
 
-  run_ralph "$repo" run batch
+  run_foreman "$repo" run batch
   assert_eq "$ST" 30 "waiting on a human, not paused on the budget"
   assert_eq "$(done_count "$repo")" "1" "the first ticket landed"
   assert_missing "$OUT" "PAUSED" "and nothing says the budget stopped it"
@@ -2107,12 +2113,12 @@ fi
 if case_is "rerunning a human ticket without finishing it stops again, for free"; then
   repo="$(make_repo 4 human-rerun-repo)"
   make_human_ticket "$repo" 3
-  run_ralph "$repo" run batch --unlimited
+  run_foreman "$repo" run batch --unlimited
   head="$(git -C "$repo" rev-parse HEAD)"
   rows="$(runs_rows "$repo")"
   log="$WORK/human-rerun-prompts.txt"
 
-  RALPH_FAKE_PROMPT_LOG="$log" run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_PROMPT_LOG="$log" run_foreman "$repo" run batch --unlimited
   assert_eq "$ST" 30 "stops the same way"
   assert_eq "$(git -C "$repo" rev-parse HEAD)" "$head" "HEAD did not move"
   assert_eq "$(runs_rows "$repo")" "$rows" "nothing was recorded"
@@ -2123,12 +2129,12 @@ fi
 if case_is "setting a human ticket to done lets a rerun continue with the next ticket"; then
   repo="$(make_repo 3 human-resume-repo)"
   make_human_ticket "$repo" 2
-  run_ralph "$repo" run batch --unlimited
+  run_foreman "$repo" run batch --unlimited
   assert_eq "$ST" 30 "stopped at the human ticket"
 
   finish_human_ticket "$repo" 2
   log="$WORK/human-resume-prompts.txt"
-  RALPH_FAKE_PROMPT_LOG="$log" run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_PROMPT_LOG="$log" run_foreman "$repo" run batch --unlimited
   assert_eq "$ST" 0 "the batch finishes"
   assert_eq "$(grep -c '^===== fake prompt' "$log")" "1" "one prompt: the ticket after it"
   assert_contains "$(cat "$log")" "03-ticket.md" "and it was ticket 3"
@@ -2138,7 +2144,7 @@ if case_is "dry-run at a human ticket says it would stop there and prints no pro
   repo="$(make_repo 2 human-dry-repo)"
   make_human_ticket "$repo" 1
 
-  run_ralph "$repo" dry-run batch
+  run_foreman "$repo" dry-run batch
   assert_eq "$ST" 0 "exits 0"
   assert_contains "$OUT" "Would stop before batch/issues/01-ticket.md" "says where it would stop"
   assert_missing "$OUT" "=== prompt that would be sent" "prints no prompt"
@@ -2151,21 +2157,21 @@ if case_is "the human word is configurable and can be switched off"; then
   sed -i 's/ready-for-human/needs-owner/' "$repo/batch/issues/01-ticket.md"
   git -C "$repo" commit --quiet -am "a different word"
 
-  run_ralph "$repo" run batch
+  run_foreman "$repo" run batch
   assert_eq "$ST" 10 "the default word no longer stops there: the ticket is an agent's"
 
   repo="$(make_repo 2 human-word2-repo)"
   make_human_ticket "$repo" 1
   sed -i 's/ready-for-human/needs-owner/' "$repo/batch/issues/01-ticket.md"
   git -C "$repo" commit --quiet -am "a different word"
-  RALPH_HUMAN_WORD=needs-owner run_ralph "$repo" run batch
-  assert_eq "$ST" 30 "RALPH_HUMAN_WORD=needs-owner stops on that word"
+  FOREMAN_HUMAN_WORD=needs-owner run_foreman "$repo" run batch
+  assert_eq "$ST" 30 "FOREMAN_HUMAN_WORD=needs-owner stops on that word"
   assert_contains "$OUT" "'**Status:** needs-owner'" "and the note quotes it"
 
   repo="$(make_repo 2 human-off-repo)"
   make_human_ticket "$repo" 1
   log="$WORK/human-off-prompts.txt"
-  RALPH_HUMAN_WORD= RALPH_FAKE_PROMPT_LOG="$log" run_ralph "$repo" run batch
+  FOREMAN_HUMAN_WORD= FOREMAN_FAKE_PROMPT_LOG="$log" run_foreman "$repo" run batch
   assert_eq "$ST" 10 "an empty word hands the ticket to the agent like any other"
   assert_contains "$(cat "$log")" "01-ticket.md" "which was prompted"
 fi
@@ -2174,7 +2180,7 @@ if case_is "a done ticket is never a human ticket"; then
   repo="$(make_repo 2 human-done-repo)"
   make_human_ticket "$repo" 1
   finish_human_ticket "$repo" 1
-  run_ralph "$repo" dry-run batch
+  run_foreman "$repo" dry-run batch
   assert_missing "$OUT" "Would stop before" "done wins over the human marker"
 fi
 
@@ -2196,7 +2202,7 @@ checked_repo() {    # checked_repo NAME
   repo="$(make_repo 5 "$1")"
   make_human_ticket "$repo" 3
   make_followup_ticket "$repo" 4 3
-  run_ralph "$repo" run batch --unlimited
+  run_foreman "$repo" run batch --unlimited
   finish_human_ticket "$repo" 3
   printf '%s' "$repo"
 }
@@ -2205,7 +2211,7 @@ if case_is "a followup ticket that sends its human ticket back ends the run at e
   repo="$(checked_repo check-sendback-repo)"
   log="$WORK/check-sendback-prompts.txt"
 
-  RALPH_FAKE_BEHAVIOUR=send-back RALPH_FAKE_PROMPT_LOG="$log" run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_BEHAVIOUR=send-back FOREMAN_FAKE_PROMPT_LOG="$log" run_foreman "$repo" run batch --unlimited
   assert_eq "$ST" 30 "waiting on a human again"
   assert_contains "$OUT" "↩ sent back to a human by 04-ticket.md" "the run says so"
   assert_contains "$OUT" "↩ It was sent back by 04-ticket.md: read '## Sent back by 04-ticket.md'" \
@@ -2222,7 +2228,7 @@ if case_is "a followup ticket that sends its human ticket back ends the run at e
 
   head="$(git -C "$repo" rev-parse HEAD)"
   rows="$(runs_rows "$repo")"
-  run_ralph "$repo" run batch --unlimited
+  run_foreman "$repo" run batch --unlimited
   assert_eq "$ST" 30 "a plain rerun stops the same way"
   assert_contains "$OUT" "↩ It was sent back by 04-ticket.md" "and says again that it was sent back"
   assert_eq "$(git -C "$repo" rev-parse HEAD)" "$head" "HEAD did not move"
@@ -2232,12 +2238,12 @@ fi
 if case_is "a human ticket is renamed only once its followup ticket has landed"; then
   repo="$(checked_repo check-rename-repo)"
 
-  RALPH_FAKE_BEHAVIOUR=noop run_ralph "$repo" run batch 1
+  FOREMAN_FAKE_BEHAVIOUR=noop run_foreman "$repo" run batch 1
   assert_eq "$ST" 20 "a followup ticket that does nothing does not land"
   [ -e "$repo/batch/issues/03-ticket.md" ] && pass || fail "so the human ticket keeps its name"
   [ -e "$repo/batch/issues/DONE_03-ticket.md" ] && fail "and is not prefixed" || pass
 
-  run_ralph "$repo" run batch 1
+  run_foreman "$repo" run batch 1
   assert_contains "$OUT" "batch/issues/03-ticket.md waits for batch/issues/04-ticket.md before it is marked done" \
     "the run says what the human ticket waits for"
   assert_contains "$OUT" "✓ landed" "the followup ticket landed"
@@ -2255,7 +2261,7 @@ if case_is "Checks: resolves whichever side carries the done prefix"; then
   sed -i 's/^\*\*Checks:\*\* 02/**Checks:** DONE_02/' "$repo/batch/issues/03-ticket.md"
   git -C "$repo" commit --quiet -am "the followup names the prefixed name"
   finish_human_ticket "$repo" 2
-  run_ralph "$repo" run batch 2
+  run_foreman "$repo" run batch 2
   assert_contains "$OUT" "batch/issues/02-ticket.md waits for batch/issues/03-ticket.md" "found through the prefix"
   [ -e "$repo/DONE_batch/issues/DONE_02-ticket.md" ] && pass || fail "and renamed when the followup landed"
 
@@ -2266,7 +2272,7 @@ if case_is "Checks: resolves whichever side carries the done prefix"; then
   finish_human_ticket "$repo" 1
   git -C "$repo" mv batch/issues/01-ticket.md batch/issues/DONE_01-ticket.md
   git -C "$repo" commit --quiet -m "renamed by hand"
-  RALPH_FAKE_BEHAVIOUR=send-back run_ralph "$repo" run batch
+  FOREMAN_FAKE_BEHAVIOUR=send-back run_foreman "$repo" run batch
   assert_eq "$ST" 30 "the followup ticket found its human ticket and sent it back"
   assert_contains "$(cat "$repo/batch/issues/DONE_01-ticket.md")" "## Sent back by 02-ticket.md" "the prefixed file"
 fi
@@ -2280,7 +2286,7 @@ if case_is "status marks human and followup tickets and says where the loop will
   make_human_ticket "$repo" 3
   make_followup_ticket "$repo" 4 3
 
-  run_ralph "$repo" status batch
+  run_foreman "$repo" status batch
   assert_eq "$ST" 0 "status still exits 0"
   assert_contains "$OUT" "human tickets remaining: 1" "the progress line counts it"
   assert_contains "$OUT" "  3  03-ticket.md   [HUMAN]" "the human ticket is marked"
@@ -2290,7 +2296,7 @@ if case_is "status marks human and followup tickets and says where the loop will
     "and says where it will stop"
   assert_missing "$OUT" "warning:" "both pieces are in place, so nothing to warn about"
 
-  run_ralph "$repo" dry-run batch
+  run_foreman "$repo" dry-run batch
   assert_eq "$ST" 0 "dry-run exits 0"
   assert_contains "$OUT" "  3  03-ticket.md   [HUMAN]" "dry-run marks the same way"
   assert_contains "$OUT" "  4  04-ticket.md   [CHECKS 03-ticket.md]" "checker included"
@@ -2307,7 +2313,7 @@ if case_is "a Checks: line reads the same bold or plain, with CRLF, and with tra
   sed -i 's|^\*\*Status:\*\* todo|&\n**Checks:**\nChecks: 01-ticket.md|' "$repo/batch/issues/05-ticket.md"
   git -C "$repo" commit --quiet -am "four spellings of Checks:"
 
-  run_ralph "$repo" status batch
+  run_foreman "$repo" status batch
   assert_eq "$ST" 0 "status exits 0"
   assert_contains "$OUT" "  2  02-ticket.md   [CHECKS 01-ticket.md]" "plain, no bold"
   assert_contains "$OUT" "  3  03-ticket.md   [CHECKS 01-ticket.md]" "trailing spaces trimmed"
@@ -2322,15 +2328,15 @@ if case_is "a Checks: line reads the same bold or plain, with CRLF, and with tra
   assert_missing "$OUT" "Checks: 01-ticket.md, which is not a ticket" "no spelling fails to resolve"
 fi
 
-if case_is "a custom RALPH_DONE_PATTERN and RALPH_HUMAN_PATTERN are matched as grep patterns"; then
+if case_is "a custom FOREMAN_DONE_PATTERN and FOREMAN_HUMAN_PATTERN are matched as grep patterns"; then
   repo="$(make_repo 4 custom-pattern-repo)"
   sed -i 's|^\*\*Status:\*\* todo|State: finished|' "$repo/batch/issues/01-ticket.md"
   sed -i 's|^\*\*Status:\*\* todo|State: over|' "$repo/batch/issues/02-ticket.md"
   sed -i 's|^\*\*Status:\*\* todo|State: waiting on someone|' "$repo/batch/issues/03-ticket.md"
   git -C "$repo" commit --quiet -am "a status line of another shape"
 
-  RALPH_DONE_PATTERN='^State: *\(finished\|over\)$' RALPH_HUMAN_PATTERN='^State: *waiting.*one$' \
-    run_ralph "$repo" status batch
+  FOREMAN_DONE_PATTERN='^State: *\(finished\|over\)$' FOREMAN_HUMAN_PATTERN='^State: *waiting.*one$' \
+    run_foreman "$repo" status batch
   assert_contains "$OUT" "Tickets done: 2 / 4" "both alternatives of the done pattern count"
   assert_contains "$OUT" "Next: 03-ticket.md   [HUMAN" "the custom human pattern marks the next ticket"
   assert_contains "$OUT" "  2  04-ticket.md" "and the ticket with no State: line is still to do"
@@ -2350,7 +2356,7 @@ if case_is "a status line holding . [ * ^ $ or a backslash matches itself only";
   git -C "$repo" add -A >/dev/null
   git -C "$repo" commit --quiet -m "a status line of metacharacters"
 
-  RALPH_STATUS_LINE="$line" run_ralph "$repo" status batch
+  FOREMAN_STATUS_LINE="$line" run_foreman "$repo" status batch
   assert_eq "$ST" 0 "status exits 0"
   assert_contains "$OUT" "Tickets done: 1 / 6" "only the ticket carrying the line itself is done"
   assert_contains "$OUT" "  3  04-ticket.md   [HUMAN]" "the human pattern is escaped the same way"
@@ -2361,13 +2367,13 @@ if case_is "file names are cut the way basename and dirname cut them"; then
   repo="$(make_repo 1 name-helpers-repo)"
   paths=("" a a/ a// / /a /a/ /a// a/b a/b/ a//b ./a ../a "a b/c d" /a//b// C:/x/y -x a/-b "a/b.md" ".scratch/b/issues/01-t.md"
          'C:\x\y.jsonl' 'C:\y' 'a\b' 'a\b\' '\a' '\' 'a/b\c' 'a\b/c')
-  helpers_out="$(cd "$repo" && RALPH_BATCH=batch bash -c '
-    source "$1/lib/ralph-config.sh" || exit 1
+  helpers_out="$(cd "$repo" && FOREMAN_BATCH=batch bash -c '
+    source "$1/lib/foreman-config.sh" || exit 1
     shift
     for p in "$@"; do
-      _ralph_basename b "$p"; _ralph_dirname d "$p"
+      _foreman_basename b "$p"; _foreman_dirname d "$p"
       printf "%s\t%s\n" "$b" "$d"
-    done' _ "$RALPH_HOME" "${paths[@]}" 2>&1)"
+    done' _ "$FOREMAN_HOME" "${paths[@]}" 2>&1)"
   want=""
   for p in "${paths[@]}"; do
     want+="$(basename -- "$p")"$'\t'"$(dirname -- "$p")"$'\n'
@@ -2379,7 +2385,7 @@ if case_is "status names the human ticket when it is next, with its note"; then
   repo="$(make_repo 2 status-next-human-repo)"
   make_human_ticket "$repo" 1
 
-  run_ralph "$repo" status batch
+  run_foreman "$repo" status batch
   assert_eq "$ST" 0 "status exits 0"
   assert_contains "$OUT" "Next: 01-ticket.md   [HUMAN" "Next: is marked"
   assert_contains "$OUT" "batch/issues/01-ticket.md is a human ticket. The loop stops here." \
@@ -2391,10 +2397,10 @@ if case_is "warning: a human ticket with no followup ticket"; then
   repo="$(make_repo 1 warn-nocheck-repo)"
   make_human_ticket "$repo" 1
 
-  run_ralph "$repo" status batch
+  run_foreman "$repo" status batch
   assert_eq "$ST" 0 "warnings never change the exit code"
   assert_contains "$OUT" \
-    "warning: batch/issues/01-ticket.md is a human ticket with no ticket that Checks: it — run /ralph-human-followup-tickets" \
+    "warning: batch/issues/01-ticket.md is a human ticket with no ticket that Checks: it — run /foreman-human-followup-tickets" \
     "warns about the missing checker"
 fi
 
@@ -2402,9 +2408,9 @@ if case_is "warning: a human ticket with no handoff file"; then
   repo="$(make_repo 1 warn-nohandoff-repo)"
   make_human_ticket "$repo" 1 none
 
-  run_ralph "$repo" status batch
+  run_foreman "$repo" status batch
   assert_eq "$ST" 0 "warnings never change the exit code"
-  assert_contains "$OUT" "warning: batch/issues/01-ticket.md has no Handoff: file — run /ralph-human-followup-tickets" \
+  assert_contains "$OUT" "warning: batch/issues/01-ticket.md has no Handoff: file — run /foreman-human-followup-tickets" \
     "warns about the missing handoff"
 fi
 
@@ -2414,9 +2420,9 @@ if case_is "warning: a Handoff: line naming a file that does not exist"; then
   rm "$repo/batch/handoff/01-ticket.md"
   git -C "$repo" commit --quiet -am "the handoff file went missing"
 
-  run_ralph "$repo" status batch
+  run_foreman "$repo" status batch
   assert_eq "$ST" 0 "warnings never change the exit code"
-  assert_contains "$OUT" "warning: batch/issues/01-ticket.md has no Handoff: file — run /ralph-human-followup-tickets" \
+  assert_contains "$OUT" "warning: batch/issues/01-ticket.md has no Handoff: file — run /foreman-human-followup-tickets" \
     "warns the same way as a missing line"
 fi
 
@@ -2431,7 +2437,7 @@ if case_is "warning: a followup ticket that is not immediately after the ticket 
     echo '<!-- ORDER:END -->'; } > "$repo/batch/order.md"
   git -C "$repo" add -A && git -C "$repo" commit --quiet -m "order.md puts 02 in between"
 
-  run_ralph "$repo" status batch
+  run_foreman "$repo" status batch
   assert_eq "$ST" 0 "warnings never change the exit code"
   assert_contains "$OUT" \
     "warning: batch/issues/03-ticket.md should come right after batch/issues/01-ticket.md in order.md" \
@@ -2443,7 +2449,7 @@ if case_is "warning: a Checks: line naming no ticket in the batch"; then
   sed -i 's/^\*\*Status:\*\* todo/&\n**Checks:** 99-nowhere.md/' "$repo/batch/issues/02-ticket.md"
   git -C "$repo" commit --quiet -am "ticket 2 checks nothing that exists"
 
-  run_ralph "$repo" status batch
+  run_foreman "$repo" status batch
   assert_eq "$ST" 0 "warnings never change the exit code"
   assert_contains "$OUT" \
     "warning: batch/issues/02-ticket.md Checks: 99-nowhere.md, which is not a ticket in this batch" \
@@ -2456,7 +2462,7 @@ if case_is "with the human word off, only the followup-ticket warnings still app
   sed -i 's/^\*\*Status:\*\* todo/&\n**Checks:** 99-nowhere.md/' "$repo/batch/issues/02-ticket.md"
   git -C "$repo" commit --quiet -am "ticket 1 human, ticket 2 checks nothing real"
 
-  RALPH_HUMAN_WORD= run_ralph "$repo" status batch
+  FOREMAN_HUMAN_WORD= run_foreman "$repo" status batch
   assert_eq "$ST" 0 "still exits 0"
   assert_missing "$OUT" "is a human ticket with no ticket" "warning 1 is skipped"
   assert_missing "$OUT" "has no Handoff:" "warning 2 is skipped"
@@ -2467,11 +2473,11 @@ if case_is "dry-run at a human ticket still shows the marked listing and warning
   repo="$(make_repo 1 warn-dryrun-repo)"
   make_human_ticket "$repo" 1
 
-  run_ralph "$repo" dry-run batch
+  run_foreman "$repo" dry-run batch
   assert_eq "$ST" 0 "exits 0"
   assert_contains "$OUT" "  1  01-ticket.md   [HUMAN]" "the listing is marked"
   assert_contains "$OUT" \
-    "warning: batch/issues/01-ticket.md is a human ticket with no ticket that Checks: it — run /ralph-human-followup-tickets" \
+    "warning: batch/issues/01-ticket.md is a human ticket with no ticket that Checks: it — run /foreman-human-followup-tickets" \
     "and the warning is printed"
   assert_contains "$OUT" "Would stop before batch/issues/01-ticket.md" "still says it would stop"
 fi
@@ -2481,11 +2487,11 @@ if case_is "the start-of-run sweep renames a finished ticket and leaves a dirty 
   sed -i 's/^\*\*Status:\*\* todo/**Status:** done\n\n- [x] the thing/' "$repo/batch/issues/01-ticket.md"
   git -C "$repo" commit --quiet -am "ticket 1 done by hand"
 
-  run_ralph "$repo" status batch
-  run_ralph "$repo" dry-run batch
+  run_foreman "$repo" status batch
+  run_foreman "$repo" dry-run batch
   [ -e "$repo/batch/issues/01-ticket.md" ] && pass || fail "status and dry-run rename nothing"
 
-  run_ralph "$repo" run batch 1
+  run_foreman "$repo" run batch 1
   [ -e "$repo/DONE_batch/issues/DONE_01-ticket.md" ] && pass || fail "a run renames it before picking a ticket"
   assert_contains "$OUT" "✓ marked done" "and says so"
   assert_contains "$(git -C "$repo" log --format=%s)" "chore: mark 01-ticket.md done" "in a commit of its own"
@@ -2493,14 +2499,14 @@ if case_is "the start-of-run sweep renames a finished ticket and leaves a dirty 
   repo="$(make_repo 2 sweep-unticked-repo)"
   sed -i 's/^\*\*Status:\*\* todo/**Status:** done\n\n- [ ] the thing/' "$repo/batch/issues/01-ticket.md"
   git -C "$repo" commit --quiet -am "ticket 1 done by hand, boxes unticked"
-  run_ralph "$repo" run batch 1
+  run_foreman "$repo" run batch 1
   [ -e "$repo/DONE_batch/issues/01-ticket.md" ] && pass || fail "an unticked ticket keeps its name"
 
   repo="$(make_repo 3 sweep-dirty-repo)"
   sed -i 's/^\*\*Status:\*\* todo/**Status:** done/' "$repo/batch/issues/01-ticket.md"
   git -C "$repo" commit --quiet -am "ticket 1 done by hand"
   printf 'uncommitted\n' > "$repo/scratch.txt"
-  RALPH_ALLOW_DIRTY=1 run_ralph "$repo" run batch 1
+  FOREMAN_ALLOW_DIRTY=1 run_foreman "$repo" run batch 1
   [ -e "$repo/batch/issues/01-ticket.md" ] && pass || fail "a dirty tree is not swept"
   assert_missing "$(git -C "$repo" log --format=%s)" "mark 01-ticket.md done" "and no rename commit was made"
 fi
@@ -2509,8 +2515,8 @@ fi
 # Ordering
 # ---------------------------------------------------------------------------
 
-# A stub `claude` on PATH for `ralph order`: captures the `-p` prompt to
-# RALPH_ORDER_PROMPT_LOG and prints a placeholder response, so ordering runs with no model
+# A stub `claude` on PATH for `foreman order`: captures the `-p` prompt to
+# FOREMAN_ORDER_PROMPT_LOG and prints a placeholder response, so ordering runs with no model
 # and no cost. Prints the stub's own directory — put it first on PATH.
 make_claude_stub() {
   local dir="$WORK/claude-stub-$CASE_IDX"    # one per case: cases run side by side
@@ -2519,7 +2525,7 @@ make_claude_stub() {
 #!/bin/bash
 while [ $# -gt 0 ]; do
   case "$1" in
-    -p) shift; [ -n "${RALPH_ORDER_PROMPT_LOG:-}" ] && printf '%s' "$1" > "$RALPH_ORDER_PROMPT_LOG" ;;
+    -p) shift; [ -n "${FOREMAN_ORDER_PROMPT_LOG:-}" ] && printf '%s' "$1" > "$FOREMAN_ORDER_PROMPT_LOG" ;;
   esac
   shift
 done
@@ -2529,8 +2535,8 @@ STUB
   printf '%s' "$dir"
 }
 
-# order.md need only exist for `ralph order` to run — it always re-derives the ticket list
-# itself (--unordered). But `ralph_human_warnings` reads the batch through `--all`, which DOES
+# order.md need only exist for `foreman order` to run — it always re-derives the ticket list
+# itself (--unordered). But `foreman_human_warnings` reads the batch through `--all`, which DOES
 # honour order.md, so the block has to list every ticket already in batch/issues, or an empty
 # block reads as an empty batch.
 write_order_stub() {    # write_order_stub REPO
@@ -2541,13 +2547,13 @@ write_order_stub() {    # write_order_stub REPO
   git -C "$repo" add -A && git -C "$repo" commit --quiet -m "order.md stub"
 }
 
-if case_is "ralph order runs with a stub claude, spending no money and needing no model"; then
+if case_is "foreman order runs with a stub claude, spending no money and needing no model"; then
   repo="$(make_repo 2 order-stub-repo)"
   write_order_stub "$repo"
   log="$WORK/order-stub-prompt.txt"
 
-  PATH="$(make_claude_stub):$PATH" RALPH_ORDER_PROMPT_LOG="$log" run_ralph "$repo" order batch
-  assert_eq "$ST" 0 "ralph order exits 0 against the stub"
+  PATH="$(make_claude_stub):$PATH" FOREMAN_ORDER_PROMPT_LOG="$log" run_foreman "$repo" order batch
+  assert_eq "$ST" 0 "foreman order exits 0 against the stub"
   assert_contains "$OUT" "wrote batch/order.md" "it reports writing order.md"
   [ -f "$log" ] && pass || fail "the stub captured a prompt"
   assert_contains "$(cat "$log")" "Tickets in batch:" "the prompt lists the batch's tickets"
@@ -2560,8 +2566,8 @@ if case_is "the ordering prompt names human tickets and followup tickets"; then
   write_order_stub "$repo"
   log="$WORK/order-human-prompt.txt"
 
-  PATH="$(make_claude_stub):$PATH" RALPH_ORDER_PROMPT_LOG="$log" run_ralph "$repo" order batch
-  assert_eq "$ST" 0 "ralph order still exits 0"
+  PATH="$(make_claude_stub):$PATH" FOREMAN_ORDER_PROMPT_LOG="$log" run_foreman "$repo" order batch
+  assert_eq "$ST" 0 "foreman order still exits 0"
   prompt="$(cat "$log")"
   assert_contains "$prompt" "HUMAN TICKETS" "the human-tickets section is present"
   assert_contains "$prompt" "batch/issues/02-ticket.md" "naming the human ticket"
@@ -2574,23 +2580,23 @@ if case_is "with neither kind of ticket, the ordering prompt has no human or fol
   write_order_stub "$repo"
   log="$WORK/order-plain-prompt.txt"
 
-  PATH="$(make_claude_stub):$PATH" RALPH_ORDER_PROMPT_LOG="$log" run_ralph "$repo" order batch
-  assert_eq "$ST" 0 "ralph order exits 0"
+  PATH="$(make_claude_stub):$PATH" FOREMAN_ORDER_PROMPT_LOG="$log" run_foreman "$repo" order batch
+  assert_eq "$ST" 0 "foreman order exits 0"
   prompt="$(cat "$log")"
   assert_missing "$prompt" "HUMAN TICKETS" "no human-tickets section"
   assert_missing "$prompt" "FOLLOWUP TICKETS" "no followup-tickets section"
   assert_contains "$prompt" "Blocked by" "the Blocked by: sentence is still there"
 fi
 
-if case_is "ralph order warns about a human ticket with no followup ticket, and still exits 0"; then
+if case_is "foreman order warns about a human ticket with no followup ticket, and still exits 0"; then
   repo="$(make_repo 1 order-warn-repo)"
   make_human_ticket "$repo" 1
   write_order_stub "$repo"
 
-  PATH="$(make_claude_stub):$PATH" run_ralph "$repo" order batch
+  PATH="$(make_claude_stub):$PATH" run_foreman "$repo" order batch
   assert_eq "$ST" 0 "warnings never change the exit code"
   assert_contains "$OUT" \
-    "warning: batch/issues/01-ticket.md is a human ticket with no ticket that Checks: it — run /ralph-human-followup-tickets" \
+    "warning: batch/issues/01-ticket.md is a human ticket with no ticket that Checks: it — run /foreman-human-followup-tickets" \
     "and the warning is printed after ordering"
 fi
 
@@ -2600,11 +2606,11 @@ fi
 
 # A throwaway copy of this checkout's bin/lib/skills/install.sh, so a test can edit its
 # SKILL.md (simulating a pulled update) without touching the real repo. Prints its path.
-make_ralph_checkout() {
+make_foreman_checkout() {
   local name="${1:-checkout}" dir
   dir="$WORK/$name"
   mkdir -p "$dir"
-  cp -r "$RALPH_HOME/bin" "$RALPH_HOME/lib" "$RALPH_HOME/skills" "$RALPH_HOME/install.sh" "$dir/"
+  cp -r "$FOREMAN_HOME/bin" "$FOREMAN_HOME/lib" "$FOREMAN_HOME/skills" "$FOREMAN_HOME/install.sh" "$dir/"
   printf '%s' "$dir"
 }
 
@@ -2623,26 +2629,26 @@ run_install() {
   ST=$?
 }
 
-skill_copy_dir() { printf '%s/skills/ralph-human-followup-tickets' "$1"; }
+skill_copy_dir() { printf '%s/skills/foreman-human-followup-tickets' "$1"; }
 
 if case_is "install.sh installs the shims and a marked copy of the skill"; then
-  checkout="$(make_ralph_checkout install-basic-checkout)"
+  checkout="$(make_foreman_checkout install-basic-checkout)"
   run_install "$checkout" install-basic
 
   assert_eq "$ST" 0 "install.sh exits 0"
-  [ -f "$INSTALL_BIN/ralph" ] && pass || fail "the bash shim was written"
-  [ -f "$INSTALL_BIN/ralph.cmd" ] && pass || fail "the cmd shim was written"
+  [ -f "$INSTALL_BIN/foreman" ] && pass || fail "the bash shim was written"
+  [ -f "$INSTALL_BIN/foreman.cmd" ] && pass || fail "the cmd shim was written"
   [ -f "$(skill_copy_dir "$INSTALL_CONFIG")/SKILL.md" ] && pass || fail "the skill's SKILL.md was copied"
-  [ -f "$(skill_copy_dir "$INSTALL_CONFIG")/.ralph-installed-from" ] && pass || fail "the copy carries the marker"
+  [ -f "$(skill_copy_dir "$INSTALL_CONFIG")/.foreman-installed-from" ] && pass || fail "the copy carries the marker"
   assert_contains "$OUT" "installed skill" "and says so"
 fi
 
 if case_is "re-running install.sh after the checkout's SKILL.md changes replaces the copy, no --force needed"; then
-  checkout="$(make_ralph_checkout install-update-checkout)"
+  checkout="$(make_foreman_checkout install-update-checkout)"
   run_install "$checkout" install-update
   assert_eq "$ST" 0 "the first install exits 0"
 
-  printf '\n<!-- a line the pulled update added -->\n' >> "$checkout/skills/ralph-human-followup-tickets/SKILL.md"
+  printf '\n<!-- a line the pulled update added -->\n' >> "$checkout/skills/foreman-human-followup-tickets/SKILL.md"
   run_install "$checkout" install-update
   assert_eq "$ST" 0 "the second install exits 0 without --force"
   assert_contains "$(cat "$(skill_copy_dir "$INSTALL_CONFIG")/SKILL.md")" \
@@ -2650,7 +2656,7 @@ if case_is "re-running install.sh after the checkout's SKILL.md changes replaces
 fi
 
 if case_is "a skill directory without the marker refuses and writes nothing; --force overwrites it"; then
-  checkout="$(make_ralph_checkout install-foreign-checkout)"
+  checkout="$(make_foreman_checkout install-foreign-checkout)"
   INSTALL_HOME="$WORK/install-foreign-home"
   INSTALL_CONFIG="$WORK/install-foreign-config"
   # Deliberately NOT created — a genuine "write nothing" refusal must not even create it.
@@ -2666,18 +2672,18 @@ if case_is "a skill directory without the marker refuses and writes nothing; --f
 
   OUT="$(HOME="$INSTALL_HOME" CLAUDE_CONFIG_DIR="$INSTALL_CONFIG" bash "$checkout/install.sh" --to "$INSTALL_BIN" --force 2>&1)"; ST=$?
   assert_eq "$ST" 0 "--force overwrites it"
-  [ -f "$(skill_copy_dir "$INSTALL_CONFIG")/.ralph-installed-from" ] && pass || fail "the copy now carries the marker"
+  [ -f "$(skill_copy_dir "$INSTALL_CONFIG")/.foreman-installed-from" ] && pass || fail "the copy now carries the marker"
 fi
 
 if case_is "--uninstall removes a marked copy and leaves an unmarked one alone"; then
-  checkout="$(make_ralph_checkout install-uninstall-checkout)"
+  checkout="$(make_foreman_checkout install-uninstall-checkout)"
 
   run_install "$checkout" install-uninstall-marked
   assert_eq "$ST" 0 "the install exits 0"
   run_install "$checkout" install-uninstall-marked --uninstall
   assert_eq "$ST" 0 "uninstall exits 0"
   [ -e "$(skill_copy_dir "$INSTALL_CONFIG")" ] && fail "the marked copy was removed" || pass
-  [ -e "$INSTALL_BIN/ralph" ] && fail "the shims were removed too" || pass
+  [ -e "$INSTALL_BIN/foreman" ] && fail "the shims were removed too" || pass
 
   INSTALL_HOME="$WORK/install-uninstall-foreign-home"
   INSTALL_CONFIG="$WORK/install-uninstall-foreign-config"
@@ -2690,62 +2696,62 @@ if case_is "--uninstall removes a marked copy and leaves an unmarked one alone";
 fi
 
 if case_is "--no-skill installs only the shims"; then
-  checkout="$(make_ralph_checkout install-noskill-checkout)"
+  checkout="$(make_foreman_checkout install-noskill-checkout)"
   run_install "$checkout" install-noskill --no-skill
 
   assert_eq "$ST" 0 "install.sh exits 0"
-  [ -f "$INSTALL_BIN/ralph" ] && pass || fail "the shims were still installed"
+  [ -f "$INSTALL_BIN/foreman" ] && pass || fail "the shims were still installed"
   [ -e "$(skill_copy_dir "$INSTALL_CONFIG")" ] && fail "no skill directory was created" || pass
 fi
 
 if case_is "install.sh warns under WSL, names the WSL home and the Git Bash command, and installs the same"; then
-  checkout="$(make_ralph_checkout install-wsl-checkout)"
+  checkout="$(make_foreman_checkout install-wsl-checkout)"
 
   # Not a real WSL: the signal is WSL_DISTRO_NAME, or "microsoft" in /proc/version, which
-  # RALPH_PROC_VERSION lets a test point at a file of its own.
+  # FOREMAN_PROC_VERSION lets a test point at a file of its own.
   OUT="$(HOME="$WORK/install-wsl-home" CLAUDE_CONFIG_DIR="$WORK/install-wsl-config" WSL_DISTRO_NAME=Ubuntu \
     bash "$checkout/install.sh" --to "$WORK/install-wsl-bin" 2>&1)"; ST=$?
   assert_eq "$ST" 0 "the warning does not change the exit code"
   assert_contains "$OUT" "WSL" "says it is running under WSL"
   assert_contains "$OUT" "$WORK/install-wsl-home" "names the WSL home it is installing into"
   assert_contains "$OUT" 'C:\Program Files\Git\bin\bash.exe' "gives the Git Bash command for Windows"
-  [ -f "$WORK/install-wsl-bin/ralph" ] && [ -f "$WORK/install-wsl-bin/ralph.cmd" ] && pass || fail "the shims were still installed"
+  [ -f "$WORK/install-wsl-bin/foreman" ] && [ -f "$WORK/install-wsl-bin/foreman.cmd" ] && pass || fail "the shims were still installed"
   [ -f "$(skill_copy_dir "$WORK/install-wsl-config")/SKILL.md" ] && pass || fail "the skill was still installed"
   assert_contains "$OUT" "installed skill" "and says so"
 
   # The same signal from /proc/version.
   printf 'Linux version 5.15.153.1-microsoft-standard-WSL2 (root@build) (gcc)\n' > "$WORK/fake-proc-wsl"
-  OUT="$(HOME="$WORK/install-wsl2-home" CLAUDE_CONFIG_DIR="$WORK/install-wsl2-config" RALPH_PROC_VERSION="$WORK/fake-proc-wsl" \
+  OUT="$(HOME="$WORK/install-wsl2-home" CLAUDE_CONFIG_DIR="$WORK/install-wsl2-config" FOREMAN_PROC_VERSION="$WORK/fake-proc-wsl" \
     bash "$checkout/install.sh" --to "$WORK/install-wsl2-bin" 2>&1)"; ST=$?
   assert_eq "$ST" 0 "a /proc/version naming microsoft exits 0 too"
   assert_contains "$OUT" 'C:\Program Files\Git\bin\bash.exe' "and warns"
 
   # Outside WSL: nothing new, even with a /proc/version that names something else.
   printf 'Linux version 6.1.0-18-amd64 (debian-kernel@lists.debian.org)\n' > "$WORK/fake-proc-linux"
-  OUT="$(HOME="$WORK/install-nowsl-home" CLAUDE_CONFIG_DIR="$WORK/install-nowsl-config" RALPH_PROC_VERSION="$WORK/fake-proc-linux" \
+  OUT="$(HOME="$WORK/install-nowsl-home" CLAUDE_CONFIG_DIR="$WORK/install-nowsl-config" FOREMAN_PROC_VERSION="$WORK/fake-proc-linux" \
     WSL_DISTRO_NAME= bash "$checkout/install.sh" --to "$WORK/install-nowsl-bin" 2>&1)"; ST=$?
   assert_eq "$ST" 0 "the install outside WSL exits 0"
   assert_missing "$OUT" "WSL" "no warning outside WSL"
 fi
 
-if case_is "ralph doctor warns when the installed skill copy is stale, and is silent otherwise"; then
+if case_is "foreman doctor warns when the installed skill copy is stale, and is silent otherwise"; then
   repo="$WORK/doctor-skill-repo"
   mkdir -p "$repo"
   git -C "$repo" init --quiet
-  git -C "$repo" config user.name ralph-test
-  git -C "$repo" config user.email test@ralph.invalid
+  git -C "$repo" config user.name foreman-test
+  git -C "$repo" config user.email test@foreman.invalid
 
   doctor_home="$WORK/doctor-skill-home"
   doctor_config="$WORK/doctor-skill-config"
   doctor_bin="$WORK/doctor-skill-bin"
   mkdir -p "$doctor_home" "$doctor_config"
 
-  run_doctor() { OUT="$(cd "$repo" && HOME="$doctor_home" CLAUDE_CONFIG_DIR="$doctor_config" "$RALPH" doctor 2>&1)"; ST=$?; }
+  run_doctor() { OUT="$(cd "$repo" && HOME="$doctor_home" CLAUDE_CONFIG_DIR="$doctor_config" "$FOREMAN" doctor 2>&1)"; ST=$?; }
 
   run_doctor
-  assert_missing "$OUT" "ralph-human-followup-tickets" "silent before the skill is installed"
+  assert_missing "$OUT" "foreman-human-followup-tickets" "silent before the skill is installed"
 
-  HOME="$doctor_home" CLAUDE_CONFIG_DIR="$doctor_config" bash "$RALPH_HOME/install.sh" --to "$doctor_bin" >/dev/null
+  HOME="$doctor_home" CLAUDE_CONFIG_DIR="$doctor_config" bash "$FOREMAN_HOME/install.sh" --to "$doctor_bin" >/dev/null
 
   run_doctor
   assert_missing "$OUT" "STALE" "silent — the installed copy matches this checkout"
@@ -2753,28 +2759,28 @@ if case_is "ralph doctor warns when the installed skill copy is stale, and is si
   printf '\n<!-- drift -->\n' >> "$(skill_copy_dir "$doctor_config")/SKILL.md"
   run_doctor
   assert_contains "$OUT" "STALE" "warns once the installed copy drifts"
-  assert_contains "$OUT" "ralph-human-followup-tickets" "names the skill"
+  assert_contains "$OUT" "foreman-human-followup-tickets" "names the skill"
   assert_contains "$OUT" "install.sh" "and says to re-run it"
 fi
 
-if case_is "ralph finds its toolkit when bash is handed a Windows path, as ralph.cmd does, from any directory"; then
-  # ralph.cmd runs `bash C:\...\bin\ralph`. That path has no '/', so the dispatcher once
-  # resolved RALPH_HOME against the current directory and looked for lib/ one level above it.
+if case_is "foreman finds its toolkit when bash is handed a Windows path, as foreman.cmd does, from any directory"; then
+  # foreman.cmd runs `bash C:\...\bin\foreman`. That path has no '/', so the dispatcher once
+  # resolved FOREMAN_HOME against the current directory and looked for lib/ one level above it.
   if command -v cygpath >/dev/null 2>&1; then
     elsewhere="$WORK/winpath-elsewhere"
     mkdir -p "$elsewhere"
-    OUT="$(cd "$elsewhere" && bash "$(cygpath -w "$RALPH")" version 2>&1)"; ST=$?
+    OUT="$(cd "$elsewhere" && bash "$(cygpath -w "$FOREMAN")" version 2>&1)"; ST=$?
     assert_eq "$ST" 0 "version exits 0 given a backslash path"
-    assert_contains "$OUT" "$RALPH_HOME" "RALPH_HOME is the checkout, not a path beside the current directory"
+    assert_contains "$OUT" "$FOREMAN_HOME" "FOREMAN_HOME is the checkout, not a path beside the current directory"
   else
     pass  # no cygpath, so this is not Windows: a backslash path is just an odd file name
   fi
 fi
 
-# --- colour (ralph-ui.sh) ----------------------------------------------------
-# run_ralph captures through `$(...)`, so none of these runs has a terminal: what they show is
-# the auto rule (plain), and RALPH_COLOR=always for the colour itself. A real terminal is the
-# one thing a test run cannot give — try `RALPH_COLOR=auto ralph run <batch>` by hand.
+# --- colour (foreman-ui.sh) ----------------------------------------------------
+# run_foreman captures through `$(...)`, so none of these runs has a terminal: what they show is
+# the auto rule (plain), and FOREMAN_COLOR=always for the colour itself. A real terminal is the
+# one thing a test run cannot give — try `FOREMAN_COLOR=auto foreman run <batch>` by hand.
 
 # The lines whose wording colour must not change: every event line, rule and frame, with the
 # things that differ between two runs (the run id, a commit's short sha) normalised away.
@@ -2787,7 +2793,7 @@ colour_lines() {
 if case_is "colour is off when output is not a terminal, and the log never carries it"; then
   ESC=$'\033'
   repo="$(make_repo 3 colour-plain-repo)"
-  RALPH_FAKE_BEHAVIOUR=transient:land:partial-turn:land run_ralph "$repo" run batch --unlimited
+  FOREMAN_FAKE_BEHAVIOUR=transient:land:partial-turn:land run_foreman "$repo" run batch --unlimited
 
   assert_eq "$ST" 0 "the batch finishes"
   assert_missing "$OUT" "$ESC" "a captured run has no escape codes at all"
@@ -2798,31 +2804,31 @@ if case_is "colour is off when output is not a terminal, and the log never carri
   assert_contains "$OUT" "== run " "and the summary frame"
 
   # NO_COLOR is a no-op here, being already off — and must not break anything.
-  NO_COLOR=1 run_ralph "$repo" status batch
+  NO_COLOR=1 run_foreman "$repo" status batch
   assert_missing "$OUT" "$ESC" "status with NO_COLOR set is plain too"
 
   # Forcing colour on must not reach the files a run writes.
   repo="$(make_repo 3 colour-log-repo)"
-  RALPH_COLOR=always RALPH_FAKE_BEHAVIOUR=land run_ralph "$repo" run batch --unlimited
-  assert_missing "$(cat "$repo"/*batch/ralph-runs.log)" "$ESC" "the run log has no escape codes, even with colour forced"
-  assert_missing "$(cat "$repo"/*batch/ralph-runs.jsonl)" "$ESC" "nor has the jsonl"
+  FOREMAN_COLOR=always FOREMAN_FAKE_BEHAVIOUR=land run_foreman "$repo" run batch --unlimited
+  assert_missing "$(cat "$repo"/*batch/foreman-runs.log)" "$ESC" "the run log has no escape codes, even with colour forced"
+  assert_missing "$(cat "$repo"/*batch/foreman-runs.jsonl)" "$ESC" "nor has the jsonl"
 fi
 
-if case_is "RALPH_COLOR=always colours the glyph or prefix only, and the words stay the same"; then
+if case_is "FOREMAN_COLOR=always colours the glyph or prefix only, and the words stay the same"; then
   ESC=$'\033'
   # A ticket with an open checkbox is what makes the loop print a `note:` when it lands. Both
   # runs get it, so the lines compared below are the same lines.
   plain_repo="$(make_repo 3 colour-same-plain)"
   printf '\n- [ ] still open\n' >> "$plain_repo/batch/issues/01-ticket.md"
   git -C "$plain_repo" commit --quiet -am "open box"
-  RALPH_FAKE_BEHAVIOUR=transient:land:partial-turn:land run_ralph "$plain_repo" run batch --unlimited
+  FOREMAN_FAKE_BEHAVIOUR=transient:land:partial-turn:land run_foreman "$plain_repo" run batch --unlimited
   plain_lines="$(colour_lines "$OUT")"
 
   repo="$(make_repo 3 colour-same-repo)"
   printf '\n- [ ] still open\n' >> "$repo/batch/issues/01-ticket.md"
   git -C "$repo" commit --quiet -am "open box"
-  RALPH_COLOR=always RALPH_FAKE_BEHAVIOUR=transient:land:partial-turn:land \
-    run_ralph "$repo" run batch --unlimited
+  FOREMAN_COLOR=always FOREMAN_FAKE_BEHAVIOUR=transient:land:partial-turn:land \
+    run_foreman "$repo" run batch --unlimited
 
   assert_contains "$OUT" "${ESC}[32m✓${ESC}[0m landed  ·  " "landed is a green tick"
   assert_contains "$OUT" "${ESC}[2m⋯${ESC}[0m progressed  ·  " "progress is a dim ellipsis"
@@ -2836,25 +2842,25 @@ if case_is "RALPH_COLOR=always colours the glyph or prefix only, and the words s
   assert_eq "$(colour_lines "$OUT")" "$plain_lines" "stripped of colour, the output is the plain output"
 fi
 
-if case_is "RALPH_COLOR is read from ralph.conf, the environment beats it, and a bad value is refused"; then
+if case_is "FOREMAN_COLOR is read from foreman.conf, the environment beats it, and a bad value is refused"; then
   ESC=$'\033'
   repo="$(make_repo 4 colour-conf-repo)"
-  printf 'RALPH_COLOR=always\n' >> "$repo/batch/ralph.conf"
+  printf 'FOREMAN_COLOR=always\n' >> "$repo/batch/foreman.conf"
   git -C "$repo" commit --quiet -am "colour on"
 
-  run_ralph "$repo" run batch
-  assert_contains "$OUT" "${ESC}[32m✓${ESC}[0m landed" "ralph.conf can turn colour on"
+  run_foreman "$repo" run batch
+  assert_contains "$OUT" "${ESC}[32m✓${ESC}[0m landed" "foreman.conf can turn colour on"
 
-  RALPH_COLOR=never run_ralph "$repo" run batch
+  FOREMAN_COLOR=never run_foreman "$repo" run batch
   assert_missing "$OUT" "$ESC" "and the environment wins over it"
 
-  # An explicit RALPH_COLOR is a decision about ralph; NO_COLOR is a default for every tool.
-  NO_COLOR=1 RALPH_COLOR=always run_ralph "$repo" run batch
-  assert_contains "$OUT" "${ESC}[32m✓${ESC}[0m landed" "RALPH_COLOR=always wins over NO_COLOR"
+  # An explicit FOREMAN_COLOR is a decision about foreman; NO_COLOR is a default for every tool.
+  NO_COLOR=1 FOREMAN_COLOR=always run_foreman "$repo" run batch
+  assert_contains "$OUT" "${ESC}[32m✓${ESC}[0m landed" "FOREMAN_COLOR=always wins over NO_COLOR"
 
-  RALPH_COLOR=rainbow run_ralph "$repo" status batch
+  FOREMAN_COLOR=rainbow run_foreman "$repo" status batch
   assert_eq "$ST" 1 "an unknown value is a usage error"
-  assert_contains "$OUT" "RALPH_COLOR must be auto, always or never (got 'rainbow')" "that says what is allowed"
+  assert_contains "$OUT" "FOREMAN_COLOR must be auto, always or never (got 'rainbow')" "that says what is allowed"
 fi
 
 if case_is "a preflight failure is prefixed in colour only when asked to be"; then
@@ -2862,12 +2868,12 @@ if case_is "a preflight failure is prefixed in colour only when asked to be"; th
   repo="$(make_repo 1 colour-preflight-repo)"
   printf 'stray edit\n' >> "$repo/batch/issues/01-ticket.md"
 
-  run_ralph "$repo" run batch
+  run_foreman "$repo" run batch
   assert_eq "$ST" 1 "a dirty tree is refused"
   assert_contains "$OUT" "preflight: the working tree is dirty." "plain: the prefix is just text"
   assert_missing "$OUT" "$ESC" "and there is no escape code"
 
-  RALPH_COLOR=always run_ralph "$repo" run batch
+  FOREMAN_COLOR=always run_foreman "$repo" run batch
   assert_eq "$ST" 1 "still refused"
   assert_contains "$OUT" "${ESC}[33mpreflight:${ESC}[0m the working tree is dirty." "forced: the prefix is yellow"
   assert_contains "$OUT" "           iteration's review sees only what this iteration wrote." \
@@ -2881,26 +2887,26 @@ if case_is "a key echo is plain text unless colour is asked for, and always take
   printf '3\n' > "$ctl/budget"
   printf '1\n' > "$ctl/iteration"
 
-  OUT="$(bash "$RALPH_HOME/lib/ralph-keys.sh" --apply + "$ctl" 2>&1)"
+  OUT="$(bash "$FOREMAN_HOME/lib/foreman-keys.sh" --apply + "$ctl" 2>&1)"
   assert_eq "$OUT" $'\r\033[2K   ⌨ iterations: 1 of 4' "plain: byte for byte what it always was"
 
-  OUT="$(RALPH_COLOR=always bash "$RALPH_HOME/lib/ralph-keys.sh" --apply + "$ctl" 2>&1)"
+  OUT="$(FOREMAN_COLOR=always bash "$FOREMAN_HOME/lib/foreman-keys.sh" --apply + "$ctl" 2>&1)"
   assert_eq "$OUT" $'\r\033[2K   \033[36m⌨\033[0m iterations: 1 of 5' \
     "forced: only the glyph is cyan, and the erase-line still comes first"
 
-  OUT="$(NO_COLOR=1 bash "$RALPH_HOME/lib/ralph-keys.sh" --apply + "$ctl" 2>&1)"
+  OUT="$(NO_COLOR=1 bash "$FOREMAN_HOME/lib/foreman-keys.sh" --apply + "$ctl" 2>&1)"
   assert_missing "$OUT" "[36m" "NO_COLOR keeps the echo plain"
 fi
 
 if case_is "--live draws its clock dim only when colour is on, and the line is otherwise the same"; then
   ESC=$'\033'
   repo="$(make_repo 2 colour-live-repo)"
-  RALPH_FAKE_BEHAVIOUR=stream run_ralph "$repo" run batch --live
+  FOREMAN_FAKE_BEHAVIOUR=stream run_foreman "$repo" run batch --live
   assert_missing "$OUT" "$ESC" "a plain ticker line has no escape codes"
   assert_contains "$OUT" " · Write src/foo.js" "and is clock, dot, label"
 
   repo="$(make_repo 2 colour-live-forced-repo)"
-  RALPH_COLOR=always RALPH_FAKE_BEHAVIOUR=stream run_ralph "$repo" run batch --live
+  FOREMAN_COLOR=always FOREMAN_FAKE_BEHAVIOUR=stream run_foreman "$repo" run batch --live
   assert_contains "$OUT" "   ${ESC}[2m00:0" "forced: the clock digits are dim"
   assert_contains "$OUT" "${ESC}[0m · Write src/foo.js" "and the dot and the label are not"
 fi
@@ -2911,17 +2917,98 @@ if case_is "status colours its labels when asked to, and prints the same words e
   sed -i 's/Status:\*\* todo/Status:** ready-for-human/' "$repo/batch/issues/02-ticket.md"
   git -C "$repo" commit --quiet -am "human ticket"
 
-  run_ralph "$repo" status batch
+  run_foreman "$repo" status batch
   plain="$OUT"
   assert_missing "$plain" "$ESC" "a captured status is plain"
   assert_contains "$plain" "Batch: batch" "and keeps its first line"
   assert_contains "$plain" "  2  02-ticket.md   [HUMAN]" "and the marked list"
 
-  RALPH_COLOR=always run_ralph "$repo" status batch
+  FOREMAN_COLOR=always run_foreman "$repo" status batch
   assert_contains "$OUT" "${ESC}[36mBatch:${ESC}[0m batch" "forced: the Batch label is cyan"
   assert_contains "$OUT" "${ESC}[36mNext:${ESC}[0m 01-ticket.md" "and the Next label"
   assert_contains "$OUT" "02-ticket.md   ${ESC}[33m[HUMAN]${ESC}[0m" "and the human flag is yellow"
   assert_eq "$(printf '%s' "$OUT" | sed $'s/\033\[[0-9;]*m//g')" "$plain" "stripped of colour it is the plain status"
+fi
+
+# --- foreman convert ---------------------------------------------------------
+# A repo as the toolkit left it before the rename: ralph.conf, RALPH_* settings, the old run
+# files, the old .gitignore lines, prose that names ralph — plus one file of the project's
+# own with ralph in its name, and credit to the Ralph loop. Prints its path.
+make_ralph_repo() {
+  local repo
+  repo="$(make_repo 1 "$1")"
+  git -C "$repo" mv batch/foreman.conf batch/ralph.conf
+  printf '# Sourced by the ralph toolkit. Try `ralph doctor`.\nRALPH_EXEC=fake\n#RALPH_SANDBOX=ralph-<repo-name>\n' \
+    > "$repo/batch/ralph.conf"
+  printf '**/ralph-runs.jsonl\n**/.ralph-iter.bundle\n' >> "$repo/.gitignore"
+  mkdir -p "$repo/docs"
+  printf 'Run `ralph run batch`, then read ralph-loop.sh.\r\nBuilt on the Ralph loop, after Ralph Wiggum.\r\nSee docs/ralph-notes.md.\r\n' \
+    > "$repo/docs/guide.md"
+  printf 'notes\n' > "$repo/docs/ralph-notes.md"
+  git -C "$repo" add -A
+  git -C "$repo" commit --quiet -m "as ralph left it"
+  printf '{}\n' > "$repo/batch/ralph-runs.jsonl"
+  printf 'bundle' > "$repo/batch/.ralph-iter.bundle"
+  printf '%s' "$repo"
+}
+
+if case_is "convert moves a ralph project to foreman, and keeps the credit and the project's own names"; then
+  repo="$(make_ralph_repo convert-repo)"
+  mkdir -p "$WORK/convert-home/.config/ralph"
+  printf 'RALPH_DOCKER_USERNAME=someone\n' > "$WORK/convert-home/.config/ralph/env"
+  OUT="$(cd "$repo" && unset FOREMAN_CREDENTIALS_FILE; HOME="$WORK/convert-home" "$FOREMAN" convert 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "convert succeeds"
+  assert_contains "$OUT" "renamed  batch/ralph.conf → foreman.conf" "it names the conf it renamed"
+  assert_contains "$OUT" "Review with \`git diff\`" "and leaves the commit to you"
+
+  assert_contains "$(git -C "$repo" status --porcelain)" "RM batch/ralph.conf -> batch/foreman.conf" \
+    "the conf is a staged git mv, its rewrite left unstaged"
+  assert_eq "$(cat "$repo/batch/foreman.conf")" \
+    "$(printf '# Sourced by the foreman toolkit. Try `foreman doctor`.\nFOREMAN_EXEC=fake\n#FOREMAN_SANDBOX=foreman-<repo-name>')" \
+    "and its settings and prose are foreman's"
+  [ -f "$repo/batch/foreman-runs.jsonl" ] && [ ! -e "$repo/batch/ralph-runs.jsonl" ] && pass || fail "the run log is renamed"
+  [ ! -e "$repo/batch/.ralph-iter.bundle" ] && pass || fail "the old iteration bundle is gone"
+  assert_contains "$(cat "$repo/.gitignore")" "**/foreman-runs.jsonl" ".gitignore names the new run log"
+  assert_missing "$(cat "$repo/.gitignore")" "ralph" "and nothing of ralph's"
+
+  assert_eq "$(cat "$repo/docs/guide.md")" \
+    "$(printf 'Run `foreman run batch`, then read foreman-loop.sh.\r\nBuilt on the Ralph loop, after Ralph Wiggum.\r\nSee docs/ralph-notes.md.')" \
+    "prose is converted, CRLF kept, the credit and the project's own file name left alone"
+  [ -f "$repo/docs/ralph-notes.md" ] && pass || fail "the project's own file is not renamed"
+  assert_contains "$OUT" "docs/ralph-notes.md" "it is listed for you to look at"
+
+  assert_eq "$(cat "$WORK/convert-home/.config/foreman/env")" "FOREMAN_DOCKER_USERNAME=someone" \
+    "the credentials file is copied under the new names"
+  [ -f "$WORK/convert-home/.config/ralph/env" ] && pass || fail "and the old one is kept"
+
+  run_foreman "$repo" status batch
+  assert_missing "$OUT" "rename to Foreman" "the converted repo draws no legacy warning"
+
+  git -C "$repo" commit --quiet -am "converted"
+  OUT="$(cd "$repo" && HOME="$WORK/convert-home" "$FOREMAN" convert 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "a second convert succeeds"
+  assert_contains "$OUT" "Nothing in the project to convert" "and finds nothing to do"
+  assert_eq "$(git -C "$repo" status --porcelain)" "" "and changes nothing"
+fi
+
+if case_is "convert --dry-run changes nothing, and a dirty tree or the toolkit itself is refused"; then
+  repo="$(make_ralph_repo convert-dry-repo)"
+  OUT="$(HOME="$WORK/convert-dry-home" "$FOREMAN" convert "$repo" --dry-run 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "a dry run succeeds, given the project as an argument"
+  assert_contains "$OUT" "renamed  batch/ralph.conf → foreman.conf" "it says what it would rename"
+  assert_contains "$OUT" "rewrote  docs/guide.md" "and rewrite"
+  assert_eq "$(git -C "$repo" status --porcelain)" "" "and changes nothing tracked"
+  [ -f "$repo/batch/ralph-runs.jsonl" ] && pass || fail "nor the run files"
+
+  printf 'x\n' >> "$repo/docs/guide.md"
+  OUT="$(HOME="$WORK/convert-dry-home" "$FOREMAN" convert "$repo" 2>&1)"; ST=$?
+  assert_eq "$ST" 1 "a dirty tree is refused"
+  assert_contains "$OUT" "uncommitted changes" "and says why"
+  [ -f "$repo/batch/ralph.conf" ] && pass || fail "with nothing converted"
+
+  OUT="$(HOME="$WORK/convert-dry-home" "$FOREMAN" convert "$FOREMAN_HOME" --dry-run 2>&1)"; ST=$?
+  assert_eq "$ST" 1 "the toolkit's own repo is refused"
+  assert_contains "$OUT" "the foreman toolkit itself" "and says so"
 fi
 
 # ---------------------------------------------------------------------------

@@ -1,18 +1,22 @@
-# ralph
+# Foreman
 
 A loop that implements one ticket per iteration, until a batch of tickets is done or a
 budget stops it. Installed once per machine; point it at any directory of tickets, in any
 repository.
 
+*Inspired by the Ralph loop technique (one agent turn per task, in a loop), extended with
+ordered ticket batches, budgets, human handoffs and stall recovery — see
+[Inspiration](#inspiration).*
+
 ```bash
 cd <any git repo>
-ralph doctor                    # is this repo ready?                  (free)
-ralph init .scratch/my-batch    # scaffold a batch, then order its tickets
-ralph status .scratch/my-batch  # what is left, what is next, where a human is needed (free)
-ralph dry-run .scratch/my-batch # the plan and the exact prompt        (free)
-ralph run .scratch/my-batch             # one iteration
-ralph run .scratch/my-batch 5           # at most 5 iterations
-ralph run .scratch/my-batch --unlimited # until done or a budget stops it
+foreman doctor                      # is this repo ready?                  (free)
+foreman init .scratch/my-batch      # scaffold a batch, then order its tickets
+foreman status .scratch/my-batch    # what is left, what is next, where a human is needed (free)
+foreman dry-run .scratch/my-batch   # the plan and the exact prompt        (free)
+foreman run .scratch/my-batch             # one iteration
+foreman run .scratch/my-batch 5           # at most 5 iterations
+foreman run .scratch/my-batch --unlimited # until done or a budget stops it
 ```
 
 Everything marked *(free)* makes no model call and starts no sandbox.
@@ -20,9 +24,9 @@ Everything marked *(free)* makes no model call and starts no sandbox.
 ## Install
 
 ```bash
-git clone <this repo> ~/tools/ralph   # or anywhere you like
-bash ~/tools/ralph/install.sh
-ralph version
+git clone https://github.com/OriGonen/foreman.git ~/tools/foreman   # or anywhere you like
+bash ~/tools/foreman/install.sh
+foreman version
 ```
 
 From PowerShell, don't use a plain `bash`: there it is often the WSL launcher
@@ -36,18 +40,18 @@ checkout (or run the `bash` line above from Git Bash):
 
 `install.sh` prints a warning if it finds itself running under WSL, but still installs.
 
-`install.sh` writes two small forwarding scripts — `ralph` and `ralph.cmd` — into the first
+`install.sh` writes two small forwarding scripts — `foreman` and `foreman.cmd` — into the first
 personal `bin` directory already on your PATH (`~/bin`, then `~/.local/bin`), so both Git
 Bash and PowerShell get the same command. `bash install.sh --to <dir>` picks the directory
 yourself.
 
-It also copies the `ralph-human-followup-tickets` skill (see "Human tickets" below) into
-`${CLAUDE_CONFIG_DIR:-~/.claude}/skills/ralph-human-followup-tickets/` — a copy, not a
+It also copies the `foreman-human-followup-tickets` skill (see "Human tickets" below) into
+`${CLAUDE_CONFIG_DIR:-~/.claude}/skills/foreman-human-followup-tickets/` — a copy, not a
 symlink, marked with the checkout it came from. Re-running `install.sh` replaces a marked
 copy with whatever this checkout now has, no `--force` needed: that is how a pulled update
 reaches it. `--no-skill` installs only the shims; `--force` overwrites a same-named
 directory (shim or skill) this installer didn't write; `--uninstall` removes both, but
-leaves an unmarked directory alone; `ralph doctor` warns, for free, if an installed copy
+leaves an unmarked directory alone; `foreman doctor` warns, for free, if an installed copy
 ever drifts from this checkout.
 
 Move the checkout later and just re-run `install.sh` to re-point the shims.
@@ -55,11 +59,11 @@ Move the checkout later and just re-run `install.sh` to re-point the shims.
 ### Requirements
 
 `git`, `node`, `awk`, and **bash 4+** (associative arrays and `compgen -v`). On Windows that
-means Git Bash — there is no separate Windows implementation, and `ralph.cmd` forwards to
+means Git Bash — there is no separate Windows implementation, and `foreman.cmd` forwards to
 it.
 
 Plus, depending on the execution mode a batch asks for: `sbx` for the sandbox modes, or
-`claude` on PATH for `local`. `ralph doctor` checks all of this and tells you which one your
+`claude` on PATH for `local`. `foreman doctor` checks all of this and tells you which one your
 batches actually need.
 
 ## The one rule: the toolkit is stateless
@@ -69,13 +73,13 @@ directory**, inside the repository being worked on:
 
 | in the batch | what it is |
 |---|---|
-| `ralph.conf` | the batch's config — the only file that makes a directory a batch |
+| `foreman.conf` | the batch's config — the only file that makes a directory a batch |
 | `order.md` | the run order (optional — see below) |
 | `progress.txt` | the agent's running notes, appended each iteration |
 | `prompt-extra.md` | project-specific prompt text (optional) |
-| `ralph-runs.jsonl` `ralph-runs.log` | append-only run telemetry, gitignored |
-| `.ralph-iter.bundle` | transient; exists only inside one iteration |
-| `.ralph-stall-marker` | disposable; exists while an agent turn runs, and is left behind when a run stops part-way through one (a usage limit, Ctrl-C, a stall it could not salvage), so a rerun may review and rescue the work — see "Pausing and resuming" |
+| `foreman-runs.jsonl` `foreman-runs.log` | append-only run telemetry, gitignored |
+| `.foreman-iter.bundle` | transient; exists only inside one iteration |
+| `.foreman-stall-marker` | disposable; exists while an agent turn runs, and is left behind when a run stops part-way through one (a usage limit, Ctrl-C, a stall it could not salvage), so a rerun may review and rescue the work — see "Pausing and resuming" |
 
 Two batches never share any of it, and two *repositories* never share any of it either. Run
 one, pause it, switch repos, run another, come back — each resumes exactly where it was.
@@ -86,17 +90,17 @@ Nothing accumulates in the install.
 Once per repo:
 
 ```bash
-ralph doctor --fix
+foreman doctor --fix
 ```
 
 That appends the only two things a repo has to provide itself:
 
-- `.gitignore` — `**/.ralph-iter.bundle`, `**/.ralph-stall-marker`, `**/ralph-runs.jsonl`,
-  `**/ralph-runs.log`, so a
+- `.gitignore` — `**/.foreman-iter.bundle`, `**/.foreman-stall-marker`, `**/foreman-runs.jsonl`,
+  `**/foreman-runs.log`, so a
   batch's run state stays untracked. The patterns match anywhere because a batch is any
-  directory with a `ralph.conf`.
-- `.gitattributes` — `ralph.conf text eol=lf`, but only if the repo normalises line
-  endings. `ralph.conf` is sourced as bash, and a CRLF checkout would make `RALPH_EXEC` read
+  directory with a `foreman.conf`.
+- `.gitattributes` — `foreman.conf text eol=lf`, but only if the repo normalises line
+  endings. `foreman.conf` is sourced as bash, and a CRLF checkout would make `FOREMAN_EXEC` read
   as `sandbox<CR>` and fail validation with a message that looks like a lie.
 
 Review the diff and commit it. `--fix` only ever appends, and never touches a ticket.
@@ -113,19 +117,19 @@ A batch is a directory containing tickets. A ticket is a markdown file with a st
 - [ ] the thing is done
 ```
 
-`ralph init <dir>` writes the three files a batch needs, generating `order.md` from
+`foreman init <dir>` writes the three files a batch needs, generating `order.md` from
 `<dir>/issues/*.md`, then — unless `--no-order` is given — has an agent read the tickets and
 rewrite that order. It never overwrites without `--force`, and it never touches a ticket.
 
-Then edit `<dir>/ralph.conf`. The two lines that matter most are what "verify your work"
+Then edit `<dir>/foreman.conf`. The two lines that matter most are what "verify your work"
 means in your project:
 
 ```sh
-RALPH_CHECK_CMD="npm run check"
-RALPH_TEST_CMD="npm test"
+FOREMAN_CHECK_CMD="npm run check"
+FOREMAN_TEST_CMD="npm test"
 ```
 
-Everything else has a default; `lib/ralph.conf.template` documents the full set.
+Everything else has a default; `lib/foreman.conf.template` documents the full set.
 
 ### Human tickets
 
@@ -141,8 +145,8 @@ account. Mark a ticket for one on its own status line:
 - [ ] the owner has reviewed the copy and left feedback in the handoff file
 ```
 
-`RALPH_HUMAN_WORD` (default `ready-for-human`) is the word that marks it; set it empty in
-`ralph.conf` to turn the feature off entirely — every ticket is then an agent's, as before.
+`FOREMAN_HUMAN_WORD` (default `ready-for-human`) is the word that marks it; set it empty in
+`foreman.conf` to turn the feature off entirely — every ticket is then an agent's, as before.
 Reaching a human ticket at the head of the order stops the run **before anything is
 spent** — before the sandbox starts, before any budget check, before any prompt is sent —
 and exits **30**, naming the ticket and its handoff file. Rerunning before the person has
@@ -173,8 +177,8 @@ with any `DONE_` prefix stripped on either side, so a rename never breaks it. **
 human ticket back** means: set its status line to `ready-for-human` again, append a
 `## Sent back by 16-check-owner-review.md` section saying what's missing, commit as
 `check: send 15 back — …`, and leave the followup ticket's own status line unflipped. The
-loop recognises that shape wherever it sees it — it is what `ralph_was_sent_back` and the
-rename-gating in `lib/ralph-human.sh` look for — so once it lands, the next pick is the
+loop recognises that shape wherever it sees it — it is what `foreman_was_sent_back` and the
+rename-gating in `lib/foreman-human.sh` look for — so once it lands, the next pick is the
 human ticket again, and the run stops there (exit 30) with the reason visible in the
 ticket itself.
 
@@ -194,9 +198,9 @@ only act on once a person has weighed in:
 
 **Writing the handoff files and followup tickets.** A person writes the human tickets
 themselves (with Matt Pocock's `to-tickets`, or by hand), but nothing writes their handoff
-files and followup tickets until `install.sh` puts the `ralph-human-followup-tickets` skill
-in `~/.claude/skills/`. Type `/ralph-human-followup-tickets`, usually right after `to-tickets`
-and before `ralph init`: it adds whichever of the three pieces above each human ticket is
+files and followup tickets until `install.sh` puts the `foreman-human-followup-tickets` skill
+in `~/.claude/skills/`. Type `/foreman-human-followup-tickets`, usually right after `to-tickets`
+and before `foreman init`: it adds whichever of the three pieces above each human ticket is
 still missing, never overwrites a handoff file, and tells you what to run next. Running it
 again — on the same batch, or after adding one more human ticket — only adds what is new.
 
@@ -205,12 +209,12 @@ again — on the same batch, or after adding one more human ticket — only adds
 If `order.md` exists, the lines between its `<!-- ORDER:BEGIN -->` and `<!-- ORDER:END -->`
 markers are the order, one ticket path per line (repo-relative or batch-relative, inside a
 code fence or not, `#` to comment one out). If it does not exist, every `*.md` under
-`RALPH_ISSUES_DIRS` runs in filename order — which is what the `NN-` prefixes are for. A
+`FOREMAN_ISSUES_DIRS` runs in filename order — which is what the `NN-` prefixes are for. A
 relative entry there is resolved against the batch directory, not the repo root, so `.`
 means the batch directory itself.
 
-`ralph init` doesn't leave that at filename order: right after scaffolding, it runs
-`ralph order <batch>`, which has an agent read every ticket and rewrite the order, weighing
+`foreman init` doesn't leave that at filename order: right after scaffolding, it runs
+`foreman order <batch>`, which has an agent read every ticket and rewrite the order, weighing
 these in priority order — dependencies (what has to land before what, and which tickets
 touch the same files closely enough to keep adjacent), human-ticket placement and
 followup-ticket adjacency (see below, when the batch has either), importance (foundations
@@ -228,28 +232,28 @@ That is a first pass, not a guarantee — read it, and move things by hand where
 constraint that isn't in the ticket text. Re-run it any time the tickets change:
 
 ```bash
-ralph order .scratch/my-batch
+foreman order .scratch/my-batch
 ```
 
 It costs one model call, touches only `order.md`, and runs locally — no sandbox, since it
-edits no code. `ralph init --no-order` skips it and leaves `order.md` in plain filename
+edits no code. `foreman init --no-order` skips it and leaves `order.md` in plain filename
 order, same as before this step existed.
 
-It defaults to `RALPH_MODEL` — the same model that implements tickets — but sorting a list
+It defaults to `FOREMAN_MODEL` — the same model that implements tickets — but sorting a list
 is a smaller job than writing code, so point it at something cheaper without touching what
 tickets run on:
 
 ```bash
-RALPH_ORDERING_MODEL=haiku ralph order .scratch/my-batch
+FOREMAN_ORDERING_MODEL=haiku foreman order .scratch/my-batch
 ```
 
-(or set `RALPH_ORDERING_MODEL` in the batch's `ralph.conf` to make that the default). Effort
-for this pass stays fixed at `high` regardless of `RALPH_EFFORT`.
+(or set `FOREMAN_ORDERING_MODEL` in the batch's `foreman.conf` to make that the default). Effort
+for this pass stays fixed at `high` regardless of `FOREMAN_EFFORT`.
 
 ### The prompt
 
 One built-in five-step prompt — agree the seams, implement, verify, review, land — serves
-every batch. `lib/prompt.template.md` is the text; `ralph.conf` fills in the slots (check
+every batch. `lib/prompt.template.md` is the text; `foreman.conf` fills in the slots (check
 command, test command, TDD skill, review skill); anything left empty degrades to generic
 prose rather than naming a command that does not exist.
 
@@ -257,20 +261,20 @@ Anything that fits no slot goes in `<batch>/prompt-extra.md`, spliced in under i
 heading between Verify and Review — a project-specific instruction to drive UI tickets
 through a real browser, say.
 
-`ralph dry-run` prints the exact assembled prompt and sends nothing. Read it once before the
+`foreman dry-run` prints the exact assembled prompt and sends nothing. Read it once before the
 first real run of any new batch.
 
-## Where the agent runs — `RALPH_EXEC`
+## Where the agent runs — `FOREMAN_EXEC`
 
 | mode | what happens | when |
 |---|---|---|
 | `sandbox` (default) | `sbx` on a **private clone**; each iteration's commits come back as a git bundle and fast-forward your branch | the only mode that survives a host/container native-module split |
 | `sandbox-mount` | `sbx` bind-mounting your working tree; commits land there directly | isolation wanted, no install step needed in the container |
 | `local` | `claude` in your working tree, no sandbox | simplest; no isolation |
-| `fake` | no agent at all — a scripted stand-in | testing ralph itself; see `test/smoke.sh` |
+| `fake` | no agent at all — a scripted stand-in | testing Foreman itself; see `test/smoke.sh` |
 
 Each mode is one file in `lib/exec/`, satisfying the interface documented in
-`lib/ralph-exec.sh`. Nothing outside those files asks which mode is in force, and nothing
+`lib/foreman-exec.sh`. Nothing outside those files asks which mode is in force, and nothing
 holds a list of the modes that exist — adding a mode is adding a file.
 
 The clone in `sandbox` mode is not a preference. A bind-mounted Windows workspace hands a
@@ -281,47 +285,47 @@ host repo is mounted read-only so it cannot be clobbered. The cost is that commi
 appear in your tree by themselves, hence the sync-down / run / bundle-up dance in
 `lib/exec/sandbox.sh`.
 
-In `sandbox` and `sandbox-mount`, set `RALPH_SANDBOX_PROBE` to a command that must succeed
-inside the sandbox before any money is spent, and `RALPH_SANDBOX_SETUP` to the command that
+In `sandbox` and `sandbox-mount`, set `FOREMAN_SANDBOX_PROBE` to a command that must succeed
+inside the sandbox before any money is spent, and `FOREMAN_SANDBOX_SETUP` to the command that
 fixes it. Without them the first iteration on a fresh clone pays for the model's work and
 then fails its verification step.
 
 **Staying signed in to Docker.** `sbx` signs out on its own schedule, and its next command
-then starts a browser device-code flow that an unattended run cannot answer. Give ralph a
+then starts a browser device-code flow that an unattended run cannot answer. Give Foreman a
 Docker access token and it signs in itself, quietly, at the start of every run. Put the
-username and token in `~/.config/ralph/env` (or wherever `RALPH_CREDENTIALS_FILE` points) —
+username and token in `~/.config/foreman/env` (or wherever `FOREMAN_CREDENTIALS_FILE` points) —
 a local file outside every repository, plain `NAME=value` lines:
 
 ```
-RALPH_DOCKER_USERNAME=your-docker-username
-RALPH_DOCKER_PAT=dckr_pat_...
+FOREMAN_DOCKER_USERNAME=your-docker-username
+FOREMAN_DOCKER_PAT=dckr_pat_...
 ```
 
 Create the token at hub.docker.com → Account settings → Personal access tokens (expiration
 *None*; the lowest *Repo* permission that `sbx login` accepts). The file is read as data and
-never run, and it is plaintext, so keep it out of `ralph.conf`, which is committed. A real
+never run, and it is plaintext, so keep it out of `foreman.conf`, which is committed. A real
 environment variable of the same name wins over the file. A rejected token stops the run in
 preflight with what `sbx` said; the token itself is never printed, never on a command line,
-and reaches `sbx` on stdin only. Neither set means ralph does nothing here, as before. This
+and reaches `sbx` on stdin only. Neither set means Foreman does nothing here, as before. This
 covers Docker's login only; the agent's own Claude login inside the sandbox is separate
 (`sbx secret ls`).
 
-The sandbox is named `ralph-<repo>` by default, so each repository gets its own and every
+The sandbox is named `foreman-<repo>` by default, so each repository gets its own and every
 batch in it shares that one — the setup cost is paid once per repo.
 
 **The sandbox modes need a primary checkout, not a linked worktree.** `sbx create` acts on
 the repository at the path you are standing in, and a worktree's `.git` is a file pointing
 elsewhere. Run from the primary checkout, on whichever branch the batch should land on, or
-set `RALPH_EXEC=local`. The loop refuses in preflight rather than discovering this later.
+set `FOREMAN_EXEC=local`. The loop refuses in preflight rather than discovering this later.
 
-### Watching a run — `ralph run --live`
+### Watching a run — `foreman run --live`
 
 Without it, the terminal is silent from the moment the agent starts until it returns —
 seven minutes, forty-five minutes, however long — with no way to tell whether the iteration
 is alive or what it is doing.
 
 ```bash
-ralph run .scratch/my-batch --live      # or RALPH_STREAM=1 in ralph.conf
+foreman run .scratch/my-batch --live      # or FOREMAN_STREAM=1 in foreman.conf
 ```
 
 A wall clock and one line per **file write and shell command**, drawn to stderr:
@@ -337,33 +341,33 @@ Only the tool name and its first path or command argument are ever printed, trun
 `tool_use` event carries the *whole* input, and a `Write` carries the entire file body. The
 input object is never rendered, no transcript is dumped, and no raw stream is kept on disk.
 
-**Off by default**, and the default path is unchanged — `lib/ralph-stream.cjs` sits in the
+**Off by default**, and the default path is unchanged — `lib/foreman-stream.cjs` sits in the
 pipeline either way and is a pass-through when the run is not being watched, so there is one
 code path rather than two. `--live` also switches the agent to `--output-format stream-json`
 (which the CLI requires `--verbose` alongside); the recorder still receives exactly the one
-result object it always did. `ralph dry-run` reports which state a run would use.
+result object it always did. `foreman dry-run` reports which state a run would use.
 
-### Colour — `NO_COLOR` and `RALPH_COLOR`
+### Colour — `NO_COLOR` and `FOREMAN_COLOR`
 
-On a terminal, ralph colours the **glyph or prefix** of a line and nothing else: `✓` green,
+On a terminal, Foreman colours the **glyph or prefix** of a line and nothing else: `✓` green,
 `✗` red, `⋯` dim, `↩` and the `note:` and `preflight:` prefixes yellow, `⌨`, the status labels and the `──` and
 `==` rules cyan, and the `--live` clock dim. The words are never coloured and the glyph still
 carries the meaning, so a run read without colour loses nothing. Only the terminal's basic 16
 colours are used, so your own theme picks the shades.
 
 Colour is decided per stream: it is on only when the stream a line is written to is a
-terminal, so `ralph run … > run.txt`, a pipe, or CI output stays plain, byte for byte. The run
+terminal, so `foreman run … > run.txt`, a pipe, or CI output stays plain, byte for byte. The run
 log and the jsonl never contain colour codes. It is off when `NO_COLOR` is set or `TERM` is
-`dumb`. `RALPH_COLOR` overrides all of that, in the environment or in `ralph.conf`:
+`dumb`. `FOREMAN_COLOR` overrides all of that, in the environment or in `foreman.conf`:
 
-| `RALPH_COLOR` | |
+| `FOREMAN_COLOR` | |
 |---|---|
 | `auto` | the default: a terminal, unless `NO_COLOR` is set |
-| `always` | colour even when piped or redirected — and even with `NO_COLOR` set, since naming it is a decision about ralph |
+| `always` | colour even when piped or redirected — and even with `NO_COLOR` set, since naming it is a decision about Foreman |
 | `never` | no colour |
 
 ```bash
-RALPH_COLOR=always ralph run .scratch/my-batch | less -R
+FOREMAN_COLOR=always foreman run .scratch/my-batch | less -R
 ```
 
 ### Tickets bigger than one turn
@@ -385,27 +389,27 @@ The loop then treats that as what it is:
   gets the next iteration, told it is continuing and pointed at the handoff note;
 - the continuation is reviewed against the commit the ticket was **first** attempted from,
   not its own last chunk, so a ticket that took three passes is still reviewed as one diff;
-- progress does not spend a `RALPH_TICKET_ATTEMPTS` retry — that counter counts unproductive
+- progress does not spend a `FOREMAN_TICKET_ATTEMPTS` retry — that counter counts unproductive
   attempts, which is what it was always for;
-- `RALPH_MAX_CONTINUATIONS` (default 5) stops the run if one ticket keeps chunking without
+- `FOREMAN_MAX_CONTINUATIONS` (default 5) stops the run if one ticket keeps chunking without
   landing. That is a mis-sized ticket, not a retry problem, and splitting it is your call.
 
 **The loop still never auto-commits.** The *author* commits its own work; the machinery only
 stops calling that a failure. WIP commits stay in history — `wip: profile script —
 remaining: run at N=96` is better history than a squash that hides the three passes.
 
-`RALPH_CONTEXT_BUDGET_TOKENS` (default 200000) is the number the prompt asks the agent to
+`FOREMAN_CONTEXT_BUDGET_TOKENS` (default 200000) is the number the prompt asks the agent to
 judge itself against. Nothing enforces it; the CLI has no such flag, and `--autocompact` is
 the real backstop.
 
-`RALPH_COMMAND_TIMEOUT_MINUTES` (default 60) is how long one shell command the agent runs may
+`FOREMAN_COMMAND_TIMEOUT_MINUTES` (default 60) is how long one shell command the agent runs may
 take. Claude Code's Bash tool stops a call at 10 minutes unless told otherwise, and a full
 test suite can outgrow that; an agent that cannot run a check in the foreground backgrounds
-it, and a one-shot turn never hears back. Ralph starts `claude` with `BASH_MAX_TIMEOUT_MS`
+it, and a one-shot turn never hears back. Foreman starts `claude` with `BASH_MAX_TIMEOUT_MS`
 set to this, and the prompt tells the agent the limit, to never background a check, and to
 commit as `wip:` before it starts the long ones.
 
-### Permissions — `RALPH_PERMISSION_MODE` and `RALPH_CLAUDE_ARGS`
+### Permissions — `FOREMAN_PERMISSION_MODE` and `FOREMAN_CLAUDE_ARGS`
 
 `claude --print` has **nobody to ask**. Anything that would raise a permission prompt is
 denied automatically, and there is no second turn in which to recover: the ticket's work
@@ -413,26 +417,26 @@ still happens, and still costs, and only the landing fails — showing up as a d
 with no mention of permissions anywhere.
 
 That matters because `acceptEdits` covers `Edit` and `Write` but leaves `Bash` to the
-settings allowlist, and ralph's own prompt requires the agent to `git commit` its work.
+settings allowlist, and Foreman's own prompt requires the agent to `git commit` its work.
 
-So `RALPH_PERMISSION_MODE` has **no single default** — it is asked of the execution mode:
+So `FOREMAN_PERMISSION_MODE` has **no single default** — it is asked of the execution mode:
 
-| `RALPH_EXEC` | default | why |
+| `FOREMAN_EXEC` | default | why |
 |---|---|---|
 | `sandbox`, `sandbox-mount` | `bypassPermissions` | the container is the boundary; the gate protects nothing it does not, and costs a paid iteration each time it fires |
 | `local`, `fake` | `acceptEdits` | no container — "no isolation" and "no permission check at all" are different things on a machine with real repositories on it |
 
-Anything you set in `ralph.conf` or the environment wins over both. `ralph dry-run` prints
+Anything you set in `foreman.conf` or the environment wins over both. `foreman dry-run` prints
 the mode that actually won, which is the only place outside a real run where you can see it.
 
-`local` therefore needs the allowlist that lets its agent commit, and `ralph.conf.template`
+`local` therefore needs the allowlist that lets its agent commit, and `foreman.conf.template`
 ships it uncommented for exactly that reason:
 
 ```bash
-RALPH_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)")
+FOREMAN_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)")
 ```
 
-`ralph doctor` flags a `local` batch that has neither this nor `bypassPermissions` — at $0,
+`foreman doctor` flags a `local` batch that has neither this nor `bypassPermissions` — at $0,
 rather than after three tickets.
 
 ## Pausing and resuming
@@ -449,8 +453,8 @@ The loop pauses itself, cleanly, when:
 
 | trigger | what it does |
 |---|---|
-| `RALPH_MAX_COST_USD` reached | stops **before** starting an iteration that would exceed it |
-| `RALPH_MAX_MINUTES` reached | same |
+| `FOREMAN_MAX_COST_USD` reached | stops **before** starting an iteration that would exceed it |
+| `FOREMAN_MAX_MINUTES` reached | same |
 | the iteration-count argument is reached | same |
 | the iteration budget, after `-` was pressed during the run | same — the iteration running when you pressed it still finishes |
 | a usage / rate / billing limit is detected in the response | stops immediately, reporting the reset time when the response carries one |
@@ -483,12 +487,12 @@ A batch whose every ticket is done gets the same treatment: when a run finishes 
 nothing left to do), the batch directory itself is renamed `DONE_<name>` — `.scratch/foo`
 becomes `.scratch/DONE_foo` — and the rename committed on its own, `chore: mark foo batch
 done`. The run log and `progress.txt` travel with the directory. It is skipped, with a note,
-when tracked files under the batch have uncommitted changes (`RALPH_ALLOW_DIRTY`), or when
-the `DONE_` name is already taken. `RALPH_DONE_PREFIX=` turns off both this and the ticket
-rename. Afterwards every command needs the new path: `ralph report .scratch/DONE_foo`.
-A `DONE_` batch is also skipped when `<batch>` is omitted, so `ralph status` on its own finds
-the one unfinished batch rather than complaining that two directories have a `ralph.conf`.
-(The prefix is read from the environment for this, since no batch's `ralph.conf` is known yet.)
+when tracked files under the batch have uncommitted changes (`FOREMAN_ALLOW_DIRTY`), or when
+the `DONE_` name is already taken. `FOREMAN_DONE_PREFIX=` turns off both this and the ticket
+rename. Afterwards every command needs the new path: `foreman report .scratch/DONE_foo`.
+A `DONE_` batch is also skipped when `<batch>` is omitted, so `foreman status` on its own finds
+the one unfinished batch rather than complaining that two directories have a `foreman.conf`.
+(The prefix is read from the environment for this, since no batch's `foreman.conf` is known yet.)
 
 A turn that ends cleanly with the ticket unflipped and work left uncommitted is a **stall** —
 the shape of a turn that simply ran out of room before reaching its own checkpoint step. HEAD
@@ -502,7 +506,7 @@ turn *also* cannot commit does the run stop, for the same reason it always did. 
 `docs/adr/0001-checkpoint-turn-over-session-resume.md`.
 
 **Rerunning a stop like that salvages it.** Before every agent turn the loop writes a small
-marker, `.ralph-stall-marker`, in the batch directory naming the ticket, the base commit and
+marker, `.foreman-stall-marker`, in the batch directory naming the ticket, the base commit and
 the sandbox, and removes it once the turn has been dealt with. So a run that stops part-way
 through a turn — a usage limit, Ctrl-C, a closed terminal, or a stall the checkpoint turn
 could not salvage — leaves it behind. The next run checks for it before its first sync: if
@@ -519,11 +523,11 @@ whichever ticket this run picked first, is exactly the unreviewed commit the loo
 make. With no marker, or one that does not match, the run refuses to sync and prints the
 recovery note instead. "Dirty" is judged by the `.gitignore` of the commit the run is about
 to sync to, not the clone's older one, so a build cache you have just ignored here (Kotlin's
-`.kotlin/`, say) does not block the sync that delivers the rule. If you know the work is the next ticket's, `ralph run --adopt-dirty`
+`.kotlin/`, say) does not block the sync that delivers the rule. If you know the work is the next ticket's, `foreman run --adopt-dirty`
 sends it through the same review turn without a marker. The marker is disposable: deleting it
 by hand is always safe and costs only the automatic rescue, and it is removed as soon as the
 tree is clean, a checkpoint succeeds, or a reviewer refuses the work. It is only written where
-`.gitignore` ignores it (as `ralph init` and `ralph doctor --fix` arrange), so an agent's
+`.gitignore` ignores it (as `foreman init` and `foreman doctor --fix` arrange), so an agent's
 `git add -A` can never sweep it into a commit. See
 `docs/adr/0002-in-flight-marker-and-review-turn.md`.
 
@@ -534,7 +538,7 @@ exactly like a logic failure, and a blind second attempt costs a whole iteration
 nothing. Running out of context is retried even when no JSON came back, since that is the
 case a fresh context might carry, and the retry is told to work smaller; if it still fails
 that way, the run stops saying the ticket is too large for one iteration rather than that it
-merely did not land. `ralph report <batch> --failures` flags those as `out-of-context`.
+merely did not land. `foreman report <batch> --failures` flags those as `out-of-context`.
 
 Exit **0** means every ticket in the batch is done. Exit **1** is a preflight failure or bad
 usage; nothing has been spent.
@@ -542,7 +546,7 @@ usage; nothing has been spent.
 ### Budgets
 
 ```bash
-RALPH_MAX_COST_USD=25 RALPH_MAX_MINUTES=180 ralph run .scratch/my-batch --unlimited
+FOREMAN_MAX_COST_USD=25 FOREMAN_MAX_MINUTES=180 foreman run .scratch/my-batch --unlimited
 ```
 
 The cost guard is the reliable brake. It is checked *before* each iteration and never
@@ -563,12 +567,12 @@ work the run has already spent money on. When that happens, the run's closing su
 so explicitly — a budget was overshot to salvage stalled work, and by how much — rather than
 letting the figures in the summary silently disagree with the budget that was set.
 
-Any `RALPH_*` set in the environment beats the batch's `ralph.conf`, so a one-off run needs
+Any `FOREMAN_*` set in the environment beats the batch's `foreman.conf`, so a one-off run needs
 no edit.
 
 #### Changing the budget mid-run
 
-While `ralph run` is going, press keys in its terminal:
+While `foreman run` is going, press keys in its terminal:
 
 - `+` (or `=`): one more iteration
 - `-` (or `_`): one fewer
@@ -602,20 +606,20 @@ a throwaway batch (see the script's header for its options).
 
 Two files per batch, both **append-only**, both gitignored:
 
-- `ralph-runs.jsonl` — one JSON object per iteration, forever: ticket, batch, run id,
+- `foreman-runs.jsonl` — one JSON object per iteration, forever: ticket, batch, run id,
   commits, exit status, subtype, turns, wall and API duration, every token count, cost, the
   pass/fail flags, and the agent's own reply.
-- `ralph-runs.log` — the same runs as readable text, with the agent's reply inline and a
+- `foreman-runs.log` — the same runs as readable text, with the agent's reply inline and a
   header/footer per run.
 
-**Nothing reads them back.** Not the loop, not `ralph-next.sh`. Truncate them, delete them,
+**Nothing reads them back.** Not the loop, not `foreman-next.sh`. Truncate them, delete them,
 or hand-edit them and the loop behaves identically — the tickets' status lines are the only
 thing it treats as state. To read them:
 
 ```bash
-ralph report .scratch/my-batch              # totals, then per run
-ralph report .scratch/my-batch --by-ticket  # which tickets cost what
-ralph report .scratch/my-batch --failures   # only what went wrong
+foreman report .scratch/my-batch              # totals, then per run
+foreman report .scratch/my-batch --by-ticket  # which tickets cost what
+foreman report .scratch/my-batch --failures   # only what went wrong
 ```
 
 That tool is manual and is never invoked by the loop.
@@ -624,35 +628,35 @@ That tool is manual and is never invoked by the loop.
 
 | file | what it is |
 |---|---|
-| `bin/ralph` | the dispatcher — resolves a subcommand to a script in `lib/` |
-| `bin/ralph.cmd` | the same, for PowerShell and cmd.exe |
+| `bin/foreman` | the dispatcher — resolves a subcommand to a script in `lib/` |
+| `bin/foreman.cmd` | the same, for PowerShell and cmd.exe |
 | `install.sh` | writes the PATH shims; `--uninstall` removes them |
-| `lib/ralph-loop.sh` | the loop: preflight, budgets, iteration, pause/resume, footer |
-| `lib/ralph-config.sh` | resolves a batch into RALPH_* — sourced, never run |
-| `lib/ralph-exec.sh` | the seam between the loop and where the agent runs — sourced, never run |
-| `lib/exec/*.sh` | one adapter per `RALPH_EXEC` mode; `_`-prefixed files are shared implementation |
-| `lib/ralph-repo.sh` | repo root and batch-relative path: the one place that crosses Windows path syntax — sourced, never run |
-| `lib/ralph-next.sh` | `ralph next`: resolves the order against what has landed — also `--list`, `--count`, `--all`, `--unordered` |
-| `lib/ralph-tickets.sh` | the ticket list and the questions asked of it, as functions `ralph-next.sh` and the loop share, so one command loads its config once — sourced, never run |
-| `lib/ralph-prompt.sh` | assembles one iteration's prompt — sourced, never run |
+| `lib/foreman-loop.sh` | the loop: preflight, budgets, iteration, pause/resume, footer |
+| `lib/foreman-config.sh` | resolves a batch into FOREMAN_* — sourced, never run |
+| `lib/foreman-exec.sh` | the seam between the loop and where the agent runs — sourced, never run |
+| `lib/exec/*.sh` | one adapter per `FOREMAN_EXEC` mode; `_`-prefixed files are shared implementation |
+| `lib/foreman-repo.sh` | repo root and batch-relative path: the one place that crosses Windows path syntax — sourced, never run |
+| `lib/foreman-next.sh` | `foreman next`: resolves the order against what has landed — also `--list`, `--count`, `--all`, `--unordered` |
+| `lib/foreman-tickets.sh` | the ticket list and the questions asked of it, as functions `foreman-next.sh` and the loop share, so one command loads its config once — sourced, never run |
+| `lib/foreman-prompt.sh` | assembles one iteration's prompt — sourced, never run |
 | `lib/prompt.template.md` | the five-step prompt, with slots |
-| `lib/ralph-record.cjs` | appends one iteration to both logs; writes the verdict the loop acts on |
-| `lib/ralph-report.cjs` | manual log reader |
-| `lib/ralph-stream.cjs` | sits between the agent and the recorder; draws the run when `--live`, a pass-through otherwise |
-| `lib/ralph-credentials.sh` | the one reader of the credentials file (`~/.config/ralph/env`): path, lookup (environment, else file), and `…last4` mask — sourced, never run |
-| `lib/ralph-ui.sh` | how output looks: the glyphs, indents, `  ·  ` separators and colour, as `say_event`, `say_rule` and friends — sourced, never run |
-| `lib/ralph-strip-ansi.cjs` | removes `sbx`'s banner control codes — shared by the two above |
-| `lib/ralph-init.sh` | scaffolds a batch, then runs `ralph-order.sh` unless told not to |
-| `lib/ralph-order.sh` | has an agent order the tickets by dependency, importance and load |
-| `lib/ralph-doctor.sh` | checks the machine, the repo and the batches; `--fix` writes the repo's two files |
-| `lib/ralph.conf.template` | every knob, commented, with its default |
-| `test/smoke.sh` | end-to-end tests of the loop, run through the `fake` adapter — no sandbox, no model, no money; cases run side by side, `RALPH_SMOKE_JOBS=1` for one at a time |
-| `test/bench.sh` | times `ralph status` on a 3-ticket batch and counts its spawns by command — a measuring instrument, not a test; `bash test/bench.sh [runs]` |
+| `lib/foreman-record.cjs` | appends one iteration to both logs; writes the verdict the loop acts on |
+| `lib/foreman-report.cjs` | manual log reader |
+| `lib/foreman-stream.cjs` | sits between the agent and the recorder; draws the run when `--live`, a pass-through otherwise |
+| `lib/foreman-credentials.sh` | the one reader of the credentials file (`~/.config/foreman/env`): path, lookup (environment, else file), and `…last4` mask — sourced, never run |
+| `lib/foreman-ui.sh` | how output looks: the glyphs, indents, `  ·  ` separators and colour, as `say_event`, `say_rule` and friends — sourced, never run |
+| `lib/foreman-strip-ansi.cjs` | removes `sbx`'s banner control codes — shared by the two above |
+| `lib/foreman-init.sh` | scaffolds a batch, then runs `foreman-order.sh` unless told not to |
+| `lib/foreman-order.sh` | has an agent order the tickets by dependency, importance and load |
+| `lib/foreman-doctor.sh` | checks the machine, the repo and the batches; `--fix` writes the repo's two files |
+| `lib/foreman.conf.template` | every knob, commented, with its default |
+| `test/smoke.sh` | end-to-end tests of the loop, run through the `fake` adapter — no sandbox, no model, no money; cases run side by side, `FOREMAN_SMOKE_JOBS=1` for one at a time |
+| `test/bench.sh` | times `foreman status` on a 3-ticket batch and counts its spawns by command — a measuring instrument, not a test; `bash test/bench.sh [runs]` |
 | `test/fixture.sh` | sourced by the two above: builds a template repository once and copies it for each fixture |
 | `assumptions.md` | the decisions taken while generalising this, and how to undo them |
 
-Each `lib/` script is still directly callable — `bash lib/ralph-loop.sh <batch> --status`
-does what `ralph status <batch>` does. The dispatcher exists for the typing, not because
+Each `lib/` script is still directly callable — `bash lib/foreman-loop.sh <batch> --status`
+does what `foreman status <batch>` does. The dispatcher exists for the typing, not because
 anything depends on it.
 
 ## Using it in a new repository
@@ -661,11 +665,55 @@ There is nothing to copy.
 
 ```bash
 cd <the repo>
-ralph doctor --fix     # its .gitignore / .gitattributes lines, once
-ralph init <batch-dir> # its first batch
+foreman doctor --fix     # its .gitignore / .gitattributes lines, once
+foreman init <batch-dir> # its first batch
 ```
 
-The toolkit is not inside the repository and never becomes part of it: `RALPH_TOOL_DIR`
+The toolkit is not inside the repository and never becomes part of it: `FOREMAN_TOOL_DIR`
 comes from the script's own location, the repository comes from `git rev-parse` where you
 are standing, and the two are unrelated paths. Upgrading the install upgrades every project
 at once.
+
+## Inspiration
+
+Foreman started from the Ralph loop: run a coding agent on the next task, let it exit, and
+run it again until the work is done. Foreman keeps that one-turn-per-task core and adds
+what an unattended run needs: an ordered batch of tickets, cost and time budgets, tickets
+only a human can do (with a handoff file and a followup ticket that checks it), and
+checkpoint turns that salvage a stalled agent's work instead of losing it.
+
+The project was called `ralph` until it was renamed to Foreman. A batch or install from
+before the rename keeps working for now: see [Upgrading from ralph](#upgrading-from-ralph).
+
+## Upgrading from ralph
+
+Everything a `ralph` install left behind keeps working for one release, with a warning that
+says what to rename. `foreman doctor` lists whatever is left, under "From before the rename
+to Foreman", and says nothing when there is nothing.
+
+`foreman convert` does the project's part of the table below in one go. Point it at each
+project, review the diff, and commit:
+
+```bash
+foreman convert ~/Projects/my-app --dry-run   # what it would change (free, changes nothing)
+foreman convert ~/Projects/my-app             # do it; never commits
+```
+
+It renames every `ralph.conf` (with `git mv`) and the run files, and rewrites `RALPH_*` names,
+`ralph` commands and toolkit file names, and "Ralph" in prose, in every text file git knows
+about. It leaves credit to the Ralph loop alone, and also any path to a file of the project's
+own with ralph in its name. Those are listed at the end. It refuses a tree with uncommitted
+changes (`--allow-dirty` overrides), so the conversion is a diff of its own. A second run
+finds nothing to do. On the machine it copies `~/.config/ralph/env` to `~/.config/foreman/env`
+under the new names, and prints the rest for you: `RALPH_*` variables to `setx` again, and
+the old sandbox to remove.
+
+| Left behind | What happens now | What to do |
+| --- | --- | --- |
+| `ralph` / `ralph.cmd` shims, the `ralph-human-followup-tickets` skill | `bash install.sh` (and `--uninstall`) removes them, if this installer wrote them for this checkout | re-run `bash install.sh` |
+| `<batch>/ralph.conf` | read when the batch has no `foreman.conf`; `foreman init` keeps it rather than adding a second conf | `git mv <batch>/ralph.conf <batch>/foreman.conf` |
+| `RALPH_*` settings, in a conf or the environment | each is used when its `FOREMAN_*` name is unset, with one warning naming them | rename each to `FOREMAN_*` — the same name, new prefix |
+| `~/.config/ralph/env` | read when `~/.config/foreman/env` does not exist; `RALPH_DOCKER_*` keys in it still count | move it to `~/.config/foreman/env` and rename the keys |
+| `ralph-runs.jsonl`, `ralph-runs.log`, `.ralph-stall-marker` | renamed to `foreman-*` on the batch's next run, so history and a pending stall salvage carry on | `foreman doctor --fix`, for the new `.gitignore` lines |
+| the `ralph-<repo>` sandbox | no longer used: the default is now `foreman-<repo>`, created on first run | `sbx rm ralph-<repo>` |
+

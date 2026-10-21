@@ -8,7 +8,7 @@
 
 **What to build:**
 
-Ticket 07 had the user try the `ralph-human-followup-tickets` skill on a throwaway batch and
+Ticket 07 had the user try the `foreman-human-followup-tickets` skill on a throwaway batch and
 report in `.scratch/human-tickets/handoff/07-try-the-followup-skill-on-a-real-batch.md`. Read
 that handoff and ticket 07, and judge whether the handoff is complete — not whether the skill
 is. You can only verify what is in this repo: the throwaway repo, and anything the user did in
@@ -32,7 +32,7 @@ with any new tickets.
 
 - [x] Every section of the handoff is answered: no section is left as its placeholder, empty,
       or "TBD"
-- [x] The answers are specific (which files, what the skill wrote, what `ralph status` printed)
+- [x] The answers are specific (which files, what the skill wrote, what `foreman status` printed)
       and speak to each of ticket 07's criteria in turn
 - [x] The handoff contains no secret value
 - [x] Every problem the handoff reports is a new `ready-for-agent` ticket in this batch, or the

@@ -1,5 +1,5 @@
 #!/bin/bash
-# RALPH_EXEC=fake — no agent, no sandbox, no money. Every other adapter needs either a
+# FOREMAN_EXEC=fake — no agent, no sandbox, no money. Every other adapter needs either a
 # model or a container to say anything at all, which is what used to make the loop
 # untestable: budget arithmetic, attempt accounting, verdict handling and every stop
 # condition could only be exercised by paying for a real run.
@@ -8,7 +8,7 @@
 # given and then acts out one scripted outcome, so a test can drive the loop to any of
 # its five endings.
 #
-#   RALPH_FAKE_BEHAVIOUR   what the "agent" does. Default: land.
+#   FOREMAN_FAKE_BEHAVIOUR   what the "agent" does. Default: land.
 #     land     flip the ticket's status line to the done word and commit it
 #     noop     succeed, change nothing — the ticket does not land
 #     dirty    write an uncommitted file and leave it there
@@ -28,7 +28,7 @@
 #              "usage limit reached" anywhere. The loop should pause on this too.
 #     stream   what `--output-format stream-json` looks like: one JSON object per line,
 #              tool_use events as they happen, the result object last. Used to test what
-#              `ralph run --live` draws — and, just as much, what it must not draw.
+#              `foreman run --live` draws — and, just as much, what it must not draw.
 #     partial-turn  a ticket that outgrew one turn: the agent commits what it has as a
 #              `wip:` checkpoint and hands off, leaving the status line unflipped. exit 0,
 #              subtype success, no error anywhere — the loop should continue the SAME ticket
@@ -49,26 +49,26 @@
 #              the human ticket (exit 30).
 #     auth     exit non-zero with a 401 / "Failed to authenticate" payload: the agent's login
 #              expired. The loop should stop at once, not retry.
-#   RALPH_FAKE_KEYS        keys "pressed" while each call runs, as a `:`-separated list
-#              parallel to RALPH_FAKE_BEHAVIOUR: `+:` presses + during call 1 and nothing
+#   FOREMAN_FAKE_KEYS        keys "pressed" while each call runs, as a `:`-separated list
+#              parallel to FOREMAN_FAKE_BEHAVIOUR: `+:` presses + during call 1 and nothing
 #              during call 2, `--` presses - twice during call 1. Unlike the behaviour list it
 #              does not repeat its last entry — a call past the end presses nothing. Applied
-#              through ralph-keys.sh --apply, so everything but the terminal read is real.
-#   RALPH_FAKE_SLEEP       seconds each call takes before acting. Default 0. For trying the
+#              through foreman-keys.sh --apply, so everything but the terminal read is real.
+#   FOREMAN_FAKE_SLEEP       seconds each call takes before acting. Default 0. For trying the
 #              + / - keys by hand, which need an iteration long enough to press them in.
-#   RALPH_FAKE_PROMPT_LOG  file to append each prompt to, with a separator. Optional. The
-#              line after the separator is `args:` and the RALPH_CLAUDE_ARGS the call was
+#   FOREMAN_FAKE_PROMPT_LOG  file to append each prompt to, with a separator. Optional. The
+#              line after the separator is `args:` and the FOREMAN_CLAUDE_ARGS the call was
 #              given — what a real adapter would pass to claude, e.g. a checkpoint's --max-turns.
-#   RALPH_FAKE_COST       reported cost per iteration in USD. Default 0.01.
+#   FOREMAN_FAKE_COST       reported cost per iteration in USD. Default 0.01.
 #
 # The behaviour may also be a `:`-separated list — `noop:land` lands on the second
 # attempt — which is how retry accounting gets a test.
 #
-# A checkpoint turn (ralph-loop.sh, run when `dirty` above leaves the loop's stall
+# A checkpoint turn (foreman-loop.sh, run when `dirty` above leaves the loop's stall
 # signature) is a SECOND, separate turn within the same iteration, recognised here by a
 # sentinel phrase in the prompt itself — the real prompt-assembly path, not a side channel.
-# It never consumes a slot of RALPH_FAKE_BEHAVIOUR's list; its own scripted outcome is:
-#   RALPH_FAKE_CHECKPOINT_BEHAVIOUR   commit (default), fail, discard, or reject
+# It never consumes a slot of FOREMAN_FAKE_BEHAVIOUR's list; its own scripted outcome is:
+#   FOREMAN_FAKE_CHECKPOINT_BEHAVIOUR   commit (default), fail, discard, or reject
 #     commit   stage and commit whatever is dirty, as `wip: <ticket> — remaining: the rest`
 #     fail     leave the tree exactly as it was — still dirty, nothing committed
 #     discard  clean the tree WITHOUT committing — simulates a checkpoint turn that
@@ -78,7 +78,7 @@
 #              line — what a REVIEW checkpoint turn (a start-of-run rescue) does on a red flag
 
 # shellcheck source=_common.sh
-source "$RALPH_EXEC_DIR/_common.sh"
+source "$FOREMAN_EXEC_DIR/_common.sh"
 
 exec_required_tool() { printf ''; }
 
@@ -94,7 +94,7 @@ exec_describe() { printf 'fake (no agent is run)'; }
 # The loop calls exec_run inside a command substitution, so the call count cannot live in
 # a variable — that subshell's increment would be thrown away. It lives in a file keyed on
 # the loop's own PID, which command substitution does not change.
-_FAKE_CALLS_FILE="${TMPDIR:-/tmp}/ralph-fake-$$.calls"
+_FAKE_CALLS_FILE="${TMPDIR:-/tmp}/foreman-fake-$$.calls"
 
 _fake_bump() {
   local n=0
@@ -108,7 +108,7 @@ _fake_bump() {
 # The behaviour for call $1: the Nth entry of the `:`-separated list, or the last one once
 # the list runs out.
 _fake_behaviour() {
-  local call="$1" list="${RALPH_FAKE_BEHAVIOUR:-land}" i=0 chosen=""
+  local call="$1" list="${FOREMAN_FAKE_BEHAVIOUR:-land}" i=0 chosen=""
   local IFS=':'
   # shellcheck disable=SC2086
   set -- $list
@@ -119,29 +119,29 @@ _fake_behaviour() {
   printf '%s' "$chosen"
 }
 
-# Presses call $1's entry of RALPH_FAKE_KEYS against the loop's control directory, as the
+# Presses call $1's entry of FOREMAN_FAKE_KEYS against the loop's control directory, as the
 # person at the terminal would while that call runs. Nothing once the list runs out.
 _fake_press_keys() {
   local call="$1" i=0 keys=""
-  [ -n "${RALPH_FAKE_KEYS:-}" ] && [ -n "${RUN_CTL_DIR:-}" ] || return 0
+  [ -n "${FOREMAN_FAKE_KEYS:-}" ] && [ -n "${RUN_CTL_DIR:-}" ] || return 0
   local IFS=':'
   # shellcheck disable=SC2086
-  set -- $RALPH_FAKE_KEYS
+  set -- $FOREMAN_FAKE_KEYS
   for keys in "$@"; do
     i=$((i + 1))
     [ "$i" -eq "$call" ] || continue
-    [ -z "$keys" ] || bash "$RALPH_TOOL_DIR/ralph-keys.sh" --apply "$keys" "$RUN_CTL_DIR"
+    [ -z "$keys" ] || bash "$FOREMAN_TOOL_DIR/foreman-keys.sh" --apply "$keys" "$RUN_CTL_DIR"
     return 0
   done
 }
 
-# The `claude --output-format json` shape, as much of it as ralph-record.cjs reads.
+# The `claude --output-format json` shape, as much of it as foreman-record.cjs reads.
 _fake_payload() {
   local subtype="$1" is_error="$2" result="$3"
   printf '{"type":"result","subtype":"%s","is_error":%s,"session_id":"fake-session",' \
     "$subtype" "$is_error"
   printf '"num_turns":3,"duration_ms":1200,"duration_api_ms":900,"total_cost_usd":%s,' \
-    "${RALPH_FAKE_COST:-0.01}"
+    "${FOREMAN_FAKE_COST:-0.01}"
   printf '"usage":{"input_tokens":1000,"output_tokens":200,'
   printf '"cache_read_input_tokens":5000,"cache_creation_input_tokens":300},'
   printf '"result":"%s"}\n' "$result"
@@ -151,47 +151,47 @@ _fake_payload() {
 _fake_land() {
   local ticket="$1" tmp
   tmp="$(mktemp)"
-  awk -v sl="$RALPH_STATUS_LINE" -v dw="$RALPH_DONE_WORD" '
+  awk -v sl="$FOREMAN_STATUS_LINE" -v dw="$FOREMAN_DONE_WORD" '
     index($0, sl) == 1 { print sl " " dw; found = 1; next }
     { print }
     END { if (!found) { print ""; print sl " " dw } }
   ' "$ticket" > "$tmp" && mv "$tmp" "$ticket"
   git add -A >/dev/null 2>&1
-  git -c user.name=ralph-fake -c user.email=fake@ralph.invalid \
+  git -c user.name=foreman-fake -c user.email=fake@foreman.invalid \
     commit --quiet -m "fake: land $ticket" >/dev/null 2>&1
 }
 
 # What a followup ticket does when the handoff it verifies is not good enough. The ticket it checks
-# comes from the same `Checks:` lookup the loop uses (ralph-human.sh), so a rename or a
+# comes from the same `Checks:` lookup the loop uses (foreman-human.sh), so a rename or a
 # DONE_ prefix on either side cannot make the two disagree.
 _fake_send_back() {
   local ticket="$1" checked tmp
-  checked="$(ralph_checked_ticket "$ticket")"
+  checked="$(foreman_checked_ticket "$ticket")"
   if [ -z "$checked" ]; then
     warn "fake: send-back: $ticket has no resolvable Checks: line"
     return 2
   fi
   tmp="$(mktemp)"
-  awk -v sl="$RALPH_STATUS_LINE" -v hw="$RALPH_HUMAN_WORD" '
+  awk -v sl="$FOREMAN_STATUS_LINE" -v hw="$FOREMAN_HUMAN_WORD" '
     index($0, sl) == 1 { print sl " " hw; next }
     { print }
   ' "$checked" > "$tmp" && mv "$tmp" "$checked"
   printf '\n## Sent back by %s\n\nThe handoff file is not filled in.\n' "$(basename "$ticket")" >> "$checked"
   git add -A >/dev/null 2>&1
-  git -c user.name=ralph-fake -c user.email=fake@ralph.invalid \
-    commit --quiet -m "check: send $(_ralph_ticket_key "$checked" | sed "s/-.*//") back — the handoff is not filled in" >/dev/null 2>&1
+  git -c user.name=foreman-fake -c user.email=fake@foreman.invalid \
+    commit --quiet -m "check: send $(_foreman_ticket_key "$checked" | sed "s/-.*//") back — the handoff is not filled in" >/dev/null 2>&1
 }
 
-# The checkpoint turn's own scripted outcome — separate from RALPH_FAKE_BEHAVIOUR because it
+# The checkpoint turn's own scripted outcome — separate from FOREMAN_FAKE_BEHAVIOUR because it
 # is a distinct turn, not another entry in that turn-by-turn list.
 _fake_checkpoint() {
   local ticket="$1"
-  case "${RALPH_FAKE_CHECKPOINT_BEHAVIOUR:-commit}" in
+  case "${FOREMAN_FAKE_CHECKPOINT_BEHAVIOUR:-commit}" in
     fail)
       _fake_payload success false "could not commit the checkpoint"
       ;;
     reject)
-      _fake_payload success false "Read the diff.\n${RALPH_REVIEW_REJECTED_SENTINEL:-RALPH_REVIEW: REJECTED}: changes outside the ticket's scope"
+      _fake_payload success false "Read the diff.\n${FOREMAN_REVIEW_REJECTED_SENTINEL:-FOREMAN_REVIEW: REJECTED}: changes outside the ticket's scope"
       ;;
     discard)
       git checkout -q -- . >/dev/null 2>&1
@@ -204,7 +204,7 @@ _fake_checkpoint() {
           printf 'Remaining: the rest\n'; } >> "$PROGRESS_FILE" 2>/dev/null
       fi
       git add -A >/dev/null 2>&1
-      git -c user.name=ralph-fake -c user.email=fake@ralph.invalid \
+      git -c user.name=foreman-fake -c user.email=fake@foreman.invalid \
         commit --quiet -m "wip: $ticket — remaining: the rest" >/dev/null 2>&1
       _fake_payload success false "committed the checkpoint"
       ;;
@@ -219,14 +219,14 @@ exec_run() {
     *) call="$(_fake_bump)"; behaviour="$(_fake_behaviour "$call")"; label="$call" ;;
   esac
 
-  [ "${RALPH_FAKE_SLEEP:-0}" = 0 ] || sleep "$RALPH_FAKE_SLEEP"
+  [ "${FOREMAN_FAKE_SLEEP:-0}" = 0 ] || sleep "$FOREMAN_FAKE_SLEEP"
   [ "$label" = checkpoint ] || _fake_press_keys "$call"
 
-  if [ -n "${RALPH_FAKE_PROMPT_LOG:-}" ]; then
+  if [ -n "${FOREMAN_FAKE_PROMPT_LOG:-}" ]; then
     { printf '===== fake prompt %s (%s) =====\n' "$label" "$ticket"
       printf 'args:'
-      printf ' %s' ${RALPH_CLAUDE_ARGS+"${RALPH_CLAUDE_ARGS[@]}"}
-      printf '\n%s\n' "$prompt"; } >> "$RALPH_FAKE_PROMPT_LOG"
+      printf ' %s' ${FOREMAN_CLAUDE_ARGS+"${FOREMAN_CLAUDE_ARGS[@]}"}
+      printf '\n%s\n' "$prompt"; } >> "$FOREMAN_FAKE_PROMPT_LOG"
   fi
 
   if [ "$label" = checkpoint ]; then
@@ -251,15 +251,15 @@ exec_run() {
       # checkpoint turn commits this file, a second `dirty` call must still produce a real,
       # uncommitted diff rather than rewriting identical content over an identical commit —
       # which git sees as no change at all, and the loop as nothing to stall on.
-      printf 'left behind by the fake adapter (call %s)\n' "$call" >> .ralph-fake-leftover
+      printf 'left behind by the fake adapter (call %s)\n' "$call" >> .foreman-fake-leftover
       _fake_payload success false "left the tree dirty"
       ;;
     commit-dirty)
-      printf 'committed before verifying (call %s)\n' "$call" >> .ralph-fake-partial
+      printf 'committed before verifying (call %s)\n' "$call" >> .foreman-fake-partial
       git add -A >/dev/null 2>&1
-      git -c user.name=ralph-fake -c user.email=fake@ralph.invalid \
+      git -c user.name=foreman-fake -c user.email=fake@foreman.invalid \
         commit --quiet -m "wip: $ticket — verifying" >/dev/null 2>&1
-      printf 'a fix made while verifying (call %s)\n' "$call" >> .ralph-fake-leftover
+      printf 'a fix made while verifying (call %s)\n' "$call" >> .foreman-fake-leftover
       _fake_payload success false "Pausing here until the background test run reports back."
       ;;
     error)
@@ -275,14 +275,14 @@ exec_run() {
       return 1
       ;;
     limit-dirty)
-      printf 'half-written by the fake adapter (call %s)\n' "$call" >> .ralph-fake-leftover
+      printf 'half-written by the fake adapter (call %s)\n' "$call" >> .foreman-fake-leftover
       printf 'Claude AI usage limit reached|%s\n' "$(( $(date +%s) + 3600 ))"
       return 1
       ;;
     interrupt-dirty)
       # $$ is the loop's own PID inside this pipeline's subshell. Its trap runs once the
       # pipeline returns, exactly as with a real Ctrl-C during a turn.
-      printf 'half-written by the fake adapter (call %s)\n' "$call" >> .ralph-fake-leftover
+      printf 'half-written by the fake adapter (call %s)\n' "$call" >> .foreman-fake-leftover
       kill -INT $$
       printf 'claude: interrupted\n'
       return 130
@@ -314,7 +314,7 @@ exec_run() {
       # What a real sandbox prints when the agent never starts: sbx's own banner and error,
       # no result object, and nothing from claude at all. Every line is non-JSON, so without
       # the tail the payload is empty and the human log has nothing to show.
-      printf 'Attaching to existing sandbox "ralph-fake".\n'
+      printf 'Attaching to existing sandbox "foreman-fake".\n'
       printf 'Starting claude agent in sandbox...\n'
       printf 'ERROR: agent exited with code 1 SANDBOX-ERROR-SENTINEL\n'
       return 1
@@ -322,9 +322,9 @@ exec_run() {
     partial-turn)
       # Appends rather than overwrites, so repeating this behaviour produces a genuinely new
       # commit each time and the continuation cap has something to count.
-      printf 'chunk %s\n' "$call" >> .ralph-fake-partial
+      printf 'chunk %s\n' "$call" >> .foreman-fake-partial
       git add -A >/dev/null 2>&1
-      git -c user.name=ralph-fake -c user.email=fake@ralph.invalid \
+      git -c user.name=foreman-fake -c user.email=fake@foreman.invalid \
         commit --quiet -m "wip: $ticket — remaining: the rest" >/dev/null 2>&1
       _fake_payload success false "committed a checkpoint and handed off; the ticket is not done"
       ;;
@@ -332,7 +332,7 @@ exec_run() {
       # Nothing about this says "failure" except the reply text: exit 0, is_error false. The
       # tree is dirty because the commit was the thing denied, which is why the loop has to
       # decide this above the dirty-tree branch or it reports the symptom instead.
-      printf 'work the fake adapter could not commit\n' > .ralph-fake-uncommitted
+      printf 'work the fake adapter could not commit\n' > .foreman-fake-uncommitted
       _fake_payload success false \
         "I implemented the ticket, but Bash(git commit) requires approval and I could not obtain it, so the work is uncommitted."
       ;;
@@ -371,7 +371,7 @@ exec_run() {
       return 1
       ;;
     *)
-      warn "fake: unknown RALPH_FAKE_BEHAVIOUR '$behaviour'"
+      warn "fake: unknown FOREMAN_FAKE_BEHAVIOUR '$behaviour'"
       return 2
       ;;
   esac

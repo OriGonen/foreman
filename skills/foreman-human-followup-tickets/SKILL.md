@@ -1,12 +1,12 @@
 ---
-name: ralph-human-followup-tickets
-description: Add the followup tickets and handoff files a batch's human tickets are missing, after to-tickets and before ralph init.
+name: foreman-human-followup-tickets
+description: Add the followup tickets and handoff files a batch's human tickets are missing, after to-tickets and before `foreman init`.
 disable-model-invocation: true
 ---
 
-# ralph-human-followup-tickets
+# foreman-human-followup-tickets
 
-Adds the pieces a batch's human tickets need to run under ralph: a `Handoff:` line, a
+Adds the pieces a batch's human tickets need to run under Foreman: a `Handoff:` line, a
 handoff file, and a followup ticket — for every human ticket that is missing one. Never
 overwrites a handoff file, so running this twice, or running it after the batch grew a new
 human ticket, changes only what is new.
@@ -19,7 +19,7 @@ human ticket, changes only what is new.
 
 A **human ticket** is one whose status line already carries the human label (step 2). This
 skill never decides that a ticket is one; it only acts on tickets already marked as such.
-`ralph`'s glossary (`CONTEXT.md`) defines human ticket, handoff file and followup ticket —
+`foreman`'s glossary (`CONTEXT.md`) defines human ticket, handoff file and followup ticket —
 read it if those terms are unfamiliar.
 
 ## Steps
@@ -35,13 +35,13 @@ The human and agent labels are the right-hand column of `docs/agents/triage-labe
 `ready-for-human` and `ready-for-agent`, when that file exists; otherwise those two strings,
 literally.
 
-Then check `<batch>/ralph.conf` (it may not exist yet — this skill usually runs before
-`ralph init`) for a `RALPH_HUMAN_WORD=` line. If it sets a word different from the human
+Then check `<batch>/foreman.conf` (it may not exist yet — this skill usually runs before
+`foreman init`) for a `FOREMAN_HUMAN_WORD=` line. If it sets a word different from the human
 label, or the file has no such line and the human label is not `ready-for-human`, remember
-this: step 6 tells the user the exact line to add. Never edit `ralph.conf` yourself.
+this: step 6 tells the user the exact line to add. Never edit `foreman.conf` yourself.
 
 Done when you know the human label, the agent label, and whether step 6 owes the user a
-`ralph.conf` line.
+`foreman.conf` line.
 
 ### 3. For each human ticket that is not done, add what it is missing
 
@@ -123,22 +123,22 @@ commit holds exactly those files.
 Without running any of it. If step 3 wrote or edited a file, say this:
 
 ```
-Next:  ralph init <batch>   (or: ralph order <batch>, if <batch>/ralph.conf already exists —
+Next:  foreman init <batch>   (or: foreman order <batch>, if <batch>/foreman.conf already exists —
        the new followup tickets only run once order.md lists them)
-Then:  ralph status <batch> should show no warnings.
+Then:  foreman status <batch> should show no warnings.
 ```
 
 If step 3 wrote or edited nothing (no not-done human ticket was missing a piece), no
-`ralph init` or `ralph order` is owed, so give no `Next:` / `Then:` block — say this instead:
+`foreman init` or `foreman order` is owed, so give no `Next:` / `Then:` block — say this instead:
 
 ```
 Nothing was added — no human ticket in <batch> was missing a Handoff: line, handoff file or
-followup ticket. No ralph command is needed for this run.
+followup ticket. No foreman command is needed for this run.
 ```
 
-Whichever you said, if step 2 found a `ralph.conf` line to add, append it:
+Whichever you said, if step 2 found a `foreman.conf` line to add, append it:
 
 ```
-Also add to <batch>/ralph.conf:
-  RALPH_HUMAN_WORD=<the human label>
+Also add to <batch>/foreman.conf:
+  FOREMAN_HUMAN_WORD=<the human label>
 ```

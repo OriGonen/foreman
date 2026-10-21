@@ -5,7 +5,7 @@
      This file is committed and read by an agent: record a secret by WHERE it is stored, never
      its value. -->
 
-## `ralph setup` completed; `--check` exited 0; doctor showed credentials ok
+## `foreman setup` completed; `--check` exited 0; doctor showed credentials ok
 
 <!-- -->
 
@@ -21,6 +21,6 @@
 
 <!-- -->
 
-## Anything confusing in `ralph setup`'s wording is written down
+## Anything confusing in `foreman setup`'s wording is written down
 
 <!-- -->

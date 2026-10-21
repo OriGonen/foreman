@@ -1,4 +1,4 @@
-# ralph
+# Foreman
 
 A loop that implements one ticket per iteration, until a batch of tickets is done or a
 budget stops it. This file is the project's glossary: what the words mean, and which
@@ -10,8 +10,8 @@ behaves, `lib/` is how it does it, and `docs/adr/` is why.
 ### The things being worked on
 
 **Batch**:
-A directory containing a `ralph.conf`, and the tickets to be worked through. The unit
-`ralph run` is pointed at. Once every ticket in it is done, the loop renames the directory
+A directory containing a `foreman.conf`, and the tickets to be worked through. The unit
+`foreman run` is pointed at. Once every ticket in it is done, the loop renames the directory
 with the `DONE_` prefix, as it does a finished ticket.
 _Avoid_: Project, job, queue
 
@@ -26,7 +26,7 @@ _Avoid_: Priority, backlog, schedule
 
 **Human ticket**:
 A ticket only a person can do, marked by its own status line (`ready-for-human` by
-default, `RALPH_HUMAN_WORD`). The loop never hands one to an agent; reaching it at the
+default, `FOREMAN_HUMAN_WORD`). The loop never hands one to an agent; reaching it at the
 head of the order ends the run, and nothing after it runs until the person marks it
 done.
 _Avoid_: Manual ticket, blocked ticket, HITL ticket
@@ -46,7 +46,7 @@ _Avoid_: Check ticket, control ticket, review ticket, verification ticket
 ### The loop's units of work
 
 **Run**:
-One invocation of `ralph run`. Holds a budget and its own in-memory accounting; ends
+One invocation of `foreman run`. Holds a budget and its own in-memory accounting; ends
 when the batch is done, a budget is reached, or something needs a human.
 _Avoid_: Session, execution
 
@@ -112,12 +112,12 @@ terminal running it move it by one, and the loop reads it again before each iter
 
 **Attempt**:
 An unproductive try at a ticket — one that neither landed nor progressed nor stalled.
-Counted per ticket per run, capped by `RALPH_TICKET_ATTEMPTS`.
+Counted per ticket per run, capped by `FOREMAN_TICKET_ATTEMPTS`.
 _Avoid_: Retry, try
 
 **Continuation**:
 An extra turn a ticket needed after progressing or stalling. Counted per ticket per run
-and capped by `RALPH_MAX_CONTINUATIONS`, which is the single budget for "how many extra
+and capped by `FOREMAN_MAX_CONTINUATIONS`, which is the single budget for "how many extra
 turns has this one ticket needed".
 _Avoid_: Extension, follow-up
 
@@ -152,7 +152,7 @@ _Avoid_: Environment, box, VM
 ### Resuming
 
 **Resume**:
-Rerunning `ralph run` on a batch so it picks up at the first ticket that has not landed.
+Rerunning `foreman run` on a batch so it picks up at the first ticket that has not landed.
 There is no state to restore and nothing to pass; rerunning the same command is the whole
 procedure.
 _Avoid_: Restart, continue (that is what a continuation does)
@@ -169,10 +169,10 @@ registry.
 _Avoid_: Lock, state file, journal
 
 **Adopt dirty**:
-`ralph run --adopt-dirty`: the operator vouching for a dirty tree no marker vouches for, as
+`foreman run --adopt-dirty`: the operator vouching for a dirty tree no marker vouches for, as
 the next ticket's own work. It goes through the same review turn. On a clean tree the flag
 does nothing.
-_Avoid_: Force, allow dirty (that is `RALPH_ALLOW_DIRTY`, which only waives the preflight)
+_Avoid_: Force, allow dirty (that is `FOREMAN_ALLOW_DIRTY`, which only waives the preflight)
 
 **Session resume**:
 The deferred idea of reattaching to the agent's *own* prior conversation via the CLI's

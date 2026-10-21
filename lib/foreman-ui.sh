@@ -1,8 +1,8 @@
 #!/bin/bash
-# How ralph's terminal output looks: the glyphs, the indents, the "  ·  " separators and the
+# How foreman's terminal output looks: the glyphs, the indents, the "  ·  " separators and the
 # colour all live here, so a line reads the same wherever the loop prints it. Sourced by
-# ralph-loop.sh (and, for the adapters' preflight lines, by ralph-exec.sh) and by
-# ralph-keys.sh — never run.
+# foreman-loop.sh (and, for the adapters' preflight lines, by foreman-exec.sh) and by
+# foreman-keys.sh — never run.
 #
 #   say_event ok|progress|sentback|fail FACT [DETAIL]   "   ✓ FACT  ·  DETAIL"
 #   say_rule TEXT                                       "── TEXT"
@@ -16,7 +16,7 @@
 #   ui_paint VAR FD STYLE TEXT                          VAR = TEXT, coloured when FD wants it
 #
 # STYLE is ok, warn, error, accent or muted. say_tag / warn_tag colour only TAG — the
-# "Batch:" of a status line, the "ralph order:" of a message.
+# "Batch:" of a status line, the "foreman order:" of a message.
 #
 # Streams are unchanged from before: everything above is stdout except `fail`, the two warn_
 # helpers and the key echo, which are stderr. A caller may still redirect (`say_rule … >&2`).
@@ -30,9 +30,9 @@
 # from `[ -t FD ]` on the stream that call writes to, so:
 #   - a line redirected with `>&2` follows stderr, and one captured by `$(…)` or sent to a
 #     pipe or file is plain;
-#   - nothing that reaches ralph-runs.log goes through these helpers' colour — log_append
+#   - nothing that reaches foreman-runs.log goes through these helpers' colour — log_append
 #     writes its own strings.
-# RALPH_COLOR overrides it (set in the environment or ralph.conf):
+# FOREMAN_COLOR overrides it (set in the environment or foreman.conf):
 #   auto    (default) a terminal, unless NO_COLOR is set or TERM is dumb
 #   always  colour on every stream, whatever it is — even with NO_COLOR set
 #   never   no colour, ever
@@ -40,15 +40,15 @@
 # Nothing here starts a process: `[ -t ]`, `printf -v` and `case` are builtins, which is the
 # point under MSYS, where a fork is the expensive thing and these run once per event line.
 
-[ -z "${_RALPH_UI_LOADED:-}" ] || return 0
-_RALPH_UI_LOADED=1
+[ -z "${_FOREMAN_UI_LOADED:-}" ] || return 0
+_FOREMAN_UI_LOADED=1
 
 _UI_ESC=$'\033'
 _UI_SEP='  ·  '
 
 # ui_color_on FD — success when colour is wanted on that file descriptor.
 ui_color_on() {
-  case "${RALPH_COLOR:-auto}" in
+  case "${FOREMAN_COLOR:-auto}" in
     always) return 0 ;;
     never)  return 1 ;;
   esac
@@ -82,7 +82,7 @@ say_event() {    # say_event ok|progress|sentback|fail FACT [DETAIL]
     progress) glyph='⋯'; style=muted ;;
     sentback) glyph='↩'; style=warn ;;
     fail)     glyph='✗'; style=error; fd=2 ;;
-    *)        printf 'ralph-ui: say_event: unknown kind %s\n' "$kind" >&2; return 2 ;;
+    *)        printf 'foreman-ui: say_event: unknown kind %s\n' "$kind" >&2; return 2 ;;
   esac
   ui_paint glyph "$fd" "$style" "$glyph"
   line="   $glyph $fact"
@@ -134,11 +134,11 @@ ui_key_echo() {    # ui_key_echo TEXT
   printf '\r\033[2K   %s %s\n' "$mark" "$1" >&2
 }
 
-# THE STATUS BAR. On a terminal, `ralph run` keeps the bottom rows for lines that are
+# THE STATUS BAR. On a terminal, `foreman run` keeps the bottom rows for lines that are
 # redrawn in place while everything else scrolls in the rows above them: the bar itself (the
 # iteration count, the live view, the keys) on the last row, and with the live view on, the
 # agent's activity on the row above it. ROWS is the terminal's height; KEPT is how many rows
-# are held back, 0 for none. Only ralph-keys.sh draws there, and each call is one printf, so
+# are held back, 0 for none. Only foreman-keys.sh draws there, and each call is one printf, so
 # one write: nothing else on the terminal can land in the middle of it.
 #
 # Every line drawn there must fit its row. A line that wraps puts its tail on the row below

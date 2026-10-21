@@ -1,11 +1,11 @@
-# ralph.conf — everything this batch does differently from the defaults.
+# foreman.conf — everything this batch does differently from the defaults.
 #
-# Sourced as bash by the ralph toolkit, which is installed outside this repository.
+# Sourced as bash by the foreman toolkit, which is installed outside this repository.
 # Delete any line you are happy with the default for; the commented value shown is the
-# default. `ralph doctor` reports where the toolkit is and what this repo still needs.
+# default. `foreman doctor` reports where the toolkit is and what this repo still needs.
 #
 # Precedence: environment > this file > defaults. So a one-off
-#   RALPH_MAX_COST_USD=10 ralph run <batch>
+#   FOREMAN_MAX_COST_USD=10 foreman run <batch>
 # overrides whatever is written here, without editing anything.
 
 # ---------------------------------------------------------------------------
@@ -19,27 +19,27 @@
 # sandbox-mount  `sbx` bind-mounting the working tree; commits land directly. Fine when
 #                the project has no native modules and no install step in the sandbox.
 # local          `claude` in the working tree. No isolation, no sandbox needed.
-# fake           no agent at all — a scripted stand-in used to test ralph itself. It
+# fake           no agent at all — a scripted stand-in used to test foreman itself. It
 #                will not implement anything; see lib/exec/fake.sh.
 #
-# Each mode is a file in the toolkit's lib/exec/. `ralph run` lists the ones that exist
+# Each mode is a file in the toolkit's lib/exec/. `foreman run` lists the ones that exist
 # if this is set to something else.
-#RALPH_EXEC=sandbox
+#FOREMAN_EXEC=sandbox
 
 # Name of the sandbox to create or reattach to. One per repo by default, shared by every
 # batch in it, which is what you want — the setup cost is paid once.
-#RALPH_SANDBOX=ralph-<repo-name>
+#FOREMAN_SANDBOX=foreman-<repo-name>
 
 # A command that must succeed INSIDE the sandbox before any money is spent, and the
-# command that fixes it when it does not. Ignored when RALPH_EXEC=local.
+# command that fixes it when it does not. Ignored when FOREMAN_EXEC=local.
 #
 # Worth setting: a clone starts with no gitignored dependency directories, so without
 # these the first iteration of a batch pays for the model's work and then fails its
 # verification step. Example for a Node project with a native module:
-#   RALPH_SANDBOX_PROBE='node -e "new (require(\"better-sqlite3\"))(\":memory:\")"'
-#   RALPH_SANDBOX_SETUP='npm ci'
-#RALPH_SANDBOX_PROBE=
-#RALPH_SANDBOX_SETUP=
+#   FOREMAN_SANDBOX_PROBE='node -e "new (require(\"better-sqlite3\"))(\":memory:\")"'
+#   FOREMAN_SANDBOX_SETUP='npm ci'
+#FOREMAN_SANDBOX_PROBE=
+#FOREMAN_SANDBOX_SETUP=
 
 # ---------------------------------------------------------------------------
 # The agent
@@ -47,24 +47,24 @@
 # Defaults to a pinned full id, not the `sonnet` alias: the alias is resolved by the claude
 # CLI that runs the call, and the one inside the sandbox can be older than the host's and
 # resolve it to an older Sonnet.
-#RALPH_MODEL=claude-sonnet-5-5
-#RALPH_EFFORT=high
-# The default depends on RALPH_EXEC: bypassPermissions in the sandbox modes, where the
+#FOREMAN_MODEL=claude-sonnet-5-5
+#FOREMAN_EFFORT=high
+# The default depends on FOREMAN_EXEC: bypassPermissions in the sandbox modes, where the
 # container is the boundary and the gate protects nothing it does not, and acceptEdits in
 # `local`, where there is no container. Set it here to override either.
-#RALPH_PERMISSION_MODE=
-# The one-off `ralph order` pass (run automatically by `ralph init`) defaults to
-# RALPH_MODEL above. Point it at something cheaper without touching what tickets run on:
-#RALPH_ORDERING_MODEL=haiku
+#FOREMAN_PERMISSION_MODE=
+# The one-off `foreman order` pass (run automatically by `foreman init`) defaults to
+# FOREMAN_MODEL above. Point it at something cheaper without touching what tickets run on:
+#FOREMAN_ORDERING_MODEL=haiku
 
 # Extra arguments passed through to `claude`, as a bash array.
 #
 # The default is not empty, and this is why: `acceptEdits` covers Edit and Write but leaves
-# Bash to the settings allowlist, and ralph's own prompt requires the agent to `git commit`
+# Bash to the settings allowlist, and foreman's own prompt requires the agent to `git commit`
 # its work. Under `claude --print` there is nobody to approve a Bash call, so a
 # non-allowlisted one is denied outright — the ticket's work gets done and paid for, and
 # then cannot land. These two entries are the narrowest thing that lets it.
-RALPH_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)")
+FOREMAN_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)")
 
 # ---------------------------------------------------------------------------
 # Prompt slots — what "verify your work" means in this repo
@@ -74,44 +74,44 @@ RALPH_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)")
 # than naming a command that does not exist — but a batch that fills them in gets a much
 # tighter loop.
 # ---------------------------------------------------------------------------
-#RALPH_CHECK_CMD="npm run check"
-#RALPH_TEST_CMD="npm test"
-#RALPH_FOCUSED_TEST_CMD="npx vitest run <file>"
+#FOREMAN_CHECK_CMD="npm run check"
+#FOREMAN_TEST_CMD="npm test"
+#FOREMAN_FOCUSED_TEST_CMD="npx vitest run <file>"
 
 # Skills the agent should use for the test-first and review steps. Empty means "do it,
 # but without naming a skill".
-#RALPH_TDD_SKILL="mattpocock-skills:tdd"
-#RALPH_REVIEW_SKILL="mattpocock-skills:code-review"
+#FOREMAN_TDD_SKILL="mattpocock-skills:tdd"
+#FOREMAN_REVIEW_SKILL="mattpocock-skills:code-review"
 
 # Watch the iteration as it happens: a wall clock and one line per file write and shell
-# command, drawn to stderr. `ralph run --live` turns it on for a single run. Off by default,
+# command, drawn to stderr. `foreman run --live` turns it on for a single run. Off by default,
 # so the default path is exactly what it always was.
-#RALPH_STREAM=0
+#FOREMAN_STREAM=0
 
-# Colour for the glyphs and prefixes in ralph's output (✓ ✗ ⋯ ↩ ⌨, note:, preflight:, the
+# Colour for the glyphs and prefixes in foreman's output (✓ ✗ ⋯ ↩ ⌨, note:, preflight:, the
 # ── and == rules), using your terminal's own 16 colours. The words are never coloured, and
 # the glyph carries the meaning either way.
 #   auto    colour only when the stream is a terminal, and not when NO_COLOR is set.  DEFAULT.
 #   always  colour even when piped or redirected. Wins over NO_COLOR.
 #   never   no colour.
-# Whatever the setting, ralph-runs.log and ralph-runs.jsonl never contain colour codes.
-#RALPH_COLOR=auto
+# Whatever the setting, foreman-runs.log and foreman-runs.jsonl never contain colour codes.
+#FOREMAN_COLOR=auto
 
 # Anything else that is specific to this batch goes in prompt-extra.md next to this file.
 # It is spliced into the prompt between Verify and Review, under its own heading. Leave
 # the file out entirely if there is nothing to add.
-#RALPH_PROMPT_EXTRA=prompt-extra.md
+#FOREMAN_PROMPT_EXTRA=prompt-extra.md
 
 # ---------------------------------------------------------------------------
 # Tickets
 # ---------------------------------------------------------------------------
-# How a done ticket is recognised. RALPH_DONE_PATTERN is a grep BRE matched against the
+# How a done ticket is recognised. FOREMAN_DONE_PATTERN is a grep BRE matched against the
 # ticket file; by default it's derived from the two settings below, so they can't drift out
-# of sync. Set RALPH_DONE_PATTERN directly only if a ticket's status line isn't a simple
+# of sync. Set FOREMAN_DONE_PATTERN directly only if a ticket's status line isn't a simple
 # "STATUS_LINE DONE_WORD" prefix.
-#RALPH_STATUS_LINE='**Status:**'
-#RALPH_DONE_WORD=implemented
-#RALPH_DONE_PATTERN='^\*\*Status:\*\* *implemented'
+#FOREMAN_STATUS_LINE='**Status:**'
+#FOREMAN_DONE_WORD=implemented
+#FOREMAN_DONE_PATTERN='^\*\*Status:\*\* *implemented'
 
 # A HUMAN TICKET is one only a person can do. Mark it with this word on its status line
 # ('**Status:** ready-for-human'); the loop stops before it (exit 30) and runs nothing after
@@ -119,49 +119,49 @@ RALPH_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)")
 # the person fills in, and follow it with a followup ticket ('**Checks:** <its file name>')
 # that verifies the handoff before anything builds on it. Set empty to treat every ticket
 # as an agent's.
-#RALPH_HUMAN_WORD=ready-for-human
-#RALPH_HUMAN_PATTERN='^\*\*Status:\*\* *ready-for-human'
+#FOREMAN_HUMAN_WORD=ready-for-human
+#FOREMAN_HUMAN_PATTERN='^\*\*Status:\*\* *ready-for-human'
 
 # When a ticket lands with its status flipped AND every checklist box ticked, the loop
 # renames the file to DONE_<name> and commits the rename. Tickets are still found by their
 # original name (order.md need not change). Once every ticket is done the batch directory
 # is renamed the same way, so later commands need its new path. Set empty to never rename.
-#RALPH_DONE_PREFIX=DONE_
+#FOREMAN_DONE_PREFIX=DONE_
 
 # The run order. If order.md exists, its <!-- ORDER:BEGIN --> block is the order and
-# RALPH_ISSUES_DIRS is ignored. Otherwise every *.md in these directories runs in
+# FOREMAN_ISSUES_DIRS is ignored. Otherwise every *.md in these directories runs in
 # filename order — which is what the NN- prefixes are for. A relative entry is resolved
 # against the BATCH directory, not the repo root, so "." means the batch directory itself.
-#RALPH_ORDER_FILE=order.md
-#RALPH_ISSUES_DIRS="issues"
-#RALPH_ISSUES_EXCLUDE="README.md spec.md order.md"
+#FOREMAN_ORDER_FILE=order.md
+#FOREMAN_ISSUES_DIRS="issues"
+#FOREMAN_ISSUES_EXCLUDE="README.md spec.md order.md"
 
 # The agent's running notes. Appended each iteration; the tail is attached to the next
 # prompt. Per batch, never shared.
-#RALPH_PROGRESS_FILE=progress.txt
-#RALPH_PROGRESS_TAIL_BYTES=6000
+#FOREMAN_PROGRESS_FILE=progress.txt
+#FOREMAN_PROGRESS_TAIL_BYTES=6000
 
 # ---------------------------------------------------------------------------
 # Budgets — 0 means no limit
 # ---------------------------------------------------------------------------
-#RALPH_MAX_COST_USD=0
-#RALPH_MAX_MINUTES=0
+#FOREMAN_MAX_COST_USD=0
+#FOREMAN_MAX_MINUTES=0
 # Unproductive tries per ticket within one run. An iteration that committed progress is not
-# one of them — see RALPH_MAX_CONTINUATIONS.
-#RALPH_TICKET_ATTEMPTS=2
+# one of them — see FOREMAN_MAX_CONTINUATIONS.
+#FOREMAN_TICKET_ATTEMPTS=2
 
 # A ticket bigger than one turn is committed in chunks: the agent checkpoints what it has,
 # leaves the status line unflipped, and the next iteration continues it. This caps how many
 # times in a row that may happen on one ticket before the loop stops for a human — past it,
 # the ticket is mis-sized and splitting it is a decision only you can make.
-#RALPH_MAX_CONTINUATIONS=5
+#FOREMAN_MAX_CONTINUATIONS=5
 
 # What the prompt tells the agent to work well inside. Not enforced anywhere — the CLI has
 # no such flag — it is the number the agent is asked to judge itself against.
-#RALPH_CONTEXT_BUDGET_TOKENS=200000
+#FOREMAN_CONTEXT_BUDGET_TOKENS=200000
 
 # How long one shell command the agent runs may take, in minutes. Claude Code's own cap is
 # 10, which a full test suite can outgrow — and an agent that cannot run a check in the
 # foreground backgrounds it, then ends its turn waiting for a result nothing will deliver.
 # Raise it if your slowest check takes longer than this.
-#RALPH_COMMAND_TIMEOUT_MINUTES=60
+#FOREMAN_COMMAND_TIMEOUT_MINUTES=60

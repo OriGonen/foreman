@@ -12,7 +12,7 @@ harness".
 across cases, and the initial commit contains the tickets. A committed template would need
 `git rm` and `commit --amend` per case, which gives back the git spawns the template saves,
 and would give every fixture the same root commit. So the template is a configured
-repository (identity, `core.autocrlf`, `ralph.conf`, `.gitignore`, `.gitattributes`) with
+repository (identity, `core.autocrlf`, `foreman.conf`, `.gitignore`, `.gitattributes`) with
 nothing staged or committed. After the copy, a fixture gets its ticket files (written with
 `printf` and a redirection, not `cat`) and then one `git add` and one `git commit`.
 
@@ -33,7 +33,7 @@ on it. All of 05-09 have landed.
 - [x] Fixtures are independent: a case that changes its repository cannot affect another case's
 - [x] Callers of the fixture builder are unchanged
 - [x] No existing assertion is edited, and `bash test/smoke.sh` passes in full
-- [x] The template builder and the copy step live in one file that both `test/smoke.sh` and `test/bench.sh` source; the fixture code in `test/bench.sh` is gone, and its numbers still compare with the baseline (it times `ralph status`, which the fixture does not touch)
+- [x] The template builder and the copy step live in one file that both `test/smoke.sh` and `test/bench.sh` source; the fixture code in `test/bench.sh` is gone, and its numbers still compare with the baseline (it times `foreman status`, which the fixture does not touch)
 - [x] The ticket records the time of one fixture build before and after (the primary evidence), and the suite total before and after (a check that the suite still passes in full, not evidence of the saving); the closing note records `Full smoke suite: N passed in Mm Ss`
 
 - [x] Last step, always: compare the suite total from this ticket's "after" run (with 05-09 and this ticket landed) with the spec's ten minutes. If it is over, write the `parallel-cases` ticket as ticket 10, blocked by this one, opening with the shared-state audit (`spec.md`, user stories 30-32); if it is at or under, say so here, and the effort is finished
@@ -62,7 +62,7 @@ baseline's 0.65-0.80 s.
 
 ## Comments
 
-**Design.** `test/fixture.sh` (sourced, not run) has two functions. `build_fixture_template DIR` makes the configured repository with no tickets and no commit: `git init`, `core.autocrlf false`, the `ralph-test` identity, `batch/ralph.conf` (the template plus `RALPH_EXEC=fake`), `.gitignore`, `.gitattributes`, and an empty `batch/issues`. `copy_fixture TEMPLATE DEST COUNT` does `cp -R`, writes the tickets with `printf` and a redirection in a bash `for` loop (no `cat`, no `seq`), then one `git add` and one `git commit`. `test/smoke.sh` builds the template once at start-up in `$WORK/.template` (so the run's cleanup trap removes it, and `$WORK/*` globs do not see it); `make_repo` is now a three-line wrapper with the same signature and the same printed path, so its 83 call sites are untouched. `test/bench.sh` sources the same file and its own copy of the fixture code is deleted; it builds a template and copies it once.
+**Design.** `test/fixture.sh` (sourced, not run) has two functions. `build_fixture_template DIR` makes the configured repository with no tickets and no commit: `git init`, `core.autocrlf false`, the `foreman-test` identity, `batch/foreman.conf` (the template plus `FOREMAN_EXEC=fake`), `.gitignore`, `.gitattributes`, and an empty `batch/issues`. `copy_fixture TEMPLATE DEST COUNT` does `cp -R`, writes the tickets with `printf` and a redirection in a bash `for` loop (no `cat`, no `seq`), then one `git add` and one `git commit`. `test/smoke.sh` builds the template once at start-up in `$WORK/.template` (so the run's cleanup trap removes it, and `$WORK/*` globs do not see it); `make_repo` is now a three-line wrapper with the same signature and the same printed path, so its 83 call sites are untouched. `test/bench.sh` sources the same file and its own copy of the fixture code is deleted; it builds a template and copies it once.
 
 **Same repository as before.** A scratch script (not committed) built `make_repo 3` from HEAD's code and from the new code and compared the two: file lists, every file's bytes (`od -c`), `.git/config`, the number of hooks in `.git/hooks`, `git log` author, committer and subject, the commit count, `git show --stat`, `git status --porcelain` and the branch. The only difference was the label line. A 5-ticket fixture from the same template had five tickets and one commit; committing in one fixture left another at one commit; the template itself stayed with no commit, no tickets and nothing staged.
 
@@ -84,7 +84,7 @@ That is about 0.45 s saved per fixture, as the ticket's measurement predicted. T
 
 The 19 s difference is inside the suite's run-to-run variation (about a minute on this machine), so it is not evidence of anything; the per-fixture time above is. No assertion was edited.
 
-**Benchmark.** `bash test/bench.sh 1` after the change: `ralph status` 0.76 s, 32 spawns in the trace, the same total as ticket 09's "after" table, and no `ralph-bench-*` directory left in `$TMPDIR`. The benchmark times `ralph status`, which the fixture does not touch, so its numbers still compare with the baseline.
+**Benchmark.** `bash test/bench.sh 1` after the change: `foreman status` 0.76 s, 32 spawns in the trace, the same total as ticket 09's "after" table, and no `foreman-bench-*` directory left in `$TMPDIR`. The benchmark times `foreman status`, which the fixture does not touch, so its numbers still compare with the baseline.
 
 **Code review** (`/code-review`, on the uncommitted diff, both axes done inline): Standards, one finding: the README's file table lists everything under `test/` and did not list `test/fixture.sh`; a row was added. Spec, no findings.
 

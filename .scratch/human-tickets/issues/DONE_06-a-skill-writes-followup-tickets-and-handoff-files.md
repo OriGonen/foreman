@@ -9,13 +9,13 @@
 Tickets 01–05 taught the loop to read human tickets, handoff files and followup tickets. Nothing
 writes them yet: today a person would have to hand-write a handoff template and a followup
 ticket for every human ticket, in the exact formats the loop reads. Add a Claude Code skill,
-`ralph-human-followup-tickets`, that does it, and have `install.sh` install it.
+`foreman-human-followup-tickets`, that does it, and have `install.sh` install it.
 
 **Where it fits.** The user plans with Matt Pocock's skills: `to-spec`, then `to-tickets`, which
 writes one ticket per file under `.scratch/<batch>/issues/`. The tickets only a person can do
 already carry the human label on their status line (`**Status:** ready-for-human`) by the time
-this skill runs. The user then types `/ralph-human-followup-tickets`, usually in the same
-context window and usually before `ralph init`. Those skills are a third-party plugin: this
+this skill runs. The user then types `/foreman-human-followup-tickets`, usually in the same
+context window and usually before `foreman init`. Those skills are a third-party plugin: this
 ticket changes nothing in them.
 
 **What the skill does and does not decide.** A human ticket is a ticket whose status line
@@ -24,8 +24,8 @@ changes a status, never renumbers, and never edits a ticket's `Blocked by:` line
 pieces a human ticket is missing, and only those, so running it again on the same batch
 changes nothing, and running it on a batch that has been partly run is safe.
 
-**The skill**, at `skills/ralph-human-followup-tickets/SKILL.md` in this repo (the formats it
-writes are ralph's, so writer and reader change together). User-invoked
+**The skill**, at `skills/foreman-human-followup-tickets/SKILL.md` in this repo (the formats it
+writes are foreman's, so writer and reader change together). User-invoked
 (`disable-model-invocation: true`), with a one-line human-facing description. Written following
 the `writing-for-agents` skill: steps with completion criteria, the leading term *followup
 ticket* used as the glossary defines it (ticket 05), no restated environment. Its steps:
@@ -34,10 +34,10 @@ ticket* used as the glossary defines it (ticket 05), no restated environment. It
    the user names. Ask if it is ambiguous.
 2. **Read the label words.** The human and agent labels are the right-hand column of
    `docs/agents/triage-labels.md` for `ready-for-human` and `ready-for-agent`, when that file
-   exists; otherwise those canonical names. If the batch's `ralph.conf` sets a
-   `RALPH_HUMAN_WORD` different from the human label (or does not set one, and the label is
+   exists; otherwise those canonical names. If the batch's `foreman.conf` sets a
+   `FOREMAN_HUMAN_WORD` different from the human label (or does not set one, and the label is
    not `ready-for-human`), remember to tell the user, in step 6, the exact line to put in
-   `ralph.conf`. The skill never edits `ralph.conf`.
+   `foreman.conf`. The skill never edits `foreman.conf`.
 3. **For each human ticket that is not done** (not `DONE_`-prefixed, status not done), add
    whichever of these it is missing:
    - a `**Handoff:** .scratch/<batch>/handoff/<its file name>` line, directly under its status
@@ -69,17 +69,17 @@ ticket* used as the glossary defines it (ticket 05), no restated environment. It
    and a followup ticket's `Checks:` names it. Then commit exactly the files it wrote or
    edited, together.
 6. **Tell the user**, the same way every time, without running any of it: next is
-   `ralph init <batch>`, or `ralph order <batch>` if the batch already has a `ralph.conf` (the
-   new followup tickets only run once `order.md` lists them); then `ralph status <batch>`
-   should show no warnings. Plus the `ralph.conf` line from step 2, if any.
+   `foreman init <batch>`, or `foreman order <batch>` if the batch already has a `foreman.conf` (the
+   new followup tickets only run once `order.md` lists them); then `foreman status <batch>`
+   should show no warnings. Plus the `foreman.conf` line from step 2, if any.
 
-**ralph's warnings point at it.** The two warnings the skill fixes gain a pointer:
-`… is a human ticket with no ticket that Checks: it — run /ralph-human-followup-tickets` and
-`… has no Handoff: file — run /ralph-human-followup-tickets`. The other two warnings are
+**foreman's warnings point at it.** The two warnings the skill fixes gain a pointer:
+`… is a human ticket with no ticket that Checks: it — run /foreman-human-followup-tickets` and
+`… has no Handoff: file — run /foreman-human-followup-tickets`. The other two warnings are
 ordering mistakes the skill does not fix, and stay as they are.
 
-**Installing it.** `install.sh` also copies `skills/ralph-human-followup-tickets/` to
-`${CLAUDE_CONFIG_DIR:-~/.claude}/skills/ralph-human-followup-tickets/` — a copy, not a symlink,
+**Installing it.** `install.sh` also copies `skills/foreman-human-followup-tickets/` to
+`${CLAUDE_CONFIG_DIR:-~/.claude}/skills/foreman-human-followup-tickets/` — a copy, not a symlink,
 for the same reason the shims are forwarders — and writes a marker file into the copy naming
 the checkout it came from.
 
@@ -89,9 +89,9 @@ the checkout it came from.
   unless `--force`. Refuse before writing anything.
 - `--uninstall` removes the copy only if it carries the marker.
 - `--no-skill` installs only the shims. `--to` still applies only to the shims.
-- A copy goes stale when the checkout is pulled, so `ralph doctor` warns (free, no exit-code
+- A copy goes stale when the checkout is pulled, so `foreman doctor` warns (free, no exit-code
   change) when an installed copy that carries the marker differs from the checkout's
-  `skills/ralph-human-followup-tickets/`, and says to re-run `install.sh`.
+  `skills/foreman-human-followup-tickets/`, and says to re-run `install.sh`.
 
 Update `install.sh`'s header and `--help`, and the README: the Install section (what is
 installed, the flags), and the "Human tickets" subsection (run the skill after `to-tickets`;
@@ -99,14 +99,14 @@ what it adds; that it never overwrites a handoff file and is safe to re-run).
 
 **Acceptance criteria:**
 
-- [x] `skills/ralph-human-followup-tickets/SKILL.md` exists, is user-invoked, and covers steps
-      1–6 above: the label mapping and the `ralph.conf` line, adding only what is missing, the
+- [x] `skills/foreman-human-followup-tickets/SKILL.md` exists, is user-invoked, and covers steps
+      1–6 above: the label mapping and the `foreman.conf` line, adding only what is missing, the
       handoff file contents including the secret rule, the followup ticket's name, title,
       fields, observable-only criteria and both outcomes verbatim, the self-check, the commit,
       and the fixed closing message
 - [x] The skill says it never classifies, splits, re-statuses or renumbers a ticket, never edits
       another ticket's `Blocked by:`, and never overwrites a handoff file
-- [x] Warnings 1 and 2 end with `run /ralph-human-followup-tickets`; warnings 3 and 4 are
+- [x] Warnings 1 and 2 end with `run /foreman-human-followup-tickets`; warnings 3 and 4 are
       unchanged; the smoke assertions for them are updated
 - [x] `bash install.sh` (smoke case with `HOME` and `CLAUDE_CONFIG_DIR` in a temp dir, `--to` a
       temp dir) installs the shims and a copy of the skill carrying the marker
@@ -115,7 +115,7 @@ what it adds; that it never overwrites a handoff file and is safe to re-run).
       write nothing; `--force` overwrites it
 - [x] `--uninstall` removes a marked copy and leaves an unmarked one; `--no-skill` installs no
       skill
-- [x] `ralph doctor` warns when the installed copy differs from the checkout's, and is silent
+- [x] `foreman doctor` warns when the installed copy differs from the checkout's, and is silent
       when they match or when no copy is installed
 - [x] `install.sh`'s header and `--help` and the README's Install and "Human tickets" sections
       describe the skill and the flags

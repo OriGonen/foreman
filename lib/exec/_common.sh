@@ -1,7 +1,7 @@
 #!/bin/bash
 # Shared implementation for the adapters whose agent commits into the working tree the
 # loop is already watching: `local`, `sandbox-mount` and `fake`. Not a mode — the leading
-# underscore is what keeps it out of `ralph_exec_modes`.
+# underscore is what keeps it out of `foreman_exec_modes`.
 #
 # For all three, "collect the iteration's work" is just "look at this repo", and nothing
 # can be stranded anywhere, so there is never a recovery note.
@@ -33,7 +33,7 @@ exec_dirty_recovery_note() {
   local ticket="$2" batch="$3"
   printf '%s\n' \
     "  git add -A && git commit -m 'wip: $ticket — remaining: <what is left>'" \
-    "  $RALPH_INVOKE run $batch"
+    "  $FOREMAN_INVOKE run $batch"
 }
 
 exec_commit_note() {

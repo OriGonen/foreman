@@ -10,7 +10,7 @@ The sandbox modes' Docker login reads the Docker username and personal access to
 local, user-level credentials file, so the operator no longer needs `setx` environment
 variables that every child process (including the agent in `local` mode) would inherit.
 
-The file is `~/.config/ralph/env`, or wherever `RALPH_CREDENTIALS_FILE` points. It holds
+The file is `~/.config/foreman/env`, or wherever `FOREMAN_CREDENTIALS_FILE` points. It holds
 plain `NAME=value` lines and `#` comments. It is **parsed as data, never sourced**: CR is
 stripped, optional surrounding quotes are removed, blank and comment lines are ignored. A
 real environment variable of the same name wins over the file, so today's env-var setup
@@ -18,7 +18,7 @@ keeps working unchanged.
 
 Build one shared reader, sourced and never run, that resolves the file path, looks up a
 name (env, else file, else empty) and masks a value for display (`…last4`). It is the only
-parser: the adapters, `ralph setup` and `ralph doctor` will all use it later, so they cannot
+parser: the adapters, `foreman setup` and `foreman doctor` will all use it later, so they cannot
 disagree. Then switch the existing sandbox Docker login over to it.
 
 Values are never printed, never put in argv and never exported. They reach `sbx` on stdin
@@ -36,7 +36,7 @@ See `.scratch/credentials-setup/spec.md`.
 - [ ] An environment variable beats the file
 - [ ] CRLF line endings, quoted values, comments and blank lines are handled
 - [ ] A missing file yields empty, not an error
-- [ ] `RALPH_CREDENTIALS_FILE` moves the file
+- [ ] `FOREMAN_CREDENTIALS_FILE` moves the file
 - [ ] A file line containing shell code is never executed
 - [ ] The sandbox Docker login uses the file's username and token; with a stub `sbx`, the
       token arrives on stdin and never appears in argv or output

@@ -10,7 +10,7 @@ Issues and specs for this repo live as markdown files in `.scratch/`.
 - Triage state is recorded as a `Status:` line near the top of each issue file (see `triage-labels.md` for the role strings)
 - Comments and conversation history append to the bottom of the file under a `## Comments` heading
 - **Closing note:** when a ticket's criteria include the smoke suite, its closing note records the result as `Full smoke suite: N passed in Mm Ss`, so a slowdown shows up in ticket history
-- **Completion:** when a ticket is finished — `**Status:** done` (or `implemented`) and every checkbox in it ticked — rename the file with a `DONE_` prefix (`git mv 07-foo.md DONE_07-foo.md`) in the same commit that finishes it. A ticket with an unticked box, or a status that is not yet done, keeps its name. `ralph run` does the same for tickets it lands (`RALPH_DONE_PREFIX`), and finds a renamed ticket wherever `order.md` still lists the old name.
+- **Completion:** when a ticket is finished — `**Status:** done` (or `implemented`) and every checkbox in it ticked — rename the file with a `DONE_` prefix (`git mv 07-foo.md DONE_07-foo.md`) in the same commit that finishes it. A ticket with an unticked box, or a status that is not yet done, keeps its name. `foreman run` does the same for tickets it lands (`FOREMAN_DONE_PREFIX`), and finds a renamed ticket wherever `order.md` still lists the old name.
 
 ## When a skill says "publish to the issue tracker"
 

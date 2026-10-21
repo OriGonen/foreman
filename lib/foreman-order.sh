@@ -2,24 +2,24 @@
 # Has an agent read a batch's tickets and rewrite order.md: the run order, weighing
 # dependencies, importance and each ticket's apparent load, plus the reasoning behind it.
 #
-#   ralph order <batch>
+#   foreman order <batch>
 #
-# Runs automatically at the end of `ralph init`. Re-run it by hand after tickets change.
+# Runs automatically at the end of `foreman init`. Re-run it by hand after tickets change.
 #
 # Read-only over the tickets themselves — the only file it writes is <batch>/order.md.
-# Runs locally, never in a sandbox: it edits no code, so none of RALPH_EXEC's isolation
+# Runs locally, never in a sandbox: it edits no code, so none of FOREMAN_EXEC's isolation
 # concerns apply, and it should work even in a repo that has no sandbox set up yet.
 #
-# Costs one model call, on RALPH_MODEL by default — ordering rarely needs the same model
-# the tickets themselves run on, so set RALPH_ORDERING_MODEL in ralph.conf to point it at
-# something cheaper without touching RALPH_MODEL. If `claude` is not on PATH, this prints a
+# Costs one model call, on FOREMAN_MODEL by default — ordering rarely needs the same model
+# the tickets themselves run on, so set FOREMAN_ORDERING_MODEL in foreman.conf to point it at
+# something cheaper without touching FOREMAN_MODEL. If `claude` is not on PATH, this prints a
 # note and exits 0 rather than failing whatever called it — order.md just keeps its
 # filename order.
 set -uo pipefail
 
-# This file's directory, from the shell and not `dirname` (see ralph-config.sh).
-RALPH_TOOL_DIR="${BASH_SOURCE[0]%/*}"; [ "$RALPH_TOOL_DIR" != "${BASH_SOURCE[0]}" ] || RALPH_TOOL_DIR=.
-RALPH_TOOL_DIR="$(cd "${RALPH_TOOL_DIR:-/}" && pwd)"
+# This file's directory, from the shell and not `dirname` (see foreman-config.sh).
+FOREMAN_TOOL_DIR="${BASH_SOURCE[0]%/*}"; [ "$FOREMAN_TOOL_DIR" != "${BASH_SOURCE[0]}" ] || FOREMAN_TOOL_DIR=.
+FOREMAN_TOOL_DIR="$(cd "${FOREMAN_TOOL_DIR:-/}" && pwd)"
 
 show_help() { awk 'NR==1 { next } !/^#/ { exit } { sub(/^# ?/, ""); print }' "$0"; }
 
@@ -27,48 +27,48 @@ BATCH_INPUT=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --help|-h) show_help; exit 0 ;;
-    -*) echo "Usage: ralph order <batch>" >&2; exit 1 ;;
+    -*) echo "Usage: foreman order <batch>" >&2; exit 1 ;;
     *) BATCH_INPUT="$1" ;;
   esac
   shift
 done
-[ -n "$BATCH_INPUT" ] || { echo "Usage: ralph order <batch>" >&2; exit 1; }
+[ -n "$BATCH_INPUT" ] || { echo "Usage: foreman order <batch>" >&2; exit 1; }
 
-# ralph-config.sh gives us BATCH_DIR, ORDER_FILE and RALPH_MODEL resolved the same way
-# every other ralph command resolves them — env, then this batch's ralph.conf, then
-# defaults — so RALPH_ORDERING_MODEL set there is honoured without this script knowing
-# anything about ralph.conf's format itself.
-export RALPH_BATCH="$BATCH_INPUT"
-# shellcheck source=ralph-config.sh
-source "$RALPH_TOOL_DIR/ralph-config.sh" || exit 1
-# shellcheck source=ralph-human.sh
-source "$RALPH_TOOL_DIR/ralph-human.sh" || exit 1
-# shellcheck source=ralph-tickets.sh
-source "$RALPH_TOOL_DIR/ralph-tickets.sh" || exit 1
+# foreman-config.sh gives us BATCH_DIR, ORDER_FILE and FOREMAN_MODEL resolved the same way
+# every other foreman command resolves them — env, then this batch's foreman.conf, then
+# defaults — so FOREMAN_ORDERING_MODEL set there is honoured without this script knowing
+# anything about foreman.conf's format itself.
+export FOREMAN_BATCH="$BATCH_INPUT"
+# shellcheck source=foreman-config.sh
+source "$FOREMAN_TOOL_DIR/foreman-config.sh" || exit 1
+# shellcheck source=foreman-human.sh
+source "$FOREMAN_TOOL_DIR/foreman-human.sh" || exit 1
+# shellcheck source=foreman-tickets.sh
+source "$FOREMAN_TOOL_DIR/foreman-tickets.sh" || exit 1
 
 [ -f "$ORDER_FILE" ] || {
-  warn_tag error "ralph order:" "$ORDER_FILE does not exist — run: ralph init $BATCH_DIR"
+  warn_tag error "foreman order:" "$ORDER_FILE does not exist — run: foreman init $BATCH_DIR"
   exit 1
 }
 
 if ! command -v claude >/dev/null 2>&1; then
-  warn_tag error "ralph order:" "'claude' is not on PATH — skipping."
-  echo "              $ORDER_FILE keeps its filename order; re-run \`ralph order $BATCH_DIR\` once it is." >&2
+  warn_tag error "foreman order:" "'claude' is not on PATH — skipping."
+  echo "              $ORDER_FILE keeps its filename order; re-run \`foreman order $BATCH_DIR\` once it is." >&2
   exit 0
 fi
 
 # The batch's own ticket list, from the one place that knows how a batch answers that
-# (ralph-tickets.sh) —
-# including any RALPH_ISSUES_DIRS the conf sets. `--unordered` rather than `--all` because
+# (foreman-tickets.sh) —
+# including any FOREMAN_ISSUES_DIRS the conf sets. `--unordered` rather than `--all` because
 # re-ordering has to see tickets added since order.md was last written.
 tickets=()
 while IFS= read -r f; do
   [ -n "$f" ] && tickets+=("$f")
-done < <(ralph_next_answer --unordered)
+done < <(foreman_next_answer --unordered)
 
 if [ "${#tickets[@]}" -eq 0 ]; then
-  say_tag accent "ralph order:" "$BATCH_DIR has no tickets — nothing to order."
-  ralph_issues_hint
+  say_tag accent "foreman order:" "$BATCH_DIR has no tickets — nothing to order."
+  foreman_issues_hint
   exit 0
 fi
 
@@ -78,9 +78,9 @@ fi
 human_tickets=()
 has_checks=0
 for t in "${tickets[@]}"; do
-  ralph_ticket_status "$t"
-  [ "$_RALPH_TICKET_HUMAN" = 1 ] && human_tickets+=("$t")
-  [ -n "$_RALPH_TICKET_CHECKS" ] && has_checks=1
+  foreman_ticket_status "$t"
+  [ "$_FOREMAN_TICKET_HUMAN" = 1 ] && human_tickets+=("$t")
+  [ -n "$_FOREMAN_TICKET_CHECKS" ] && has_checks=1
 done
 
 HUMAN_SECTION=""
@@ -115,16 +115,16 @@ CHECK_EOF
 )
 fi
 
-# Ordering is a much smaller job than implementing a ticket, so it defaults to RALPH_MODEL
+# Ordering is a much smaller job than implementing a ticket, so it defaults to FOREMAN_MODEL
 # rather than automatically riding whatever the tickets themselves run on — set
-# RALPH_ORDERING_MODEL in ralph.conf to point it at something cheaper. Effort stays fixed
-# at high regardless of RALPH_EFFORT: reading every ticket and weighing dependencies is the
+# FOREMAN_ORDERING_MODEL in foreman.conf to point it at something cheaper. Effort stays fixed
+# at high regardless of FOREMAN_EFFORT: reading every ticket and weighing dependencies is the
 # one place in this toolkit where skimping on effort risks a bad order, even on a small model.
-MODEL="${RALPH_ORDERING_MODEL:-$RALPH_MODEL}"
+MODEL="${FOREMAN_ORDERING_MODEL:-$FOREMAN_MODEL}"
 EFFORT=high
 
 PROMPT=$(cat <<PROMPT_EOF
-You are ordering the tickets in $BATCH_DIR for the ralph ticket loop, which implements
+You are ordering the tickets in $BATCH_DIR for the foreman ticket loop, which implements
 exactly one ticket per iteration, in the order given, committing each before moving to the
 next.
 
@@ -160,14 +160,14 @@ $(for t in "${tickets[@]}"; do printf -- '- %s\n' "$t"; done)
 PROMPT_EOF
 )
 
-say_tag accent "ralph order:" "reading ${#tickets[@]} ticket(s) in $BATCH_DIR ..."
+say_tag accent "foreman order:" "reading ${#tickets[@]} ticket(s) in $BATCH_DIR ..."
 
 RESPONSE=$(claude --model "$MODEL" --effort "$EFFORT" --permission-mode acceptEdits \
   --print --output-format json -p "$PROMPT")
 status=$?
 
 if [ "$status" -ne 0 ]; then
-  warn_tag error "ralph order:" "the agent call failed (exit $status) — $ORDER_FILE is unchanged."
+  warn_tag error "foreman order:" "the agent call failed (exit $status) — $ORDER_FILE is unchanged."
   exit 1
 fi
 
@@ -178,9 +178,9 @@ cost=$(node -e '
   } catch {}
 ' <<< "$RESPONSE")
 
-say_tag accent "ralph order:" "wrote $ORDER_FILE${cost:+ (cost \$$cost)}"
+say_tag accent "foreman order:" "wrote $ORDER_FILE${cost:+ (cost \$$cost)}"
 echo "             review it — this is a first pass, not a guarantee."
 
-warnings="$(ralph_human_warnings)"
+warnings="$(foreman_human_warnings)"
 [ -n "$warnings" ] && printf '%s\n' "$warnings"
 exit 0

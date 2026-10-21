@@ -6,7 +6,7 @@ Status: design agreed in a grilling session on 2026-10-01. No code yet. No ticke
 
 On 2026-09-30 a `python3 -` process (PID 20028) sat waiting on stdin from 22:14 until it was
 killed by hand the next morning: about two hours alive, about 0.08 s of CPU. It came from a
-**Claude Code desktop app (Code tab) session**, not from ralph. The user reports this happens
+**Claude Code desktop app (Code tab) session**, not from foreman. The user reports this happens
 often: processes started by the implementing session, possibly including the smoke suite, never
 stop.
 
@@ -30,30 +30,30 @@ docs ([tools reference](https://code.claude.com/docs/en/tools-reference.md),
 - The only off switch, `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`, disables **all** background work.
   Timed-out commands would then die at the 2-10 min foreground limit, which kills the hour-plus
   smoke suite and every deliberately backgrounded command. Rejected.
-- In `claude --print`, **background tasks are killed about 5 s after the turn ends**, so ralph's
+- In `claude --print`, **background tasks are killed about 5 s after the turn ends**, so foreman's
   agents already can't leave processes running after their turn. The leak is mainly an
   interactive-session problem.
 - In both the Bash and PowerShell tools, stdin is empty (`/dev/null`), so a bare `python3 -` exits
   at once. The incident's process was most likely reading from a pipe whose writer had stopped,
   e.g. `something | python3 -`. The idle rule below catches that whatever the cause.
 
-## Ralph today (for reference)
+## Foreman today (for reference)
 
-ralph has no hang protection of its own. The design below doesn't change ralph's code; these facts
+foreman has no hang protection of its own. The design below doesn't change foreman's code; these facts
 explain why it doesn't need to.
 
-- The agent call is a plain foreground pipeline: `exec_run … | node ralph-stream.cjs > payload`
-  ([ralph-loop.sh:949](../../lib/ralph-loop.sh:949); checkpoint turn at
-  [ralph-loop.sh:706](../../lib/ralph-loop.sh:706)). There is no timeout, kill or idle check
+- The agent call is a plain foreground pipeline: `exec_run … | node foreman-stream.cjs > payload`
+  ([foreman-loop.sh:949](../../lib/foreman-loop.sh:949); checkpoint turn at
+  [foreman-loop.sh:706](../../lib/foreman-loop.sh:706)). There is no timeout, kill or idle check
   anywhere in `lib/` or `bin/`.
 - Agent launch points: [local.sh:19](../../lib/exec/local.sh:19),
-  [_sbx.sh:98](../../lib/exec/_sbx.sh:98), and `ralph order`'s own call at
-  [ralph-order.sh:163](../../lib/ralph-order.sh:163).
-- `RALPH_MAX_MINUTES` is checked only between iterations
-  ([ralph-loop.sh:883](../../lib/ralph-loop.sh:883)).
-- `on_interrupt` only sets a flag ([ralph-loop.sh:603](../../lib/ralph-loop.sh:603)).
+  [_sbx.sh:98](../../lib/exec/_sbx.sh:98), and `foreman order`'s own call at
+  [foreman-order.sh:163](../../lib/foreman-order.sh:163).
+- `FOREMAN_MAX_MINUTES` is checked only between iterations
+  ([foreman-loop.sh:883](../../lib/foreman-loop.sh:883)).
+- `on_interrupt` only sets a flag ([foreman-loop.sh:603](../../lib/foreman-loop.sh:603)).
 - The default output format is `json`, a single object printed at the end of the turn. `stream-json`
-  is used only under `--live` ([ralph-exec.sh:122-124](../../lib/ralph-exec.sh:122)). A detector
+  is used only under `--live` ([foreman-exec.sh:122-124](../../lib/foreman-exec.sh:122)). A detector
   based on output going quiet would therefore need every run switched to `stream-json`.
 - The prompt tells the agent to run checks in the foreground "however long it takes"
   ([prompt.template.md:50](../../lib/prompt.template.md:50)), so long silent commands are legitimate.
@@ -78,16 +78,16 @@ The desktop app is itself a `claude.exe`: PID 7568, parent `sihost`, running sin
 
 ### Scope
 - **Desktop-app Code-tab sessions are the main target**; that's where the incident came from.
-  The CLI and ralph's local runs are covered by the same rule at no extra cost.
+  The CLI and foreman's local runs are covered by the same rule at no extra cost.
 - The smoke suite is covered whenever an agent runs it. There is no separate per-case guard in
   `test/smoke.sh`.
-- **Out of scope:** sandbox (`RALPH_EXEC=sandbox`) runs. The agent's processes are inside the
+- **Out of scope:** sandbox (`FOREMAN_EXEC=sandbox`) runs. The agent's processes are inside the
   container, where the host can't see them, and `--print` already kills its background tasks when
   the turn ends. `sbx` itself is never killed.
 
 ### What counts as a Claude Code session
 - A session is a `claude.exe` running from `…\AppData\Roaming\Claude\claude-code\<version>\`
-  (desktop-app Code-tab sessions) or `~/.local/bin/` (CLI and ralph). The watchdog watches these,
+  (desktop-app Code-tab sessions) or `~/.local/bin/` (CLI and foreman). The watchdog watches these,
   and their tool-command trees can be killed.
 - **Never** treat the desktop app's own `claude.exe` as a session, and never kill it. That covers
   the app window (the long-lived process whose parent is `sihost`) and its helper processes
@@ -96,7 +96,7 @@ The desktop app is itself a `claude.exe`: PID 7568, parent `sihost`, running sin
 
 ### Form and home
 - A standalone PowerShell script under `tools/claude-reaper/` in this repo, with a short install
-  note. No change to ralph's loop.
+  note. No change to foreman's loop.
 - It runs as a **Windows scheduled task every 5 minutes**, started headless so no console window
   flashes. Nothing is resident between runs (0 MB). State (each process's last-seen CPU time) is
   kept in a small file between runs. It doesn't depend on hooks and finds nothing to do when

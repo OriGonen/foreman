@@ -14,17 +14,17 @@ follows a human ticket a *check ticket*. The owner renamed it **followup ticket*
 everywhere) after those tickets were written, so the code they produced says "check ticket".
 Rename the noun, and only the noun:
 
-- in code comments (`ralph-human.sh`, `ralph-loop.sh`, `lib/exec/fake.sh`'s header and its
+- in code comments (`foreman-human.sh`, `foreman-loop.sh`, `lib/exec/fake.sh`'s header and its
   `send-back` behaviour), smoke case names and test comments, and test helper names such as
   `make_check_ticket`;
-- in `ralph order`'s prompt: the `CHECK TICKETS` section becomes `FOLLOWUP TICKETS`, and its
+- in `foreman order`'s prompt: the `CHECK TICKETS` section becomes `FOLLOWUP TICKETS`, and its
   smoke assertion follows;
 - in everything this ticket writes.
 
 The settled formats keep their spelling — they read as a verb ("a followup ticket `Checks:` its
-human ticket"): the `**Checks:**` line, the `[CHECKS <name>]` marker in `ralph status`, the
+human ticket"): the `**Checks:**` line, the `[CHECKS <name>]` marker in `foreman status`, the
 `## Sent back by …` heading and the `check: send <NN> back — …` commit message. Shell function
-and variable names (`ralph_checked_ticket`, `ralph_pending_checker`, …) may stay. Finished
+and variable names (`foreman_checked_ticket`, `foreman_pending_checker`, …) may stay. Finished
 ticket files and `.scratch/` keep their history.
 
 The docs:
@@ -40,14 +40,14 @@ The docs:
     formats, the handoff file (including: record where a secret is stored, never its value),
     sending back, and the human → followup → apply pattern, using an owner review split into a
     human ticket, its followup ticket, and an agent ticket that applies the owner's feedback;
-  - "Ordering": how `ralph order` places human tickets and keeps followup tickets adjacent;
+  - "Ordering": how `foreman order` places human tickets and keeps followup tickets adjacent;
   - "Pausing and resuming": exit 30 — what it means, that rerunning stops again for free, how
     it differs from 10 and 20; the start-of-run rename, and why a human ticket is renamed only
     after its followup ticket lands;
-  - the quick-start comment on `ralph status`: what is left, what is next, where a human is
+  - the quick-start comment on `foreman status`: what is left, what is next, where a human is
     needed.
-- **The batch config template** documents `RALPH_HUMAN_WORD` and `RALPH_HUMAN_PATTERN`.
-- **`ralph init`**'s generated `order.md` prose stops telling people to describe a human step
+- **The batch config template** documents `FOREMAN_HUMAN_WORD` and `FOREMAN_HUMAN_PATTERN`.
+- **`foreman init`**'s generated `order.md` prose stops telling people to describe a human step
   in prose, and points at human tickets instead.
 
 The skill that writes followup tickets and handoff files is ticket 06 — do not document it
@@ -61,10 +61,10 @@ here.
       finds nothing but that _Avoid_ list
 - [x] `**Checks:**`, `[CHECKS <name>]`, `## Sent back by` and `check: send <NN> back` are
       unchanged, and the smoke cases asserting them still pass
-- [x] `ralph order`'s prompt has a `FOLLOWUP TICKETS` section, and the smoke case asserts it
+- [x] `foreman order`'s prompt has a `FOLLOWUP TICKETS` section, and the smoke case asserts it
 - [x] The README covers the formats, handoff files, sending back, the pattern, ordering, exit
       30 and the rename, matching what the code does
 - [x] The config template documents both settings, and says an empty word turns the feature off
-- [x] `ralph init --no-order` on a fresh batch writes the new prose (an existing smoke case or a
+- [x] `foreman init --no-order` on a fresh batch writes the new prose (an existing smoke case or a
       new assertion checks it)
 - [x] `bash test/smoke.sh` passes in full

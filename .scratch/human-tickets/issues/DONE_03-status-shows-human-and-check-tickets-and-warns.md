@@ -6,7 +6,7 @@
 
 **What to build:**
 
-`ralph status` should make it unmissable which tickets are for a person, and where the next
+`foreman status` should make it unmissable which tickets are for a person, and where the next
 stop for a person is.
 
 - Every remaining human ticket is marked `[HUMAN]` and every remaining check ticket
@@ -16,7 +16,7 @@ stop for a person is.
   <ticket> for a human."
 - When the next ticket is human: the `Next:` line says so, and the human-ticket note from
   ticket 01 follows the list.
-- `ralph dry-run`'s "Would run, in this order" list uses the same marked listing.
+- `foreman dry-run`'s "Would run, in this order" list uses the same marked listing.
 
 It also warns about a batch whose human tickets are missing their pieces. Warnings print last,
 never change an exit code, and never stop a run:
@@ -29,13 +29,13 @@ never change an exit code, and never stop a run:
 4. a `Checks:` line that names no ticket in the batch.
 
 With the human word switched off, 1–2 are skipped and 3–4 still apply. A batch with no human
-or check tickets prints exactly what `ralph status` prints today.
+or check tickets prints exactly what `foreman status` prints today.
 
 The warnings are one function in the human-ticket module, so ticket 04 can print the same ones
 after ordering.
 
 Full design: `.scratch/human-tickets/plan.md` — "Warnings" and the `status` mode part of the
-`ralph-loop.sh` section.
+`foreman-loop.sh` section.
 
 **Acceptance criteria:**
 

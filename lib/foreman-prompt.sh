@@ -1,13 +1,13 @@
 #!/bin/bash
-# Assembles one iteration's prompt. Sourced by ralph-loop.sh, not executed.
+# Assembles one iteration's prompt. Sourced by foreman-loop.sh, not executed.
 #
-# Requires: TICKET_FILE, and the variables ralph-config.sh sets (BATCH_DIR, ORDER_FILE,
-# PROGRESS_FILE, PROMPT_EXTRA_FILE, RALPH_*). BASE_REF defaults to HEAD. The exec adapter
+# Requires: TICKET_FILE, and the variables foreman-config.sh sets (BATCH_DIR, ORDER_FILE,
+# PROGRESS_FILE, PROMPT_EXTRA_FILE, FOREMAN_*). BASE_REF defaults to HEAD. The exec adapter
 # is loaded here if the caller has not already loaded one.
-# Produces:  RALPH_PROMPT
+# Produces:  FOREMAN_PROMPT
 #
 # The structure comes from prompt.template.md and the project-specific parts come from
-# the batch's ralph.conf, so one template serves every repo. Anything that does not fit a
+# the batch's foreman.conf, so one template serves every repo. Anything that does not fit a
 # slot goes in the batch's prompt-extra.md, which is spliced in at the __PROMPT_EXTRA__
 # marker (between Verify and Review).
 #
@@ -15,7 +15,7 @@
 # directory.
 
 if [ -z "${TICKET_FILE:-}" ]; then
-  echo "ralph-prompt.sh: TICKET_FILE is not set" >&2
+  echo "foreman-prompt.sh: TICKET_FILE is not set" >&2
   return 1 2>/dev/null || exit 1
 fi
 
@@ -26,12 +26,12 @@ fi
 # adapter's own commit note, and the progress file) a template would be more machinery than
 # the prompt it holds, so it is built directly here, beside the main prompt assembly.
 #
-# A function, not top-level code like the rest of this file: ralph-loop.sh calls it only
+# A function, not top-level code like the rest of this file: foreman-loop.sh calls it only
 # when a turn has actually stalled, never every iteration. It diffs against THIS turn's own
 # base, never REVIEW_BASE above — a checkpoint turn does not review the ticket, it only
 # preserves whatever this one turn left behind.
 # ---------------------------------------------------------------------------
-ralph_checkpoint_prompt() {    # ralph_checkpoint_prompt TICKET BASE
+foreman_checkpoint_prompt() {    # foreman_checkpoint_prompt TICKET BASE
   local ticket="$1" base="$2"
   cat <<EOF
 This is a CHECKPOINT TURN, not a continuation of ${ticket}. A previous turn on this ticket
@@ -55,7 +55,7 @@ and do not investigate whether it is correct.
 5. Commit the entry: \`git add -A && git commit -m 'wip: ${ticket} — remaining: <short summary
    of what is left>'\`. If git says there is nothing to commit, the progress file is not
    tracked here, and the commit from step 1 is enough.
-6. Do not touch the '${RALPH_STATUS_LINE}' line — this ticket has not landed.
+6. Do not touch the '${FOREMAN_STATUS_LINE}' line — this ticket has not landed.
 
 Stop as soon as step 5 is done. Do nothing else.
 EOF
@@ -73,9 +73,9 @@ EOF
 # the reply, not a file — on the clone sandbox a file written in the clone never comes back.
 # "CHECKPOINT TURN" stays in the first line: the fake adapter recognises the turn by it.
 # ---------------------------------------------------------------------------
-RALPH_REVIEW_REJECTED_SENTINEL="RALPH_REVIEW: REJECTED"
+FOREMAN_REVIEW_REJECTED_SENTINEL="FOREMAN_REVIEW: REJECTED"
 
-ralph_review_checkpoint_prompt() {    # ralph_review_checkpoint_prompt TICKET BASE
+foreman_review_checkpoint_prompt() {    # foreman_review_checkpoint_prompt TICKET BASE
   local ticket="$1" base="$2"
   cat <<EOF
 This is a REVIEW CHECKPOINT TURN, not a continuation of ${ticket}. An earlier run stopped
@@ -95,7 +95,7 @@ or checks: the work is expected to be unfinished, and the next turn verifies it.
    - mass deletion, or content that is garbage rather than code or prose.
    Incomplete, rough or broken work is NOT a red flag — that is what a checkpoint is for.
 3. If you refuse: commit nothing, change nothing, and end your reply with exactly one line:
-   ${RALPH_REVIEW_REJECTED_SENTINEL}: <the reasons, on one line>
+   ${FOREMAN_REVIEW_REJECTED_SENTINEL}: <the reasons, on one line>
    Then stop.
 4. Otherwise append an entry to ${PROGRESS_FILE} describing what the diff contains, ending
    in a 'Remaining:' list of what is left. Include what you noticed reading it: truncated
@@ -103,7 +103,7 @@ or checks: the work is expected to be unfinished, and the next turn verifies it.
    the diff shows, never what you guess was intended.
 5. Commit everything as-is, the progress entry included: \`git add -A && git commit -m
    'wip: ${ticket} — remaining: <short summary of what is left>'\`. $(exec_commit_note)
-6. Do not touch the '${RALPH_STATUS_LINE}' line — this ticket has not landed.
+6. Do not touch the '${FOREMAN_STATUS_LINE}' line — this ticket has not landed.
 
 Stop as soon as the commit exists, or the refusal line is written.
 EOF
@@ -120,126 +120,126 @@ BASE_REF="${BASE_REF:-$(git rev-parse HEAD)}"
 # Only the review base moves. exec_sync_down and exec_collect keep using BASE_REF: a
 # continuation that synced down to the ticket's original base would reset the sandbox clone
 # over its own committed chunk.
-REVIEW_BASE="${RALPH_REVIEW_BASE:-$BASE_REF}"
+REVIEW_BASE="${FOREMAN_REVIEW_BASE:-$BASE_REF}"
 
-_ralph_template="$RALPH_TOOL_DIR/prompt.template.md"
-if [ ! -f "$_ralph_template" ]; then
-  echo "ralph-prompt.sh: no prompt template at $_ralph_template" >&2
+_foreman_template="$FOREMAN_TOOL_DIR/prompt.template.md"
+if [ ! -f "$_foreman_template" ]; then
+  echo "foreman-prompt.sh: no prompt template at $_foreman_template" >&2
   return 1 2>/dev/null || exit 1
 fi
 
 # ---------------------------------------------------------------------------
 # Work out the variable parts before substituting, so the template stays free of
-# conditionals. A knob left empty in ralph.conf degrades to generic prose rather than
+# conditionals. A knob left empty in foreman.conf degrades to generic prose rather than
 # emitting an empty bullet or a dangling command name.
 # ---------------------------------------------------------------------------
 
 if [ -f "$ORDER_FILE" ]; then
-  _ralph_order_sentence="The ticket was chosen for you by the loop from $ORDER_FILE, which holds the run order for
+  _foreman_order_sentence="The ticket was chosen for you by the loop from $ORDER_FILE, which holds the run order for
 this batch and the reasoning behind it."
 else
-  _ralph_order_sentence="The ticket was chosen for you by the loop: it is the first one in $BATCH_DIR that has not
+  _foreman_order_sentence="The ticket was chosen for you by the loop: it is the first one in $BATCH_DIR that has not
 landed yet."
 fi
 
-if [ -n "$RALPH_TDD_SKILL" ]; then
-  _ralph_tdd="For each named seam, use the \`$RALPH_TDD_SKILL\` skill: write the failing test first, watch
+if [ -n "$FOREMAN_TDD_SKILL" ]; then
+  _foreman_tdd="For each named seam, use the \`$FOREMAN_TDD_SKILL\` skill: write the failing test first, watch
 it fail for the right reason, make it pass, then refactor. Write the rest directly."
 else
-  _ralph_tdd="For each named seam, work test-first: write the failing test, watch it fail for the right
+  _foreman_tdd="For each named seam, work test-first: write the failing test, watch it fail for the right
 reason, make it pass, then refactor. Write the rest directly."
 fi
 
-_ralph_iterative=""
-[ -n "$RALPH_CHECK_CMD" ] && _ralph_iterative+="
-- run \`$RALPH_CHECK_CMD\` regularly, not just at the end;"
-[ -n "$RALPH_FOCUSED_TEST_CMD" ] && _ralph_iterative+="
-- run the individual test files you are touching (\`$RALPH_FOCUSED_TEST_CMD\`) after each
+_foreman_iterative=""
+[ -n "$FOREMAN_CHECK_CMD" ] && _foreman_iterative+="
+- run \`$FOREMAN_CHECK_CMD\` regularly, not just at the end;"
+[ -n "$FOREMAN_FOCUSED_TEST_CMD" ] && _foreman_iterative+="
+- run the individual test files you are touching (\`$FOREMAN_FOCUSED_TEST_CMD\`) after each
   red-green cycle."
-[ -n "$_ralph_iterative" ] || _ralph_iterative="
+[ -n "$_foreman_iterative" ] || _foreman_iterative="
 - re-run the project's checks and the tests you are touching as you go, not just at the end."
 
-_ralph_verify=""
-[ -n "$RALPH_CHECK_CMD" ] && _ralph_verify+="
-- \`$RALPH_CHECK_CMD\`"
-[ -n "$RALPH_TEST_CMD" ] && _ralph_verify+="
-- \`$RALPH_TEST_CMD\`"
-[ -n "$_ralph_verify" ] || _ralph_verify="
+_foreman_verify=""
+[ -n "$FOREMAN_CHECK_CMD" ] && _foreman_verify+="
+- \`$FOREMAN_CHECK_CMD\`"
+[ -n "$FOREMAN_TEST_CMD" ] && _foreman_verify+="
+- \`$FOREMAN_TEST_CMD\`"
+[ -n "$_foreman_verify" ] || _foreman_verify="
 - whatever this repo uses to type-check, lint and test (check package.json, Makefile, or
   the contributing docs — and say in $PROGRESS_FILE what you settled on)."
 
-if [ -n "$RALPH_REVIEW_SKILL" ]; then
-  _ralph_review="Use the \`$RALPH_REVIEW_SKILL\` skill to review the work since $REVIEW_BASE against the ticket."
+if [ -n "$FOREMAN_REVIEW_SKILL" ]; then
+  _foreman_review="Use the \`$FOREMAN_REVIEW_SKILL\` skill to review the work since $REVIEW_BASE against the ticket."
 else
-  _ralph_review="Review your own work since $REVIEW_BASE against the ticket, as a reviewer would: correctness
+  _foreman_review="Review your own work since $REVIEW_BASE against the ticket, as a reviewer would: correctness
 first, then whether it actually does what the ticket asked."
 fi
 
 # What "commit your work" means depends on where the work is happening — only the clone
 # arrangement makes an uncommitted change a *lost* change — so the adapter says it, not
-# this file. ralph-loop.sh has already loaded one; the guard is for anything that sources
+# this file. foreman-loop.sh has already loaded one; the guard is for anything that sources
 # this file on its own.
 if ! declare -F exec_commit_note >/dev/null 2>&1; then
-  # shellcheck source=ralph-exec.sh
-  source "$RALPH_TOOL_DIR/ralph-exec.sh" && ralph_exec_load "$RALPH_EXEC" || {
-    echo "ralph-prompt.sh: cannot load the '$RALPH_EXEC' exec adapter" >&2
+  # shellcheck source=foreman-exec.sh
+  source "$FOREMAN_TOOL_DIR/foreman-exec.sh" && foreman_exec_load "$FOREMAN_EXEC" || {
+    echo "foreman-prompt.sh: cannot load the '$FOREMAN_EXEC' exec adapter" >&2
     return 1 2>/dev/null || exit 1
   }
 fi
-_ralph_commit="$(exec_commit_note)"
+_foreman_commit="$(exec_commit_note)"
 
 # ---------------------------------------------------------------------------
 # Substitution
 #
-# All slots go through _ralph_fill rather than bash's ${var//pat/repl}: in a replacement,
-# `&` means "the text that matched" and `\` escapes the next character, so a RALPH_TEST_CMD
+# All slots go through _foreman_fill rather than bash's ${var//pat/repl}: in a replacement,
+# `&` means "the text that matched" and `\` escapes the next character, so a FOREMAN_TEST_CMD
 # containing either (a shell `&&`, a Windows path, a regex) would come out mangled — and
 # there is no way to escape those in the replacement text either, since the escaping is
-# itself subject to the same rule. _ralph_fill does a literal split-and-concat instead, the
+# itself subject to the same rule. _foreman_fill does a literal split-and-concat instead, the
 # same strategy already used for the free-text blocks below.
 # ---------------------------------------------------------------------------
 # A CRLF checkout of the template would put a stray carriage return at the end of every
-# line of the prompt. Strip them for the same reason ralph-config.sh strips its conf.
-_ralph_body="$(tr -d $'\r' < "$_ralph_template")"
+# line of the prompt. Strip them for the same reason foreman-config.sh strips its conf.
+_foreman_body="$(tr -d $'\r' < "$_foreman_template")"
 
-_ralph_fill() {                    # _ralph_fill <marker> <value> — rewrites _ralph_body
+_foreman_fill() {                    # _foreman_fill <marker> <value> — rewrites _foreman_body
   local marker="$1" value="$2" out=""
-  while [ "${_ralph_body#*"$marker"}" != "$_ralph_body" ]; do
-    out+="${_ralph_body%%"$marker"*}$value"
-    _ralph_body="${_ralph_body#*"$marker"}"
+  while [ "${_foreman_body#*"$marker"}" != "$_foreman_body" ]; do
+    out+="${_foreman_body%%"$marker"*}$value"
+    _foreman_body="${_foreman_body#*"$marker"}"
   done
-  _ralph_body="$out$_ralph_body"
+  _foreman_body="$out$_foreman_body"
 }
 
-_ralph_fill __ORDER_SENTENCE__ "$_ralph_order_sentence"
-_ralph_fill __PROGRESS_FILE__ "$PROGRESS_FILE"
-_ralph_fill __BASE_REF__ "$REVIEW_BASE"
-_ralph_fill __CONTEXT_BUDGET__ "$RALPH_CONTEXT_BUDGET_TOKENS"
-_ralph_fill __COMMAND_TIMEOUT_MS__ "$((RALPH_COMMAND_TIMEOUT_MINUTES * 60000))"
-_ralph_fill __COMMAND_TIMEOUT__ "$RALPH_COMMAND_TIMEOUT_MINUTES"
-_ralph_fill __TDD_INSTRUCTION__ "$_ralph_tdd"
-_ralph_fill __ITERATIVE_CHECK_BLOCK__ "$_ralph_iterative"
-_ralph_fill __VERIFY_BLOCK__ "$_ralph_verify"
-_ralph_fill __REVIEW_INSTRUCTION__ "$_ralph_review"
-_ralph_fill __COMMIT_NOTE__ "$_ralph_commit"
-_ralph_fill __STATUS_LINE__ "$RALPH_STATUS_LINE"
-_ralph_fill __DONE_WORD__ "$RALPH_DONE_WORD"
+_foreman_fill __ORDER_SENTENCE__ "$_foreman_order_sentence"
+_foreman_fill __PROGRESS_FILE__ "$PROGRESS_FILE"
+_foreman_fill __BASE_REF__ "$REVIEW_BASE"
+_foreman_fill __CONTEXT_BUDGET__ "$FOREMAN_CONTEXT_BUDGET_TOKENS"
+_foreman_fill __COMMAND_TIMEOUT_MS__ "$((FOREMAN_COMMAND_TIMEOUT_MINUTES * 60000))"
+_foreman_fill __COMMAND_TIMEOUT__ "$FOREMAN_COMMAND_TIMEOUT_MINUTES"
+_foreman_fill __TDD_INSTRUCTION__ "$_foreman_tdd"
+_foreman_fill __ITERATIVE_CHECK_BLOCK__ "$_foreman_iterative"
+_foreman_fill __VERIFY_BLOCK__ "$_foreman_verify"
+_foreman_fill __REVIEW_INSTRUCTION__ "$_foreman_review"
+_foreman_fill __COMMIT_NOTE__ "$_foreman_commit"
+_foreman_fill __STATUS_LINE__ "$FOREMAN_STATUS_LINE"
+_foreman_fill __DONE_WORD__ "$FOREMAN_DONE_WORD"
 
-_ralph_extra=""
+_foreman_extra=""
 if [ -f "$PROMPT_EXTRA_FILE" ] && [ -s "$PROMPT_EXTRA_FILE" ]; then
-  _ralph_extra="
+  _foreman_extra="
 ## Project-specific instructions
 
 $(cat "$PROMPT_EXTRA_FILE")
 "
 fi
 
-case "$_ralph_body" in
+case "$_foreman_body" in
   *__PROMPT_EXTRA__*)
-    RALPH_PROMPT_BODY="${_ralph_body%%__PROMPT_EXTRA__*}${_ralph_extra}${_ralph_body#*__PROMPT_EXTRA__}"
+    FOREMAN_PROMPT_BODY="${_foreman_body%%__PROMPT_EXTRA__*}${_foreman_extra}${_foreman_body#*__PROMPT_EXTRA__}"
     ;;
   *)
-    RALPH_PROMPT_BODY="$_ralph_body$_ralph_extra"
+    FOREMAN_PROMPT_BODY="$_foreman_body$_foreman_extra"
     ;;
 esac
 
@@ -254,22 +254,22 @@ esac
 # an `@`-attachment would silently resolve to nothing. (That is not hypothetical: it is
 # what went wrong for a whole round before this was noticed.)
 # ---------------------------------------------------------------------------
-PROGRESS_TAIL=$(tail -c "$RALPH_PROGRESS_TAIL_BYTES" "$PROGRESS_FILE" 2>/dev/null || true)
+PROGRESS_TAIL=$(tail -c "$FOREMAN_PROGRESS_TAIL_BYTES" "$PROGRESS_FILE" 2>/dev/null || true)
 [ -n "$PROGRESS_TAIL" ] || PROGRESS_TAIL='(nothing recorded yet — this is the first iteration.)'
 
 # A previous iteration committed progress on this ticket without landing it, and the loop
-# is continuing it rather than counting it as a failure (ralph-loop.sh sets the flag). This
+# is continuing it rather than counting it as a failure (foreman-loop.sh sets the flag). This
 # goes at the TOP, ahead of the instructions: an agent that reads "implement the attached
 # ticket" and starts from nothing has already wasted the handoff the last one wrote.
 #
 # Two variants, because the two handoffs are not equally trustworthy. A deliberate handoff
 # was written by the same turn that did the work, so its 'Remaining:' list reflects intent.
 # A stall's handoff was reconstructed from the diff by a checkpoint turn that never saw the
-# reasoning (ralph-loop.sh sets RALPH_STALL_CONTINUATION for exactly this case) — it
+# reasoning (foreman-loop.sh sets FOREMAN_STALL_CONTINUATION for exactly this case) — it
 # describes what is there, not what was planned, and may be missing intent entirely.
-_ralph_continuation=""
-if [ "${RALPH_STALL_CONTINUATION:-0}" = "1" ]; then
-  _ralph_continuation="You are CONTINUING this ticket, not starting it. The previous turn on it ran out of room
+_foreman_continuation=""
+if [ "${FOREMAN_STALL_CONTINUATION:-0}" = "1" ]; then
+  _foreman_continuation="You are CONTINUING this ticket, not starting it. The previous turn on it ran out of room
 before it could commit its own work or explain it; a checkpoint turn salvaged the uncommitted
 diff and reconstructed the most recent ${PROGRESS_FILE} entry from that diff alone. Treat its
 'Remaining:' list as a description of what the diff contains, not of what was planned — it may
@@ -278,8 +278,8 @@ ${REVIEW_BASE}, and pick up from there rather than starting over. Work in smalle
 commit sooner than the previous turn did.
 
 "
-elif [ "${RALPH_CONTINUATION:-0}" = "1" ]; then
-  _ralph_continuation="You are CONTINUING this ticket, not starting it. A previous iteration did part of the work
+elif [ "${FOREMAN_CONTINUATION:-0}" = "1" ]; then
+  _foreman_continuation="You are CONTINUING this ticket, not starting it. A previous iteration did part of the work
 and committed it; the ticket has not landed yet. Before doing anything else, read the most
 recent ${PROGRESS_FILE} entry — it ends with a 'Remaining:' list — and the commits since
 ${REVIEW_BASE}, and pick up from there rather than starting over.
@@ -287,32 +287,32 @@ ${REVIEW_BASE}, and pick up from there rather than starting over.
 "
 fi
 
-RALPH_PROMPT="@${TICKET_FILE}
+FOREMAN_PROMPT="@${TICKET_FILE}
 
-${_ralph_continuation}${RALPH_PROMPT_BODY}
+${_foreman_continuation}${FOREMAN_PROMPT_BODY}
 
 ## Where the last few iterations got to
 
 The most recent excerpt of ${PROGRESS_FILE} (it is appended to every iteration, so the
 full history is not repeated here to keep prompts cheap). Each ticket's own
-'${RALPH_STATUS_LINE}' line, not this excerpt, is the source of truth for what has landed.
+'${FOREMAN_STATUS_LINE}' line, not this excerpt, is the source of truth for what has landed.
 
 <progress-excerpt>
 ${PROGRESS_TAIL}
 </progress-excerpt>"
 
-# A previous attempt on this ticket ran out of context (ralph-loop.sh sets the flag). One
+# A previous attempt on this ticket ran out of context (foreman-loop.sh sets the flag). One
 # fixed sentence: what crosses from the failed attempt is the CATEGORY of constraint that
 # bit it, never anything it said or did. There is no narrative here to anchor the retry on
 # a wrong approach, and no self-report to have to trust.
-if [ "${RALPH_CONTEXT_RETRY:-0}" = "1" ]; then
-  RALPH_PROMPT+="
+if [ "${FOREMAN_CONTEXT_RETRY:-0}" = "1" ]; then
+  FOREMAN_PROMPT+="
 
 A previous attempt on this ticket ran out of context. Work more economically this time:
 read only what the ticket names, do not re-survey the repository, and work in smaller
 checkpointed steps, committing as you go."
 fi
 
-unset _ralph_template _ralph_order_sentence _ralph_tdd _ralph_iterative _ralph_verify
-unset _ralph_review _ralph_commit _ralph_body _ralph_extra _ralph_continuation
-unset -f _ralph_fill
+unset _foreman_template _foreman_order_sentence _foreman_tdd _foreman_iterative _foreman_verify
+unset _foreman_review _foreman_commit _foreman_body _foreman_extra _foreman_continuation
+unset -f _foreman_fill

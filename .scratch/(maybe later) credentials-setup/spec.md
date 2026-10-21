@@ -1,28 +1,28 @@
-# Keep Docker and the sandbox's Claude signed in: local credentials file + `ralph setup`
+# Keep Docker and the sandbox's Claude signed in: local credentials file + `foreman setup`
 
 ## Context
 
-Two logins keep dying on unattended `ralph run`s: Docker's `sbx` session (device-code prompt)
+Two logins keep dying on unattended `foreman run`s: Docker's `sbx` session (device-code prompt)
 and the sandbox's Claude OAuth secret ("could not be refreshed" — `sbx secret ls` shows
-`anthropic (oauth configured)`). ralph now stops fast on an auth failure (commit 3a3f41b) and
+`anthropic (oauth configured)`). foreman now stops fast on an auth failure (commit 3a3f41b) and
 has an env-var Docker login (`_sbx_login`). The goal:
 
 1. both credentials read from a **local, uncommitted, user-level file** instead of `setx`
    environment variables (which every child process inherits, including the agent in `local`
    mode);
-2. ralph keeps the Claude credential in place for the sandbox, using a `claude setup-token`
+2. foreman keeps the Claude credential in place for the sandbox, using a `claude setup-token`
    long-lived token (subscription);
-3. a **`ralph setup` command that guides the user through creating and saving them**.
+3. a **`foreman setup` command that guides the user through creating and saving them**.
 
 ## The credentials file
 
-One file, outside every repo: `~/.config/ralph/env`, overridable with `RALPH_CREDENTIALS_FILE`.
+One file, outside every repo: `~/.config/foreman/env`, overridable with `FOREMAN_CREDENTIALS_FILE`.
 Plain `NAME=value` lines, `#` comments:
 
 ```
-RALPH_DOCKER_USERNAME=someone
-RALPH_DOCKER_PAT=dckr_pat_...
-RALPH_CLAUDE_TOKEN=sk-ant-oat...
+FOREMAN_DOCKER_USERNAME=someone
+FOREMAN_DOCKER_PAT=dckr_pat_...
+FOREMAN_CLAUDE_TOKEN=sk-ant-oat...
 ```
 
 **Parsed as data, never sourced** (a stray line cannot run code). Strip CR, optional
@@ -40,19 +40,19 @@ file + `mv`, create the directory, best-effort `chmod 600`); and a mask (`…las
 Shared by `sandbox` and `sandbox-mount`, all before the sandbox exists or any money is spent:
 Docker login → Claude secret → existing preflight.
 
-Claude secret, when `RALPH_CLAUDE_TOKEN` is present: if `sbx secret ls` shows an anthropic
+Claude secret, when `FOREMAN_CLAUDE_TOKEN` is present: if `sbx secret ls` shows an anthropic
 **oauth** row, `sbx secret rm anthropic -f` first (an OAuth secret takes precedence over an
 api-key one); then pipe the token into `sbx secret set anthropic`. On failure → preflight
 warning with sbx's output, never the token. Token absent → today's behaviour. Failure
-messages end with "run `ralph setup`".
+messages end with "run `foreman setup`".
 
-## `ralph setup`
+## `foreman setup`
 
 ```
-ralph setup              guided: Docker, then Claude (skips a step already working)
-ralph setup docker       redo just the Docker step
-ralph setup claude       redo just the Claude step
-ralph setup --check      no prompts, no network: which keys exist (names only); exit 1 if any missing
+foreman setup              guided: Docker, then Claude (skips a step already working)
+foreman setup docker       redo just the Docker step
+foreman setup claude       redo just the Claude step
+foreman setup --check      no prompts, no network: which keys exist (names only); exit 1 if any missing
 ```
 
 Guided flow needs a terminal (refuses with a pointer to `--check` otherwise):
@@ -68,7 +68,7 @@ Guided flow needs a terminal (refuses with a pointer to `--check` otherwise):
 
 Never echoes a value; a failed test never writes; unrelated lines in the file survive.
 
-## `ralph doctor`
+## `foreman doctor`
 
 A "Credentials" section only when a batch asks for a sandbox mode: ok / MISS per credential,
 presence only, no network, MISS counts toward the exit code.

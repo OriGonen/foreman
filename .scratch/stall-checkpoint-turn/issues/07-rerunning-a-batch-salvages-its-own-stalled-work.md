@@ -48,8 +48,8 @@ disposable file in the batch directory, never a registry.
 
 ## Comments
 
-The marker is `<batch>/.ralph-stall-marker`, three `key=value` lines (`ticket`, `base_ref`,
-`sandbox`), written by `write_stall_marker` in `lib/ralph-loop.sh` only when a checkpoint
+The marker is `<batch>/.foreman-stall-marker`, three `key=value` lines (`ticket`, `base_ref`,
+`sandbox`), written by `write_stall_marker` in `lib/foreman-loop.sh` only when a checkpoint
 turn leaves the tree still dirty. A run checks it once, at the top of its first iteration —
 after `exec_prepare`, before the budget checks and before the first `exec_sync_down` — using
 ticket 02's `exec_tree_dirty`: clean tree → marker deleted; dirty and matching (same sandbox,
@@ -65,7 +65,7 @@ Decisions worth knowing:
 
 - The marker is deleted *before* the rescue's checkpoint turn and rewritten if it fails, rather
   than deleted after success. In a repo that has not ignored it, `git add -A` would otherwise
-  sweep it into the wip commit. `ralph doctor` now checks for the `.gitignore` pattern too.
+  sweep it into the wip commit. `foreman doctor` now checks for the `.gitignore` pattern too.
 - The clean-tree preflight is waived when the marker matches. Without that, "just rerun it"
   was not true as typed under `local`/`sandbox-mount`, where the agent's tree is the host's and
   the preflight fails first.

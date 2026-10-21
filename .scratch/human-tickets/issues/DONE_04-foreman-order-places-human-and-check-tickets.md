@@ -1,4 +1,4 @@
-# 04: `ralph order` places human and check tickets
+# 04: `foreman order` places human and check tickets
 
 **Status:** done
 
@@ -6,7 +6,7 @@
 
 **What to build:**
 
-`ralph order` has an agent read every ticket and write `order.md`. It has no idea that a human
+`foreman order` has an agent read every ticket and write `order.md`. It has no idea that a human
 ticket stops the loop dead, or that a check ticket must sit right after the ticket it checks.
 Tell it, and check its work for free.
 
@@ -24,19 +24,19 @@ The ordering prompt gains:
   work;
 - always: a `Blocked by:` line is an explicit dependency, honoured exactly.
 
-After the agent writes `order.md`, `ralph order` prints the same four warnings as `ralph
+After the agent writes `order.md`, `foreman order` prints the same four warnings as `foreman
 status` (ticket 03), with its exit status unchanged. The loop itself still never parses
 `Blocked by:` — order.md stays the single source of truth for sequencing.
 
-Full design: `.scratch/human-tickets/plan.md` — the `ralph-order.sh` section.
+Full design: `.scratch/human-tickets/plan.md` — the `foreman-order.sh` section.
 
 **Acceptance criteria:**
 
 - [x] A smoke case puts a stub `claude` first on `PATH` that captures the `-p` prompt and
-      prints `{"total_cost_usd":0}`, so `ralph order` runs with no model and no cost
+      prints `{"total_cost_usd":0}`, so `foreman order` runs with no model and no cost
 - [x] With a human ticket and a check ticket in the batch, the captured prompt has the
       human-tickets section naming the human ticket, and the check-tickets section
 - [x] With neither, both sections are absent, and the `Blocked by:` sentence is still there
-- [x] With a human ticket that has no check ticket, `ralph order` prints that warning after
+- [x] With a human ticket that has no check ticket, `foreman order` prints that warning after
       ordering and still exits 0
 - [x] `bash test/smoke.sh` passes in full

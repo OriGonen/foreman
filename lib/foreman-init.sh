@@ -1,22 +1,22 @@
 #!/bin/bash
-# Scaffolds a ralph batch in a directory that already has tickets.
+# Scaffolds a foreman batch in a directory that already has tickets.
 #
-#   ralph init <batch-dir>
-#   ralph init <batch-dir> --force      overwrite what is already there
-#   ralph init <batch-dir> --no-order   skip the automatic ordering pass
+#   foreman init <batch-dir>
+#   foreman init <batch-dir> --force      overwrite what is already there
+#   foreman init <batch-dir> --no-order   skip the automatic ordering pass
 #
 # <batch-dir> is a directory in the CURRENT repository. The toolkit itself lives elsewhere
 # and nothing is copied into your repo except this batch's three files.
 #
 # Creates, if missing:
-#   <batch>/ralph.conf     from ralph.conf.template — every knob, all commented out
+#   <batch>/foreman.conf     from foreman.conf.template — every knob, all commented out
 #   <batch>/order.md       generated from <batch>/issues/*.md in filename order, with the
 #                          machine-readable ORDER block the loop reads
 #   <batch>/progress.txt   empty, with a one-line header
 #
 # It never touches a ticket file, and it never overwrites without --force.
 #
-# order.md is then handed to an agent — see ralph-order.sh — which rewrites the run order
+# order.md is then handed to an agent — see foreman-order.sh — which rewrites the run order
 # and the reasoning above it, weighing dependencies between tickets, which look foundational
 # or important, and each ticket's apparent load. That costs one model call; skip it with
 # --no-order and order.md is left in plain filename order, same as before that step existed.
@@ -24,9 +24,9 @@
 # <batch>/issues.
 set -uo pipefail
 
-# This file's directory, from the shell and not `dirname` (see ralph-config.sh).
-RALPH_TOOL_DIR="${BASH_SOURCE[0]%/*}"; [ "$RALPH_TOOL_DIR" != "${BASH_SOURCE[0]}" ] || RALPH_TOOL_DIR=.
-RALPH_TOOL_DIR="$(cd "${RALPH_TOOL_DIR:-/}" && pwd)"
+# This file's directory, from the shell and not `dirname` (see foreman-config.sh).
+FOREMAN_TOOL_DIR="${BASH_SOURCE[0]%/*}"; [ "$FOREMAN_TOOL_DIR" != "${BASH_SOURCE[0]}" ] || FOREMAN_TOOL_DIR=.
+FOREMAN_TOOL_DIR="$(cd "${FOREMAN_TOOL_DIR:-/}" && pwd)"
 
 FORCE=0
 NO_ORDER=0
@@ -47,21 +47,21 @@ if [ -z "$BATCH_INPUT" ]; then
   exit 1
 fi
 
-# shellcheck source=ralph-repo.sh
-source "$RALPH_TOOL_DIR/ralph-repo.sh" || {
-  echo "ralph-init: cannot load $RALPH_TOOL_DIR/ralph-repo.sh" >&2; exit 1; }
+# shellcheck source=foreman-repo.sh
+source "$FOREMAN_TOOL_DIR/foreman-repo.sh" || {
+  echo "foreman-init: cannot load $FOREMAN_TOOL_DIR/foreman-repo.sh" >&2; exit 1; }
 
-ralph_repo_root REPO_ROOT || {
-  echo "ralph-init: not inside a git repository" >&2; exit 1; }
+foreman_repo_root REPO_ROOT || {
+  echo "foreman-init: not inside a git repository" >&2; exit 1; }
 
 # The batch has to exist before git can tell us where it is, and creating it is this
 # script's job anyway.
 mkdir -p "$BATCH_INPUT" || exit 1
 
-ralph_batch_relpath BATCH_DIR "$BATCH_INPUT" "$REPO_ROOT"
+foreman_batch_relpath BATCH_DIR "$BATCH_INPUT" "$REPO_ROOT"
 case "$?" in
-  1) echo "ralph-init: $BATCH_INPUT is not a directory" >&2; exit 1 ;;
-  2) echo "ralph-init: the batch directory must be inside $REPO_ROOT" >&2; exit 1 ;;
+  1) echo "foreman-init: $BATCH_INPUT is not a directory" >&2; exit 1 ;;
+  2) echo "foreman-init: the batch directory must be inside $REPO_ROOT" >&2; exit 1 ;;
 esac
 
 # Everything below writes repo-relative paths, so stand at the repo root.
@@ -81,36 +81,41 @@ write_if_absent() {
 
 echo "Batch: $BATCH_DIR"
 
-# --- ralph.conf ------------------------------------------------------------
-if write_if_absent "$BATCH_DIR/ralph.conf"; then
-  cp "$RALPH_TOOL_DIR/ralph.conf.template" "$BATCH_DIR/ralph.conf" || exit 1
-  echo "   created  $BATCH_DIR/ralph.conf"
+# --- foreman.conf ------------------------------------------------------------
+# legacy: a batch from before the rename keeps its ralph.conf rather than getting a second,
+# empty conf beside it that would shadow every setting in the old one.
+if [ -f "$BATCH_DIR/ralph.conf" ] && [ ! -e "$BATCH_DIR/foreman.conf" ]; then
+  echo "   kept     $BATCH_DIR/ralph.conf (from before the rename to Foreman)"
+  echo "            rename it:  git mv \"$BATCH_DIR/ralph.conf\" \"$BATCH_DIR/foreman.conf\""
+elif write_if_absent "$BATCH_DIR/foreman.conf"; then
+  cp "$FOREMAN_TOOL_DIR/foreman.conf.template" "$BATCH_DIR/foreman.conf" || exit 1
+  echo "   created  $BATCH_DIR/foreman.conf"
   wrote_any=1
 fi
 
-_ralph_basename init_batch_name "$BATCH_DIR"
+_foreman_basename init_batch_name "$BATCH_DIR"
 
 # --- order.md --------------------------------------------------------------
 if write_if_absent "$BATCH_DIR/order.md"; then
-  # What tickets this batch has is ralph-next.sh's question, not this file's: it is the
-  # one place that knows about RALPH_ISSUES_DIRS and RALPH_ISSUES_EXCLUDE, so a batch
-  # whose ralph.conf points somewhere other than `issues/` is scaffolded from the right
+  # What tickets this batch has is foreman-next.sh's question, not this file's: it is the
+  # one place that knows about FOREMAN_ISSUES_DIRS and FOREMAN_ISSUES_EXCLUDE, so a batch
+  # whose foreman.conf points somewhere other than `issues/` is scaffolded from the right
   # directory. `--unordered` is what makes this safe under --force, too: it never reads
   # the order.md we are about to overwrite.
   tickets=()
   while IFS= read -r file; do
     [ -n "$file" ] && tickets+=("$file")
-  done < <(bash "$RALPH_TOOL_DIR/ralph-next.sh" "$BATCH_DIR" --unordered)
+  done < <(bash "$FOREMAN_TOOL_DIR/foreman-next.sh" "$BATCH_DIR" --unordered)
 
   {
     echo "# $init_batch_name — implementation order"
     echo
-    echo "\`ralph-loop.sh\` reads the block at the bottom of this file, takes the first ticket"
+    echo "\`foreman-loop.sh\` reads the block at the bottom of this file, takes the first ticket"
     echo "whose Status line is not flipped, and runs exactly that one."
     echo
     if [ "${#tickets[@]}" -eq 0 ]; then
       echo "**No tickets found in \`$BATCH_DIR\`.** Add them, then either fill in the"
-      echo "block below by hand or re-run \`ralph-init.sh $BATCH_DIR --force\`."
+      echo "block below by hand or re-run \`foreman-init.sh $BATCH_DIR --force\`."
     else
       echo "Generated from \`$BATCH_DIR\` in filename order. **Re-order it.** Filename"
       echo "order is a starting point, not a plan — put shared foundations first, put the"
@@ -120,12 +125,12 @@ if write_if_absent "$BATCH_DIR/order.md"; then
       echo "Anything the loop cannot infer belongs in prose here: a dependency that crosses"
       echo "issue directories. A step only a person can do belongs in its own ticket instead —"
       echo "give it \`**Status:** ready-for-human\`, a \`**Handoff:**\` file, and a followup"
-      echo "ticket that \`Checks:\` it; \`ralph order\` places them, and the loop stops there."
+      echo "ticket that \`Checks:\` it; \`foreman order\` places them, and the loop stops there."
     fi
     echo
     echo "<!--"
     echo "The machine-readable order. One repo-relative ticket path per line, in run order."
-    echo "ralph-next.sh reads only the lines between the ORDER markers."
+    echo "foreman-next.sh reads only the lines between the ORDER markers."
     echo "-->"
     echo
     echo "<!-- ORDER:BEGIN -->"
@@ -155,16 +160,16 @@ echo
 
 if [ "$order_written" -eq 1 ] && [ "$NO_ORDER" -eq 0 ]; then
   echo
-  bash "$RALPH_TOOL_DIR/ralph-order.sh" "$BATCH_DIR"
+  bash "$FOREMAN_TOOL_DIR/foreman-order.sh" "$BATCH_DIR"
 fi
 
 echo
 if [ "$wrote_any" -eq 1 ]; then
   echo "Next:"
-  echo "  1. edit $BATCH_DIR/ralph.conf     — at minimum RALPH_CHECK_CMD and RALPH_TEST_CMD"
-  echo "  2. review $RALPH_INVOKE order picked in $BATCH_DIR/order.md — it is a first pass, not a guarantee"
-  echo "  3. $RALPH_INVOKE dry-run $BATCH_DIR   (free; prints the exact prompt)"
-  echo "  4. $RALPH_INVOKE run $BATCH_DIR       (one iteration, then look)"
+  echo "  1. edit $BATCH_DIR/foreman.conf     — at minimum FOREMAN_CHECK_CMD and FOREMAN_TEST_CMD"
+  echo "  2. review $FOREMAN_INVOKE order picked in $BATCH_DIR/order.md — it is a first pass, not a guarantee"
+  echo "  3. $FOREMAN_INVOKE dry-run $BATCH_DIR   (free; prints the exact prompt)"
+  echo "  4. $FOREMAN_INVOKE run $BATCH_DIR       (one iteration, then look)"
 else
   echo "Nothing to do — this batch is already set up."
 fi

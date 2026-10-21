@@ -6,7 +6,7 @@ it was asked whether that is excessive and wasteful of tokens/compute. Split out
 
 ## Correcting the premise first
 
-The 1s redraw is **not** a token cost. `lib/ralph-stream.cjs:100-103`:
+The 1s redraw is **not** a token cost. `lib/foreman-stream.cjs:100-103`:
 
 ```js
 if (tty) {
@@ -34,11 +34,11 @@ tick over. That is a legitimate complaint, and a separate one from the token que
 
 ## If this gets picked up
 
-A configurable ticker interval: `RALPH_LIVE_TICK_MS` (default `1000`), read where
-`setInterval(() => render(lastLabel), 1000)` is called at `ralph-stream.cjs:102`, wired
-through the same env-first pattern `ralph-config.sh` already uses for every other `RALPH_*`
+A configurable ticker interval: `FOREMAN_LIVE_TICK_MS` (default `1000`), read where
+`setInterval(() => render(lastLabel), 1000)` is called at `foreman-stream.cjs:102`, wired
+through the same env-first pattern `foreman-config.sh` already uses for every other `FOREMAN_*`
 knob. A larger default (2000-3000ms) would cut redraw frequency without losing the "is
 this stalled?" purpose the comment at `:97-99` gives the ticker.
 
-Worth deciding whether this is a batch-level `ralph.conf` setting or purely an environment
+Worth deciding whether this is a batch-level `foreman.conf` setting or purely an environment
 override, consistent with how other display-only knobs are handled.

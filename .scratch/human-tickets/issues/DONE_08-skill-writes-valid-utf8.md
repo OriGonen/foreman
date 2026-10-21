@@ -7,11 +7,11 @@
 **What to build:**
 
 Reported by the handoff for ticket 07 (`handoff/07-try-the-followup-skill-on-a-real-batch.md`,
-problem 1). The `ralph-human-followup-tickets` skill wrote its em dashes as cp1252 bytes (0x97),
+problem 1). The `foreman-human-followup-tickets` skill wrote its em dashes as cp1252 bytes (0x97),
 which is not valid UTF-8. On the first run the skill noticed, converted them and amended its
 commit; on the third run it did not, and `handoff/08-legal-review-of-terms.md` and
 `issues/08a-followup-legal-review-of-terms.md` in the test batch were committed (ec22280) with raw
-0x97 bytes. Nothing in `skills/ralph-human-followup-tickets/SKILL.md` says to write UTF-8 or to
+0x97 bytes. Nothing in `skills/foreman-human-followup-tickets/SKILL.md` says to write UTF-8 or to
 verify it, so whether a run catches it is luck.
 
 Change `SKILL.md`: step 3 says every file it writes is UTF-8, and step 5 verifies that (every

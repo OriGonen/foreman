@@ -1,11 +1,11 @@
 #!/bin/bash
-# The keyboard side of `ralph run`: + and - change the iteration budget while the run is
-# going, and L turns the live view on and off. Started by ralph-loop.sh in the background,
+# The keyboard side of `foreman run`: + and - change the iteration budget while the run is
+# going, and L turns the live view on and off. Started by foreman-loop.sh in the background,
 # on the terminal's stdin, and killed when the run exits. Never sourced.
 #
-#   ralph-keys.sh <ctl-dir> <loop-pid>      read keys until the loop is gone
-#   ralph-keys.sh --apply <keys> <ctl-dir>  apply each key in <keys> once, as if pressed
-#   ralph-keys.sh --text <ctl-dir> [cols]   print the bar's line, then the live view's line
+#   foreman-keys.sh <ctl-dir> <loop-pid>      read keys until the loop is gone
+#   foreman-keys.sh --apply <keys> <ctl-dir>  apply each key in <keys> once, as if pressed
+#   foreman-keys.sh --text <ctl-dir> [cols]   print the bar's line, then the live view's line
 #
 #   +  =    one more iteration
 #   -  _    one fewer — never below the iteration already running
@@ -15,17 +15,17 @@
 #   budget     the iteration budget, 0 for unlimited. Seeded by the loop, then written only
 #              here (temp file plus mv, so the loop never reads half a number).
 #   live       1 while the live view is on, else 0. Seeded by the loop, then written only
-#              here; read by ralph-stream.cjs when there is no bar (see below).
+#              here; read by foreman-stream.cjs when there is no bar (see below).
 #   iteration  the iteration now running, written by the loop. Only read here.
 #   screen     "ROWS COLS KEPT" while the loop has a status bar open: the terminal's size and
 #              how many bottom rows are held back. Written by the loop, then here on a resize
 #              or an L. No file, no bar: each key press prints a line instead.
 #   activity   "EPOCH LABEL" while an iteration runs with a bar open: when it started and what
-#              the agent did last. Written by ralph-stream.cjs, removed by the loop after.
+#              the agent did last. Written by foreman-stream.cjs, removed by the loop after.
 # The loop reads `budget` before each iteration's budget check; a key never touches the
 # iteration already running.
 #
-# THE STATUS BAR (ralph-ui.sh draws it; the loop opens and closes it). This reader is the
+# THE STATUS BAR (foreman-ui.sh draws it; the loop opens and closes it). This reader is the
 # only thing that draws there — the live view included, from `activity`, on the row above the
 # bar. One writer, so nothing else ever moves the cursor under it. It repaints after every
 # key, and once a second: a new iteration, the live view's clock.
@@ -35,10 +35,10 @@
 # processes, which matters under MSYS, where starting one is the expensive thing. A key press
 # may spawn one (the `mv`), and so may a resize (`stty size`).
 
-# This file's directory, from the shell and not `dirname` (see ralph-config.sh).
+# This file's directory, from the shell and not `dirname` (see foreman-config.sh).
 _keys_dir="${BASH_SOURCE[0]%/*}"; [ "$_keys_dir" != "${BASH_SOURCE[0]}" ] || _keys_dir=.
-# shellcheck source=ralph-ui.sh
-source "$_keys_dir/ralph-ui.sh" || exit 1
+# shellcheck source=foreman-ui.sh
+source "$_keys_dir/foreman-ui.sh" || exit 1
 
 # The lines drawn here are fitted to the terminal's width by ${#…}, which counts bytes unless
 # the locale is UTF-8 — and Git Bash often has none set, so every `·` counted twice. Switched
@@ -156,7 +156,7 @@ keys_bar_text() {    # keys_bar_text CTL_DIR COLS
 
 # Sets _KEYS_TICKER to the live view's line for <ctl-dir>/activity, fitted to COLS:
 #      03:12 · Bash ./gradlew assembleDebug
-# The clock runs from the epoch second ralph-stream.cjs wrote with the label, so it keeps
+# The clock runs from the epoch second foreman-stream.cjs wrote with the label, so it keeps
 # moving while the agent is quiet. Empty when there is no activity file (between iterations).
 keys_ticker_text() {    # keys_ticker_text CTL_DIR COLS
   local cols="$2" started="" label="" now s clock room
@@ -180,7 +180,7 @@ keys_ticker_text() {    # keys_ticker_text CTL_DIR COLS
 
 if [ "${1:-}" = "--apply" ]; then
   keys="${2:-}" dir="${3:-}"
-  [ -d "$dir" ] || { printf 'ralph-keys: no control directory at %s\n' "$dir" >&2; exit 1; }
+  [ -d "$dir" ] || { printf 'foreman-keys: no control directory at %s\n' "$dir" >&2; exit 1; }
   for ((i = 0; i < ${#keys}; i++)); do
     keys_apply "${keys:i:1}" "$dir"
     [ -z "$_KEYS_SAID" ] || ui_key_echo "$_KEYS_SAID"
@@ -190,7 +190,7 @@ fi
 
 if [ "${1:-}" = "--text" ]; then
   dir="${2:-}" cols="${3:-80}"
-  [ -d "$dir" ] || { printf 'ralph-keys: no control directory at %s\n' "$dir" >&2; exit 1; }
+  [ -d "$dir" ] || { printf 'foreman-keys: no control directory at %s\n' "$dir" >&2; exit 1; }
   keys_bar_text "$dir" "$cols"
   keys_ticker_text "$dir" "$cols"
   printf '%s\n%s\n' "$_KEYS_BAR" "$_KEYS_TICKER"
@@ -199,7 +199,7 @@ fi
 
 CTL_DIR="${1:-}" LOOP_PID="${2:-}"
 if [ ! -d "$CTL_DIR" ] || ! [[ "$LOOP_PID" =~ ^[0-9]+$ ]]; then
-  printf 'usage: ralph-keys.sh <ctl-dir> <loop-pid>  |  --apply <keys> <ctl-dir>  |  --text <ctl-dir> [cols]\n' >&2
+  printf 'usage: foreman-keys.sh <ctl-dir> <loop-pid>  |  --apply <keys> <ctl-dir>  |  --text <ctl-dir> [cols]\n' >&2
   exit 1
 fi
 

@@ -39,20 +39,20 @@ question at the start of a run. Make the change easy, then make the easy change.
 Implemented via a new `exec_tree_dirty` seam function: `_common.sh` (shared by `local`,
 `sandbox-mount`, `fake`) answers with a plain `git status --porcelain` on the host repo;
 `sandbox.sh` answers by querying the clone inside the sandbox, with no bundling and no
-`EXEC_AGENT_HEAD` — read-only, unlike `exec_collect`. `ralph-loop.sh` asks it at the top of
+`EXEC_AGENT_HEAD` — read-only, unlike `exec_collect`. `foreman-loop.sh` asks it at the top of
 every iteration, before `exec_sync_down`; a dirty answer prints `exec_show_dirty` and ticket
 01's `exec_dirty_recovery_note`, then stops for a human without syncing or running the agent.
 
 A background `/code-review` pass flagged that this refusal is unconditional — it does not
-check `RALPH_ALLOW_DIRTY`, so that flag (which already skips the separate, older
+check `FOREMAN_ALLOW_DIRTY`, so that flag (which already skips the separate, older
 clean-tree *preflight*) no longer gets a dirty `local`/`fake`/`sandbox-mount` tree past this
-new check. Traced through deliberately: making the refusal respect `RALPH_ALLOW_DIRTY`
-would also suppress it under `RALPH_EXEC=sandbox` whenever that flag is set (e.g. left on in
-`ralph.conf` for unrelated reasons), silently reopening the destructive-reset hole this
-ticket exists to close. Kept the refusal unconditional and tightened the `RALPH_ALLOW_DIRTY`
-usage comment in `ralph-loop.sh` instead, so it no longer implies it reaches this check.
+new check. Traced through deliberately: making the refusal respect `FOREMAN_ALLOW_DIRTY`
+would also suppress it under `FOREMAN_EXEC=sandbox` whenever that flag is set (e.g. left on in
+`foreman.conf` for unrelated reasons), silently reopening the destructive-reset hole this
+ticket exists to close. Kept the refusal unconditional and tightened the `FOREMAN_ALLOW_DIRTY`
+usage comment in `foreman-loop.sh` instead, so it no longer implies it reaches this check.
 
-The second finding — one extra `sbx exec` round trip per iteration under `RALPH_EXEC=sandbox`
+The second finding — one extra `sbx exec` round trip per iteration under `FOREMAN_EXEC=sandbox`
 to ask the question — is the direct cost of asking before every sync, which is what the
 ticket asks for; not changed.
 
