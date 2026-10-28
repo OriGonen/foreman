@@ -35,3 +35,14 @@
 - Full smoke: 1174 passed in 1m 6s, 1 failed (the same pre-existing CRLF `convert` case).
 - Review: added a clear error for an out-of-range frame in `draw()`, `--step` in the header. Skipped: none.
 - Remaining for a human: watch it in a real window (hand box left unchecked). UNVERIFIED: in mintty without a pty shim node sees stdin/stdout as pipes, so `--play` exits 4 and Git Bash users get the still sunrise; Windows Terminal (ConPTY) should play it.
+
+
+## 08 init breaking ground — implemented
+- Built the mark in `lib/foreman-draw.cjs` (`mark`, `withMark`, `rule`, `ticketId`, `movedCount`, all exported: report/version should `require` them; text starts at column 23) and scenes `init` + `init-done`. `foreman-init.sh` draws in two goes (header+files, then ordering+NEXT); `say`/`fact` keep today's text back and print it if node cannot draw. `_init_min_cols=64` tied to SCENES by a smoke case.
+- `foreman-order.sh` writes `FOREMAN_ORDER_RESULT` facts when set (result, cost, was/now lists, human, check, warning). Ticket 09 can reuse the `was`/`now` lists; `movedCount` is the LCS-based "moved" (one ticket to the front = 1).
+- Test-driven (smoke): mark cell for cell vs 07a-init.ans (new `test/ans-cells.cjs`), both scenes incl. failed/skipped/no-order/nothing-to-do/plural, movedCount, ticketId, order result facts, init end to end (forced show with/without --no-order, --force replaced, kept, legacy, empty, command pass, node can't draw, mktemp fails, plain byte for byte, a pty case).
+- Plain init checked byte for byte against pre-change output over 8 scenarios. Full smoke: 1356 passed in 0m 59s, 1 failed (the same pre-existing CRLF `convert` case).
+- Review: guarded the empty `tickets` array under `set -u`, made a failed `mktemp` fall back to plain ordering text (it would have shown "not ordered"), silenced mktemp's stderr. Skipped: none.
+- Deliberate deviation: NEXT steps 3/4 include the batch path (design omits it) so they can be pasted. FOREMAN_SHOW is env-only for init (it runs before any conf is read). `$SECONDS` is whole seconds, so smoke avoids exact times.
+- Remaining for a human: look at `foreman init` in a real window (Windows Terminal, mintty) — not checkable here.
+

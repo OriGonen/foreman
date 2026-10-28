@@ -244,7 +244,7 @@ say ""
 if [ "$SHOW" -eq 1 ]; then
   read_tickets
   declare -A seen_dirs=()
-  for file in "${tickets[@]}"; do seen_dirs["${file%/*}"]=1; done
+  for file in ${tickets[@]+"${tickets[@]}"}; do seen_dirs["${file%/*}"]=1; done
   FACTS="batch"$'\t'"$BATCH_DIR"$'\n'"tickets"$'\t'"${#tickets[@]}"$'\n'"dirs"$'\t'"${#seen_dirs[@]}"$'\n'"$FACTS"
   draw_or_plain init
 fi
@@ -259,8 +259,7 @@ order_out=""
 order_facts=""
 order_seconds=""
 if [ "$order_written" -eq 1 ] && [ "$NO_ORDER" -eq 0 ]; then
-  if [ "$SHOW" -eq 1 ]; then
-    order_facts="$(mktemp "${TMPDIR:-/tmp}/foreman-order.XXXXXX")" || order_facts=""
+  if [ "$SHOW" -eq 1 ] && order_facts="$(mktemp "${TMPDIR:-/tmp}/foreman-order.XXXXXX" 2>/dev/null)"; then
     # The wait is the longest part of init, so a terminal is told what it is waiting for.
     [ -t 1 ] && printf '  ordering %s ticket(s) with the agent ...' "${#tickets[@]}"
     order_start=$SECONDS
@@ -268,8 +267,10 @@ if [ "$order_written" -eq 1 ] && [ "$NO_ORDER" -eq 0 ]; then
     order_seconds=$((SECONDS - order_start))
     [ -t 1 ] && printf '\r\033[K'
   else
+    # Plain, or a show with nowhere to leave the ordering's facts: its own words are all there is.
     echo
     bash "$FOREMAN_TOOL_DIR/foreman-order.sh" "$BATCH_DIR"
+    SHOW=0
   fi
 fi
 

@@ -4381,6 +4381,19 @@ if case_is "foreman init at a terminal still shows the agent's command pass, and
   assert_contains "$SHOWN" "NEXT" "then the steps"
   case "${SHOWN%%NEXT*}" in *FOREMAN_TEST_CMD=*) pass ;; *) fail "the command pass comes before NEXT" ;; esac
 
+  # Nowhere to leave the ordering's facts (mktemp fails): the header was drawn, the ordering speaks for itself.
+  repo="$(make_repo 2 init-show-notmp-repo)"; rm -f "$repo/batch/foreman.conf"
+  PATH="$(make_commands_claude_stub):$PATH" STUB_OUT='{"is_error":false,"total_cost_usd":0.08}' TMPDIR="$WORK/no/such/dir" \
+    init_show "$repo" batch --no-commands
+  assert_eq "$ST" 0 "init still exits 0"
+  assert_contains "$(printf '%s\n' "$OUT" | strip)" "FOREMAN  breaks ground" "the header was drawn"
+  SHOWN="$(printf '%s\n' "$OUT" | strip)"
+  assert_contains "$SHOWN" "foreman order: wrote batch/order.md (cost \$0.0800)" "the ordering says how it went itself"
+  assert_contains "$SHOWN" "Next:" "and the steps are the plain ones"
+  assert_missing "$SHOWN" "NEXT" "not drawn"
+  assert_missing "$SHOWN" "not ordered" "and the ordering is not claimed to have failed"
+  assert_missing "$SHOWN" "mktemp" "with no complaint from mktemp"
+
   # A node that cannot draw: the text init would have printed, all of it, and the same exit status.
   tools="$WORK/init-no-draw-$CASE_IDX"; mkdir -p "$tools"
   printf '#!/bin/bash\nexit 1\n' > "$tools/node"; chmod +x "$tools/node"
