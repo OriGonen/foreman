@@ -1,0 +1,4 @@
+# terminal-design — the agent's running notes.
+# One short entry per iteration, appended by the agent. The tail of this file is
+# attached to every later prompt, so length here is a recurring cost.
+
