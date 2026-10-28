@@ -4498,6 +4498,138 @@ if case_is "foreman init on a real terminal shows without being forced, and clea
   fi
 fi
 
+if case_is "foreman-draw version is the design's mark beside the build, and tilde shortens only what is under home"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  ANS="$FOREMAN_HOME/.scratch/terminal-design/designs/13a-version.ans"
+  TXT="$FOREMAN_HOME/.scratch/terminal-design/designs/13a-version.txt"
+  CELLS="$FOREMAN_HOME/test/ans-cells.cjs"
+  version_facts() { printf 'rev\t59c405c\npath\t/home/you/.foreman\nhome\t/home/you\n'; }
+  OUT24="$(version_facts | node "$DRAW" version --tier 24 --cols 120)"; ST=$?
+  assert_eq "$ST" 0 "the version scene runs"
+  assert_eq "$(printf '%s\n' "$OUT24" | strip)" "$(sed -n '2,9p' "$TXT" | sed 's/ *$//')" "its words and shapes read as 13a-version.txt does: a blank line, the mark, three lines beside it, and a blank"
+  assert_eq "$(printf '%s\n' "$OUT24" | node "$CELLS" --cells 20 --rows 1-6)" "$(node "$CELLS" --cells 20 --rows 2-7 < "$ANS")" "the mark is the design's, every cell"
+  assert_eq "$(printf '%s\n' "$OUT24" | node "$CELLS" --cells 70 --rows 1-4)" "$(node "$CELLS" --cells 70 --rows 2-5 < "$ANS")" "and so are the words beside it, in the colours of the .ans"
+  assert_contains "$OUT24" "${ESC}[0;1;38;2;224;168;74mFOREMAN" "FOREMAN is bold amber"
+  assert_contains "$OUT24" "${ESC}[0;1m59c405c" "the rev is bold"
+  assert_contains "$OUT24" "${ESC}[0;38;2;168;162;153minstalled at" "installed at is muted"
+  assert_contains "$OUT24" "${ESC}[0;38;2;168;162;153mone ticket per iteration, until the batch is done" "and so is the description"
+  OUT16="$(version_facts | node "$DRAW" version --tier 16 --cols 120)"
+  assert_missing "$OUT16" "38;2;" "16 colours: no 24 bits"
+  words_of() { strip | node -e 'console.log(require("fs").readFileSync(0, "utf8").split("\n").map((l) => Array.from(l).slice(23).join("")).join("\n"))'; }
+  assert_eq "$(printf '%s\n' "$OUT16" | words_of)" "$(printf '%s\n' "$OUT24" | words_of)" "the same words at 16 (its dark shades of the mark are the terminal's background)"
+
+  # What it is given: the path under home is shortened, nothing else is invented.
+  line_of() { printf '%s\n' "$1" | node "$DRAW" version --tier 24 --cols 120 | strip | sed -n "$2p"; }
+  assert_contains "$(line_of $'rev\tabc1234\npath\t/home/you/.foreman\nhome\t/home/you' 3)" "FOREMAN  abc1234" "the rev"
+  assert_contains "$(line_of $'rev\tabc1234\npath\t/home/you/.foreman\nhome\t/home/you' 4)" "installed at ~/.foreman" "the install path, shortened to ~"
+  assert_contains "$(line_of $'rev\tabc1234\npath\t/home/you/.foreman\nhome\t/home/you' 5)" "one ticket per iteration, until the batch is done" "and the description"
+  assert_contains "$(line_of $'rev\tunknown\npath\t/opt/foreman' 3)" "FOREMAN  unknown" "an unknown rev is told as it is"
+  assert_contains "$(line_of $'rev\tunknown\npath\t/opt/foreman' 4)" "installed at /opt/foreman" "a path with no home is as it is"
+  assert_contains "$(line_of '' 3)" "FOREMAN" "no facts at all still draws the name"
+  assert_contains "$(line_of '' 4)" "installed at" "and the line for the path"
+  assert_eq "$(printf 'path\t/home/you/.foreman\nhome\t/home/you\n' | node "$DRAW" version --tier 24 --cols 120 | wc -l | tr -d ' ')" 8 "and eight rows, rev or no rev"
+
+  tilde() { node -e 'const d = require(process.argv[1]); console.log(d.tilde(process.argv[2], process.argv[3]))' "$DRAW" "$1" "$2"; }
+  assert_eq "$(tilde /home/you/.foreman /home/you)" "~/.foreman" "under home"
+  assert_eq "$(tilde /home/you /home/you)" "~" "home itself"
+  assert_eq "$(tilde /home/you2/.foreman /home/you)" "/home/you2/.foreman" "a path that only starts with home's letters is not under it"
+  assert_eq "$(tilde /home/you/.foreman /home/you/)" "~/.foreman" "a trailing slash on home does not matter"
+  assert_eq "$(tilde /opt/foreman /home/you)" "/opt/foreman" "elsewhere"
+  assert_eq "$(tilde /opt/foreman '')" "/opt/foreman" "no home"
+  assert_eq "$(tilde /opt/foreman /)" "/opt/foreman" "a home of / is not worth a ~"
+  assert_eq "$(tilde /c/Users/you/.foreman /c/Users/you)" "~/.foreman" "as Git Bash spells them"
+  assert_eq "$(node -e 'console.log(require(process.argv[1]).tilde(undefined, "/h"))' "$DRAW")" "" "no path is no text"
+
+  # Narrow, and a scene the shell's minimum must agree with.
+  OUT="$(version_facts | node "$DRAW" version --tier 24 --cols 71 2>"$WORK/draw-err")"; ST=$?
+  assert_eq "$ST" 3 "71 columns is refused"
+  assert_eq "$OUT" "" "and nothing drawn"
+  assert_eq "$(version_facts | node "$DRAW" version --tier 24 --cols 72 | wc -l | tr -d ' ')" 8 "72 is wide enough"
+  assert_eq "$(version_facts | node "$DRAW" version --tier 24 --cols 72 | strip | node -e 'console.log(Math.max(...require("fs").readFileSync(0, "utf8").split("\n").map((l) => Array.from(l).length)))')" 72 "and the longest row is exactly that"
+  assert_eq "$(node -e 'console.log(require(process.argv[1]).SCENES.version.min)' "$DRAW")" \
+    "$(sed -n 's/^_version_min_cols=\([0-9]*\).*/\1/p' "$FOREMAN_HOME/bin/foreman")" "the renderer's minimum for version is the dispatcher's"
+fi
+
+if case_is "foreman version is today's two lines in a pipe and the mark beside the build when the show is forced; --version is the same"; then
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  rev="$(git -C "$FOREMAN_HOME" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+  want="$(printf 'foreman %s\n%s' "$rev" "$FOREMAN_HOME")"
+  OUT="$("$FOREMAN" version 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "version exits 0"
+  assert_eq "$OUT" "$want" "captured, it is today's two lines"
+  assert_eq "$("$FOREMAN" version | od -c | tr -s ' ')" "$(printf 'foreman %s\n%s\n' "$rev" "$FOREMAN_HOME" | od -c | tr -s ' ')" "byte for byte, down to the final newline"
+  assert_eq "$("$FOREMAN" version | wc -l | tr -d ' ')" 2 "two lines"
+  assert_eq "$("$FOREMAN" --version 2>&1)" "$want" "--version is the same"
+  assert_eq "$("$FOREMAN" -V 2>&1)" "$want" "and -V"
+  OUT="$(FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" version 2>&1)"
+  assert_eq "$OUT" "$want" "colour alone is not the show: this is a pipe"
+
+  OUT="$(FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" version 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "the forced show exits 0"
+  assert_contains "$OUT" "38;2;224;168;74" "it is drawn in 24 bits, in amber"
+  stripped="$(printf '%s\n' "$OUT" | strip)"
+  assert_contains "$stripped" "FOREMAN  $rev" "it holds the rev"
+  assert_contains "$stripped" "▄▄▀▀▀███▀▀▀▄▄" "and the mark"
+  assert_contains "$stripped" "one ticket per iteration, until the batch is done" "and the description"
+  assert_contains "$stripped" "installed at " "it says where it is installed"
+  assert_contains "$stripped" "$FOREMAN_HOME" "and that is the install path, as it is when HOME is not above it"
+  assert_eq "$(FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" --version 2>&1)" "$OUT" "--version draws what version draws"
+  assert_eq "$(FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" -V 2>&1)" "$OUT" "and -V"
+
+  # With HOME above the checkout, the show writes ~ and the plain text still writes the path.
+  OUT="$(HOME="$(dirname "$FOREMAN_HOME")" FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" version 2>&1 | strip)"
+  assert_contains "$OUT" "installed at ~/$(basename "$FOREMAN_HOME")" "under home, the path is shortened in the show"
+  OUT="$(HOME="$(dirname "$FOREMAN_HOME")" "$FOREMAN" version 2>&1)"
+  assert_eq "$OUT" "$want" "and never in the pipe"
+
+  OUT="$(FOREMAN_SHOW=always FOREMAN_COLOR=16 COLUMNS=120 "$FOREMAN" version 2>&1)"
+  assert_missing "$OUT" "38;2;" "at 16 colours it is still drawn, not in 24 bits"
+  assert_contains "$(printf '%s\n' "$OUT" | strip)" "FOREMAN  $rev" "with the build"
+  OUT="$(FOREMAN_SHOW=always FOREMAN_COLOR=256 COLUMNS=120 "$FOREMAN" version 2>&1)"
+  assert_contains "$OUT" "38;5;" "256"
+
+  OUT="$(FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=40 "$FOREMAN" version 2>&1)"
+  assert_eq "$OUT" "$want" "a narrow screen gets today's text"
+  OUT="$(FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=71 "$FOREMAN" version 2>&1)"
+  assert_eq "$OUT" "$want" "one column short of the picture"
+  OUT="$(FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=72 "$FOREMAN" version 2>&1)"
+  assert_contains "$OUT" "38;2;" "and exactly enough"
+  OUT="$(FOREMAN_SHOW=never FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" version 2>&1)"
+  assert_eq "$OUT" "$want" "FOREMAN_SHOW=never"
+  OUT="$(FOREMAN_SHOW=always FOREMAN_COLOR=never COLUMNS=120 "$FOREMAN" version 2>&1)"
+  assert_eq "$OUT" "$want" "FOREMAN_COLOR=never"
+
+  # If the renderer cannot draw, the text is all there is, and no half of a picture is left before it.
+  fake_home="$WORK/version-nonode-home"
+  mkdir -p "$fake_home/lib" "$fake_home/bin"
+  cp "$FOREMAN" "$fake_home/bin/foreman"; cp "$FOREMAN_HOME/lib/foreman-ui.sh" "$fake_home/lib/"
+  printf 'process.exit(1)\n' > "$fake_home/lib/foreman-draw.cjs"
+  OUT="$(FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 bash "$fake_home/bin/foreman" version 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "a renderer that fails does not fail version"
+  assert_eq "$OUT" "$(printf 'foreman unknown\n%s' "$fake_home")" "and the plain text is printed alone (not a git checkout, so unknown)"
+fi
+
+if case_is "foreman version on a real terminal shows without being forced, and not in CI"; then
+  if command -v script >/dev/null 2>&1 && [ "$(show_of tty 1 FOREMAN_SHOW=always)" = show:16 ]; then
+    ESC=$'\033'
+    rev="$(git -C "$FOREMAN_HOME" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+    OUT="$(env -u CI -u NO_COLOR -u WT_SESSION -u FOREMAN_COLOR -u FOREMAN_SHOW TERM=xterm COLORTERM=truecolor COLUMNS=100 \
+      script -qec "$FOREMAN version" /dev/null </dev/null 2>/dev/null)"
+    OUT="${OUT//$'\r'/}"
+    assert_contains "$OUT" "38;2;" "a terminal that says truecolor gets 24 bits"
+    assert_contains "$(printf '%s\n' "$OUT" | sed "s/${ESC}\[[0-9;]*[mK]//g")" "FOREMAN  $rev" "and the show, unforced"
+    OUT="$(env -u NO_COLOR -u WT_SESSION -u FOREMAN_COLOR -u FOREMAN_SHOW CI=true TERM=xterm COLORTERM=truecolor COLUMNS=100 \
+      script -qec "$FOREMAN version" /dev/null </dev/null 2>/dev/null)"
+    OUT="${OUT//$'\r'/}"
+    assert_eq "$OUT" "$(printf 'foreman %s\n%s' "$rev" "$FOREMAN_HOME")" "CI is plain, terminal or not"
+  else
+    printf '  (skipped: no `script` to give a terminal)\n'
+  fi
+fi
+
 # ---------------------------------------------------------------------------
 # A case process that ran the last case in the file ends here.
 [ "$CASE_OPEN" = 1 ] && case_finish

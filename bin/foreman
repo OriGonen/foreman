@@ -13,7 +13,7 @@
 #   foreman report  [batch] [--by-ticket|--failures] what it cost               (free)
 #   foreman doctor  [--fix]                is this repo (and this machine) ready (free)
 #   foreman convert [<project>] [--dry-run]  move a project from ralph to foreman
-#   foreman help | foreman version
+#   foreman help | foreman version        (also --help, --version)
 #
 # <batch> is any directory in the current repository holding tickets and a foreman.conf.
 # It may be omitted when exactly one directory in the repo has one.
@@ -82,9 +82,20 @@ usage_show() {
   node "$LIB/foreman-draw.cjs" help --tier "$tier" --cols "$cols" </dev/null 2>/dev/null || true
 }
 
+# `foreman version` at a terminal is the mark beside the build, drawn by the renderer (the `version`
+# scene, which needs `_version_min_cols`; a smoke case holds the two together). Anywhere else it is
+# the two lines it always was, and so it is if the renderer cannot draw: nothing is written
+# before it has drawn the whole picture. The install path is told whole; the picture shortens it.
+_version_min_cols=72
 version() {
-  local rev
+  local rev tier cols
   rev="$(git -C "$FOREMAN_HOME" rev-parse --short HEAD 2>/dev/null)" || rev="unknown"
+  # shellcheck source=../lib/foreman-ui.sh
+  if source "$LIB/foreman-ui.sh" && ui_show 1 tier && ui_cols cols 1 && [ "$cols" -ge "$_version_min_cols" ] &&
+    printf 'rev\t%s\npath\t%s\nhome\t%s\n' "$rev" "$FOREMAN_HOME" "${HOME:-}" |
+      node "$LIB/foreman-draw.cjs" version --tier "$tier" --cols "$cols" 2>/dev/null; then
+    return 0
+  fi
   printf 'foreman %s\n%s\n' "$rev" "$FOREMAN_HOME"
 }
 
