@@ -2588,6 +2588,67 @@ if case_is "with neither kind of ticket, the ordering prompt has no human or fol
   assert_contains "$prompt" "Blocked by" "the Blocked by: sentence is still there"
 fi
 
+# A stub `claude` that prints $STUB_OUT on stdout and exits $STUB_EXIT, for the failure cases.
+make_canned_claude_stub() {
+  local dir="$WORK/canned-stub-$CASE_IDX"
+  mkdir -p "$dir"
+  cat > "$dir/claude" <<'STUB'
+#!/bin/bash
+printf '%s\n' "$STUB_OUT"
+exit "${STUB_EXIT:-0}"
+STUB
+  chmod +x "$dir/claude"
+  printf '%s' "$dir"
+}
+
+if case_is "foreman order says why the agent call failed, and points at /login when the login expired"; then
+  repo="$(make_repo 1 order-auth-repo)"
+  write_order_stub "$repo"
+  before="$(cat "$repo/batch/order.md")"
+
+  PATH="$(make_canned_claude_stub):$PATH" STUB_EXIT=1 \
+    STUB_OUT='{"type":"result","subtype":"success","is_error":true,"terminal_reason":"api_error","api_error_status":null,"total_cost_usd":0,"result":"Failed to authenticate: OAuth session expired and could not be refreshed"}' \
+    run_foreman "$repo" order batch
+  assert_eq "$ST" 1 "a failed agent call exits 1"
+  assert_contains "$OUT" "OAuth session expired" "it shows what claude said"
+  assert_contains "$OUT" "claude /login" "it points at the fix"
+  assert_eq "$(cat "$repo/batch/order.md")" "$before" "order.md is unchanged"
+fi
+
+if case_is "foreman order treats is_error as a failure even when claude exits 0"; then
+  repo="$(make_repo 1 order-iserror-repo)"
+  write_order_stub "$repo"
+
+  PATH="$(make_canned_claude_stub):$PATH" STUB_EXIT=0 \
+    STUB_OUT='{"type":"result","subtype":"success","is_error":true,"total_cost_usd":0,"result":"Prompt is too long for this model"}' \
+    run_foreman "$repo" order batch
+  assert_eq "$ST" 1 "is_error:true fails the call"
+  assert_contains "$OUT" "Prompt is too long" "it shows the result text"
+  assert_missing "$OUT" "wrote" "it does not claim to have written the order"
+  assert_missing "$OUT" "claude /login" "and gives no login hint for an unrelated error"
+fi
+
+if case_is "foreman order shows non-JSON output from a failed call"; then
+  repo="$(make_repo 1 order-nonjson-repo)"
+  write_order_stub "$repo"
+
+  PATH="$(make_canned_claude_stub):$PATH" STUB_EXIT=1 STUB_OUT='claude: unexpected failure' \
+    run_foreman "$repo" order batch
+  assert_eq "$ST" 1 "the call failed"
+  assert_contains "$OUT" "claude: unexpected failure" "the raw output is shown"
+fi
+
+if case_is "foreman order still reports the cost of a successful call"; then
+  repo="$(make_repo 1 order-cost-repo)"
+  write_order_stub "$repo"
+
+  PATH="$(make_canned_claude_stub):$PATH" STUB_EXIT=0 \
+    STUB_OUT='{"is_error":false,"total_cost_usd":0.1234,"result":"done"}' \
+    run_foreman "$repo" order batch
+  assert_eq "$ST" 0 "a clean call exits 0"
+  assert_contains "$OUT" 'wrote batch/order.md (cost $0.1234)' "the cost is reported"
+fi
+
 if case_is "foreman order warns about a human ticket with no followup ticket, and still exits 0"; then
   repo="$(make_repo 1 order-warn-repo)"
   make_human_ticket "$repo" 1

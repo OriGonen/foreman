@@ -236,7 +236,9 @@ foreman order .scratch/my-batch
 ```
 
 It costs one model call, touches only `order.md`, and runs locally — no sandbox, since it
-edits no code. `foreman init --no-order` skips it and leaves `order.md` in plain filename
+edits no code. If the agent call fails — including an `is_error` reply that came with exit 0 —
+it prints what claude said, with a `claude /login` hint when the login has expired, and leaves
+`order.md` alone. `foreman init --no-order` skips it and leaves `order.md` in plain filename
 order, same as before this step existed.
 
 It defaults to `FOREMAN_MODEL` — the same model that implements tickets — but sorting a list
@@ -646,6 +648,7 @@ That tool is manual and is never invoked by the loop.
 | `lib/foreman-credentials.sh` | the one reader of the credentials file (`~/.config/foreman/env`): path, lookup (environment, else file), and `…last4` mask — sourced, never run |
 | `lib/foreman-ui.sh` | how output looks: the glyphs, indents, `  ·  ` separators and colour, as `say_event`, `say_rule` and friends — sourced, never run |
 | `lib/foreman-strip-ansi.cjs` | removes `sbx`'s banner control codes — shared by the two above |
+| `lib/foreman-auth-patterns.cjs` | the strings that mean the agent's login has expired — shared by the recorder and `foreman order` |
 | `lib/foreman-init.sh` | scaffolds a batch, then runs `foreman-order.sh` unless told not to |
 | `lib/foreman-order.sh` | has an agent order the tickets by dependency, importance and load |
 | `lib/foreman-doctor.sh` | checks the machine, the repo and the batches; `--fix` writes the repo's two files |

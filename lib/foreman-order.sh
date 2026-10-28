@@ -166,17 +166,17 @@ RESPONSE=$(claude --model "$MODEL" --effort "$EFFORT" --permission-mode acceptEd
   --print --output-format json -p "$PROMPT")
 status=$?
 
-if [ "$status" -ne 0 ]; then
+# Read the payload once: is_error, the cost, and the agent's own message as one line, plus
+# whether that message is a login failure (see foreman-claude-reply.cjs).
+{ IFS= read -r is_error; IFS= read -r cost; IFS= read -r said; IFS= read -r auth_failed; } < <(
+  node "$FOREMAN_TOOL_DIR/foreman-claude-reply.cjs" <<< "$RESPONSE")
+
+if [ "$status" -ne 0 ] || [ "$is_error" = 1 ]; then
   warn_tag error "foreman order:" "the agent call failed (exit $status) — $ORDER_FILE is unchanged."
+  [ -n "$said" ] && echo "             claude said: $said"
+  [ "$auth_failed" = 1 ] && echo "             your claude login has expired — run \`claude /login\`, then re-run \`foreman order $BATCH_INPUT\`."
   exit 1
 fi
-
-cost=$(node -e '
-  try {
-    const p = JSON.parse(require("fs").readFileSync(0, "utf8"));
-    if (typeof p.total_cost_usd === "number") process.stdout.write(p.total_cost_usd.toFixed(4));
-  } catch {}
-' <<< "$RESPONSE")
 
 say_tag accent "foreman order:" "wrote $ORDER_FILE${cost:+ (cost \$$cost)}"
 echo "             review it — this is a first pass, not a guarantee."
