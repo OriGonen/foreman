@@ -3,8 +3,9 @@
 # standing in. The toolkit is installed once per machine and holds no state of its own;
 # everything that differs between batches lives in the batch directory.
 #
-#   foreman init    <batch> [--force] [--no-order]   scaffold a batch, then order it
+#   foreman init    <batch> [--force] [--no-order] [--no-commands]   scaffold, fill in, order
 #   foreman order   <batch>                have an agent (re-)order the tickets
+#   foreman commands <batch>               have an agent fill in foreman.conf's check/test commands
 #   foreman status  [batch]                what is left, what is next            (free)
 #   foreman dry-run [batch]                the plan and the exact prompt         (free)
 #   foreman run     [batch] [<n>|--unlimited] [--live] [--adopt-dirty]  one iteration by default
@@ -41,7 +42,7 @@ export FOREMAN_INVOKE="${FOREMAN_INVOKE:-foreman}"
 
 LIB="$FOREMAN_HOME/lib"
 
-# The header comment above IS the help text: lines 2-24, with the leading '# ' stripped
+# The header comment above IS the help text: lines 2-25, with the leading '# ' stripped
 # and $FOREMAN_HOME expanded so the README reference is a path you can actually open.
 usage() {
   awk 'NR==1 { next } !/^#/ { exit } { sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}" |
@@ -62,6 +63,7 @@ cmd="${1:-help}"
 case "$cmd" in
   init)      exec bash "$LIB/foreman-init.sh" "$@" ;;
   order)     exec bash "$LIB/foreman-order.sh" "$@" ;;
+  commands)  exec bash "$LIB/foreman-commands.sh" "$@" ;;
   run)       exec bash "$LIB/foreman-loop.sh" "$@" ;;
   status)    exec bash "$LIB/foreman-loop.sh" "$@" --status ;;
   dry-run)   exec bash "$LIB/foreman-loop.sh" "$@" --dry-run ;;

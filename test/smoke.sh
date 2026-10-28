@@ -74,6 +74,11 @@ else
   # No case may read the operator's real credentials file (~/.config/foreman/env): a case that
   # wants one points FOREMAN_CREDENTIALS_FILE at its own. Case processes inherit this.
   export FOREMAN_CREDENTIALS_FILE="$WORK/no-such-credentials-file"
+  # Nor the operator's installed skills: `foreman init` runs `foreman commands`, which calls
+  # whatever `claude` is on PATH once it finds the skill installed. Pointed at an empty
+  # directory, a case that does not stub claude and install the skill gets a skip note, not a
+  # model call. A case that wants either points CLAUDE_CONFIG_DIR at its own.
+  export CLAUDE_CONFIG_DIR="$WORK/no-such-claude-config"
   JOB_PIDS=()
   # Stops the case processes still running — each leads a process group of its own, so the
   # signal reaches everything it started — then removes the directory. Windows keeps a
@@ -2662,6 +2667,137 @@ if case_is "foreman order warns about a human ticket with no followup ticket, an
 fi
 
 # ---------------------------------------------------------------------------
+# foreman commands
+# ---------------------------------------------------------------------------
+
+# A claude config directory holding this checkout's foreman-conf-commands skill, as install.sh
+# would leave it. Prints its path — point CLAUDE_CONFIG_DIR at it.
+make_conf_skill_config() {
+  local dir="$WORK/conf-skill-config-$CASE_IDX"
+  mkdir -p "$dir/skills/foreman-conf-commands"
+  cp "$FOREMAN_HOME/skills/foreman-conf-commands/SKILL.md" "$dir/skills/foreman-conf-commands/"
+  printf '%s' "$dir"
+}
+
+# A stub `claude` standing in for the skill: captures the `-p` prompt to STUB_PROMPT_LOG,
+# runs STUB_SCRIPT (from the repo root, as the agent would) to make its edit, then prints
+# STUB_OUT — a clean zero-cost reply unless set — and exits STUB_EXIT.
+make_commands_claude_stub() {
+  local dir="$WORK/commands-stub-$CASE_IDX"
+  mkdir -p "$dir"
+  cat > "$dir/claude" <<'STUB'
+#!/bin/bash
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -p) shift; [ -n "${STUB_PROMPT_LOG:-}" ] && printf '%s' "$1" > "$STUB_PROMPT_LOG" ;;
+  esac
+  shift
+done
+[ -z "${STUB_SCRIPT:-}" ] || bash -c "$STUB_SCRIPT"
+if [ -n "${STUB_OUT:-}" ]; then printf '%s\n' "$STUB_OUT"; else echo '{"is_error":false,"total_cost_usd":0}'; fi
+exit "${STUB_EXIT:-0}"
+STUB
+  chmod +x "$dir/claude"
+  printf '%s' "$dir"
+}
+
+# What the skill does to one slot: the commented-out line becomes the set line, in place, with
+# the evidence comment above it.
+SET_TEST_CMD='sed -i "s|^#FOREMAN_TEST_CMD=.*|# foreman-conf-commands: from Makefile\nFOREMAN_TEST_CMD=\"make test\"|" batch/foreman.conf'
+
+if case_is "foreman commands runs the skill headless and prints each slot as the conf now has it"; then
+  repo="$(make_repo 1 commands-repo)"
+  log="$WORK/commands-prompt.txt"
+
+  CLAUDE_CONFIG_DIR="$(make_conf_skill_config)" PATH="$(make_commands_claude_stub):$PATH" \
+    STUB_PROMPT_LOG="$log" STUB_SCRIPT="$SET_TEST_CMD" run_foreman "$repo" commands batch
+  assert_eq "$ST" 0 "foreman commands exits 0"
+  assert_eq "$(cat "$log" 2>/dev/null)" "/foreman-conf-commands batch" "the prompt is the skill's slash command"
+  assert_contains "$OUT" "updated batch/foreman.conf" "it says the conf was updated"
+  assert_contains "$OUT" 'FOREMAN_TEST_CMD="make test"' "it prints the line the agent set"
+  assert_contains "$OUT" "left empty  FOREMAN_CHECK_CMD" "and names the slots it left empty"
+  assert_contains "$(cat "$repo/batch/foreman.conf")" "# foreman-conf-commands: from Makefile" "the evidence comment is kept"
+fi
+
+if case_is "foreman commands skips, changing nothing, when the skill is not installed"; then
+  repo="$(make_repo 1 commands-noskill-repo)"
+  log="$WORK/commands-noskill-prompt.txt"
+  before="$(cat "$repo/batch/foreman.conf")"
+
+  PATH="$(make_commands_claude_stub):$PATH" STUB_PROMPT_LOG="$log" STUB_SCRIPT="$SET_TEST_CMD" \
+    run_foreman "$repo" commands batch
+  assert_eq "$ST" 0 "a missing skill is not an error"
+  assert_contains "$OUT" "foreman-conf-commands skill is not installed" "it says why it skipped"
+  assert_contains "$OUT" "install.sh" "and how to fix it"
+  [ -e "$log" ] && fail "claude was not called" || pass
+  assert_eq "$(cat "$repo/batch/foreman.conf")" "$before" "foreman.conf is unchanged"
+fi
+
+if case_is "foreman commands leaves a conf alone once every slot is set, even to empty"; then
+  repo="$(make_repo 1 commands-allset-repo)"
+  log="$WORK/commands-allset-prompt.txt"
+  printf '%s\n' 'FOREMAN_CHECK_CMD="make lint"' 'export FOREMAN_TEST_CMD="make test"' \
+    'FOREMAN_FOCUSED_TEST_CMD=' 'FOREMAN_SANDBOX_SETUP=' 'FOREMAN_SANDBOX_PROBE=' >> "$repo/batch/foreman.conf"
+
+  CLAUDE_CONFIG_DIR="$(make_conf_skill_config)" PATH="$(make_commands_claude_stub):$PATH" \
+    STUB_PROMPT_LOG="$log" run_foreman "$repo" commands batch
+  assert_eq "$ST" 0 "exits 0"
+  assert_contains "$OUT" "already set" "it says there is nothing to fill in"
+  [ -e "$log" ] && fail "claude was not called" || pass
+fi
+
+if case_is "foreman commands fails, and says what claude said, when the agent call fails"; then
+  repo="$(make_repo 1 commands-fail-repo)"
+
+  CLAUDE_CONFIG_DIR="$(make_conf_skill_config)" PATH="$(make_commands_claude_stub):$PATH" STUB_EXIT=0 \
+    STUB_OUT='{"is_error":true,"total_cost_usd":0,"result":"Failed to authenticate: OAuth session expired"}' \
+    run_foreman "$repo" commands batch
+  assert_eq "$ST" 1 "is_error:true fails the call, even with exit 0"
+  assert_contains "$OUT" "fill in batch/foreman.conf by hand" "it says what to do instead"
+  assert_contains "$OUT" "OAuth session expired" "it shows what claude said"
+  assert_contains "$OUT" "claude /login" "and points at the fix"
+  assert_missing "$OUT" "updated batch/foreman.conf" "it does not claim to have updated the conf"
+fi
+
+if case_is "foreman commands catches an edit that leaves foreman.conf unparseable"; then
+  repo="$(make_repo 1 commands-broken-repo)"
+
+  CLAUDE_CONFIG_DIR="$(make_conf_skill_config)" PATH="$(make_commands_claude_stub):$PATH" \
+    STUB_SCRIPT="printf 'FOREMAN_TEST_CMD=\"make test\n' >> batch/foreman.conf" \
+    run_foreman "$repo" commands batch
+  assert_eq "$ST" 1 "a broken conf exits 1"
+  assert_contains "$OUT" "no longer parses" "it says the conf is broken"
+  assert_missing "$OUT" "updated batch/foreman.conf" "rather than reporting the update"
+fi
+
+if case_is "init fills in the commands of a conf it writes, but not with --no-commands or for a kept conf"; then
+  repo="$(make_repo 1 init-commands-repo)"
+  rm -f "$repo/batch/foreman.conf"
+  log="$WORK/init-commands-prompt.txt"
+  config="$(make_conf_skill_config)"
+  stub="$(make_commands_claude_stub)"
+
+  CLAUDE_CONFIG_DIR="$config" PATH="$stub:$PATH" STUB_PROMPT_LOG="$log" STUB_SCRIPT="$SET_TEST_CMD" \
+    run_foreman "$repo" init batch --no-order
+  assert_eq "$ST" 0 "init exits 0"
+  assert_eq "$(cat "$log" 2>/dev/null)" "/foreman-conf-commands batch" "init ran the skill on the new conf"
+  assert_contains "$OUT" 'FOREMAN_TEST_CMD="make test"' "and printed what it set"
+
+  rm -f "$log"
+  CLAUDE_CONFIG_DIR="$config" PATH="$stub:$PATH" STUB_PROMPT_LOG="$log" run_foreman "$repo" init batch --no-order
+  assert_eq "$ST" 0 "a second init exits 0"
+  [ -e "$log" ] && fail "a conf init kept is not handed to the agent again" || pass
+
+  repo="$(make_repo 1 init-nocommands-repo)"
+  rm -f "$repo/batch/foreman.conf"
+  CLAUDE_CONFIG_DIR="$config" PATH="$stub:$PATH" STUB_PROMPT_LOG="$log" \
+    run_foreman "$repo" init batch --no-order --no-commands
+  assert_eq "$ST" 0 "init --no-commands exits 0"
+  [ -e "$log" ] && fail "--no-commands skips the agent" || pass
+  assert_contains "$(cat "$repo/batch/foreman.conf")" '#FOREMAN_TEST_CMD=' "and the slots stay commented out"
+fi
+
+# ---------------------------------------------------------------------------
 # install.sh and the skill copy
 # ---------------------------------------------------------------------------
 
@@ -2701,6 +2837,7 @@ if case_is "install.sh installs the shims and a marked copy of the skill"; then
   [ -f "$INSTALL_BIN/foreman.cmd" ] && pass || fail "the cmd shim was written"
   [ -f "$(skill_copy_dir "$INSTALL_CONFIG")/SKILL.md" ] && pass || fail "the skill's SKILL.md was copied"
   [ -f "$(skill_copy_dir "$INSTALL_CONFIG")/.foreman-installed-from" ] && pass || fail "the copy carries the marker"
+  [ -f "$INSTALL_CONFIG/skills/foreman-conf-commands/.foreman-installed-from" ] && pass || fail "every skill is copied, foreman-conf-commands too"
   assert_contains "$OUT" "installed skill" "and says so"
 fi
 

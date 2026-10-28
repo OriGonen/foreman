@@ -162,8 +162,10 @@ PROMPT_EOF
 
 say_tag accent "foreman order:" "reading ${#tickets[@]} ticket(s) in $BATCH_DIR ..."
 
+# stdin is closed because claude, finding it is not a terminal, otherwise waits for input
+# that never comes.
 RESPONSE=$(claude --model "$MODEL" --effort "$EFFORT" --permission-mode acceptEdits \
-  --print --output-format json -p "$PROMPT")
+  --print --output-format json -p "$PROMPT" </dev/null)
 status=$?
 
 # Read the payload once: is_error, the cost, and the agent's own message as one line, plus

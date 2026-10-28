@@ -45,14 +45,15 @@ personal `bin` directory already on your PATH (`~/bin`, then `~/.local/bin`), so
 Bash and PowerShell get the same command. `bash install.sh --to <dir>` picks the directory
 yourself.
 
-It also copies the `foreman-human-followup-tickets` skill (see "Human tickets" below) into
-`${CLAUDE_CONFIG_DIR:-~/.claude}/skills/foreman-human-followup-tickets/` — a copy, not a
-symlink, marked with the checkout it came from. Re-running `install.sh` replaces a marked
-copy with whatever this checkout now has, no `--force` needed: that is how a pulled update
-reaches it. `--no-skill` installs only the shims; `--force` overwrites a same-named
-directory (shim or skill) this installer didn't write; `--uninstall` removes both, but
-leaves an unmarked directory alone; `foreman doctor` warns, for free, if an installed copy
-ever drifts from this checkout.
+It also copies each of foreman's skills into `${CLAUDE_CONFIG_DIR:-~/.claude}/skills/<name>/` —
+`foreman-human-followup-tickets` (see "Human tickets" below) and `foreman-conf-commands` (see
+"Setting up a batch") — a copy, not a symlink, marked with the checkout it came from. Both
+are user-invoked only, so neither costs any context in a chat that does not use it.
+Re-running `install.sh` replaces a marked copy with whatever this checkout now has, no
+`--force` needed: that is how a pulled update reaches it. `--no-skill` installs only the
+shims; `--force` overwrites a same-named directory (shim or skill) this installer didn't
+write; `--uninstall` removes both, but leaves an unmarked directory alone; `foreman doctor`
+warns, for free, if an installed copy ever drifts from this checkout.
 
 Move the checkout later and just re-run `install.sh` to re-point the shims.
 
@@ -118,16 +119,32 @@ A batch is a directory containing tickets. A ticket is a markdown file with a st
 ```
 
 `foreman init <dir>` writes the three files a batch needs, generating `order.md` from
-`<dir>/issues/*.md`, then — unless `--no-order` is given — has an agent read the tickets and
-rewrite that order. It never overwrites without `--force`, and it never touches a ticket.
+`<dir>/issues/*.md`. Then it runs two agent passes: one fills in `foreman.conf`'s commands
+(below, unless `--no-commands`), the other rewrites the order (see "Ordering", unless
+`--no-order`). It never overwrites without `--force`, and it never touches a ticket.
 
-Then edit `<dir>/foreman.conf`. The two lines that matter most are what "verify your work"
-means in your project:
+The lines in `<dir>/foreman.conf` that matter most are what "verify your work" means in your
+project:
 
 ```sh
 FOREMAN_CHECK_CMD="npm run check"
 FOREMAN_TEST_CMD="npm test"
 ```
+
+`foreman init` fills those in for you — with `FOREMAN_FOCUSED_TEST_CMD` and, for the sandbox,
+`FOREMAN_SANDBOX_SETUP` / `FOREMAN_SANDBOX_PROBE` — by running `foreman commands <dir>`. That
+runs the `foreman-conf-commands` skill headless, as `/foreman-conf-commands <dir>`: the agent
+reads the repo's CI workflows, task runners (`package.json` scripts, `Makefile`,
+`pyproject.toml`, …) and contributor docs, and sets each slot it finds evidence for, with a
+`# foreman-conf-commands: from <file>` comment above it. A slot with no evidence stays
+commented out, and a line you set yourself is never touched. It runs nothing and commits
+nothing; it then prints each slot as the conf now has it. **Review those lines** before the
+first run — a wrong test command fails every iteration's own verification.
+
+Like ordering it is one model call, on `FOREMAN_ORDERING_MODEL` when set, and it runs only
+when `init` has just written the conf. Re-run it by hand after commenting a slot back out;
+without `claude` on PATH, or without the skill installed, it prints a note and changes
+nothing. You can also type `/foreman-conf-commands <dir>` in Claude Code yourself.
 
 Everything else has a default; `lib/foreman.conf.template` documents the full set.
 
@@ -249,8 +266,9 @@ tickets run on:
 FOREMAN_ORDERING_MODEL=haiku foreman order .scratch/my-batch
 ```
 
-(or set `FOREMAN_ORDERING_MODEL` in the batch's `foreman.conf` to make that the default). Effort
-for this pass stays fixed at `high` regardless of `FOREMAN_EFFORT`.
+(or set `FOREMAN_ORDERING_MODEL` in the batch's `foreman.conf` to make that the default — it
+covers `foreman commands` too). Effort for this pass stays fixed at `high` regardless of
+`FOREMAN_EFFORT`.
 
 ### The prompt
 
@@ -632,7 +650,8 @@ That tool is manual and is never invoked by the loop.
 |---|---|
 | `bin/foreman` | the dispatcher — resolves a subcommand to a script in `lib/` |
 | `bin/foreman.cmd` | the same, for PowerShell and cmd.exe |
-| `install.sh` | writes the PATH shims; `--uninstall` removes them |
+| `install.sh` | writes the PATH shims and copies the skills; `--uninstall` removes them |
+| `skills/*/SKILL.md` | foreman's skills, which `install.sh` copies into `~/.claude/skills` |
 | `lib/foreman-loop.sh` | the loop: preflight, budgets, iteration, pause/resume, footer |
 | `lib/foreman-config.sh` | resolves a batch into FOREMAN_* — sourced, never run |
 | `lib/foreman-exec.sh` | the seam between the loop and where the agent runs — sourced, never run |
@@ -648,8 +667,10 @@ That tool is manual and is never invoked by the loop.
 | `lib/foreman-credentials.sh` | the one reader of the credentials file (`~/.config/foreman/env`): path, lookup (environment, else file), and `…last4` mask — sourced, never run |
 | `lib/foreman-ui.sh` | how output looks: the glyphs, indents, `  ·  ` separators and colour, as `say_event`, `say_rule` and friends — sourced, never run |
 | `lib/foreman-strip-ansi.cjs` | removes `sbx`'s banner control codes — shared by the two above |
-| `lib/foreman-auth-patterns.cjs` | the strings that mean the agent's login has expired — shared by the recorder and `foreman order` |
-| `lib/foreman-init.sh` | scaffolds a batch, then runs `foreman-order.sh` unless told not to |
+| `lib/foreman-auth-patterns.cjs` | the strings that mean the agent's login has expired — shared by the recorder and `foreman-claude-reply.cjs` |
+| `lib/foreman-claude-reply.cjs` | reads one `claude --print` JSON reply: failed or not, cost, what it said, whether the login expired — shared by `foreman order` and `foreman commands` |
+| `lib/foreman-init.sh` | scaffolds a batch, then runs `foreman-commands.sh` and `foreman-order.sh` unless told not to |
+| `lib/foreman-commands.sh` | has an agent fill in `foreman.conf`'s check, test and sandbox-setup commands, through the `foreman-conf-commands` skill |
 | `lib/foreman-order.sh` | has an agent order the tickets by dependency, importance and load |
 | `lib/foreman-doctor.sh` | checks the machine, the repo and the batches; `--fix` writes the repo's two files |
 | `lib/foreman.conf.template` | every knob, commented, with its default |

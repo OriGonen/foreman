@@ -1,12 +1,11 @@
 #!/bin/bash
-# Puts `foreman` on your PATH, pointing at this checkout, and installs the
-# foreman-human-followup-tickets skill.
+# Puts `foreman` on your PATH, pointing at this checkout, and installs foreman's skills.
 #
 #   bash install.sh                 install into the first writable directory on PATH
 #   bash install.sh --to <dir>      install the shims into <dir> instead
 #   bash install.sh --force         overwrite a `foreman` or a skill dir not written by this installer
-#   bash install.sh --no-skill      install only the shims, not the skill
-#   bash install.sh --uninstall     remove the shims and the skill copy this wrote
+#   bash install.sh --no-skill      install only the shims, not the skills
+#   bash install.sh --uninstall     remove the shims and the skill copies this wrote
 #
 # It writes two small forwarding scripts, not symlinks — Windows symlinks need elevation
 # or developer mode, and a forwarder survives moving this checkout being the only thing
@@ -15,20 +14,30 @@
 #   <dir>/foreman       for bash / Git Bash / WSL
 #   <dir>/foreman.cmd   for PowerShell and cmd.exe
 #
-# It also copies skills/foreman-human-followup-tickets/ to
-# ${CLAUDE_CONFIG_DIR:-~/.claude}/skills/foreman-human-followup-tickets/ — a copy, not a
-# symlink, for the same reason the shims are forwarders — marked with a file naming the
-# checkout it came from. Re-running install.sh replaces a copy carrying that marker, no
-# --force needed: that is how a pulled update is installed. `--to` applies only to the
-# shims; the skill always goes under CLAUDE_CONFIG_DIR (or ~/.claude).
+# It also copies each skills/<name>/ to ${CLAUDE_CONFIG_DIR:-~/.claude}/skills/<name>/ — a
+# copy, not a symlink, for the same reason the shims are forwarders — marked with a file
+# naming the checkout it came from. Re-running install.sh replaces a copy carrying that
+# marker, no --force needed: that is how a pulled update is installed. `--to` applies only to
+# the shims; the skills always go under CLAUDE_CONFIG_DIR (or ~/.claude). They are:
+#
+#   foreman-human-followup-tickets   you type it, after to-tickets and before `foreman init`
+#   foreman-conf-commands            `foreman init` runs it, to fill in foreman.conf's commands
 #
 # Nothing else is installed and nothing is written outside those two locations. The
 # toolkit itself stays where you cloned it, and holds no state.
 set -uo pipefail
 
 FOREMAN_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FOREMAN_SKILL_NAME="foreman-human-followup-tickets"
 FOREMAN_SKILL_MARKER=".foreman-installed-from"
+
+# Every skill this checkout ships: a directory under skills/ with a SKILL.md in it. An empty
+# directory left behind by a rename is not one.
+FOREMAN_SKILL_NAMES=()
+for _foreman_skill_md in "$FOREMAN_HOME"/skills/*/SKILL.md; do
+  [ -f "$_foreman_skill_md" ] || continue
+  _foreman_skill_dir="${_foreman_skill_md%/SKILL.md}"
+  FOREMAN_SKILL_NAMES+=("${_foreman_skill_dir##*/}")
+done
 
 TARGET=""
 FORCE=0
@@ -63,7 +72,6 @@ if [ -n "${WSL_DISTRO_NAME:-}" ] || grep -qi microsoft "${FOREMAN_PROC_VERSION:-
 fi
 
 SKILL_HOME_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
-SKILL_TARGET="$SKILL_HOME_DIR/skills/$FOREMAN_SKILL_NAME"
 
 # Prefer a personal bin directory that is already on PATH, so nothing has to be added to
 # the environment.
@@ -126,11 +134,14 @@ if [ "$UNINSTALL" -eq 1 ]; then
 
   # Only a copy this installer marked — an unmarked directory of the same name is someone
   # else's, and is left alone just like a foreign `foreman` shim would be.
-  if [ -f "$SKILL_TARGET/$FOREMAN_SKILL_MARKER" ]; then
-    rm -rf "$SKILL_TARGET" && echo "removed  $SKILL_TARGET"
-  elif [ -e "$SKILL_TARGET" ]; then
-    echo "left alone  $SKILL_TARGET (not written by this installer)"
-  fi
+  for name in "${FOREMAN_SKILL_NAMES[@]}"; do
+    skill_target="$SKILL_HOME_DIR/skills/$name"
+    if [ -f "$skill_target/$FOREMAN_SKILL_MARKER" ]; then
+      rm -rf "$skill_target" && echo "removed  $skill_target"
+    elif [ -e "$skill_target" ]; then
+      echo "left alone  $skill_target (not written by this installer)"
+    fi
+  done
 
   echo "The toolkit itself is untouched at $FOREMAN_HOME."
   exit 0
@@ -147,13 +158,17 @@ if [ -e "$SHIM" ] && [ "$FORCE" -eq 0 ] && ! grep -q 'foreman toolkit shim' "$SH
   exit 1
 fi
 
-# Same refusal for the skill directory — unless a marked copy is there, in which case
+# Same refusal for each skill directory — unless a marked copy is there, in which case
 # replacing it is the normal case (a pulled update) and needs no --force.
-if [ "$NO_SKILL" -eq 0 ] && [ -e "$SKILL_TARGET" ] && [ "$FORCE" -eq 0 ] &&
-   [ ! -f "$SKILL_TARGET/$FOREMAN_SKILL_MARKER" ]; then
-  echo "install: $SKILL_TARGET already exists and was not written by this installer." >&2
-  echo "         Move it aside, or re-run with --force." >&2
-  exit 1
+if [ "$NO_SKILL" -eq 0 ] && [ "$FORCE" -eq 0 ]; then
+  for name in "${FOREMAN_SKILL_NAMES[@]}"; do
+    skill_target="$SKILL_HOME_DIR/skills/$name"
+    if [ -e "$skill_target" ] && [ ! -f "$skill_target/$FOREMAN_SKILL_MARKER" ]; then
+      echo "install: $skill_target already exists and was not written by this installer." >&2
+      echo "         Move it aside, or re-run with --force." >&2
+      exit 1
+    fi
+  done
 fi
 
 mkdir -p "$TARGET" || { echo "install: cannot create $TARGET" >&2; exit 1; }
@@ -197,15 +212,18 @@ echo
 if [ "$NO_SKILL" -eq 0 ]; then
   # A copy, not a symlink — same reason as the shims above. Always replaced wholesale
   # rather than diffed in place, so a file the checkout deleted does not linger.
-  rm -rf "$SKILL_TARGET"
-  mkdir -p "$SKILL_TARGET" || { echo "install: cannot create $SKILL_TARGET" >&2; exit 1; }
-  cp -r "$FOREMAN_HOME/skills/$FOREMAN_SKILL_NAME/." "$SKILL_TARGET/"
-  printf 'foreman skill copy — written by %s/install.sh. Re-run that to update it.\n' "$FOREMAN_HOME" \
-    > "$SKILL_TARGET/$FOREMAN_SKILL_MARKER"
-  echo "installed skill"
-  echo "  $SKILL_TARGET"
-  echo "  <- $FOREMAN_HOME/skills/$FOREMAN_SKILL_NAME"
-  echo
+  for name in "${FOREMAN_SKILL_NAMES[@]}"; do
+    skill_target="$SKILL_HOME_DIR/skills/$name"
+    rm -rf "$skill_target"
+    mkdir -p "$skill_target" || { echo "install: cannot create $skill_target" >&2; exit 1; }
+    cp -r "$FOREMAN_HOME/skills/$name/." "$skill_target/"
+    printf 'foreman skill copy — written by %s/install.sh. Re-run that to update it.\n' "$FOREMAN_HOME" \
+      > "$skill_target/$FOREMAN_SKILL_MARKER"
+    echo "installed skill"
+    echo "  $skill_target"
+    echo "  <- $FOREMAN_HOME/skills/$name"
+    echo
+  done
 fi
 
 # Git Bash puts ~/bin on its own PATH whether or not Windows knows about it, so the shell

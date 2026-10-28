@@ -53,8 +53,9 @@
 # container is the boundary and the gate protects nothing it does not, and acceptEdits in
 # `local`, where there is no container. Set it here to override either.
 #FOREMAN_PERMISSION_MODE=
-# The one-off `foreman order` pass (run automatically by `foreman init`) defaults to
-# FOREMAN_MODEL above. Point it at something cheaper without touching what tickets run on:
+# The one-off `foreman order` and `foreman commands` passes (both run automatically by
+# `foreman init`) default to FOREMAN_MODEL above. Point them at something cheaper without
+# touching what tickets run on:
 #FOREMAN_ORDERING_MODEL=haiku
 
 # Extra arguments passed through to `claude`, as a bash array.
@@ -73,6 +74,10 @@ FOREMAN_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)")
 # degrades to generic prose ("run whatever this repo uses to type-check and test") rather
 # than naming a command that does not exist — but a batch that fills them in gets a much
 # tighter loop.
+#
+# `foreman init` fills these in, and the two FOREMAN_SANDBOX_ lines above, from what the repo
+# shows (`foreman commands`): each line it sets carries a comment naming its source file.
+# A line you set yourself is never touched.
 # ---------------------------------------------------------------------------
 #FOREMAN_CHECK_CMD="npm run check"
 #FOREMAN_TEST_CMD="npm test"

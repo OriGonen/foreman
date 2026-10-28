@@ -17,8 +17,8 @@
 # ticket, or anything already in those files.
 #
 # It also warns, for free and without affecting the exit code, when install.sh's copy of
-# the foreman-human-followup-tickets skill has drifted from this checkout's — silent
-# whenever there is nothing installed, or it still matches.
+# one of foreman's skills has drifted from this checkout's — silent whenever there is
+# nothing installed, or it still matches.
 set -uo pipefail
 
 # This file's directory, from the shell and not `dirname` (see foreman-config.sh).
@@ -145,19 +145,26 @@ done <<< "$runners"
 echo
 
 # ---------------------------------------------------------------------------
-# The installed skill copy, if install.sh put one on this machine. Free (no exit-code
-# change) and silent unless it has drifted from this checkout — install.sh always
+# The installed skill copies, one per skill install.sh put on this machine. Free (no
+# exit-code change) and silent unless one has drifted from this checkout — install.sh always
 # replaces a marked copy wholesale, so drift only means the checkout moved on since.
-# Matches install.sh's own marker file and CLAUDE_CONFIG_DIR default exactly.
+# Matches install.sh's own marker file, skill list and CLAUDE_CONFIG_DIR default exactly.
 # ---------------------------------------------------------------------------
-_foreman_skill_name="foreman-human-followup-tickets"
 _foreman_skill_marker=".foreman-installed-from"
-_foreman_skill_copy="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/$_foreman_skill_name"
-_foreman_skill_src="$FOREMAN_HOME/skills/$_foreman_skill_name"
-if [ -f "$_foreman_skill_copy/$_foreman_skill_marker" ] &&
-   ! diff -rq -x "$_foreman_skill_marker" "$_foreman_skill_src" "$_foreman_skill_copy" >/dev/null 2>&1; then
-  echo "Skill"
-  warn "$_foreman_skill_name — installed copy differs from $_foreman_skill_src"
+_foreman_skill_drifted=0
+for _foreman_skill_md in "$FOREMAN_HOME"/skills/*/SKILL.md; do
+  [ -f "$_foreman_skill_md" ] || continue
+  _foreman_skill_src="${_foreman_skill_md%/SKILL.md}"
+  _foreman_skill_name="${_foreman_skill_src##*/}"
+  _foreman_skill_copy="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/$_foreman_skill_name"
+  if [ -f "$_foreman_skill_copy/$_foreman_skill_marker" ] &&
+     ! diff -rq -x "$_foreman_skill_marker" "$_foreman_skill_src" "$_foreman_skill_copy" >/dev/null 2>&1; then
+    [ "$_foreman_skill_drifted" -eq 1 ] || echo "Skill"
+    _foreman_skill_drifted=1
+    warn "$_foreman_skill_name — installed copy differs from $_foreman_skill_src"
+  fi
+done
+if [ "$_foreman_skill_drifted" -eq 1 ]; then
   note "run: bash $FOREMAN_HOME/install.sh"
   echo
 fi

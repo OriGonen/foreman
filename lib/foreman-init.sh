@@ -4,6 +4,7 @@
 #   foreman init <batch-dir>
 #   foreman init <batch-dir> --force      overwrite what is already there
 #   foreman init <batch-dir> --no-order   skip the automatic ordering pass
+#   foreman init <batch-dir> --no-commands   skip filling in foreman.conf's commands
 #
 # <batch-dir> is a directory in the CURRENT repository. The toolkit itself lives elsewhere
 # and nothing is copied into your repo except this batch's three files.
@@ -15,6 +16,12 @@
 #   <batch>/progress.txt   empty, with a one-line header
 #
 # It never touches a ticket file, and it never overwrites without --force.
+#
+# A foreman.conf it has just written is then handed to an agent — see foreman-commands.sh —
+# which fills in its check, test and sandbox-setup commands from what the repo shows (its CI,
+# its task runners, its docs), each with a comment naming where it was read from. A conf that
+# was already there is left alone. That costs one model call; skip it with --no-commands and
+# the slots stay commented out for you to fill in.
 #
 # order.md is then handed to an agent — see foreman-order.sh — which rewrites the run order
 # and the reasoning above it, weighing dependencies between tickets, which look foundational
@@ -30,20 +37,22 @@ FOREMAN_TOOL_DIR="$(cd "${FOREMAN_TOOL_DIR:-/}" && pwd)"
 
 FORCE=0
 NO_ORDER=0
+NO_COMMANDS=0
 BATCH_INPUT=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --force) FORCE=1 ;;
     --no-order) NO_ORDER=1 ;;
+    --no-commands) NO_COMMANDS=1 ;;
     --help|-h) awk 'NR==1 { next } !/^#/ { exit } { sub(/^# ?/, ""); print }' "$0"; exit 0 ;;
-    -*) echo "Usage: $0 <batch-dir> [--force] [--no-order]" >&2; exit 1 ;;
+    -*) echo "Usage: $0 <batch-dir> [--force] [--no-order] [--no-commands]" >&2; exit 1 ;;
     *) BATCH_INPUT="$1" ;;
   esac
   shift
 done
 
 if [ -z "$BATCH_INPUT" ]; then
-  echo "Usage: $0 <batch-dir> [--force] [--no-order]" >&2
+  echo "Usage: $0 <batch-dir> [--force] [--no-order] [--no-commands]" >&2
   exit 1
 fi
 
@@ -68,6 +77,7 @@ esac
 cd "$REPO_ROOT" || exit 1
 
 wrote_any=0
+conf_written=0
 order_written=0
 
 write_if_absent() {
@@ -91,6 +101,7 @@ elif write_if_absent "$BATCH_DIR/foreman.conf"; then
   cp "$FOREMAN_TOOL_DIR/foreman.conf.template" "$BATCH_DIR/foreman.conf" || exit 1
   echo "   created  $BATCH_DIR/foreman.conf"
   wrote_any=1
+  conf_written=1
 fi
 
 _foreman_basename init_batch_name "$BATCH_DIR"
@@ -158,6 +169,11 @@ fi
 
 echo
 
+if [ "$conf_written" -eq 1 ] && [ "$NO_COMMANDS" -eq 0 ]; then
+  echo
+  bash "$FOREMAN_TOOL_DIR/foreman-commands.sh" "$BATCH_DIR"
+fi
+
 if [ "$order_written" -eq 1 ] && [ "$NO_ORDER" -eq 0 ]; then
   echo
   bash "$FOREMAN_TOOL_DIR/foreman-order.sh" "$BATCH_DIR"
@@ -166,7 +182,7 @@ fi
 echo
 if [ "$wrote_any" -eq 1 ]; then
   echo "Next:"
-  echo "  1. edit $BATCH_DIR/foreman.conf     — at minimum FOREMAN_CHECK_CMD and FOREMAN_TEST_CMD"
+  echo "  1. review $BATCH_DIR/foreman.conf   — at minimum FOREMAN_CHECK_CMD and FOREMAN_TEST_CMD"
   echo "  2. review $FOREMAN_INVOKE order picked in $BATCH_DIR/order.md — it is a first pass, not a guarantee"
   echo "  3. $FOREMAN_INVOKE dry-run $BATCH_DIR   (free; prints the exact prompt)"
   echo "  4. $FOREMAN_INVOKE run $BATCH_DIR       (one iteration, then look)"
