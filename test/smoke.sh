@@ -3377,7 +3377,7 @@ printf '%s\n' '. "$1/lib/foreman-ui.sh"' \
   'if [ "${3:-}" = bool ]; then if ui_show "$2"; then printf show; else printf no; fi; exit; fi' \
   'if ui_show "$2" t; then printf "show:%s" "$t"; else printf no; fi' > "$SHOW_PROBE"
 show_of() {
-  local kind="$1" fd="$2" cmd out probe_arg="" setting; shift 2
+  local kind="$1" fd="$2" cmd out probe_arg=""; shift 2
   if [ "${1:-}" = bool ]; then probe_arg=bool; shift; fi
   printf -v cmd '%q ' env -u COLORTERM -u WT_SESSION -u NO_COLOR -u FOREMAN_COLOR -u TERM -u CI -u FOREMAN_SHOW \
     "$@" bash "$SHOW_PROBE" "$FOREMAN_HOME" "$fd" $probe_arg
@@ -3526,6 +3526,7 @@ if case_is "foreman-draw parses the facts a shell pipes in"; then
   assert_eq "$(facts $'a\tx\ty\n')" '{"a":"x\ty"}' "the value is everything after the first tab"
   assert_eq "$(facts $'a\tx\r\n\r\nb\t\nc')" '{"a":"x","b":"","c":""}' "CRLF, blank lines, an empty value and a key alone"
   assert_eq "$(facts '')" '{}' "nothing is no facts"
+  assert_eq "$(facts $'constructor\tx\n__proto__\ty')" '{"constructor":"x","__proto__":"y"}' "a key may be named like an Object method"
 fi
 
 if case_is "foreman-draw help draws the D1 sunrise at the tier it is given, and refuses a narrow screen"; then
@@ -3569,6 +3570,10 @@ if case_is "foreman-draw help draws the D1 sunrise at the tier it is given, and 
   OUT="$(node "$DRAW" nosuch --tier 24 --cols 120 </dev/null 2>&1)"; ST=$?
   assert_eq "$ST" 2 "an unknown scene is a usage error"
   assert_contains "$OUT" "unknown scene 'nosuch'" "and names it"
+  OUT="$(node "$DRAW" constructor --tier 24 --cols 120 </dev/null 2>&1)"; ST=$?
+  assert_eq "$ST" 2 "a scene is looked up among the scenes, not the Object methods"
+  assert_eq "$(node -e 'try { require(process.argv[1]).draw("toString", {}, { tier: 24, cols: 99 }) } catch (e) { console.log(e.message) }' "$DRAW")" \
+    "unknown scene 'toString'" "and so is the module's draw"
   OUT="$(node "$DRAW" help --cols 120 </dev/null 2>&1)"; ST=$?
   assert_eq "$ST" 2 "no tier is a usage error"
   OUT="$(node "$DRAW" help --tier none --cols 120 </dev/null 2>&1)"; ST=$?

@@ -172,7 +172,7 @@ ui_show() {
 
 # ui_cols VAR FD — sets VAR to the width of the terminal FD is, or 80 when nothing says.
 ui_cols() {
-  local _uc_size
+  local _uc_size=""
   if [[ ${COLUMNS:-} =~ ^[0-9]+$ ]] && [ "$((10#$COLUMNS))" -gt 0 ]; then
     printf -v "$1" '%s' "$((10#$COLUMNS))"
     return 0

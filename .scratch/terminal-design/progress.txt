@@ -12,3 +12,16 @@
 - Env note: bin/foreman and scripts are tracked 0644 here, so run_foreman gets exit 126; I ran `git config core.fileMode false` + chmod +x locally (not committed) to run the suite.
 - Next must know: `lib/foreman-stream.cjs` still draws the `--live` clock with raw `ESC[2m` at every tier (ticket 06 territory); foreman-draw.cjs should read `_UI_PALETTE='…'` by regex (rows: name hex idx code).
 - Review: no findings skipped; applied `declare -gA` for the arrays so sourcing inside a function can't make them local.
+
+
+## 02 the renderer and help — implemented
+- Built `ui_show FD [VAR]` (VAR gets the tier), `ui_cols VAR FD` (COLUMNS, else `stty size`, else 80), `FOREMAN_SHOW` (config-validated), `lib/foreman-draw.cjs` and `usage_show` in bin/foreman. D1 matches `01-help-d1.ans` cell for cell at 24 bits.
+- Renderer API: `draw(scene, facts, {tier,cols})` -> string ('' below `SCENES[name].min`), `encode(rows, tier)`, `halfBlocks(pixels, tier)`, `parseFacts`, `loadPalette(file)`. Run = `{t, style:{fg,bg,bold}}`, colour = palette name or `#hex`. CLI exits 0 / 2 usage / 3 too narrow. Shell keeps its own `_help_min_cols=64` (a smoke case ties it to `SCENES.help.min`) so a narrow terminal starts no node.
+- 16 colours: dark shades (sgr16 `2`) are dropped from block art (the terminal's background), since a dim `█` is a grey slab; as text fg they stay `2`. Later scenes (dome, ground) look sparser at 16 by design.
+- `FOREMAN_SHOW=always` beats CI/NO_COLOR/TERM, not `FOREMAN_COLOR=never`. Only help/--help/-h/bare draw the sun; the mistyped-command usage stays plain. `foreman ''` was always help (exit 0, `${1:-help}`); the `'')` branch is dead code, left alone.
+- Test-driven (smoke): ui_show table (pipe + `script` tty), ui_cols, palette read not copied, encoder (3 tiers, hex folding, resets), parseFacts, help scene + CLI errors, `foreman help` plain/forced/narrow/tty/CI/exit codes, FOREMAN_SHOW config.
+- Full smoke: 1072 passed in 1m 1s, 1 failed (the same CRLF `convert` case, pre-existing).
+- Review: fixed `Object.hasOwn` scene lookup and null-prototype facts (`constructor` crashed / corrupted), `local _uc_size=""` for `set -u`. Skipped: none.
+- Remaining for a human: look at `foreman help` in Windows Terminal and mintty against the .ans (ticket box left unchecked).
+- Next must know: ui_show reads FD's tty-ness, so scenes drawn from node (report, convert) need the shell to pass tier/cols in. Animations (03) need `--frame` and raw-stdin handling added to draw.cjs's main().
+
