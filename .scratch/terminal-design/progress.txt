@@ -25,3 +25,13 @@
 - Remaining for a human: look at `foreman help` in Windows Terminal and mintty against the .ans (ticket box left unchecked).
 - Next must know: ui_show reads FD's tty-ness, so scenes drawn from node (report, convert) need the shell to pass tier/cols in. Animations (03) need `--frame` and raw-stdin handling added to draw.cjs's main().
 
+
+
+## 03 the intro — implemented
+- Built Intro3 in `lib/foreman-draw.cjs`: `SCENES.intro` (36 frames, min 66 cols, sky/figure helpers shared with help), `halfBlocks(..., texts)` for the tink/TONK words, `encode(..., {erase})`, `--frame N`, `drawFrames`, `play()` (hide cursor, raw stdin only while playing, any key -> last frame, Ctrl-C byte or SIGINT/TERM/HUP -> 'interrupted', show cursor on every exit) and `--play [--step MS]`. `usage_show` plays it (`FOREMAN_INTRO=0`, CI, non-tty stdin/stdout, <66 cols turn it off); README documents it. FOREMAN_INTRO is env-only (help runs before any batch conf).
+- `--play` exits 4 when it cannot play (non-tty either end, <20 rows) -> still D1 sunrise; 130 on Ctrl-C -> dispatcher exits 130. For animations in doctor (07): reuse `play(drawFrames(...), {out, input, stepMs})`; frames are whole-line strings, cursor-up is the frame's own height.
+- Test-driven (smoke): frame key rows/errors/tiers, the player on fake streams (order, timer, skip, arrow key, Ctrl-C, 3 signals, write error, no input, empty), `--play` refusals on a pty, dispatcher on `script` ptys (full play, key, Ctrl-C + `stty -a`, off cases, min-width tie). The key feed waits on the output, not the clock (script sends EOF as a key when its input ends).
+- Matches the design cell for cell (all 36 frames, txt + ans) except one U+FFFD cell in each design file (export artefact). Frames 35 and 36 of the design are identical. Canvas is 66 wide vs the help's 64: last frame ground is 2 columns wider.
+- Full smoke: 1174 passed in 1m 6s, 1 failed (the same pre-existing CRLF `convert` case).
+- Review: added a clear error for an out-of-range frame in `draw()`, `--step` in the header. Skipped: none.
+- Remaining for a human: watch it in a real window (hand box left unchecked). UNVERIFIED: in mintty without a pty shim node sees stdin/stdout as pipes, so `--play` exits 4 and Git Bash users get the still sunrise; Windows Terminal (ConPTY) should play it.

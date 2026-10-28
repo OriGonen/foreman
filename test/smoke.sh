@@ -3740,6 +3740,8 @@ if case_is "foreman-draw intro draws a frame at a time, and holds the design's k
 
   # The module's frames: one string each, rows cleared to the end of the line for playing over
   # the last, but never at the terminal's last column, where a clear would eat a cell.
+  assert_eq "$(node -e 'try { require(process.argv[1]).draw("intro", {}, { tier: 24, cols: 99, frame: 36 }) } catch (e) { console.log(e.message) }' "$DRAW")" \
+    "no frame 36 in 'intro' (0 to 35)" "the module refuses a frame there is not"
   assert_eq "$(node -e 'const d = require(process.argv[1]); console.log(d.SCENES.intro.frames, d.SCENES.intro.min, d.SCENES.help.frames)' "$DRAW")" "36 66 1" "SCENES say how many frames and how wide"
   assert_eq "$(node -e 'const d = require(process.argv[1]); console.log(d.drawFrames("intro", {}, { tier: 24, cols: 120 }).length)' "$DRAW")" 36 "drawFrames gives all of them"
   assert_eq "$(node -e 'const d = require(process.argv[1]); process.stdout.write(d.drawFrames("intro", {}, { tier: 24, cols: 120 })[0])' "$DRAW" | grep -c "${ESC}\[K")" 19 "each row of a frame to play ends by clearing the rest of the line"
