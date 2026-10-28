@@ -387,7 +387,8 @@ FOREMAN_ALLOW_DIRTY="${FOREMAN_ALLOW_DIRTY:-0}"
 # default path — the agent's own --output-format included — stays exactly as it was.
 FOREMAN_STREAM="${FOREMAN_STREAM:-0}"
 # Colour on glyphs and prefixes — see foreman-ui.sh. auto: only on a terminal, and not with
-# NO_COLOR set; always / never force it. Piped and logged output is never coloured under auto.
+# NO_COLOR set, at the best tier the terminal has; always / never force it; 16, 256 and
+# truecolor pin the tier. Piped and logged output is never coloured under auto.
 FOREMAN_COLOR="${FOREMAN_COLOR:-auto}"
 # How much context a ticket is expected to fit well inside. A prompt slot, not a limit
 # anything enforces — the CLI has no such flag, and --autocompact is the real backstop. It
@@ -428,9 +429,9 @@ if [ -z "${FOREMAN_PERMISSION_MODE:-}" ]; then
 fi
 
 case "$FOREMAN_COLOR" in
-  auto|always|never) ;;
+  auto|always|never|16|256|truecolor) ;;
   *)
-    echo "foreman: FOREMAN_COLOR must be auto, always or never (got '$FOREMAN_COLOR')" >&2
+    echo "foreman: FOREMAN_COLOR must be auto, always or never (got '$FOREMAN_COLOR'), or 16, 256 or truecolor" >&2
     return 1 2>/dev/null || exit 1
     ;;
 esac

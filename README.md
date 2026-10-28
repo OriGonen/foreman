@@ -370,10 +370,17 @@ result object it always did. `foreman dry-run` reports which state a run would u
 ### Colour — `NO_COLOR` and `FOREMAN_COLOR`
 
 On a terminal, Foreman colours the **glyph or prefix** of a line and nothing else: `✓` green,
-`✗` red, `⋯` dim, `↩` and the `note:` and `preflight:` prefixes yellow, `⌨`, the status labels and the `──` and
-`==` rules cyan, and the `--live` clock dim. The words are never coloured and the glyph still
-carries the meaning, so a run read without colour loses nothing. Only the terminal's basic 16
-colours are used, so your own theme picks the shades.
+`✗` red, `⋯` dim, `↩` and the `note:` and `preflight:` prefixes amber (yellow at 16 colours),
+`⌨`, the status labels and the `──` and `==` rules a light gold (cyan at 16 colours), and the
+`--live` clock dim. The words are never coloured and the glyph still carries the meaning, so a
+run read without colour loses nothing.
+
+Foreman uses the best colour the terminal has: its own palette in 24-bit colour (Windows
+Terminal, mintty, iTerm2 and most Linux terminals), the nearest shades of it in 256 colours, and
+at 16 colours the terminal's basic colours, so your own theme picks the shades, as it always
+did. It looks at `COLORTERM` (`truecolor` or `24bit`), `WT_SESSION` (Windows Terminal, which
+does not set `COLORTERM`) and `TERM` (`…256color`). See
+[ADR 0003](docs/adr/0003-a-palette-over-the-terminal-theme.md).
 
 Colour is decided per stream: it is on only when the stream a line is written to is a
 terminal, so `foreman run … > run.txt`, a pipe, or CI output stays plain, byte for byte. The run
@@ -382,9 +389,12 @@ log and the jsonl never contain colour codes. It is off when `NO_COLOR` is set o
 
 | `FOREMAN_COLOR` | |
 |---|---|
-| `auto` | the default: a terminal, unless `NO_COLOR` is set |
-| `always` | colour even when piped or redirected — and even with `NO_COLOR` set, since naming it is a decision about Foreman |
+| `auto` | the default: a terminal, unless `NO_COLOR` is set, at the best colour it has |
+| `always` | colour even when piped or redirected — and even with `NO_COLOR` set, since naming it is a decision about Foreman. At the terminal's best colour, or 16 colours when nothing says better |
 | `never` | no colour |
+| `16` | 16 colours (your theme's), on every stream, whatever the terminal could do |
+| `256` | 256 colours, on every stream |
+| `truecolor` | 24-bit colour, on every stream |
 
 ```bash
 FOREMAN_COLOR=always foreman run .scratch/my-batch | less -R

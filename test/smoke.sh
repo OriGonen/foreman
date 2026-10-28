@@ -49,6 +49,13 @@ SELF="$TEST_DIR/${BASH_SOURCE[0]##*/}"
 _smoke_legacy=$(compgen -v RALPH_)
 [ -z "$_smoke_legacy" ] || unset $_smoke_legacy
 
+# The terminal this suite is started from must not decide how foreman colours: FOREMAN_COLOR=always
+# paints at the tier it detects, 16 when it detects nothing, and the cases below that look for
+# `ESC[32m` are about that 16-colour form. Windows Terminal (WT_SESSION), mintty (COLORTERM) and a
+# 256color TERM would each raise the tier. The cases that are about the tier set what they need.
+unset COLORTERM WT_SESSION NO_COLOR
+case "${TERM:-}" in *256color*) TERM=xterm ;; esac
+
 # Set only by the runner, on a case process: the case's name, its position, and the work
 # directory it shares with the runner.
 CASE_WANTED="${_SMOKE_CASE:-}"
@@ -2987,6 +2994,154 @@ colour_lines() {
     grep -E '^( +(✓|⋯|↩|✗)|──|== )' |
     sed -E 's/[0-9]{8}T[0-9]{6}Z-[0-9]+/RUN/; s/[0-9a-f]{7}( |$)/SHA\1/'
 }
+
+# The colour tier of one stream, in an environment of its own. $1 is tty or pipe — whether the
+# stream asked about is a terminal — $2 the file descriptor, and the rest are VAR=value
+# settings. A terminal is made with `script`, which not every machine has.
+TIER_PROBE="$WORK/tier-probe.sh"
+printf '%s\n' '. "$1/lib/foreman-ui.sh"' 'ui_color_tier t "$2"' 'printf "%s" "$t"' > "$TIER_PROBE"
+tier_of() {
+  local kind="$1" fd="$2" cmd out; shift 2
+  printf -v cmd '%q ' env -u COLORTERM -u WT_SESSION -u NO_COLOR -u FOREMAN_COLOR -u TERM "$@" \
+    bash "$TIER_PROBE" "$FOREMAN_HOME" "$fd"
+  if [ "$kind" = tty ]; then
+    [ "$fd" != 2 ] || cmd+='2>/dev/null'    # stdout stays the terminal; stderr is made a pipe
+    out="$(script -qec "$cmd" /dev/null </dev/null 2>/dev/null)"
+    printf '%s' "${out//$'\r'/}"
+  else
+    eval "$cmd" 2>/dev/null
+  fi
+}
+
+if case_is "ui_color_tier decides none, 16, 256 or 24 per stream from the environment"; then
+  # (stream, environment) -> tier. A pipe is what `$(…)` gives; every row of a terminal needs script.
+  assert_eq "$(tier_of pipe 1 TERM=xterm)" none "auto: a pipe is plain"
+  assert_eq "$(tier_of pipe 1 TERM=xterm-256color COLORTERM=truecolor)" none "auto: a pipe is plain whatever the terminal could do"
+  assert_eq "$(tier_of pipe 1 FOREMAN_COLOR=never COLORTERM=truecolor)" none "never is none"
+  assert_eq "$(tier_of pipe 1 FOREMAN_COLOR=always)" 16 "always with nothing detected is 16"
+  assert_eq "$(tier_of pipe 1 FOREMAN_COLOR=always TERM=xterm)" 16 "always on a plain xterm is 16"
+  assert_eq "$(tier_of pipe 1 FOREMAN_COLOR=always TERM=xterm-256color)" 256 "always follows a 256color TERM"
+  assert_eq "$(tier_of pipe 1 FOREMAN_COLOR=always TERM=screen.xterm-256color)" 256 "and any TERM that ends in 256color"
+  assert_eq "$(tier_of pipe 1 FOREMAN_COLOR=always COLORTERM=truecolor)" 24 "always follows COLORTERM=truecolor"
+  assert_eq "$(tier_of pipe 1 FOREMAN_COLOR=always COLORTERM=24bit)" 24 "and COLORTERM=24bit"
+  assert_eq "$(tier_of pipe 1 FOREMAN_COLOR=always WT_SESSION=1c3e)" 24 "and Windows Terminal, which sets WT_SESSION and not COLORTERM"
+  assert_eq "$(tier_of pipe 1 FOREMAN_COLOR=always COLORTERM=truecolor TERM=xterm-256color)" 24 "24 beats 256"
+  assert_eq "$(tier_of pipe 1 FOREMAN_COLOR=always COLORTERM=yes TERM=xterm)" 16 "another COLORTERM value says nothing"
+  assert_eq "$(tier_of pipe 1 FOREMAN_COLOR=always NO_COLOR=1 TERM=dumb)" 16 "always wins over NO_COLOR and a dumb TERM"
+  assert_eq "$(tier_of pipe 1 FOREMAN_COLOR=16 COLORTERM=truecolor)" 16 "16 pins the tier, whatever is detected"
+  assert_eq "$(tier_of pipe 1 FOREMAN_COLOR=256)" 256 "256 pins it, on a pipe"
+  assert_eq "$(tier_of pipe 1 FOREMAN_COLOR=truecolor)" 24 "truecolor pins it, on a pipe"
+  assert_eq "$(tier_of pipe 1 FOREMAN_COLOR=truecolor NO_COLOR=1 TERM=dumb)" 24 "a pinned tier wins over NO_COLOR and a dumb TERM"
+  assert_eq "$(tier_of pipe 2 FOREMAN_COLOR=256)" 256 "and on stderr"
+
+  if command -v script >/dev/null 2>&1 && [ -n "$(tier_of tty 1 FOREMAN_COLOR=always)" ]; then
+    assert_eq "$(tier_of tty 1 TERM=xterm)" 16 "auto: a plain terminal is 16"
+    assert_eq "$(tier_of tty 1 TERM=xterm FOREMAN_COLOR=auto)" 16 "and so is auto named"
+    assert_eq "$(tier_of tty 1 TERM=xterm-256color)" 256 "a 256color terminal is 256"
+    assert_eq "$(tier_of tty 1 TERM=xterm COLORTERM=truecolor)" 24 "COLORTERM=truecolor is 24"
+    assert_eq "$(tier_of tty 1 TERM=xterm COLORTERM=24bit)" 24 "COLORTERM=24bit is 24"
+    assert_eq "$(tier_of tty 1 TERM=xterm WT_SESSION=1c3e)" 24 "WT_SESSION is 24"
+    assert_eq "$(tier_of tty 1 TERM=xterm-256color COLORTERM=truecolor)" 24 "24 beats 256 on a terminal too"
+    assert_eq "$(tier_of tty 1 TERM=xterm COLORTERM=yes)" 16 "an unknown COLORTERM is 16"
+    assert_eq "$(tier_of tty 1 COLORTERM=truecolor NO_COLOR=1)" none "NO_COLOR is none, whatever the terminal could do"
+    assert_eq "$(tier_of tty 1 COLORTERM=truecolor TERM=dumb)" none "a dumb TERM is none"
+    assert_eq "$(tier_of tty 1 TERM=xterm COLORTERM=truecolor FOREMAN_COLOR=never)" none "never is none on a terminal"
+    assert_eq "$(tier_of tty 1 TERM=xterm COLORTERM=truecolor FOREMAN_COLOR=16)" 16 "16 pins a 24-bit terminal down"
+    assert_eq "$(tier_of tty 1 TERM=xterm NO_COLOR=1 FOREMAN_COLOR=256)" 256 "a pinned tier wins over NO_COLOR"
+    assert_eq "$(tier_of tty 2 TERM=xterm COLORTERM=truecolor)" none "stderr is asked about on its own: it is a pipe here"
+  else
+    printf '  (no usable script(1): the terminal rows of the tier table are not run)\n'
+  fi
+fi
+
+if case_is "ui_paint paints at the stream's tier: the palette at 24 and 256, the old codes at 16"; then
+  ESC=$'\033'
+  OUT="$(env -u COLORTERM -u WT_SESSION FOREMAN_COLOR=truecolor bash -c '. "$1/lib/foreman-ui.sh"; say_event ok landed "abc1234"' _ "$FOREMAN_HOME")"
+  assert_eq "$OUT" "   ${ESC}[38;2;143;207;143m✓${ESC}[0m landed  ·  abc1234" "24 bits: the ok glyph in the palette's exact green, the words plain"
+
+  OUT="$(env -u COLORTERM -u WT_SESSION FOREMAN_COLOR=256 bash -c '. "$1/lib/foreman-ui.sh"; say_event ok landed "abc1234"' _ "$FOREMAN_HOME")"
+  assert_eq "$OUT" "   ${ESC}[38;5;114m✓${ESC}[0m landed  ·  abc1234" "256: the nearest xterm shade"
+
+  OUT="$(env -u COLORTERM -u WT_SESSION FOREMAN_COLOR=16 bash -c '. "$1/lib/foreman-ui.sh"; say_event ok landed "abc1234"' _ "$FOREMAN_HOME")"
+  assert_eq "$OUT" "   ${ESC}[32m✓${ESC}[0m landed  ·  abc1234" "16: the old ANSI green, as before"
+
+  OUT="$(env -u COLORTERM -u WT_SESSION FOREMAN_COLOR=always TERM=xterm-256color bash -c '. "$1/lib/foreman-ui.sh"; say_event ok landed' _ "$FOREMAN_HOME")"
+  assert_contains "$OUT" "${ESC}[38;5;114m✓" "always paints at the tier it detects"
+  OUT="$(env -u WT_SESSION FOREMAN_COLOR=always COLORTERM=truecolor bash -c '. "$1/lib/foreman-ui.sh"; say_event ok landed' _ "$FOREMAN_HOME")"
+  assert_contains "$OUT" "${ESC}[38;2;143;207;143m✓" "and at 24 bits under COLORTERM=truecolor"
+
+  # Every style, at each tier.
+  paint_all() {
+    env -u COLORTERM -u WT_SESSION FOREMAN_COLOR="$1" bash -c '. "$1/lib/foreman-ui.sh"
+      for s in ok warn error accent muted bogus; do ui_paint v 1 $s "<$s>"; printf "%s" "$v"; done' _ "$FOREMAN_HOME"
+  }
+  assert_eq "$(paint_all 16)" \
+    "${ESC}[32m<ok>${ESC}[0m${ESC}[33m<warn>${ESC}[0m${ESC}[31m<error>${ESC}[0m${ESC}[36m<accent>${ESC}[0m${ESC}[2m<muted>${ESC}[0m${ESC}[0m<bogus>${ESC}[0m" \
+    "16: the five styles keep their old codes"
+  assert_eq "$(paint_all truecolor)" \
+    "${ESC}[38;2;143;207;143m<ok>${ESC}[0m${ESC}[38;2;224;168;74m<warn>${ESC}[0m${ESC}[38;2;240;128;120m<error>${ESC}[0m${ESC}[38;2;246;213;142m<accent>${ESC}[0m${ESC}[38;2;168;162;153m<muted>${ESC}[0m${ESC}[0m<bogus>${ESC}[0m" \
+    "24: ok, amber, error, sun and muted"
+  assert_eq "$(paint_all 256)" \
+    "${ESC}[38;5;114m<ok>${ESC}[0m${ESC}[38;5;179m<warn>${ESC}[0m${ESC}[38;5;210m<error>${ESC}[0m${ESC}[38;5;222m<accent>${ESC}[0m${ESC}[38;5;247m<muted>${ESC}[0m${ESC}[0m<bogus>${ESC}[0m" \
+    "256: the same five, at their nearest indexes"
+
+  # ui_color_on is "the tier is not none".
+  assert_eq "$(env -u COLORTERM FOREMAN_COLOR=256 bash -c '. "$1/lib/foreman-ui.sh"; ui_color_on 1 && echo on || echo off' _ "$FOREMAN_HOME")" on "ui_color_on: a pinned tier is on"
+  assert_eq "$(env -u COLORTERM FOREMAN_COLOR=never bash -c '. "$1/lib/foreman-ui.sh"; ui_color_on 1 && echo on || echo off' _ "$FOREMAN_HOME")" off "never is off"
+  assert_eq "$(env -u COLORTERM -u FOREMAN_COLOR bash -c '. "$1/lib/foreman-ui.sh"; ui_color_on 1 && echo on || echo off' _ "$FOREMAN_HOME")" off "auto on a pipe is off"
+
+  # Painting into a plain stream stays byte for byte the text.
+  assert_eq "$(env -u COLORTERM -u FOREMAN_COLOR bash -c '. "$1/lib/foreman-ui.sh"; ui_paint v 1 ok "x y"; printf "%s" "$v"' _ "$FOREMAN_HOME")" "x y" "plain paint is the text"
+fi
+
+if case_is "the palette is defined once, with a hex, a 256 index and a 16 code per name"; then
+  # The one assignment, as foreman-draw.cjs will read it: a regex over _UI_PALETTE='…'.
+  table="$(sed -n "/^_UI_PALETTE='\$/,/^'\$/p" "$FOREMAN_HOME/lib/foreman-ui.sh" | sed '1d;$d')"
+  assert_eq "$(printf '%s\n' "$table" | grep -c .)" 13 "thirteen names"
+  assert_eq "$(grep -c "^_UI_PALETTE=" "$FOREMAN_HOME/lib/foreman-ui.sh")" 1 "defined in one place"
+  names=""; bad=""
+  while read -r name hex idx code extra; do
+    names+="$name "
+    [[ $hex =~ ^#[0-9a-f]{6}$ ]] || bad+=" $name:hex"
+    [[ $idx =~ ^([0-9]{1,3}|-)$ ]] && { [ "$idx" = - ] || [ "$idx" -ge 16 -a "$idx" -le 255 ]; } || bad+=" $name:idx"
+    [[ $code =~ ^[0-9]+$ ]] || bad+=" $name:code"
+    [ -z "$extra" ] || bad+=" $name:extra"
+    # The index is the nearest of the 216 cube colours and 24 greys, by squared distance.
+    if [ "$idx" != - ]; then
+      r=$((16#${hex:1:2})); g=$((16#${hex:3:2})); b=$((16#${hex:5:2}))
+      best=-1; bestd=999999
+      lv=(0 95 135 175 215 255)
+      for ((i = 16; i < 256; i++)); do
+        if [ $i -lt 232 ]; then n=$((i - 16)); cr=${lv[n / 36]}; cg=${lv[n / 6 % 6]}; cb=${lv[n % 6]}
+        else cr=$((8 + 10 * (i - 232))); cg=$cr; cb=$cr; fi
+        d=$(( (r - cr) ** 2 + (g - cg) ** 2 + (b - cb) ** 2 ))
+        [ $d -lt $bestd ] && { bestd=$d; best=$i; }
+      done
+      [ "$best" = "$idx" ] || bad+=" $name:nearest-is-$best"
+    fi
+  done <<< "$table"
+  assert_eq "$bad" "" "every row is well formed and its 256 index is the nearest shade"
+  assert_eq "$names" "sun amber rust post earth shade night ok error muted dim text ink " "the names, in the spec's order"
+  squeezed="$(printf '%s\n' "$table" | tr -s ' ')"
+  assert_contains "$squeezed" "sun #f6d58e 222 33" "sun"
+  assert_contains "$squeezed" "text #ece8e1 - 0" "text has no 256 index: below 24 bits it is the terminal's own"
+fi
+
+if case_is "FOREMAN_COLOR takes 16, 256 and truecolor beside auto, always and never"; then
+  repo="$(make_repo 2 colour-values-repo)"
+  for v in auto always never 16 256 truecolor; do
+    FOREMAN_COLOR=$v run_foreman "$repo" status batch
+    assert_eq "$ST" 0 "FOREMAN_COLOR=$v is accepted"
+  done
+  FOREMAN_COLOR=rainbow run_foreman "$repo" status batch
+  assert_eq "$ST" 1 "an unknown value is refused"
+  assert_contains "$OUT" "or 16, 256 or truecolor" "and the message names the pinned tiers"
+  printf 'FOREMAN_COLOR=256\n' >> "$repo/batch/foreman.conf"
+  git -C "$repo" commit --quiet -am "pin 256"
+  run_foreman "$repo" status batch
+  assert_eq "$ST" 0 "foreman.conf can pin a tier"
+  assert_contains "$OUT" "${ESC:=$'\033'}[38;5;" "and a captured status is then painted at it"
+fi
 
 if case_is "colour is off when output is not a terminal, and the log never carries it"; then
   ESC=$'\033'

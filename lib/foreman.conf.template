@@ -94,11 +94,13 @@ FOREMAN_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)")
 #FOREMAN_STREAM=0
 
 # Colour for the glyphs and prefixes in foreman's output (✓ ✗ ⋯ ↩ ⌨, note:, preflight:, the
-# ── and == rules), using your terminal's own 16 colours. The words are never coloured, and
-# the glyph carries the meaning either way.
-#   auto    colour only when the stream is a terminal, and not when NO_COLOR is set.  DEFAULT.
-#   always  colour even when piped or redirected. Wins over NO_COLOR.
-#   never   no colour.
+# ── and == rules), in the best colour the terminal has: foreman's palette at 24 bits or 256
+# colours, and at 16 colours your terminal's own. The words are never coloured, and the glyph
+# carries the meaning either way.
+#   auto       colour only when the stream is a terminal, and not when NO_COLOR is set.  DEFAULT.
+#   always     colour even when piped or redirected. Wins over NO_COLOR.
+#   never      no colour.
+#   16|256|truecolor   that many colours, on every stream, whatever the terminal could do.
 # Whatever the setting, foreman-runs.log and foreman-runs.jsonl never contain colour codes.
 #FOREMAN_COLOR=auto
 
