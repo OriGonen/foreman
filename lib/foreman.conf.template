@@ -104,8 +104,8 @@ FOREMAN_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)")
 # Whatever the setting, foreman-runs.log and foreman-runs.jsonl never contain colour codes.
 #FOREMAN_COLOR=auto
 
-# The pictures some commands draw above their text (`foreman help` has the sunrise), built from
-# block characters in the same colours.
+# The pictures some commands draw above their text (`foreman help` has the sunrise, `foreman init`
+# breaks ground), built from block characters in the same colours.
 #   auto       on a terminal with colour, wide enough for the picture, and not in CI.  DEFAULT.
 #   always     draw them anywhere — a pipe, a file. At the terminal's best colour; FOREMAN_COLOR
 #              =never still means none.

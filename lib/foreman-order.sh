@@ -10,6 +10,10 @@
 # Runs locally, never in a sandbox: it edits no code, so none of FOREMAN_EXEC's isolation
 # concerns apply, and it should work even in a repo that has no sandbox set up yet.
 #
+# FOREMAN_ORDER_RESULT=<file>, when set, is where it leaves how it went, as facts for the
+# renderer (`key<TAB>value` lines, see foreman-draw.cjs): that is how `foreman init` draws the
+# result without reading what this prints. What this prints does not change.
+#
 # Costs one model call, on FOREMAN_MODEL by default — ordering rarely needs the same model
 # the tickets themselves run on, so set FOREMAN_ORDERING_MODEL in foreman.conf to point it at
 # something cheaper without touching FOREMAN_MODEL. If `claude` is not on PATH, this prints a
@@ -22,6 +26,16 @@ FOREMAN_TOOL_DIR="${BASH_SOURCE[0]%/*}"; [ "$FOREMAN_TOOL_DIR" != "${BASH_SOURCE
 FOREMAN_TOOL_DIR="$(cd "${FOREMAN_TOOL_DIR:-/}" && pwd)"
 
 show_help() { awk 'NR==1 { next } !/^#/ { exit } { sub(/^# ?/, ""); print }' "$0"; }
+
+# Appends a fact to FOREMAN_ORDER_RESULT, if there is one.
+order_fact() {    # order_fact KEY VALUE...
+  [ -n "${FOREMAN_ORDER_RESULT:-}" ] || return 0
+  local key="$1" value
+  shift
+  printf -v value '\t%s' "$@"
+  printf '%s%s\n' "$key" "$value" >> "$FOREMAN_ORDER_RESULT"
+}
+[ -z "${FOREMAN_ORDER_RESULT:-}" ] || : > "$FOREMAN_ORDER_RESULT" || exit 1
 
 BATCH_INPUT=""
 while [ $# -gt 0 ]; do
@@ -52,6 +66,8 @@ source "$FOREMAN_TOOL_DIR/foreman-tickets.sh" || exit 1
 }
 
 if ! command -v claude >/dev/null 2>&1; then
+  order_fact result skipped
+  order_fact said "'claude' is not on PATH"
   warn_tag error "foreman order:" "'claude' is not on PATH — skipping."
   echo "              $ORDER_FILE keeps its filename order; re-run \`foreman order $BATCH_DIR\` once it is." >&2
   exit 0
@@ -67,6 +83,7 @@ while IFS= read -r f; do
 done < <(foreman_next_answer --unordered)
 
 if [ "${#tickets[@]}" -eq 0 ]; then
+  order_fact result empty
   say_tag accent "foreman order:" "$BATCH_DIR has no tickets — nothing to order."
   foreman_issues_hint
   exit 0
@@ -160,6 +177,10 @@ $(for t in "${tickets[@]}"; do printf -- '- %s\n' "$t"; done)
 PROMPT_EOF
 )
 
+# The order as it stands, for the renderer to compare with the one the agent leaves.
+was=""
+[ -z "${FOREMAN_ORDER_RESULT:-}" ] || was="$(foreman_next_answer --all 2>/dev/null)"
+
 say_tag accent "foreman order:" "reading ${#tickets[@]} ticket(s) in $BATCH_DIR ..."
 
 # stdin is closed because claude, finding it is not a terminal, otherwise waits for input
@@ -174,6 +195,9 @@ status=$?
   node "$FOREMAN_TOOL_DIR/foreman-claude-reply.cjs" <<< "$RESPONSE")
 
 if [ "$status" -ne 0 ] || [ "$is_error" = 1 ]; then
+  order_fact result failed
+  order_fact said "$said"
+  order_fact auth "${auth_failed:-0}"
   warn_tag error "foreman order:" "the agent call failed (exit $status) — $ORDER_FILE is unchanged."
   [ -n "$said" ] && echo "             claude said: $said"
   [ "$auth_failed" = 1 ] && echo "             your claude login has expired — run \`claude /login\`, then re-run \`foreman order $BATCH_INPUT\`."
@@ -185,4 +209,36 @@ echo "             review it — this is a first pass, not a guarantee."
 
 warnings="$(foreman_human_warnings)"
 [ -n "$warnings" ] && printf '%s\n' "$warnings"
+
+# What the renderer needs to say how the order changed and who it stops for: the order before
+# ($1) and now, one ticket a line; each ticket a person does; and each ticket that checks another,
+# with the one it checks.
+order_result_lists() {    # order_result_lists WAS
+  local now line target
+  now="$(foreman_next_answer --all 2>/dev/null)"
+  while IFS= read -r line; do
+    [ -n "$line" ] && order_fact was "$line"
+  done <<< "$1"
+  while IFS= read -r line; do
+    [ -n "$line" ] && order_fact now "$line"
+  done <<< "$now"
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    foreman_ticket_status "$line"
+    [ "$_FOREMAN_TICKET_HUMAN" = 1 ] && order_fact human "$line"
+    if [ -n "$_FOREMAN_TICKET_CHECKS" ]; then
+      target="$(foreman_checked_ticket "$line")"
+      [ -n "$target" ] && order_fact check "$line" "$target"
+    fi
+  done <<< "$now"
+}
+
+if [ -n "${FOREMAN_ORDER_RESULT:-}" ]; then
+  order_fact result ordered
+  [ -z "$cost" ] || order_fact cost "$cost"
+  order_result_lists "$was"
+  while IFS= read -r line; do
+    [ -n "$line" ] && order_fact warning "${line#warning: }"
+  done <<< "$warnings"
+fi
 exit 0

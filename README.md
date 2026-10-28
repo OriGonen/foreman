@@ -403,8 +403,9 @@ FOREMAN_COLOR=always foreman run .scratch/my-batch | less -R
 ### The show — `FOREMAN_SHOW`
 
 Some commands draw a picture, made of block characters in the same palette, above their usual
-text: `foreman help` prints a sunrise. That is the **show**. It is drawn only on a terminal with
-colour on, at least as wide as the picture (64 columns for the sunrise), and not when `CI` is set;
+text: `foreman help` prints a sunrise, `foreman init` a hard hat against it. That is the **show**.
+It is drawn only on a terminal with colour on, at least as wide as the picture (64 columns for the
+sunrise and for `init`), and not when `CI` is set;
 in a pipe, a file, a narrow terminal, with `NO_COLOR`, or under `FOREMAN_COLOR=never` you get the
 plain text, byte for byte, so scripts that read a command's output are unaffected.
 
@@ -417,6 +418,23 @@ plain text, byte for byte, so scripts that read a command's output are unaffecte
 ```bash
 FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 foreman help | less -R
 ```
+
+### `foreman init` as breaking ground
+
+At a terminal, `foreman init <batch>` shows the mark and "FOREMAN breaks ground", the batch and
+what was found in it (`10 tickets in 3 issue directories`), and a `+` for each file it wrote. When
+the agent has ordered the tickets it adds a line for that — how many tickets moved, which are
+yours and which check them, how long it took and what it cost — and then NEXT, the four steps to
+take. The header and the files are drawn as soon as they are written, before the agent starts, so
+the wait is not a blank screen.
+
+- `--force` over a batch that is there marks each file it replaced; without it, a file that is
+  there is shown with an `=` and left alone, and a batch with nothing to write says so.
+- `--no-order` leaves the ordering line out; an ordering that failed (or could not start, with no
+  `claude` on the `PATH`) says so in its place, with what the agent said and how to try again.
+- Anywhere the show is not drawn, `foreman init` prints the text it always has, byte for byte.
+- `FOREMAN_SHOW` is read from the environment here, not from the batch's `foreman.conf`: `init`
+  runs before the batch has one worth reading.
 
 ### The intro — `FOREMAN_INTRO`
 

@@ -29,6 +29,14 @@
 # --no-order and order.md is left in plain filename order, same as before that step existed.
 # Either way, order.md is optional: delete it and the loop falls back to filename order over
 # <batch>/issues.
+#
+# THE SHOW. At a terminal (see ui_show in foreman-ui.sh) wide enough for it, what is printed is
+# the picture in the design instead: the mark and "FOREMAN breaks ground", the batch and what was
+# found, a `+` per file written, how the ordering went and four numbered steps — drawn by
+# foreman-draw.cjs in two goes, the header and files as soon as they are written and the rest when
+# the agent is done. Anywhere else, in a pipe, a file, CI, a narrow window, with NO_COLOR, the text
+# below is printed, unchanged. Both are the same facts told twice: the lines of text are kept
+# back while the show may replace them, and printed instead if the renderer cannot draw.
 set -uo pipefail
 
 # This file's directory, from the shell and not `dirname` (see foreman-config.sh).
@@ -60,6 +68,10 @@ fi
 source "$FOREMAN_TOOL_DIR/foreman-repo.sh" || {
   echo "foreman-init: cannot load $FOREMAN_TOOL_DIR/foreman-repo.sh" >&2; exit 1; }
 
+# shellcheck source=foreman-ui.sh
+source "$FOREMAN_TOOL_DIR/foreman-ui.sh" || {
+  echo "foreman-init: cannot load $FOREMAN_TOOL_DIR/foreman-ui.sh" >&2; exit 1; }
+
 foreman_repo_root REPO_ROOT || {
   echo "foreman-init: not inside a git repository" >&2; exit 1; }
 
@@ -80,26 +92,82 @@ wrote_any=0
 conf_written=0
 order_written=0
 
+# Whether to show, and the tier and width to show at. The renderer's own minimum width for both of
+# its init scenes is this number (a smoke case holds the two together), here so a narrow terminal
+# starts no node. The terminal's choice is the environment's: the batch's foreman.conf is not read.
+_init_min_cols=64
+SHOW=0
+SHOW_TIER=""
+SHOW_COLS=""
+if ui_show 1 SHOW_TIER && ui_cols SHOW_COLS 1 && [ "$SHOW_COLS" -ge "$_init_min_cols" ]; then SHOW=1; fi
+
+# What is said, twice: `say` prints a line of today's text, or keeps it back while the show may
+# draw it instead; `fact` is the same thing for the renderer, as a line of `key<TAB>values`.
+FACTS=""
+PLAIN=""
+say() {    # say LINE
+  if [ "$SHOW" -eq 1 ]; then PLAIN+="$1"$'\n'; else printf '%s\n' "$1"; fi
+}
+fact() {    # fact KEY VALUE...
+  [ "$SHOW" -eq 1 ] || return 0
+  local key="$1" value
+  shift
+  printf -v value '\t%s' "$@"
+  FACTS+="$key$value"$'\n'
+}
+
+# Draws SCENE from the facts so far and forgets them. If it cannot be drawn, prints the text kept
+# back instead, and from then on this is a plain run.
+draw_or_plain() {    # draw_or_plain SCENE
+  local out status
+  out="$(node "$FOREMAN_TOOL_DIR/foreman-draw.cjs" "$1" --tier "$SHOW_TIER" --cols "$SHOW_COLS" <<< "$FACTS" 2>/dev/null; printf 'x%s' "$?")"
+  status="${out##*x}"
+  out="${out%x*}"
+  if [ "$status" = 0 ]; then printf '%s' "$out"; else printf '%s' "$PLAIN"; SHOW=0; fi
+  FACTS=""
+  PLAIN=""
+}
+
+# The batch's tickets, from the one place that knows how a batch answers that. Read after the conf
+# is in place, so a conf that sets FOREMAN_ISSUES_DIRS is honoured.
+tickets=()
+tickets_read=0
+read_tickets() {
+  [ "$tickets_read" -eq 0 ] || return 0
+  tickets_read=1
+  local file
+  while IFS= read -r file; do
+    [ -n "$file" ] && tickets+=("$file")
+  done < <(bash "$FOREMAN_TOOL_DIR/foreman-next.sh" "$BATCH_DIR" --unordered)
+}
+
+# write_if_absent TARGET: is TARGET to be written? Says so if not, and leaves in FILE_STATE
+# whether writing it is creating it or replacing it.
+FILE_STATE=created
 write_if_absent() {
   local target="$1"
   if [ -e "$target" ] && [ "$FORCE" -eq 0 ]; then
-    echo "   kept     $target (already exists — pass --force to replace)"
+    say "   kept     $target (already exists — pass --force to replace)"
+    fact file kept "${target##*/}" "already there — --force replaces it"
     return 1
   fi
+  if [ -e "$target" ]; then FILE_STATE=replaced; else FILE_STATE=created; fi
   return 0
 }
 
-echo "Batch: $BATCH_DIR"
+say "Batch: $BATCH_DIR"
 
 # --- foreman.conf ------------------------------------------------------------
 # legacy: a batch from before the rename keeps its ralph.conf rather than getting a second,
 # empty conf beside it that would shadow every setting in the old one.
 if [ -f "$BATCH_DIR/ralph.conf" ] && [ ! -e "$BATCH_DIR/foreman.conf" ]; then
-  echo "   kept     $BATCH_DIR/ralph.conf (from before the rename to Foreman)"
-  echo "            rename it:  git mv \"$BATCH_DIR/ralph.conf\" \"$BATCH_DIR/foreman.conf\""
+  say "   kept     $BATCH_DIR/ralph.conf (from before the rename to Foreman)"
+  say "            rename it:  git mv \"$BATCH_DIR/ralph.conf\" \"$BATCH_DIR/foreman.conf\""
+  fact file kept ralph.conf "kept, from before the rename" "git mv \"$BATCH_DIR/ralph.conf\" \"$BATCH_DIR/foreman.conf\""
 elif write_if_absent "$BATCH_DIR/foreman.conf"; then
   cp "$FOREMAN_TOOL_DIR/foreman.conf.template" "$BATCH_DIR/foreman.conf" || exit 1
-  echo "   created  $BATCH_DIR/foreman.conf"
+  say "   created  $BATCH_DIR/foreman.conf"
+  fact file "$FILE_STATE" foreman.conf "the batch's settings, from the template"
   wrote_any=1
   conf_written=1
 fi
@@ -113,10 +181,7 @@ if write_if_absent "$BATCH_DIR/order.md"; then
   # whose foreman.conf points somewhere other than `issues/` is scaffolded from the right
   # directory. `--unordered` is what makes this safe under --force, too: it never reads
   # the order.md we are about to overwrite.
-  tickets=()
-  while IFS= read -r file; do
-    [ -n "$file" ] && tickets+=("$file")
-  done < <(bash "$FOREMAN_TOOL_DIR/foreman-next.sh" "$BATCH_DIR" --unordered)
+  read_tickets
 
   {
     echo "# $init_batch_name — implementation order"
@@ -150,7 +215,12 @@ if write_if_absent "$BATCH_DIR/order.md"; then
     echo '```'
     echo "<!-- ORDER:END -->"
   } > "$BATCH_DIR/order.md"
-  echo "   created  $BATCH_DIR/order.md (${#tickets[@]} ticket(s) — re-order it before running)"
+  say "   created  $BATCH_DIR/order.md (${#tickets[@]} ticket(s) — re-order it before running)"
+  if [ "${#tickets[@]}" -gt 0 ]; then
+    fact file "$FILE_STATE" order.md "the run order"
+  else
+    fact file "$FILE_STATE" order.md "the run order — no tickets found yet"
+  fi
   wrote_any=1
   [ "${#tickets[@]}" -gt 0 ] && order_written=1
 fi
@@ -163,29 +233,79 @@ if write_if_absent "$BATCH_DIR/progress.txt"; then
     echo "# attached to every later prompt, so length here is a recurring cost."
     echo
   } > "$BATCH_DIR/progress.txt"
-  echo "   created  $BATCH_DIR/progress.txt"
+  say "   created  $BATCH_DIR/progress.txt"
+  fact file "$FILE_STATE" progress.txt "the agent's running notes, one entry per iteration"
   wrote_any=1
 fi
 
-echo
+say ""
+
+# The header and the files, drawn now: the agent passes below take as long as they take.
+if [ "$SHOW" -eq 1 ]; then
+  read_tickets
+  declare -A seen_dirs=()
+  for file in "${tickets[@]}"; do seen_dirs["${file%/*}"]=1; done
+  FACTS="batch"$'\t'"$BATCH_DIR"$'\n'"tickets"$'\t'"${#tickets[@]}"$'\n'"dirs"$'\t'"${#seen_dirs[@]}"$'\n'"$FACTS"
+  draw_or_plain init
+fi
 
 if [ "$conf_written" -eq 1 ] && [ "$NO_COMMANDS" -eq 0 ]; then
-  echo
+  [ "$SHOW" -eq 1 ] || echo
   bash "$FOREMAN_TOOL_DIR/foreman-commands.sh" "$BATCH_DIR"
 fi
 
+# What the ordering printed, held back in the show, which tells it from the facts instead.
+order_out=""
+order_facts=""
+order_seconds=""
 if [ "$order_written" -eq 1 ] && [ "$NO_ORDER" -eq 0 ]; then
-  echo
-  bash "$FOREMAN_TOOL_DIR/foreman-order.sh" "$BATCH_DIR"
+  if [ "$SHOW" -eq 1 ]; then
+    order_facts="$(mktemp "${TMPDIR:-/tmp}/foreman-order.XXXXXX")" || order_facts=""
+    # The wait is the longest part of init, so a terminal is told what it is waiting for.
+    [ -t 1 ] && printf '  ordering %s ticket(s) with the agent ...' "${#tickets[@]}"
+    order_start=$SECONDS
+    order_out="$(FOREMAN_ORDER_RESULT="$order_facts" bash "$FOREMAN_TOOL_DIR/foreman-order.sh" "$BATCH_DIR" 2>&1)"
+    order_seconds=$((SECONDS - order_start))
+    [ -t 1 ] && printf '\r\033[K'
+  else
+    echo
+    bash "$FOREMAN_TOOL_DIR/foreman-order.sh" "$BATCH_DIR"
+  fi
 fi
 
-echo
-if [ "$wrote_any" -eq 1 ]; then
-  echo "Next:"
-  echo "  1. review $BATCH_DIR/foreman.conf   — at minimum FOREMAN_CHECK_CMD and FOREMAN_TEST_CMD"
-  echo "  2. review $FOREMAN_INVOKE order picked in $BATCH_DIR/order.md — it is a first pass, not a guarantee"
-  echo "  3. $FOREMAN_INVOKE dry-run $BATCH_DIR   (free; prints the exact prompt)"
-  echo "  4. $FOREMAN_INVOKE run $BATCH_DIR       (one iteration, then look)"
+# The text that closes a plain run, and a show that could not be drawn.
+plain_tail() {
+  [ -z "$order_out" ] || { echo; printf '%s\n' "$order_out"; }
+  echo
+  if [ "$wrote_any" -eq 1 ]; then
+    echo "Next:"
+    echo "  1. review $BATCH_DIR/foreman.conf   — at minimum FOREMAN_CHECK_CMD and FOREMAN_TEST_CMD"
+    echo "  2. review $FOREMAN_INVOKE order picked in $BATCH_DIR/order.md — it is a first pass, not a guarantee"
+    echo "  3. $FOREMAN_INVOKE dry-run $BATCH_DIR   (free; prints the exact prompt)"
+    echo "  4. $FOREMAN_INVOKE run $BATCH_DIR       (one iteration, then look)"
+  else
+    echo "Nothing to do — this batch is already set up."
+  fi
+}
+
+if [ "$SHOW" -eq 1 ]; then
+  fact batch "$BATCH_DIR"
+  fact invoke "$FOREMAN_INVOKE"
+  fact wrote "$wrote_any"
+  if [ "$order_written" -eq 1 ] && [ "$NO_ORDER" -eq 0 ]; then
+    if [ -n "$order_facts" ] && [ -s "$order_facts" ]; then
+      FACTS+="$(<"$order_facts")"$'\n'
+    else
+      # The ordering died before it could say how: what it printed is the best account there is.
+      last="${order_out##*$'\n'}"
+      fact result failed
+      fact said "$last"
+    fi
+    fact seconds "$order_seconds"
+  fi
+  [ -z "$order_facts" ] || rm -f "$order_facts"
+  draw_or_plain init-done
+  [ "$SHOW" -eq 1 ] || plain_tail
 else
-  echo "Nothing to do — this batch is already set up."
+  plain_tail
 fi

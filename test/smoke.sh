@@ -2777,6 +2777,82 @@ if case_is "foreman commands catches an edit that leaves foreman.conf unparseabl
   assert_missing "$OUT" "updated batch/foreman.conf" "rather than reporting the update"
 fi
 
+# `foreman order` can leave how it went as facts for the renderer, in the file FOREMAN_ORDER_RESULT
+# names: this is how `foreman init` draws the ordering without parsing what order prints.
+if case_is "foreman order leaves its result as facts when asked: what moved, who is human, what it cost"; then
+  repo="$(make_repo 3 order-facts-repo)"
+  make_human_ticket "$repo" 2
+  make_followup_ticket "$repo" 3 2
+  write_order_stub "$repo"
+  facts="$WORK/order-facts.txt"
+  reverse='{ echo "<!-- ORDER:BEGIN -->"; echo batch/issues/03-ticket.md; echo batch/issues/02-ticket.md; echo batch/issues/01-ticket.md; echo "<!-- ORDER:END -->"; } > batch/order.md'
+
+  FOREMAN_ORDER_RESULT="$facts" PATH="$(make_commands_claude_stub):$PATH" STUB_SCRIPT="$reverse" \
+    STUB_OUT='{"is_error":false,"total_cost_usd":0.0831,"result":"done"}' run_foreman "$repo" order batch
+  assert_eq "$ST" 0 "order exits 0"
+  assert_contains "$OUT" 'wrote batch/order.md (cost $0.0831)' "and prints what it always printed"
+  assert_eq "$(cat "$facts")" "result	ordered
+cost	0.0831
+was	batch/issues/01-ticket.md
+was	batch/issues/02-ticket.md
+was	batch/issues/03-ticket.md
+now	batch/issues/03-ticket.md
+now	batch/issues/02-ticket.md
+now	batch/issues/01-ticket.md
+check	batch/issues/03-ticket.md	batch/issues/02-ticket.md
+human	batch/issues/02-ticket.md
+warning	batch/issues/03-ticket.md should come right after batch/issues/02-ticket.md in order.md" "the order before and after, the cost, the human and followup tickets in their new order, and the warnings, as facts"
+
+  # Not asked for, nothing is written and nothing extra is done.
+  rm -f "$facts"
+  PATH="$(make_claude_stub):$PATH" run_foreman "$repo" order batch
+  [ -e "$facts" ] && fail "no FOREMAN_ORDER_RESULT, no file" || pass
+fi
+
+if case_is "foreman order's result facts say when the call failed, when the login expired, and when there is no agent"; then
+  repo="$(make_repo 2 order-facts-fail-repo)"
+  write_order_stub "$repo"
+  facts="$WORK/order-facts-fail.txt"
+
+  FOREMAN_ORDER_RESULT="$facts" PATH="$(make_canned_claude_stub):$PATH" STUB_EXIT=1 \
+    STUB_OUT='{"is_error":true,"total_cost_usd":0,"result":"Prompt is too long"}' run_foreman "$repo" order batch
+  assert_eq "$ST" 1 "a failed call still exits 1"
+  assert_eq "$(cat "$facts")" "result	failed
+said	Prompt is too long
+auth	0" "failed, and what the agent said"
+
+  FOREMAN_ORDER_RESULT="$facts" PATH="$(make_canned_claude_stub):$PATH" STUB_EXIT=1 \
+    STUB_OUT='{"is_error":true,"result":"Failed to authenticate: OAuth session expired"}' run_foreman "$repo" order batch
+  assert_contains "$(cat "$facts")" "auth	1" "an expired login is said to be one"
+
+  FOREMAN_ORDER_RESULT="$facts" PATH="$(make_canned_claude_stub):$PATH" STUB_EXIT=0 \
+    STUB_OUT='{"is_error":false,"result":"ok"}' run_foreman "$repo" order batch
+  assert_eq "$(grep -c '^result' "$facts")" 1 "a second run replaces the facts, it does not add to them"
+  assert_contains "$(cat "$facts")" "result	ordered" "this one went well"
+  assert_missing "$(cat "$facts")" "cost" "and the reply had no cost to report"
+
+  # No claude at all: a PATH holding only what foreman needs.
+  tools="$WORK/order-no-claude-$CASE_IDX"; mkdir -p "$tools"
+  for t in bash node git env rm mkdir cat sed grep awk sort date head tail tr wc cut mktemp uniq ln cp mv basename dirname; do
+    src="$(command -v "$t" 2>/dev/null)" && [ -n "$src" ] && ln -sf "$src" "$tools/$t"
+  done
+  rm -f "$facts"
+  FOREMAN_ORDER_RESULT="$facts" PATH="$tools" run_foreman "$repo" order batch
+  if PATH="$tools" command -v claude >/dev/null 2>&1; then
+    printf '  (skipped: could not build a PATH without claude)\n'
+  else
+    assert_eq "$ST" 0 "no agent is not a failure"
+    assert_eq "$(cat "$facts")" "result	skipped
+said	'claude' is not on PATH" "but it is said to have been skipped"
+  fi
+
+  # A batch with no tickets has nothing to order.
+  repo="$(make_repo 0 order-facts-empty-repo)"
+  write_order_stub "$repo"
+  FOREMAN_ORDER_RESULT="$facts" PATH="$(make_claude_stub):$PATH" run_foreman "$repo" order batch
+  assert_eq "$(cat "$facts")" "result	empty" "no tickets, nothing to order"
+fi
+
 if case_is "init fills in the commands of a conf it writes, but not with --no-commands or for a kept conf"; then
   repo="$(make_repo 1 init-commands-repo)"
   rm -f "$repo/batch/foreman.conf"
@@ -3980,6 +4056,433 @@ if case_is "FOREMAN_SHOW takes auto, always and never, and a batch's foreman.con
   git -C "$repo" commit --quiet -am "no show"
   run_foreman "$repo" status batch
   assert_eq "$ST" 0 "foreman.conf can set it"
+fi
+
+# `foreman init` as breaking ground: the mark, the files written, the ordering, four steps.
+
+# The facts `foreman init` hands the renderer for the design's batch (designs/07a-init.txt).
+INIT_DIR=".scratch/human-tickets"
+init_head_facts() {
+  printf 'batch\t%s\ntickets\t10\ndirs\t3\n' "$INIT_DIR"
+  printf 'file\tcreated\tforeman.conf\tthe batch'"'"'s settings, from the template\n'
+  printf 'file\tcreated\torder.md\tthe run order\n'
+  printf 'file\tcreated\tprogress.txt\tthe agent'"'"'s running notes, one entry per iteration\n'
+}
+init_done_facts() {
+  printf 'batch\t%s\ninvoke\tforeman\nwrote\t1\n' "$INIT_DIR"
+  printf 'result\tordered\nseconds\t31\ncost\t0.0800\n'
+  local i; for i in 01 02 03 04 05 06 07 08 09 10; do printf 'was\t%s/issues/%s-t.md\n' "$INIT_DIR" "$i"; done
+  for i in 08 09 10 01 02 03 04 05 06 07; do printf 'now\t%s/issues/%s-t.md\n' "$INIT_DIR" "$i"; done
+  printf 'human\t%s/issues/07-t.md\ncheck\t%s/issues/07a-t.md\t%s/issues/07-t.md\n' "$INIT_DIR" "$INIT_DIR" "$INIT_DIR"
+}
+
+if case_is "foreman-draw's mark is the design's, cell for cell, and shrinks to 256 and 16 colours"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  ESC=$'\033'
+  ANS="$FOREMAN_HOME/.scratch/terminal-design/designs/07a-init.ans"
+  CELLS="$FOREMAN_HOME/test/ans-cells.cjs"
+  OUT24="$(init_head_facts | node "$DRAW" init --tier 24 --cols 120)"; ST=$?
+  assert_eq "$ST" 0 "the init scene runs"
+  want="$(node "$CELLS" --cells 20 --rows 2-7 < "$ANS")"
+  got="$(printf '%s\n' "$OUT24" | node "$CELLS" --cells 20 --rows 1-6)"
+  assert_eq "$(printf '%s\n' "$got" | wc -l | tr -d ' ')" 6 "six rows of mark"
+  assert_eq "$got" "$want" "the mark at 24 bits matches 07a-init.ans, every cell"
+  # The mark is a function of its own, for report and version to use.
+  assert_eq "$(node -e '
+    const d = require(process.argv[1]);
+    const rows = d.mark(24);
+    const text = rows.map((r) => r.map((c) => c.t).join(""));
+    console.log(rows.length, Math.max(...text.map((t) => Array.from(t).length)), d.MARK_WIDTH, d.TEXT_COLUMN)' "$DRAW")" "6 20 20 23" "mark(tier): six rows, twenty wide, text at column 23"
+  assert_eq "$(node -e '
+    const d = require(process.argv[1]);
+    const rows = d.withMark(24, [null, [{ t: "hello" }], null, [{ t: "x" }]]);
+    console.log(rows.length, d.encode(rows, 24).replace(/\x1b\[[0-9;]*m/g, "").split("\n").slice(0, 4).map((l) => l.slice(20)).join("|"))' "$DRAW")" \
+    "6 |   hello||   x" "withMark(tier, beside): text starts at column 23 whatever the mark row's width"
+  assert_eq "$(node -e '
+    const d = require(process.argv[1]);
+    console.log(d.withMark(24, [null, null, null, null, null, null, [{ t: "below" }]]).length)' "$DRAW")" 7 "and a line past the mark's last row goes on below it"
+
+  OUT256="$(init_head_facts | node "$DRAW" init --tier 256 --cols 120)"
+  assert_contains "$OUT256" "${ESC}[0;38;5;" "256 colours"
+  assert_missing "$OUT256" "38;2;" "and no 24 bits"
+  assert_eq "$(printf '%s\n' "$OUT256" | sed "s/${ESC}\[[0-9;]*m//g")" "$(printf '%s\n' "$OUT24" | sed "s/${ESC}\[[0-9;]*m//g")" "the same shapes and words at 256"
+  OUT16="$(init_head_facts | node "$DRAW" init --tier 16 --cols 120)"
+  assert_missing "$OUT16" "38;2;" "16 colours: no 24 bits"
+  assert_missing "$OUT16" "38;5;" "no 256"
+  assert_contains "$OUT16" "${ESC}[0;" "but colour"
+  assert_contains "$(printf '%s\n' "$OUT16" | sed "s/${ESC}\[[0-9;]*m//g")" "FOREMAN  breaks ground" "and the words"
+fi
+
+if case_is "foreman-draw init writes the design's header and files, and its other pieces say what they are given"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  TXT="$FOREMAN_HOME/.scratch/terminal-design/designs/07a-init.txt"
+  OUT="$(init_head_facts | node "$DRAW" init --tier 24 --cols 120 | strip)"
+  assert_eq "$OUT" "$(sed -n '2,13p' "$TXT" | sed 's/ *$//')" "the header, rule and the three files read as 07a-init.txt does"
+  assert_eq "$(init_head_facts | node "$DRAW" init --tier 24 --cols 120 | wc -l | tr -d ' ')" 13 "and a blank line after"
+  assert_eq "$(printf '%s\n' "$OUT" | sed -n 8p | tr -d '\n' | wc -m | tr -d ' ')" 96 "the rule is 96 wide on a wide terminal"
+  assert_eq "$(init_head_facts | node "$DRAW" init --tier 24 --cols 80 | strip | sed -n 8p | tr -d '\n' | wc -m | tr -d ' ')" 80 "and no wider than the terminal"
+  assert_contains "$(init_head_facts | node "$DRAW" init --tier 24 --cols 120)" "${ESC}[0;1;38;2;143;207;143m+" "a bold green + for each file"
+  assert_contains "$(init_head_facts | node "$DRAW" init --tier 24 --cols 120)" "${ESC}[0;1;38;2;224;168;74mFOREMAN" "FOREMAN is bold amber"
+
+  # What was found: plural, singular, none.
+  head_of() { printf 'batch\tb\n%s\n' "$1" | node "$DRAW" init --tier 24 --cols 120 | strip | sed -n 5p; }
+  assert_contains "$(head_of $'tickets\t1\ndirs\t1')" "found  1 ticket in 1 issue directory" "singular"
+  assert_contains "$(head_of $'tickets\t2\ndirs\t2')" "found  2 tickets in 2 issue directories" "plural"
+  assert_contains "$(head_of $'tickets\t0\ndirs\t0')" "found  no tickets yet" "none"
+  assert_contains "$(head_of '')" "found  no tickets yet" "and no fact is none"
+  assert_contains "$(head_of $'tickets\t4\ndirs\t1')" "found  4 tickets in 1 issue directory" "many tickets in one directory"
+
+  # Files: replaced says so, kept is an = and a reason, and the rename hint goes under it.
+  files_of() { printf 'batch\tb\n%s\n' "$1" | node "$DRAW" init --tier 24 --cols 120 | strip | sed -n '10,$p'; }
+  assert_eq "$(files_of $'file\treplaced\torder.md\tthe run order')" \
+    "  + order.md        the run order  ·  replaced" "a replaced file is a + with the word"
+  assert_eq "$(files_of $'file\tkept\tforeman.conf\talready there, --force replaces it')" \
+    "  = foreman.conf    already there, --force replaces it" "a kept file is an ="
+  assert_eq "$(files_of $'file\tkept\tralph.conf\tfrom before the rename\tgit mv a/ralph.conf a/foreman.conf')" \
+    "  = ralph.conf      from before the rename
+    rename it:  git mv a/ralph.conf a/foreman.conf" "and a hint goes on a line under it"
+  assert_contains "$(printf 'batch\tb\nfile\treplaced\tx\ty\n' | node "$DRAW" init --tier 24 --cols 120)" "${ESC}[0;38;2;224;168;74mreplaced" "replaced is amber"
+  assert_contains "$(printf 'batch\tb\nfile\tkept\tx\ty\n' | node "$DRAW" init --tier 24 --cols 120)" "${ESC}[0;1;38;2;224;168;74m=" "and so is the ="
+
+  # Narrow, and a scene the shell's minimum must agree with.
+  OUT="$(init_head_facts | node "$DRAW" init --tier 24 --cols 63 2>"$WORK/draw-err")"; ST=$?
+  assert_eq "$ST" 3 "63 columns is refused"
+  assert_eq "$OUT" "" "and nothing drawn"
+  assert_eq "$(init_head_facts | node "$DRAW" init --tier 24 --cols 64 | wc -l | tr -d ' ')" 13 "64 is wide enough"
+  assert_eq "$(node -e 'const s = require(process.argv[1]).SCENES; console.log(s.init.min, s["init-done"].min)' "$DRAW")" \
+    "$(sed -n 's/^_init_min_cols=\([0-9]*\).*/\1 \1/p' "$FOREMAN_HOME/lib/foreman-init.sh")" "the renderer's minimum for both init scenes is foreman-init.sh's"
+fi
+
+if case_is "foreman-draw init-done writes the ordering result and NEXT as designed, and says when ordering did not happen"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  TXT="$FOREMAN_HOME/.scratch/terminal-design/designs/07a-init.txt"
+  OUT="$(init_done_facts | node "$DRAW" init-done --tier 24 --cols 120 | strip)"
+  assert_eq "$(printf '%s\n' "$OUT" | sed -n 1,2p)" "$(sed -n '15,16p' "$TXT" | sed 's/ *$//')" "the ordering result and its caution, as designed"
+  assert_eq "$(printf '%s\n' "$OUT" | sed -n 3p)" "" "then a blank line"
+  assert_eq "$(printf '%s\n' "$OUT" | sed -n 4,7p)" "NEXT
+  1  edit    $INIT_DIR/foreman.conf   FOREMAN_CHECK_CMD and FOREMAN_TEST_CMD at least
+  2  review  $INIT_DIR/order.md
+  3  foreman dry-run $INIT_DIR   free  ·  prints the exact prompt" "NEXT and its first three steps; the commands name the batch, so they can be pasted"
+  assert_eq "$(printf '%s\n' "$OUT" | sed -n 8p)" "  4  foreman run $INIT_DIR       one iteration, then look" "and the fourth, its description lined up with the third's"
+  assert_eq "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" 8 "and nothing after"
+  RAW="$(init_done_facts | node "$DRAW" init-done --tier 24 --cols 120)"
+  assert_contains "$RAW" "${ESC}[0;38;2;143;207;143m✓" "the tick is green"
+  assert_contains "$RAW" "${ESC}[0;1;38;2;224;168;74mNEXT" "NEXT is bold amber"
+  assert_contains "$RAW" "${ESC}[0;1;38;2;224;168;74m4" "the step numbers too"
+  assert_contains "$RAW" "${ESC}[0;38;2;224;168;74mforeman run $INIT_DIR" "and the commands are amber"
+  assert_contains "$RAW" "${ESC}[0;38;2;168;162;153m3 moved" "the figures are muted"
+
+  done_of() { { printf 'batch\tb\ninvoke\tforeman\nwrote\t1\n%s\n' "$1"; } | node "$DRAW" init-done --tier 24 --cols 120 | strip | sed -n 1,3p; }
+  assert_eq "$(done_of $'result\tordered\nseconds\t4\nwas\ta\nnow\ta')" "  ✓ ordered by the agent      none moved  ·  4s
+    a first pass, not a guarantee — look it over" "nothing moved, no cost reported"
+  assert_eq "$(done_of $'result\tordered\nseconds\t95\ncost\t0.4210\nwas\ta\nwas\tb\nnow\tb\nnow\ta')" \
+    "  ✓ ordered by the agent      1 moved  ·  1m35s  ·  \$0.42
+    a first pass, not a guarantee — look it over" "one moved, a minute and a half, a cost"
+  assert_eq "$(done_of $'result\tordered\nseconds\t0\ncost\t0.0000')" "  ✓ ordered by the agent      0s  ·  \$0.00
+    a first pass, not a guarantee — look it over" "no lists to compare says nothing about moved"
+  assert_eq "$(done_of $'result\tordered\nwarning\t01-x.md has no Handoff: file')" "  ✓ ordered by the agent
+    a first pass, not a guarantee — look it over
+  ▲ 01-x.md has no Handoff: file" "a warning goes under it"
+  assert_eq "$(done_of $'result\tordered\nhuman\tb/07-x.md\nhuman\tb/12-y.md\ncheck\tb/07a-x.md\tb/07-x.md\ncheck\tb/12a-y.md\tb/12-y.md' | head -n 1)" \
+    "  ✓ ordered by the agent      07 is yours, 07a checks it, 12 is yours, 12a checks it" "several human tickets, each with its checker"
+  assert_eq "$(done_of $'result\tordered\ncheck\tb/09-x.md\tb/08-y.md' | head -n 1)" \
+    "  ✓ ordered by the agent      09 checks 08" "a checker of a ticket that is not a human one names it"
+  assert_eq "$(done_of $'result\tfailed\nseconds\t12\nsaid\tboom')" "  ✗ not ordered               the agent call failed  ·  12s
+    claude said: boom
+    order.md is in filename order — foreman order b tries again" "a failed ordering says so in its place"
+  assert_contains "$(done_of $'result\tfailed\nsaid\tnot logged in\nauth\t1')" "your claude login has expired — run \`claude /login\`, then re-run \`foreman order b\`" "with the login hint"
+  assert_eq "$(done_of $'result\tskipped\nsaid\t'"'"'claude'"'"' is not on PATH')" "  ▲ not ordered               'claude' is not on PATH
+    order.md is in filename order — foreman order b once it is" "an agent that is not there is a ▲ and a way forward"
+  assert_contains "$(printf 'batch\tb\nresult\tfailed\n' | node "$DRAW" init-done --tier 24 --cols 120)" "${ESC}[0;38;2;240;128;120m✗" "a failure is red"
+  assert_eq "$(done_of '' | head -n 2)" "NEXT
+  1  edit    b/foreman.conf   FOREMAN_CHECK_CMD and FOREMAN_TEST_CMD at least" "no ordering (--no-order) is no ordering line at all, NEXT is first"
+  assert_eq "$(printf 'batch\tb\ninvoke\t/x/foreman\nwrote\t1\n' | node "$DRAW" init-done --tier 24 --cols 120 | strip | tail -n 2)" \
+    "  3  /x/foreman dry-run b   free  ·  prints the exact prompt
+  4  /x/foreman run b       one iteration, then look" "the invoking name is the shell's"
+  assert_eq "$(printf 'batch\tb\ninvoke\tforeman\nwrote\t0\n' | node "$DRAW" init-done --tier 24 --cols 120 | strip)" \
+    "  = already marked out — nothing changed. --force writes the three files again." "nothing written: no NEXT, and what to do"
+fi
+
+if case_is "foreman-draw knows how many tickets moved and what a ticket is called"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  moved() { node -e 'const d = require(process.argv[1]); console.log(d.movedCount(process.argv[2].split(","), process.argv[3].split(",").filter(Boolean)))' "$DRAW" "$1" "$2"; }
+  assert_eq "$(moved a,b,c,d a,b,c,d)" 0 "the same order: none"
+  assert_eq "$(moved a,b,c,d d,a,b,c)" 1 "one ticket taken to the front: one, not four"
+  assert_eq "$(moved a,b,c,d b,c,d,a)" 1 "or to the back"
+  assert_eq "$(moved a,b,c,d a,c,b,d)" 1 "a swap is one"
+  assert_eq "$(moved a,b,c,d d,c,b,a)" 3 "reversed: all but one"
+  assert_eq "$(moved a,b,c,d,e,f,g,h,i,j h,i,j,a,b,c,d,e,f,g)" 3 "three to the front: three"
+  assert_eq "$(moved a,b,c a,c)" 0 "a ticket the agent dropped is not moved"
+  assert_eq "$(moved a,b a,x,b)" 0 "nor is one it added"
+  assert_eq "$(moved a,b,c "")" 0 "an empty answer moves nothing"
+  assert_eq "$(moved a,a,b b,a,a)" 1 "a name twice is two tickets"
+  id() { node -e 'console.log(require(process.argv[1]).ticketId(process.argv[2]))' "$DRAW" "$1"; }
+  assert_eq "$(id .scratch/b/issues/07-doctor-inspector.md)" 07 "the number in front"
+  assert_eq "$(id .scratch/b/issues/07a-check-it.md)" 07a "and a letter after it"
+  assert_eq "$(id issues/DONE_01-x.md)" DONE_01-x "a renamed done ticket keeps its whole name"
+  assert_eq "$(id fix-login.md)" fix-login "an unnumbered ticket is its name"
+  assert_eq "$(id 12.md)" 12 "a bare number"
+  assert_eq "$(id 'C:\b\issues\03-x.md')" 03 "a Windows path"
+fi
+
+# The show, forced into a capture: no terminal, so every show variable is named. `strip` takes the
+# colour off.
+init_show() {    # init_show REPO ARGS... — a forced 24-bit show 120 wide, in $OUT and $ST
+  local repo="$1"; shift
+  OUT="$(cd "$repo" && env -u CI -u NO_COLOR FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" init "$@" 2>&1)"
+  ST=$?
+}
+
+if case_is "foreman init at a terminal breaks ground: the mark, the files with a +, the ordering, four steps"; then
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g"; }
+  repo="$(make_repo 3 init-show-repo)"
+  make_human_ticket "$repo" 2
+  make_followup_ticket "$repo" 3 2
+  rm -f "$repo/batch/foreman.conf"
+  reverse='{ echo "<!-- ORDER:BEGIN -->"; echo batch/issues/03-ticket.md; echo batch/issues/02-ticket.md; echo batch/issues/01-ticket.md; echo "<!-- ORDER:END -->"; } > batch/order.md'
+
+  PATH="$(make_commands_claude_stub):$PATH" STUB_SCRIPT="$reverse" STUB_OUT='{"is_error":false,"total_cost_usd":0.0831}' \
+    init_show "$repo" batch --no-commands
+  assert_eq "$ST" 0 "init exits 0"
+  SHOWN="$(printf '%s\n' "$OUT" | strip)"
+  assert_contains "$OUT" "${ESC}[0;" "it is coloured"
+  assert_contains "$OUT" "38;2;" "at 24 bits"
+  assert_contains "$SHOWN" "FOREMAN  breaks ground" "the mark and its title"
+  assert_contains "$SHOWN" "batch  batch" "the batch"
+  assert_contains "$SHOWN" "found  3 tickets in 1 issue directory" "what was found"
+  assert_contains "$SHOWN" "  + foreman.conf    the batch's settings, from the template" "a + per file written"
+  assert_contains "$SHOWN" "  + order.md        the run order" "(order.md)"
+  assert_contains "$SHOWN" "  + progress.txt    the agent's running notes, one entry per iteration" "(progress.txt)"
+  assert_contains "$SHOWN" "  ✓ ordered by the agent      2 moved  ·  02 is yours, 03 checks it  ·  " "the ordering: moved, human, check"
+  assert_contains "$SHOWN" "s  ·  \$0.08" "and its time and cost"
+  assert_contains "$SHOWN" "a first pass, not a guarantee — look it over" "and its caution"
+  assert_contains "$SHOWN" "▲ batch/issues/03-ticket.md should come right after batch/issues/02-ticket.md in order.md" "and the ordering's warning"
+  assert_contains "$SHOWN" "NEXT" "NEXT"
+  assert_contains "$SHOWN" "  1  edit    batch/foreman.conf   FOREMAN_CHECK_CMD and FOREMAN_TEST_CMD at least" "step 1"
+  assert_contains "$SHOWN" "  2  review  batch/order.md" "step 2"
+  assert_contains "$SHOWN" "  3  foreman dry-run batch   free  ·  prints the exact prompt" "step 3"
+  assert_contains "$SHOWN" "  4  foreman run batch       one iteration, then look" "step 4"
+  assert_missing "$SHOWN" "Batch:" "none of the plain text"
+  assert_missing "$SHOWN" "created " "(not its created lines)"
+  assert_missing "$SHOWN" "foreman order: reading" "nor the ordering's own"
+  assert_missing "$SHOWN" "Next:" "nor the old Next"
+  assert_eq "$(printf '%s\n' "$SHOWN" | sed -n 1p)" "" "a blank line first, where the prompt left off"
+  [ -f "$repo/batch/foreman.conf" ] && [ -f "$repo/batch/order.md" ] && [ -f "$repo/batch/progress.txt" ] && pass || fail "the three files were written"
+  assert_contains "$(cat "$repo/batch/order.md")" "batch/issues/03-ticket.md" "and order.md is what the agent left"
+
+  # The same, narrower: not wide enough for the picture, so today's text.
+  repo="$(make_repo 2 init-show-narrow-repo)"; rm -f "$repo/batch/foreman.conf"
+  OUT="$(cd "$repo" && env -u CI FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=63 "$FOREMAN" init batch --no-order --no-commands 2>&1)"
+  assert_contains "$OUT" "Batch: batch" "63 columns is plain"
+  assert_contains "$OUT" "   created  batch/foreman.conf" "(created lines)"
+  assert_missing "$OUT" "${ESC}" "with no escapes"
+fi
+
+if case_is "foreman init at a terminal without --no-order drops the ordering line, and says so when ordering failed"; then
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g"; }
+  repo="$(make_repo 2 init-show-noorder-repo)"; rm -f "$repo/batch/foreman.conf"
+  init_show "$repo" batch --no-order --no-commands
+  assert_eq "$ST" 0 "init --no-order exits 0"
+  SHOWN="$(printf '%s\n' "$OUT" | strip)"
+  assert_contains "$SHOWN" "found  2 tickets in 1 issue directory" "the header"
+  assert_contains "$SHOWN" "  + order.md        the run order" "the files"
+  assert_missing "$SHOWN" "ordered" "no ordering line"
+  assert_missing "$SHOWN" "not ordered" "not even a failure"
+  assert_missing "$SHOWN" "a first pass" "or its caution"
+  assert_contains "$SHOWN" "  3  foreman dry-run batch   free  ·  prints the exact prompt" "NEXT is still there"
+  assert_eq "$(printf '%s\n' "$SHOWN" | sed -n '/^NEXT/,$p' | wc -l | tr -d ' ')" 5 "all four steps"
+  assert_eq "$(printf '%s\n' "$SHOWN" | sed -n '/progress.txt/{n;p;}')" "" "with a blank line before it"
+
+  repo="$(make_repo 2 init-show-fail-repo)"; rm -f "$repo/batch/foreman.conf"
+  PATH="$(make_canned_claude_stub):$PATH" STUB_EXIT=1 STUB_OUT='{"is_error":true,"result":"Prompt is too long"}' \
+    init_show "$repo" batch --no-commands
+  assert_eq "$ST" 0 "a failed ordering does not fail init (it never did)"
+  SHOWN="$(printf '%s\n' "$OUT" | strip)"
+  assert_contains "$SHOWN" "  ✗ not ordered               the agent call failed  ·  " "the failure, in the ordering's place"
+  assert_contains "$SHOWN" "    claude said: Prompt is too long" "what the agent said"
+  assert_contains "$SHOWN" "    order.md is in filename order — foreman order batch tries again" "and what to do"
+  assert_missing "$SHOWN" "ordered by the agent" "no ✓"
+  assert_missing "$SHOWN" "claude /login" "no login hint for an unrelated failure"
+  assert_contains "$SHOWN" "  1  edit    batch/foreman.conf" "NEXT follows"
+  assert_contains "$(cat "$repo/batch/order.md")" "batch/issues/01-ticket.md" "order.md keeps its filename order"
+
+  repo="$(make_repo 2 init-show-auth-repo)"; rm -f "$repo/batch/foreman.conf"
+  PATH="$(make_canned_claude_stub):$PATH" STUB_EXIT=1 STUB_OUT='{"is_error":true,"result":"Failed to authenticate: OAuth session expired"}' \
+    init_show "$repo" batch --no-commands
+  assert_contains "$(printf '%s\n' "$OUT" | strip)" "your claude login has expired — run \`claude /login\`, then re-run \`foreman order batch\`" "an expired login says how to fix it"
+fi
+
+if case_is "foreman init at a terminal lists what --force replaced and what it kept"; then
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g"; }
+  repo="$(make_repo 2 init-show-force-repo)"
+  init_show "$repo" batch --no-order --no-commands
+  SHOWN="$(printf '%s\n' "$OUT" | strip)"
+  assert_contains "$SHOWN" "  = foreman.conf    already there — --force replaces it" "a conf that was there is kept, and says how to replace it"
+  assert_contains "$SHOWN" "  + order.md        the run order" "an order.md that was not is written"
+  assert_missing "$SHOWN" "replaced" "nothing is replaced"
+
+  init_show "$repo" batch --no-order --no-commands
+  SHOWN="$(printf '%s\n' "$OUT" | strip)"
+  assert_contains "$SHOWN" "  = order.md        already there — --force replaces it" "all three kept"
+  assert_contains "$SHOWN" "  = progress.txt    already there — --force replaces it" "(progress.txt)"
+  assert_contains "$SHOWN" "  = already marked out — nothing changed. --force writes the three files again." "and nothing to do"
+  assert_missing "$SHOWN" "NEXT" "so no steps"
+  assert_eq "$ST" 0 "exit 0"
+
+  init_show "$repo" batch --no-order --no-commands --force
+  SHOWN="$(printf '%s\n' "$OUT" | strip)"
+  assert_contains "$SHOWN" "  + foreman.conf    the batch's settings, from the template  ·  replaced" "--force says foreman.conf was replaced"
+  assert_contains "$SHOWN" "  + order.md        the run order  ·  replaced" "order.md"
+  assert_contains "$SHOWN" "  + progress.txt    the agent's running notes, one entry per iteration  ·  replaced" "and progress.txt"
+  assert_contains "$SHOWN" "NEXT" "and there are steps to take"
+
+  # Some replaced, some new: only what was there is said to be replaced.
+  rm -f "$repo/batch/progress.txt"
+  init_show "$repo" batch --no-order --no-commands --force
+  SHOWN="$(printf '%s\n' "$OUT" | strip)"
+  assert_contains "$SHOWN" "  + order.md        the run order  ·  replaced" "order.md was there"
+  assert_contains "$SHOWN" "  + progress.txt    the agent's running notes, one entry per iteration" "progress.txt was not"
+  assert_missing "$(printf '%s\n' "$SHOWN" | grep 'progress.txt')" "replaced" "so it is not said to be replaced"
+
+  # A conf from before the rename is kept, with the way to rename it.
+  repo="$(make_repo 2 init-show-legacy-repo)"
+  git -C "$repo" mv batch/foreman.conf batch/ralph.conf
+  init_show "$repo" batch --no-order --no-commands
+  SHOWN="$(printf '%s\n' "$OUT" | strip)"
+  assert_contains "$SHOWN" "  = ralph.conf      kept, from before the rename" "ralph.conf is kept"
+  assert_contains "$SHOWN" "    rename it:  git mv \"batch/ralph.conf\" \"batch/foreman.conf\"" "with the rename"
+  assert_missing "$SHOWN" "+ foreman.conf" "and no second conf is written"
+
+  # A batch with no tickets.
+  repo="$(make_repo 0 init-show-empty-repo)"; rm -f "$repo/batch/foreman.conf"
+  init_show "$repo" batch --no-commands
+  SHOWN="$(printf '%s\n' "$OUT" | strip)"
+  assert_contains "$SHOWN" "found  no tickets yet" "no tickets"
+  assert_contains "$SHOWN" "  + order.md        the run order — no tickets found yet" "the order.md says it is empty"
+  assert_missing "$SHOWN" "ordered" "and nothing is ordered"
+fi
+
+if case_is "foreman init at a terminal still shows the agent's command pass, and falls back to today's text if it cannot draw"; then
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g"; }
+  repo="$(make_repo 1 init-show-commands-repo)"; rm -f "$repo/batch/foreman.conf"
+  PATH="$(make_commands_claude_stub):$PATH" CLAUDE_CONFIG_DIR="$(make_conf_skill_config)" STUB_SCRIPT="$SET_TEST_CMD" \
+    init_show "$repo" batch --no-order
+  SHOWN="$(printf '%s\n' "$OUT" | strip)"
+  assert_contains "$SHOWN" "+ foreman.conf" "the files"
+  assert_contains "$SHOWN" 'FOREMAN_TEST_CMD="make test"' "and what the command pass set"
+  assert_contains "$SHOWN" "NEXT" "then the steps"
+  case "${SHOWN%%NEXT*}" in *FOREMAN_TEST_CMD=*) pass ;; *) fail "the command pass comes before NEXT" ;; esac
+
+  # A node that cannot draw: the text init would have printed, all of it, and the same exit status.
+  tools="$WORK/init-no-draw-$CASE_IDX"; mkdir -p "$tools"
+  printf '#!/bin/bash\nexit 1\n' > "$tools/node"; chmod +x "$tools/node"
+  repo="$(make_repo 2 init-show-nodraw-repo)"; rm -f "$repo/batch/foreman.conf"
+  PATH="$tools:$PATH" init_show "$repo" batch --no-order --no-commands
+  assert_eq "$ST" 0 "no drawing is not a failure"
+  assert_eq "$OUT" "Batch: batch
+   created  batch/foreman.conf
+   created  batch/order.md (2 ticket(s) — re-order it before running)
+   created  batch/progress.txt
+
+
+Next:
+  1. review batch/foreman.conf   — at minimum FOREMAN_CHECK_CMD and FOREMAN_TEST_CMD
+  2. review foreman order picked in batch/order.md — it is a first pass, not a guarantee
+  3. foreman dry-run batch   (free; prints the exact prompt)
+  4. foreman run batch       (one iteration, then look)" "falls back to the plain text"
+fi
+
+if case_is "plain foreman init is byte for byte what it was"; then
+  repo="$(make_repo 3 init-plain-repo)"; rm -f "$repo/batch/foreman.conf"
+  run_foreman "$repo" init batch --no-order --no-commands
+  assert_eq "$ST" 0 "exit 0"
+  assert_eq "$OUT" "Batch: batch
+   created  batch/foreman.conf
+   created  batch/order.md (3 ticket(s) — re-order it before running)
+   created  batch/progress.txt
+
+
+Next:
+  1. review batch/foreman.conf   — at minimum FOREMAN_CHECK_CMD and FOREMAN_TEST_CMD
+  2. review foreman order picked in batch/order.md — it is a first pass, not a guarantee
+  3. foreman dry-run batch   (free; prints the exact prompt)
+  4. foreman run batch       (one iteration, then look)" "a fresh batch"
+  run_foreman "$repo" init batch --no-order --no-commands
+  assert_eq "$OUT" "Batch: batch
+   kept     batch/foreman.conf (already exists — pass --force to replace)
+   kept     batch/order.md (already exists — pass --force to replace)
+   kept     batch/progress.txt (already exists — pass --force to replace)
+
+
+Nothing to do — this batch is already set up." "all kept"
+  run_foreman "$repo" init batch --no-order --no-commands --force
+  assert_contains "$OUT" "   created  batch/order.md (3 ticket(s) — re-order it before running)" "--force says created, as it did"
+  assert_missing "$OUT" "replaced" "and not replaced"
+
+  repo="$(make_repo 2 init-plain-order-repo)"; rm -f "$repo/batch/foreman.conf"
+  PATH="$(make_commands_claude_stub):$PATH" STUB_OUT='{"is_error":false,"total_cost_usd":0.08}' run_foreman "$repo" init batch --no-commands
+  assert_eq "$OUT" "Batch: batch
+   created  batch/foreman.conf
+   created  batch/order.md (2 ticket(s) — re-order it before running)
+   created  batch/progress.txt
+
+
+foreman order: reading 2 ticket(s) in batch ...
+foreman order: wrote batch/order.md (cost \$0.0800)
+             review it — this is a first pass, not a guarantee.
+
+Next:
+  1. review batch/foreman.conf   — at minimum FOREMAN_CHECK_CMD and FOREMAN_TEST_CMD
+  2. review foreman order picked in batch/order.md — it is a first pass, not a guarantee
+  3. foreman dry-run batch   (free; prints the exact prompt)
+  4. foreman run batch       (one iteration, then look)" "with the ordering"
+
+  # Not a terminal, so: a pipe never gets the show, with colour or without.
+  repo="$(make_repo 2 init-plain-pipe-repo)"; rm -f "$repo/batch/foreman.conf"
+  OUT="$(cd "$repo" && env -u CI -u NO_COLOR FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" init batch --no-order --no-commands 2>&1)"
+  assert_contains "$OUT" "Batch: batch" "a pipe, even with colour pinned"
+  repo="$(make_repo 2 init-plain-never-repo)"; rm -f "$repo/batch/foreman.conf"
+  OUT="$(cd "$repo" && env -u CI -u NO_COLOR FOREMAN_SHOW=never COLUMNS=120 "$FOREMAN" init batch --no-order --no-commands 2>&1)"
+  assert_contains "$OUT" "Batch: batch" "FOREMAN_SHOW=never"
+  repo="$(make_repo 2 init-plain-nocolor-repo)"; rm -f "$repo/batch/foreman.conf"
+  OUT="$(cd "$repo" && env -u CI NO_COLOR=1 FOREMAN_SHOW=always COLUMNS=120 TERM=xterm "$FOREMAN" init batch --no-order --no-commands 2>&1)"
+  assert_contains "$(printf '%s\n' "$OUT" | sed $'s/\033\\[[0-9;]*m//g')" "FOREMAN  breaks ground" "FOREMAN_SHOW=always beats NO_COLOR, as it does elsewhere"
+  repo="$(make_repo 2 init-plain-colornever-repo)"; rm -f "$repo/batch/foreman.conf"
+  OUT="$(cd "$repo" && env -u CI -u NO_COLOR FOREMAN_SHOW=always FOREMAN_COLOR=never COLUMNS=120 "$FOREMAN" init batch --no-order --no-commands 2>&1)"
+  assert_contains "$OUT" "Batch: batch" "but FOREMAN_COLOR=never does not"
+fi
+
+if case_is "foreman init on a real terminal shows without being forced, and clears the line it waits on"; then
+  if command -v script >/dev/null 2>&1 && [ "$(show_of tty 1 FOREMAN_SHOW=always)" = show:16 ]; then
+    ESC=$'\033'
+    repo="$(make_repo 2 init-tty-repo)"; rm -f "$repo/batch/foreman.conf"
+    OUT="$(cd "$repo" && env -u CI -u NO_COLOR -u WT_SESSION -u FOREMAN_COLOR -u FOREMAN_SHOW TERM=xterm COLORTERM=truecolor COLUMNS=100 \
+      PATH="$(make_commands_claude_stub):$PATH" STUB_OUT='{"is_error":false,"total_cost_usd":0.5}' \
+      script -qec "$FOREMAN init batch --no-commands" /dev/null </dev/null 2>/dev/null)"
+    OUT="${OUT//$'\r'/}"
+    assert_contains "$OUT" "38;2;" "a terminal that says truecolor gets 24 bits"
+    assert_contains "$(printf '%s\n' "$OUT" | sed "s/${ESC}\[[0-9;]*[mK]//g")" "FOREMAN  breaks ground" "and the show, unforced"
+    assert_contains "$OUT" "ordering 2 ticket(s) with the agent ...${ESC}[K" "the wait is announced, and the line cleared after it"
+    assert_contains "$(printf '%s\n' "$OUT" | sed "s/${ESC}\[[0-9;]*[mK]//g")" "ordered by the agent" "then the result"
+    assert_contains "$(printf '%s\n' "$OUT" | sed "s/${ESC}\[[0-9;]*[mK]//g")" "\$0.50" "with its cost"
+
+    # CI turns the show off, terminal or not, as it does for the other commands.
+    repo="$(make_repo 2 init-tty-ci-repo)"; rm -f "$repo/batch/foreman.conf"
+    OUT="$(cd "$repo" && env -u NO_COLOR -u WT_SESSION -u FOREMAN_COLOR -u FOREMAN_SHOW CI=true TERM=xterm COLORTERM=truecolor COLUMNS=100 \
+      script -qec "$FOREMAN init batch --no-order --no-commands" /dev/null </dev/null 2>/dev/null)"
+    assert_contains "$OUT" "Batch: batch" "CI is plain"
+    assert_missing "$OUT" "ordering" "with no waiting line"
+  else
+    printf '  (skipped: no `script` to give a terminal)\n'
+  fi
 fi
 
 # ---------------------------------------------------------------------------
