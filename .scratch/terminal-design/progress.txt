@@ -2,3 +2,13 @@
 # One short entry per iteration, appended by the agent. The tail of this file is
 # attached to every later prompt, so length here is a recurring cost.
 
+
+## 01 colour tiers and the palette — implemented
+- Built `ui_color_tier VAR FD` (none/16/256/24), `_UI_PALETTE` (single assignment, `name #hex idx16-256 sgr16`; `text` idx is `-`), tier-aware `ui_paint`; palette arrays load lazily on first coloured paint. `FOREMAN_COLOR` accepts 16|256|truecolor (config message keeps the old wording, then "or 16, 256 or truecolor"). ADR 0003, README, conf template updated.
+- Style→palette: ok, warn→amber, error, accent→sun, muted. At 16 the styles keep their old codes, not the table's 16 column (that column is for the art).
+- Test-driven (smoke): tier table (32 rows; terminal rows use `script`, skipped if absent), paint at 24/256/16 for all five styles, palette well-formedness incl. each 256 index being the nearest shade, config values.
+- smoke.sh now unsets COLORTERM/WT_SESSION/NO_COLOR and rewrites a 256color TERM to xterm up front, so `always` stays 16 in the old `[32m` cases.
+- Full smoke: 921 passed in 0m 52s, 1 failed: "convert moves a ralph project…" (CRLF prose) — fails identically on 928b892, left alone. bench.sh: 116 spawns before and after.
+- Env note: bin/foreman and scripts are tracked 0644 here, so run_foreman gets exit 126; I ran `git config core.fileMode false` + chmod +x locally (not committed) to run the suite.
+- Next must know: `lib/foreman-stream.cjs` still draws the `--live` clock with raw `ESC[2m` at every tier (ticket 06 territory); foreman-draw.cjs should read `_UI_PALETTE='…'` by regex (rows: name hex idx code).
+- Review: no findings skipped; applied `declare -gA` for the arrays so sourcing inside a function can't make them local.

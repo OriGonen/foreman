@@ -81,7 +81,7 @@ ink   #171614 233 30
 
 # The palette as the arrays ui_paint reads: _UI_RGB[name] is "r;g;b", _UI_X256[name] the index.
 # Built on the first colour painted, so a plain run never pays for it.
-declare -A _UI_RGB=() _UI_X256=()
+declare -gA _UI_RGB=() _UI_X256=()
 _UI_PALETTE_LOADED=
 _ui_palette_load() {
   local name hex idx code
