@@ -1,0 +1,26 @@
+[0;38;2;168;162;153m~/projects/app $[0m foreman convert[0m
+[0m
+[0;38;2;224;168;74m▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄[0m   [0m
+[0;1;38;2;23;22;20;48;2;224;168;74m [0;1;9;38;2;138;90;36;48;2;224;168;74mRALPH[0;1;38;2;23;22;20;48;2;224;168;74m   FOREMAN    [0m   [0;1;38;2;224;168;74mFOREMAN[0m  [0;38;2;168;162;153mrepaints the sign[0m  ~/projects/app[0m
+[0;38;2;224;168;74m▀▀▀▀[0;38;2;138;90;36;48;2;224;168;74m▄[0;38;2;224;168;74m▀▀▀▀▀▀▀▀▀▀▀▀[0;38;2;138;90;36;48;2;224;168;74m▄[0;38;2;224;168;74m▀▀▀▀[0m   [0;38;2;168;162;153mralph → foreman, in this repository and on this machine[0m
+[0m    [0;38;2;138;90;36m█[0m            [0;38;2;138;90;36m█[0m   [0;38;2;143;207;143m3 renamed[0m  [0;38;2;168;162;153m·[0m  [0;38;2;143;207;143m14 files rewritten[0m  [0;38;2;168;162;153m·[0m  [0;38;2;143;207;143m1 deleted[0m  [0;38;2;168;162;153m·[0m  [0;38;2;224;168;74m2 for you[0m
+[0;38;2;58;42;24m▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀[0m   [0m
+[0m   [0m
+[0;38;2;58;42;24m▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔[0m
+[0m
+[0;1;38;2;224;168;74mRENAMED[0m   .scratch/human-tickets/[0;38;2;92;87;79mralph.conf[0m [0;38;2;168;162;153m→[0m [0;38;2;143;207;143mforeman.conf[0m
+[0m          .scratch/human-tickets/[0;38;2;92;87;79mralph-runs.jsonl[0m [0;38;2;168;162;153m→[0m [0;38;2;143;207;143mforeman-runs.jsonl[0m
+[0m          .scratch/human-tickets/[0;38;2;92;87;79mralph-runs.log[0m [0;38;2;168;162;153m→[0m [0;38;2;143;207;143mforeman-runs.log[0m
+[0;1;38;2;224;168;74mREWROTE[0m   README.md [0;38;2;168;162;153m12[0m  ·  Makefile [0;38;2;168;162;153m3[0m  ·  .github/workflows/ci.yml [0;38;2;168;162;153m2[0m  ·  [0;38;2;168;162;153m11 more, 41 changes[0m
+[0;1;38;2;224;168;74mDELETED[0m   .scratch/human-tickets/.ralph-iter.bundle  [0;38;2;168;162;153mrebuilt on the next iteration[0m
+[0m
+[0;1;38;2;224;168;74mKEPT[0m      [0;38;2;168;162;153mcredit to the technique, and your own files named ralph:[0m
+[0m          docs/ralph-notes.md  [0;38;2;168;162;153m·  rename with git mv if you want to[0m
+[0m          [0;38;2;168;162;153m4 mentions of the Ralph loop[0m
+[0m
+[0;1;38;2;224;168;74mTHIS MACHINE[0m
+[0m  [0;38;2;143;207;143m✓[0m ~/.config/ralph/env [0;38;2;168;162;153m→[0m ~/.config/foreman/env  [0;38;2;168;162;153m(the old one stays)[0m
+[0m  [0;38;2;224;168;74m▲[0m RALPH_MODEL is set in your shell — rename it to FOREMAN_MODEL[0m
+[0m  [0;38;2;224;168;74m▲[0m the old sandbox ralph-sbx is still there — docker sandbox rm ralph-sbx[0m
+[0m
+[0;38;2;168;162;153mnothing is committed.[0m  [0;38;2;224;168;74mgit diff[0;38;2;168;162;153m, then commit.[0m

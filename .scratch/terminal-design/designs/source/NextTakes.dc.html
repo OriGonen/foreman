@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Next takes</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&amp;family=Inter:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+pre{margin:0;font:inherit;white-space:pre}
+.y{color:#f6d58e}.w{color:#e0a84a}.r{color:#c9772f}.o{color:#8fcf8f}.e{color:#f08078}.m{color:#a8a299}.d{color:#5c574f}.b{font-weight:700}
+.tag{background:#e0a84a;color:#171614;font-weight:700}.tagE{background:#f08078;color:#171614;font-weight:700}.tagO{background:#8fcf8f;color:#171614;font-weight:700}
+</style>
+</helmet>
+<div style="width: 3080px; height: 800px; box-sizing: border-box; background: #0d0c0b; padding: 20px; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; font-size: 13.5px; line-height: 19px; color: #ece8e1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px;">
+<div style="display: flex; flex-direction: column; min-width: 0;">
+<div style="padding: 0 4px 10px; font-family: 'Inter', system-ui, sans-serif; font-size: 18px; color: #ece8e1;">9a · The ticket by name on a terminal, the bare path in a pipe</div>
+<div style="flex-grow: 1; display: flex; flex-direction: column; border: 1px solid #3a3732; border-radius: 6px; background: #171614; overflow: hidden;">
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #3a3732; color: #a8a299; font-size: 12px;">
+<span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span>
+<span style="margin-left: 8px;">~/projects/app — foreman</span>
+</div>
+<pre style="flex-grow: 1; padding: 14px 20px;"><span class="m">~/projects/app $</span> foreman next
+<span class="w">▶</span> <span class="y b">07</span>  <span class="b">try-the-followup-skill-on-a-real-batch</span>   <span class="tag"> HUMAN </span>
+  <span class="d">.scratch/human-tickets/issues/</span>07-try-the-followup-skill-on-a-real-batch.md
+  <span class="m">then 07a · 08 · 09   ·   6 of 10 done</span>
+
+<span class="m">~/projects/app $</span> foreman next --count
+<span style="color:#8fcf8f">██████████▊</span><span class="d">████████████</span>  <span class="b">6</span><span class="m"> of 10 done</span>
+
+<span class="m">~/projects/app $</span> foreman next --list
+<span class="w">▶</span> <span class="y b">07</span>   <span class="b">try-the-followup-skill-on-a-real-batch</span>    <span class="tag"> HUMAN </span>
+  07a  followup-try-the-followup-skill           <span style="background:#5c574f;color:#ece8e1;font-weight:700"> CHECK </span>
+  08   readme-human-tickets-section
+  09   end-to-end-check-on-this-machine
+
+<span class="m">~/projects/app $</span> foreman next --unordered
+<span class="m">10 tickets in 3 directories, as found — not a run order</span>
+  <span class="m">issues/</span>  01 02 03 04 05 06   <span class="m">human/</span>  07 07a   <span class="m">docs/</span>  08 09
+
+
+<span class="m">piped, or inside $(…), each one prints what it prints today:</span>
+<span class="m">~/projects/app $</span> git log --oneline -- "$(foreman next)"
+<span class="d">        ↑ the bare path, nothing else</span></pre>
+<pre style="padding: 6px 20px; border-top: 1px solid #3a3732;"><span class="m">a terminal gets the ticket by name; a pipe gets the path, byte for byte as now</span></pre>
+</div>
+</div><div style="display: flex; flex-direction: column; min-width: 0;">
+<div style="padding: 0 4px 10px; font-family: 'Inter', system-ui, sans-serif; font-size: 18px; color: #ece8e1;">9b · --all as the stake line</div>
+<div style="flex-grow: 1; display: flex; flex-direction: column; border: 1px solid #3a3732; border-radius: 6px; background: #171614; overflow: hidden;">
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #3a3732; color: #a8a299; font-size: 12px;">
+<span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span>
+<span style="margin-left: 8px;">~/projects/app — foreman</span>
+</div>
+<pre style="flex-grow: 1; padding: 14px 20px;"><span class="m">~/projects/app $</span> foreman next --all
+
+                                     <span style="color:#c9772f">▄▄▄▄</span>                     
+                                      <span style="color:#c9772f">██</span>                      
+                                      <span style="color:#c9772f">██</span>                      
+  <span style="color:#e0a84a">██</span>    <span style="color:#e0a84a">██</span>    <span style="color:#e0a84a">██</span>    <span style="color:#e0a84a">██</span>    <span style="color:#e0a84a">██</span>    <span style="color:#e0a84a">██</span>    <span style="color:#c9772f">██</span>                      
+<span style="color:#3a2a18">▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀</span>
+  <span class="o">01    02    03    04    05    06</span>    <span class="r">07</span>    <span class="m">07a   08    09</span>
+
+  <span class="o">✓</span> <span class="d">01  the-loop-stops-before-a-human-ticket</span>
+  <span class="o">✓</span> <span class="d">02  a-check-ticket-verifies-or-sends-back</span>
+  <span class="o">✓</span> <span class="d">03  status-shows-human-and-check-tickets</span>
+  <span class="o">✓</span> <span class="d">04  foreman-order-places-human-and-check-tickets</span>
+  <span class="o">✓</span> <span class="d">05  document-human-tickets</span>
+  <span class="o">✓</span> <span class="d">06  a-skill-writes-followup-tickets</span>
+  <span class="w">▶</span> <span class="y b">07</span>  <span class="b">try-the-followup-skill-on-a-real-batch</span>        <span class="tag"> HUMAN </span>  <span class="m">next</span>
+    07a followup-try-the-followup-skill               <span style="background:#5c574f;color:#ece8e1;font-weight:700"> CHECK </span>
+    08  readme-human-tickets-section
+    09  end-to-end-check-on-this-machine
+
+  <span class="o">6 driven</span>  <span class="m">·</span>  <span class="r">1 yours</span>  <span class="m">·</span>  3 to go
+
+
+<span class="m">~/projects/app $</span> foreman next --count
+<span class="b">6</span> <span class="m">of</span> <span class="b">10</span>  <span class="m">·</span>  <span class="o">6 driven</span>  <span class="m">·</span>  4 to go</pre>
+<pre style="padding: 6px 20px; border-top: 1px solid #3a3732;"><span class="m">--all as the 3b stake line, done ones dimmed  ·  piped: paths and "6 10", as now</span></pre>
+</div>
+</div><div style="display: flex; flex-direction: column; min-width: 0;">
+<div style="padding: 0 4px 10px; font-family: 'Inter', system-ui, sans-serif; font-size: 18px; color: #ece8e1;">9c · Paths only, with colour</div>
+<div style="flex-grow: 1; display: flex; flex-direction: column; border: 1px solid #3a3732; border-radius: 6px; background: #171614; overflow: hidden;">
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #3a3732; color: #a8a299; font-size: 12px;">
+<span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span>
+<span style="margin-left: 8px;">~/projects/app — foreman</span>
+</div>
+<pre style="flex-grow: 1; padding: 14px 20px;"><span class="m">~/projects/app $</span> foreman next
+<span class="d">.scratch/human-tickets/issues/</span><span class="y b">07</span><span class="b">-try-the-followup-skill-on-a-real-batch</span><span class="d">.md</span>
+
+<span class="m">~/projects/app $</span> foreman next --count
+<span class="b">6</span> <span class="d">10</span>
+
+<span class="m">~/projects/app $</span> foreman next --list
+<span class="d">.scratch/human-tickets/issues/</span><span class="y b">07</span><span class="b">-try-the-followup-skill-on-a-real-batch</span><span class="d">.md</span>
+<span class="d">.scratch/human-tickets/issues/</span>07a-followup-try-the-followup-skill<span class="d">.md</span>
+<span class="d">.scratch/human-tickets/issues/</span>08-readme-human-tickets-section<span class="d">.md</span>
+<span class="d">.scratch/human-tickets/issues/</span>09-end-to-end-check-on-this-machine<span class="d">.md</span>
+
+<span class="m">~/projects/app $</span> foreman next --all
+<span class="d">.scratch/human-tickets/issues/05-document-human-tickets.md</span>
+<span class="d">.scratch/human-tickets/issues/06-a-skill-writes-followup-tickets.md</span>
+<span class="d">.scratch/human-tickets/issues/</span><span class="y b">07</span><span class="b">-try-the-followup-skill-on-a-real-batch</span><span class="d">.md</span>
+<span class="d">.scratch/human-tickets/issues/</span>07a-followup-try-the-followup-skill<span class="d">.md</span>
+<span class="d">.scratch/human-tickets/issues/</span>08-readme-human-tickets-section<span class="d">.md</span>
+<span class="d">.scratch/human-tickets/issues/</span>09-end-to-end-check-on-this-machine<span class="d">.md</span>
+
+
+<span class="m">next is the one other scripts call. It stays a list of paths: on a terminal</span>
+<span class="m">the directory is dimmed, the ticket&#x27;s number and name stand out, done ones fade.</span>
+<span class="m">Nothing is added, so a path copied off the screen is a path that works.</span></pre>
+<pre style="padding: 6px 20px; border-top: 1px solid #3a3732;"><span class="m">colour and nothing more  ·  the same bytes when piped</span></pre>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":3080,"height":800}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

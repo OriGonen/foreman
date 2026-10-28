@@ -1,0 +1,22 @@
+~/projects/app $ foreman init .scratch/human-tickets
+
+    ▄▄▀▀▀███▀▀▀▄▄
+  ▄▀██▀▀▀██▀▀▀▀██▀▄    FOREMAN  breaks ground
+▄▀██▀█▀█▀██▀██▀█▀██▀   batch  .scratch/human-tickets
+▀█▀█▀██▀████▀███▀█▀█   found  10 tickets in 3 issue directories
+██████▀██▀▀███▀█████
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+
+  + foreman.conf    the batch's settings, from the template
+  + order.md        the run order
+  + progress.txt    the agent's running notes, one entry per iteration
+
+  ✓ ordered by the agent      3 moved  ·  07 is yours, 07a checks it  ·  31s  ·  $0.08
+    a first pass, not a guarantee — look it over
+
+NEXT
+  1  edit    .scratch/human-tickets/foreman.conf   FOREMAN_CHECK_CMD and FOREMAN_TEST_CMD at least
+  2  review  .scratch/human-tickets/order.md
+  3  foreman dry-run   free  ·  prints the exact prompt
+  4  foreman run       one iteration, then look

@@ -1,0 +1,23 @@
+~/projects/app $ foreman status
+
+
+          ▄▄▄▀▀▀▀▀▀▀▀▀▄▄▄
+       ▄█▀███▀▀▀▀▀▀▀▀▀███▀█▄         .scratch/human-tickets
+     ▄█▀█▀▀██▀▀▀▀▀▀▀▀▀██▀▀█▀█▄
+    █▀█▀██▀█████████████▀██▀█▀█      6 of 10 done  ·  $14.20 spent
+   ███▀█▀█████▀▀▀▀▀▀▀█████▀█▀███     the sun is 60% up
+██████████████▀▀▀▀▀▀▀█████████████
+
+  ✓ 01  the-loop-stops-before-a-human-ticket
+  ✓ 02  a-check-ticket-verifies-or-sends-back
+  ✓ 03  status-shows-human-and-check-tickets
+  ✓ 04  foreman-order-places-human-and-check-tickets
+  ✓ 05  document-human-tickets
+  ✓ 06  a-skill-writes-followup-tickets
+  ▶ 07  try-the-followup-skill-on-a-real-batch    HUMAN
+    07a followup: try-the-followup-skill            after 07
+    08  readme-human-tickets-section
+    09  end-to-end-check-on-this-machine
+
+next up is yours. Do ticket 07, fill in its handoff, then foreman run.
+.scratch/human-tickets/handoff/07-try-the-followup-skill-on-a-real-batch.md

@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Order takes</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&amp;family=Inter:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+pre{margin:0;font:inherit;white-space:pre}
+.y{color:#f6d58e}.w{color:#e0a84a}.r{color:#c9772f}.o{color:#8fcf8f}.e{color:#f08078}.m{color:#a8a299}.d{color:#5c574f}.b{font-weight:700}
+.tag{background:#e0a84a;color:#171614;font-weight:700}.tagE{background:#f08078;color:#171614;font-weight:700}.tagO{background:#8fcf8f;color:#171614;font-weight:700}
+</style>
+</helmet>
+<div style="width: 3080px; height: 800px; box-sizing: border-box; background: #0d0c0b; padding: 20px; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; font-size: 13.5px; line-height: 19px; color: #ece8e1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px;">
+<div style="display: flex; flex-direction: column; min-width: 0;">
+<div style="padding: 0 4px 10px; font-family: 'Inter', system-ui, sans-serif; font-size: 18px; color: #ece8e1;">8a · Before and after, side by side</div>
+<div style="flex-grow: 1; display: flex; flex-direction: column; border: 1px solid #3a3732; border-radius: 6px; background: #171614; overflow: hidden;">
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #3a3732; color: #a8a299; font-size: 12px;">
+<span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span>
+<span style="margin-left: 8px;">~/projects/app — foreman</span>
+</div>
+<pre style="flex-grow: 1; padding: 14px 20px;"><span class="m">~/projects/app $</span> foreman order .scratch/human-tickets
+
+    <span style="color:#30231a">▄▄</span><span style="color:#30231a;background:#3a2a18">▀▀</span><span style="color:#30231a;background:#0a0908">▀</span><span style="color:#0a0908">███</span><span style="color:#30231a;background:#0a0908">▀</span><span style="color:#30231a;background:#3a2a18">▀▀</span><span style="color:#30231a">▄▄</span>      
+  <span style="color:#30231a">▄</span><span style="color:#30231a;background:#3a2a18">▀</span><span style="color:#3a2a18">██</span><span style="color:#3a2a18;background:#c9772f">▀</span><span style="color:#0a0908;background:#c9772f">▀▀</span><span style="color:#0a0908">██</span><span style="color:#0a0908;background:#c9772f">▀▀▀</span><span style="color:#3a2a18;background:#c9772f">▀</span><span style="color:#3a2a18">██</span><span style="color:#30231a;background:#3a2a18">▀</span><span style="color:#30231a">▄</span>    <span class="w b">FOREMAN</span>  <span class="m">orders the tickets</span>
+<span style="color:#30231a">▄</span><span style="color:#30231a;background:#3a2a18">▀</span><span style="color:#3a2a18">██</span><span style="color:#3a2a18;background:#c9772f">▀</span><span style="color:#c9772f">█</span><span style="color:#c9772f;background:#e0a84a">▀</span><span style="color:#e0a84a">█</span><span style="color:#e0a84a;background:#0a0908">▀</span><span style="color:#0a0908">██</span><span style="color:#e0a84a;background:#0a0908">▀</span><span style="color:#e0a84a">██</span><span style="color:#c9772f;background:#e0a84a">▀</span><span style="color:#c9772f">█</span><span style="color:#3a2a18;background:#c9772f">▀</span><span style="color:#3a2a18">██</span><span style="color:#30231a;background:#3a2a18">▀</span>   <span class="m">batch </span> .scratch/human-tickets
+<span style="color:#30231a;background:#3a2a18">▀</span><span style="color:#3a2a18">█</span><span style="color:#3a2a18;background:#c9772f">▀</span><span style="color:#c9772f">█</span><span style="color:#c9772f;background:#e0a84a">▀</span><span style="color:#e0a84a">██</span><span style="color:#0a0908;background:#e0a84a">▀</span><span style="color:#0a0908">████</span><span style="color:#0a0908;background:#f6d58e">▀</span><span style="color:#e0a84a">███</span><span style="color:#c9772f;background:#e0a84a">▀</span><span style="color:#c9772f">█</span><span style="color:#3a2a18;background:#c9772f">▀</span><span style="color:#3a2a18">█</span>   <span class="m">agent </span> claude-sonnet-5-5  <span class="m">·  31s  ·  $0.08</span>
+<span style="color:#3a2a18">██</span><span style="color:#c9772f">█</span><span style="color:#e0a84a">███</span><span style="color:#e0a84a;background:#f6d58e">▀</span><span style="color:#f6d58e">█</span><span style="color:#0a0908">█</span><span style="color:#0a0908;background:#f6d58e">▀▀</span><span style="color:#0a0908">█</span><span style="color:#f6d58e">██</span><span style="color:#e0a84a;background:#f6d58e">▀</span><span style="color:#e0a84a">███</span><span style="color:#c9772f">█</span><span style="color:#3a2a18">█</span>   
+<span style="color:#3a2a18;background:#1c1a17">▀▀</span><span style="color:#c9772f;background:#1c1a17">▀</span><span style="color:#e0a84a;background:#1c1a17">▀▀▀</span><span style="color:#f6d58e;background:#1c1a17">▀▀</span><span style="color:#0a0908;background:#1c1a17">▀</span><span style="color:#f6d58e;background:#1c1a17">▀▀</span><span style="color:#0a0908;background:#1c1a17">▀</span><span style="color:#f6d58e;background:#1c1a17">▀▀▀</span><span style="color:#e0a84a;background:#1c1a17">▀▀▀</span><span style="color:#c9772f;background:#1c1a17">▀</span><span style="color:#3a2a18;background:#1c1a17">▀</span>   
+<span style="color:#3a2a18">▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔</span>
+
+  <span class="m">FILENAME ORDER</span>                          <span class="d">│</span>  <span class="w b">THE AGENT&#x27;S ORDER</span>
+  <span class="m">01  the-loop-stops-before-a-human-ti</span>    <span class="d">│</span>  01  the-loop-stops-before-a-human-ti     
+  <span class="m">02  a-check-ticket-verifies-or-sends</span>    <span class="d">│</span>  <span class="b">03  status-shows-human-and-check-tic</span> <span class="o">↑1</span>  
+  <span class="m">03  status-shows-human-and-check-tic</span>    <span class="d">│</span>  <span class="b">02  a-check-ticket-verifies-or-sends</span> <span class="w">↓1</span>  
+  <span class="m">04  foreman-order-places-human-and-c</span>    <span class="d">│</span>  04  foreman-order-places-human-and-c     
+  <span class="m">05  document-human-tickets</span>              <span class="d">│</span>  <span class="b">06  a-skill-writes-followup-tickets</span>  <span class="o">↑1</span>  
+  <span class="m">06  a-skill-writes-followup-tickets</span>     <span class="d">│</span>  <span class="b">05  document-human-tickets</span>           <span class="w">↓1</span>  
+  <span class="m">07  try-the-followup-skill-on-a-real</span>    <span class="d">│</span>  07  try-the-followup-skill-on-a-real      <span class="tag"> HUMAN </span>
+  <span class="m">07a followup-try-the-followup-skill</span>     <span class="d">│</span>  07a followup-try-the-followup-skill       <span style="background:#5c574f;color:#ece8e1;font-weight:700"> CHECK </span>
+  <span class="m">08  readme-human-tickets-section</span>        <span class="d">│</span>  08  readme-human-tickets-section         
+  <span class="m">09  end-to-end-check-on-this-machine</span>    <span class="d">│</span>  09  end-to-end-check-on-this-machine     
+
+<span class="o">✓</span> wrote .scratch/human-tickets/order.md  <span class="m">·  4 moved  ·  07 stops the loop, 07a checks it</span>
+  <span class="m">review it — this is a first pass, not a guarantee</span></pre>
+<pre style="padding: 6px 20px; border-top: 1px solid #3a3732;"><span class="m">before and after side by side; a moved ticket is bold, with how far it moved</span></pre>
+</div>
+</div><div style="display: flex; flex-direction: column; min-width: 0;">
+<div style="padding: 0 4px 10px; font-family: 'Inter', system-ui, sans-serif; font-size: 18px; color: #ece8e1;">8b · The new order on a stake line, tags and all</div>
+<div style="flex-grow: 1; display: flex; flex-direction: column; border: 1px solid #3a3732; border-radius: 6px; background: #171614; overflow: hidden;">
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #3a3732; color: #a8a299; font-size: 12px;">
+<span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span>
+<span style="margin-left: 8px;">~/projects/app — foreman</span>
+</div>
+<pre style="flex-grow: 1; padding: 14px 20px;"><span class="m">~/projects/app $</span> foreman order .scratch/human-tickets
+
+<span class="w">▄█▄</span> <span class="b">foreman order</span> <span class="m">·</span> .scratch/human-tickets <span class="m">·  10 tickets  ·  claude-sonnet-5-5</span>
+
+  <span class="w">⠹</span> <span class="m">the agent is reading the tickets</span>   <span class="m">0:19</span>        <span class="d">← while it works, on one line</span>
+
+<span class="b">order.md</span>  <span class="m">·  ordered in 31s for $0.08</span>
+
+  <span class="d">┬</span>  <span class="m">1</span>  01  the-loop-stops-before-a-human-ticket                 
+  <span class="d">├</span>  <span class="m">2</span>  <span class="b">03  status-shows-human-and-check-tickets</span>          <span class="m">moved</span>  
+  <span class="d">├</span>  <span class="m">3</span>  <span class="b">02  a-check-ticket-verifies-or-sends-back</span>         <span class="m">moved</span>  
+  <span class="d">├</span>  <span class="m">4</span>  04  foreman-order-places-human-and-check-tickets         
+  <span class="d">├</span>  <span class="m">5</span>  <span class="b">06  a-skill-writes-followup-tickets</span>               <span class="m">moved</span>  
+  <span class="d">├</span>  <span class="m">6</span>  <span class="b">05  document-human-tickets</span>                        <span class="m">moved</span>  
+  <span class="d">├</span>  <span class="m">7</span>  07  try-the-followup-skill-on-a-real-batch               <span class="tag"> HUMAN </span>  <span class="m">the loop stops here</span>
+  <span class="d">├</span>  <span class="m">8</span>  07a followup-try-the-followup-skill                      <span style="background:#5c574f;color:#ece8e1;font-weight:700"> CHECK </span>  <span class="m">checks 07</span>
+  <span class="d">├</span>  <span class="m">9</span>  08  readme-human-tickets-section                         
+  <span class="d">└</span> <span class="m">10</span>  09  end-to-end-check-on-this-machine                     
+
+<span class="w">▲</span> 07 has no <span class="b">**Handoff:**</span> line — add one so foreman status can point at the file
+
+<span class="m">review it, then</span> <span class="w">foreman dry-run</span></pre>
+<pre style="padding: 6px 20px; border-top: 1px solid #3a3732;"><span class="m">the new order as the run will take it; a spinner, never invented progress, while the agent works</span></pre>
+</div>
+</div><div style="display: flex; flex-direction: column; min-width: 0;">
+<div style="padding: 0 4px 10px; font-family: 'Inter', system-ui, sans-serif; font-size: 18px; color: #ece8e1;">8c · One line per outcome</div>
+<div style="flex-grow: 1; display: flex; flex-direction: column; border: 1px solid #3a3732; border-radius: 6px; background: #171614; overflow: hidden;">
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #3a3732; color: #a8a299; font-size: 12px;">
+<span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span>
+<span style="margin-left: 8px;">~/projects/app — foreman</span>
+</div>
+<pre style="flex-grow: 1; padding: 14px 20px;"><span class="m">~/projects/app $</span> foreman order .scratch/human-tickets
+<span class="o">✓</span> <span class="b">order.md</span> <span class="m">·  10 tickets  ·  4 moved  ·  31s  ·  $0.08</span>   <span class="m">a first pass — review it</span>
+
+
+<span class="m">~/projects/app $</span> foreman order .scratch/human-tickets
+<span class="w">⠹</span> <span class="m">ordering 10 tickets  0:19</span>
+<span class="d">   (the same line, replaced in place when the agent answers)</span>
+
+
+<span class="m">~/projects/app $</span> foreman order .scratch/old-batch
+<span class="e">✗</span> <span class="b">claude is not on PATH</span> <span class="m">— order.md keeps its filename order</span>
+  <span class="m">install it, then</span> <span class="w">foreman order .scratch/old-batch</span>
+
+
+<span class="m">~/projects/app $</span> foreman order .scratch/empty
+<span class="m">–</span> <span class="m">.scratch/empty has no tickets — nothing to order</span>
+
+
+<span class="m">~/projects/app $</span> foreman order .scratch/human-tickets
+<span class="e">✗</span> <span class="b">the agent call failed</span> <span class="m">(exit 1) — order.md is unchanged</span>
+  <span class="m">its output:</span> .scratch/human-tickets/foreman-runs.log</pre>
+<pre style="padding: 6px 20px; border-top: 1px solid #3a3732;"><span class="m">one line per outcome: ✓ wrote  ·  – nothing to do  ·  ✗ and what to do next</span></pre>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":3080,"height":800}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

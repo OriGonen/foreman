@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Init takes</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&amp;family=Inter:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+pre{margin:0;font:inherit;white-space:pre}
+.y{color:#f6d58e}.w{color:#e0a84a}.r{color:#c9772f}.o{color:#8fcf8f}.e{color:#f08078}.m{color:#a8a299}.d{color:#5c574f}.b{font-weight:700}
+.tag{background:#e0a84a;color:#171614;font-weight:700}.tagE{background:#f08078;color:#171614;font-weight:700}.tagO{background:#8fcf8f;color:#171614;font-weight:700}
+</style>
+</helmet>
+<div style="width: 3080px; height: 800px; box-sizing: border-box; background: #0d0c0b; padding: 20px; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; font-size: 13.5px; line-height: 19px; color: #ece8e1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px;">
+<div style="display: flex; flex-direction: column; min-width: 0;">
+<div style="padding: 0 4px 10px; font-family: 'Inter', system-ui, sans-serif; font-size: 18px; color: #ece8e1;">7a · Breaking ground — the 3a header, the files, four steps</div>
+<div style="flex-grow: 1; display: flex; flex-direction: column; border: 1px solid #3a3732; border-radius: 6px; background: #171614; overflow: hidden;">
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #3a3732; color: #a8a299; font-size: 12px;">
+<span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span>
+<span style="margin-left: 8px;">~/projects/app — foreman</span>
+</div>
+<pre style="flex-grow: 1; padding: 14px 20px;"><span class="m">~/projects/app $</span> foreman init .scratch/human-tickets
+
+    <span style="color:#30231a">▄▄</span><span style="color:#30231a;background:#3a2a18">▀▀</span><span style="color:#30231a;background:#0a0908">▀</span><span style="color:#0a0908">███</span><span style="color:#30231a;background:#0a0908">▀</span><span style="color:#30231a;background:#3a2a18">▀▀</span><span style="color:#30231a">▄▄</span>      
+  <span style="color:#30231a">▄</span><span style="color:#30231a;background:#3a2a18">▀</span><span style="color:#3a2a18">██</span><span style="color:#3a2a18;background:#c9772f">▀</span><span style="color:#0a0908;background:#c9772f">▀▀</span><span style="color:#0a0908">██</span><span style="color:#0a0908;background:#c9772f">▀▀▀</span><span style="color:#3a2a18;background:#c9772f">▀</span><span style="color:#3a2a18">██</span><span style="color:#30231a;background:#3a2a18">▀</span><span style="color:#30231a">▄</span>    <span class="w b">FOREMAN</span>  <span class="m">breaks ground</span>
+<span style="color:#30231a">▄</span><span style="color:#30231a;background:#3a2a18">▀</span><span style="color:#3a2a18">██</span><span style="color:#3a2a18;background:#c9772f">▀</span><span style="color:#c9772f">█</span><span style="color:#c9772f;background:#e0a84a">▀</span><span style="color:#e0a84a">█</span><span style="color:#e0a84a;background:#0a0908">▀</span><span style="color:#0a0908">██</span><span style="color:#e0a84a;background:#0a0908">▀</span><span style="color:#e0a84a">██</span><span style="color:#c9772f;background:#e0a84a">▀</span><span style="color:#c9772f">█</span><span style="color:#3a2a18;background:#c9772f">▀</span><span style="color:#3a2a18">██</span><span style="color:#30231a;background:#3a2a18">▀</span>   <span class="m">batch </span> .scratch/human-tickets
+<span style="color:#30231a;background:#3a2a18">▀</span><span style="color:#3a2a18">█</span><span style="color:#3a2a18;background:#c9772f">▀</span><span style="color:#c9772f">█</span><span style="color:#c9772f;background:#e0a84a">▀</span><span style="color:#e0a84a">██</span><span style="color:#0a0908;background:#e0a84a">▀</span><span style="color:#0a0908">████</span><span style="color:#0a0908;background:#f6d58e">▀</span><span style="color:#e0a84a">███</span><span style="color:#c9772f;background:#e0a84a">▀</span><span style="color:#c9772f">█</span><span style="color:#3a2a18;background:#c9772f">▀</span><span style="color:#3a2a18">█</span>   <span class="m">found </span> 10 tickets in 3 issue directories
+<span style="color:#3a2a18">██</span><span style="color:#c9772f">█</span><span style="color:#e0a84a">███</span><span style="color:#e0a84a;background:#f6d58e">▀</span><span style="color:#f6d58e">█</span><span style="color:#0a0908">█</span><span style="color:#0a0908;background:#f6d58e">▀▀</span><span style="color:#0a0908">█</span><span style="color:#f6d58e">██</span><span style="color:#e0a84a;background:#f6d58e">▀</span><span style="color:#e0a84a">███</span><span style="color:#c9772f">█</span><span style="color:#3a2a18">█</span>   
+<span style="color:#3a2a18;background:#1c1a17">▀▀</span><span style="color:#c9772f;background:#1c1a17">▀</span><span style="color:#e0a84a;background:#1c1a17">▀▀▀</span><span style="color:#f6d58e;background:#1c1a17">▀▀</span><span style="color:#0a0908;background:#1c1a17">▀</span><span style="color:#f6d58e;background:#1c1a17">▀▀</span><span style="color:#0a0908;background:#1c1a17">▀</span><span style="color:#f6d58e;background:#1c1a17">▀▀▀</span><span style="color:#e0a84a;background:#1c1a17">▀▀▀</span><span style="color:#c9772f;background:#1c1a17">▀</span><span style="color:#3a2a18;background:#1c1a17">▀</span>   
+<span style="color:#3a2a18">▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔</span>
+
+  <span class="o b">+</span> <span class="b">foreman.conf</span>    <span class="m">the batch&#x27;s settings, from the template</span>
+  <span class="o b">+</span> <span class="b">order.md</span>        <span class="m">the run order</span>
+  <span class="o b">+</span> <span class="b">progress.txt</span>    <span class="m">the agent&#x27;s running notes, one entry per iteration</span>
+
+  <span class="o">✓</span> ordered by the agent      <span class="m">3 moved  ·  07 is yours, 07a checks it  ·  31s  ·  $0.08</span>
+    <span class="m">a first pass, not a guarantee — look it over</span>
+
+<span class="w b">NEXT</span>
+  <span class="w b">1</span>  edit    .scratch/human-tickets/foreman.conf   <span class="m">FOREMAN_CHECK_CMD and FOREMAN_TEST_CMD at least</span>
+  <span class="w b">2</span>  review  .scratch/human-tickets/order.md
+  <span class="w b">3</span>  <span class="w">foreman dry-run</span>   <span class="m">free  ·  prints the exact prompt</span>
+  <span class="w b">4</span>  <span class="w">foreman run</span>       <span class="m">one iteration, then look</span></pre>
+<pre style="padding: 6px 20px; border-top: 1px solid #3a3732;"><span class="m">the 3a header, the 3a rule  ·  + created  = kept  ·  piped: the same lines without the mark</span></pre>
+</div>
+</div><div style="display: flex; flex-direction: column; min-width: 0;">
+<div style="padding: 0 4px 10px; font-family: 'Inter', system-ui, sans-serif; font-size: 18px; color: #ece8e1;">7b · Stakes marked out, none driven yet</div>
+<div style="flex-grow: 1; display: flex; flex-direction: column; border: 1px solid #3a3732; border-radius: 6px; background: #171614; overflow: hidden;">
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #3a3732; color: #a8a299; font-size: 12px;">
+<span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span>
+<span style="margin-left: 8px;">~/projects/app — foreman</span>
+</div>
+<pre style="flex-grow: 1; padding: 14px 20px;"><span class="m">~/projects/app $</span> foreman init .scratch/human-tickets
+
+<span class="w b">FOREMAN</span>  <span class="m">marks out the site for</span> .scratch/human-tickets
+
+                                                              
+  <span style="color:#8a5a24">█</span><span style="color:#5c574f">██▀</span>  <span style="color:#8a5a24">█</span><span style="color:#5c574f">██▀</span>  <span style="color:#8a5a24">█</span><span style="color:#5c574f">██▀</span>  <span style="color:#8a5a24">█</span><span style="color:#5c574f">██▀</span>  <span style="color:#8a5a24">█</span><span style="color:#5c574f">██▀</span>  <span style="color:#8a5a24">█</span><span style="color:#5c574f">██▀</span>  <span style="color:#8a5a24">█</span><span style="color:#c9772f">██▀</span>  <span style="color:#8a5a24">█</span><span style="color:#f6d58e">██▀</span>  <span style="color:#8a5a24">█</span><span style="color:#5c574f">██▀</span>  <span style="color:#8a5a24">█</span><span style="color:#5c574f">██▀</span>  
+  <span style="color:#8a5a24">█</span>     <span style="color:#8a5a24">█</span>     <span style="color:#8a5a24">█</span>     <span style="color:#8a5a24">█</span>     <span style="color:#8a5a24">█</span>     <span style="color:#8a5a24">█</span>     <span style="color:#8a5a24">█</span>     <span style="color:#8a5a24">█</span>     <span style="color:#8a5a24">█</span>     <span style="color:#8a5a24">█</span>     
+  <span style="color:#8a5a24">█</span>     <span style="color:#8a5a24">█</span>     <span style="color:#8a5a24">█</span>     <span style="color:#8a5a24">█</span>     <span style="color:#8a5a24">█</span>     <span style="color:#8a5a24">█</span>     <span style="color:#8a5a24">█</span>     <span style="color:#8a5a24">█</span>     <span style="color:#8a5a24">█</span>     <span style="color:#8a5a24">█</span>     
+<span style="color:#3a2a18">▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀</span>
+<span class="m">  01    02    03    04    05    06    07    07a   08    09    </span>
+  <span class="b">10 stakes marked</span>  <span class="m">·</span>  <span class="r">1 is yours</span> <span class="m">(07)</span>  <span class="m">·</span>  <span class="y">1 checks it</span> <span class="m">(07a)</span>  <span class="m">·  none driven yet</span>
+
+.scratch/human-tickets/
+<span class="d">├─</span> <span class="b">foreman.conf</span>   <span class="o">new</span>   set FOREMAN_CHECK_CMD and FOREMAN_TEST_CMD
+<span class="d">├─</span> <span class="b">order.md</span>       <span class="o">new</span>   ordered by the agent  <span class="m">·  $0.08  ·  look it over</span>
+<span class="d">└─</span> <span class="b">progress.txt</span>   <span class="o">new</span>   <span class="m">the agent&#x27;s notes</span>
+
+<span class="m">then</span>   <span class="w">edit foreman.conf</span>  <span class="d">→</span>  <span class="w">foreman dry-run</span>  <span class="d">→</span>  <span class="w">foreman run</span>
+                           <span class="m">free, the prompt</span>   <span class="m">one iteration</span>
+
+
+<span class="m">~/projects/app $</span> foreman init .scratch/human-tickets
+<span class="m">=</span> <span class="m">already marked out — nothing changed. --force writes the three files again.</span></pre>
+<pre style="padding: 6px 20px; border-top: 1px solid #3a3732;"><span class="m">the 3b stakes, before any is driven: a peg and a flag each, red for a human ticket</span></pre>
+</div>
+</div><div style="display: flex; flex-direction: column; min-width: 0;">
+<div style="padding: 0 4px 10px; font-family: 'Inter', system-ui, sans-serif; font-size: 18px; color: #ece8e1;">7c · Quiet checklist, and the old-batch case</div>
+<div style="flex-grow: 1; display: flex; flex-direction: column; border: 1px solid #3a3732; border-radius: 6px; background: #171614; overflow: hidden;">
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #3a3732; color: #a8a299; font-size: 12px;">
+<span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span>
+<span style="margin-left: 8px;">~/projects/app — foreman</span>
+</div>
+<pre style="flex-grow: 1; padding: 14px 20px;"><span class="m">~/projects/app $</span> foreman init .scratch/human-tickets
+
+<span class="w">▄█▄</span> <span class="b">foreman init</span> <span class="m">·</span> .scratch/human-tickets <span class="m">·  10 tickets</span>
+
+<span class="o">✓</span> foreman.conf    <span class="m">created</span>
+<span class="o">✓</span> order.md        <span class="m">created, then ordered by the agent</span>       <span class="m">31s  $0.08</span>
+<span class="o">✓</span> progress.txt    <span class="m">created</span>
+
+<span class="w">▲</span> foreman.conf has the template&#x27;s check and test commands — set yours before a run
+
+<span class="m">next</span>  edit .scratch/human-tickets/foreman.conf, then <span class="w">foreman dry-run</span>
+
+
+<span class="m">~/projects/app $</span> foreman init .scratch/old-batch --no-order
+
+<span class="w">▄█▄</span> <span class="b">foreman init</span> <span class="m">·</span> .scratch/old-batch <span class="m">·  4 tickets</span>
+
+<span class="w">=</span> ralph.conf      <span class="m">kept, from before the rename</span>
+  <span class="m">rename it:</span>  git mv .scratch/old-batch/ralph.conf .scratch/old-batch/foreman.conf
+<span class="o">✓</span> order.md        <span class="m">created, filename order — --no-order skipped the agent</span>
+<span class="o">✓</span> progress.txt    <span class="m">created</span>
+
+<span class="m">next</span>  re-order <span class="w">order.md</span> by hand, or <span class="w">foreman order .scratch/old-batch</span></pre>
+<pre style="padding: 6px 20px; border-top: 1px solid #3a3732;"><span class="m">the 3c ledger: one line per file, a ▲ only when something needs you</span></pre>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":3080,"height":800}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

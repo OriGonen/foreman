@@ -1,0 +1,30 @@
+[0;38;2;168;162;153m~/projects/app $[0m foreman dry-run[0m
+[0m
+[0m                       [0m
+[0m                       [0;1;38;2;224;168;74mFOREMAN[0m  [0;38;2;168;162;153mdry run[0m  .scratch/human-tickets[0m
+[0m                       [0;38;2;168;162;153ma walk round before work starts: no prompt is sent, no sandbox starts[0m
+[0m     [0;38;2;48;35;26m▄▄▄[0;38;2;48;35;26;48;2;58;42;24m▀▀▀▀▀[0;38;2;48;35;26m▄▄▄[0m       [0;38;2;143;207;143m7 of 10 done[0m  [0;38;2;168;162;153m·  3 would run[0m
+[0m  [0;38;2;48;35;26m▄▄[0;38;2;48;35;26;48;2;58;42;24m▀[0;38;2;58;42;24m███[0;38;2;58;42;24;48;2;201;119;47m▀▀▀▀▀[0;38;2;58;42;24m███[0;38;2;48;35;26;48;2;58;42;24m▀[0;38;2;48;35;26m▄▄[0m    [0m
+[0;38;2;28;26;23m▄[0;38;2;48;35;26;48;2;28;26;23m▀▀[0;38;2;58;42;24;48;2;28;26;23m▀▀▀[0;38;2;201;119;47;48;2;28;26;23m▀▀▀▀▀▀▀▀▀[0;38;2;58;42;24;48;2;28;26;23m▀▀▀[0;38;2;48;35;26;48;2;28;26;23m▀▀[0m   [0m
+[0;38;2;58;42;24m▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔[0m
+[0;1;38;2;224;168;74mWOULD RUN[0m
+[0;38;2;224;168;74m▶[0m [0;1;38;2;246;213;142m07a[0m [0;1mfollowup-try-the-followup-skill[0m           [0;1;48;2;92;87;79m CHECK [0m
+[0m  08  readme-human-tickets-section[0m
+[0m  09  end-to-end-check-on-this-machine[0m
+[0m
+[0;1;38;2;224;168;74mSETTINGS[0m   [0;38;2;168;162;153mexec[0m     local                 [0;38;2;168;162;153mperms[0m    acceptEdits[0m
+[0m           [0;38;2;168;162;153mmodel[0m    claude-sonnet-5-5     [0;38;2;168;162;153meffort[0m   high[0m
+[0m           [0;38;2;168;162;153mlive[0m     off [0;38;2;168;162;153m— add --live to watch[0m   [0;38;2;168;162;153mbudgets[0m  $25  [0;38;2;168;162;153m·[0m  90m  [0;38;2;168;162;153m·[0m  iterations unlimited[0m
+[0m           [0;38;2;168;162;153mlogs[0m     .scratch/human-tickets/foreman-runs.jsonl  [0;38;2;168;162;153mand[0m  foreman-runs.log[0m
+[0m
+[0;1;38;2;224;168;74mPROMPT[0m [0;38;2;168;162;153mfor 07a  ·  122 lines[0m
+[0;38;2;92;87;79m  1 │ [0;38;2;224;168;74m@.scratch/human-tickets/issues/07a-followup-try-the-followup-skill.md[0m
+[0;38;2;92;87;79m  2 │ [0m
+[0;38;2;92;87;79m  3 │ [0mImplement the attached ticket, and only that ticket, to a high standard.[0m
+[0;38;2;92;87;79m  4 │ [0m
+[0;38;2;92;87;79m  5 │ [0mWork on tickets in the order of .scratch/human-tickets/order.md. Do not pick a[0m
+[0;38;2;92;87;79m  6 │ [0;38;2;92;87;79m…[0m
+[0;38;2;92;87;79m  7 │ [0;1;38;2;246;213;142m## 1. Agree the seams before writing code[0m
+[0;38;2;92;87;79m  ⋮ │[0m
+[0;38;2;92;87;79m122 │ [0;38;2;168;162;153m</progress-excerpt>[0m
+[0;38;2;92;87;79m───[0m [0;38;2;143;207;143mnothing was sent; no sandbox was started[0m [0;38;2;92;87;79m────────────────────────────────────────[0m

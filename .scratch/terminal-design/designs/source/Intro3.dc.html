@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sunrise intro</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+pre{margin:0;font:inherit;white-space:pre}
+.a{color:#7fb0ee}.w{color:#e0a84a}.m{color:#a8a299}.b{font-weight:700}
+.px{white-space:pre;height:19px;font-size:15px;line-height:19px}
+button{font:inherit;cursor:pointer}
+</style>
+</helmet>
+<div style="width: 1000px; height: 720px; box-sizing: border-box; background: #0d0c0b; padding: 20px; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; font-size: 13.5px; line-height: 19px; color: #ece8e1; display: flex; flex-direction: column; gap: 14px;">
+<div style="flex-grow: 1; display: flex; flex-direction: column; border: 1px solid #3a3732; border-radius: 6px; background: #171614; overflow: hidden;">
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #3a3732; color: #a8a299; font-size: 12px;">
+<span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span>
+<span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span>
+<span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span>
+<span style="margin-left: 8px;">~/projects/app — foreman run</span>
+<span style="margin-left: auto;">{{clock}}</span>
+</div>
+<div style="padding: 14px 20px; display: flex; flex-direction: column; gap: 10px;">
+<pre><span class="m">~/projects/app $</span> foreman run .scratch/human-tickets 3</pre>
+<div>
+<sc-for list="{{rows}}" as="row" hint-placeholder-count="18"><div class="px"><sc-for list="{{row.runs}}" as="r" hint-placeholder-count="4"><span style="{{r.style}}">{{r.t}}</span></sc-for></div></sc-for>
+</div>
+<pre class="m">{{caption}}</pre>
+<sc-if value="{{done}}" hint-placeholder-val="{{ true }}">
+<pre><span class="w b">FOREMAN</span>  <span class="m">·  run 20261021-2  ·  .scratch/human-tickets  ·  local  ·  model sonnet-5-5</span>
+<span class="a">── iteration 1 of 3  ·  04-foreman-order-places-human-and-check-tickets.md</span></pre>
+</sc-if>
+</div>
+</div>
+<div style="display: flex; align-items: center; gap: 2px;">
+<button type="button" onClick="{{replay}}" style="height: 44px; padding: 0 16px; margin-right: 8px; border-radius: 6px; border: 1px solid #e0a84a; background: #e0a84a; color: #171614; font-weight: 700;">Replay</button>
+<sc-for list="{{chips}}" as="c" hint-placeholder-count="36">
+<button type="button" onClick="{{c.pick}}" title="{{c.title}}" style="{{c.style}}">{{c.label}}</button>
+</sc-for>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"stepMs":{"editor":"range","min":40,"max":200,"step":10,"unit":"ms","default":70},"$preview":{"width":1000,"height":720}}'>
+const C = { y: '#f6d58e', o: '#e0a84a', r: '#c9772f', d: '#8a5a24', f: '#0a0908', g: '#1c1a17', l: '#3a2a18', h3: '#30231a', spark: '#fff8e8' };
+// back view, facing the sun (same figure as D1)
+const TOP = [
+'.......####.......',
+'......######......',
+'.....########.....',
+'..##############..',
+'......######......',
+'......######......',
+'.......####.......',
+'.......####.......',
+'.....########.....',
+'....##########....',
+'...###########....',
+'...###########....',
+'...###########....',
+'..##.#########....',
+'..##.#########....',
+'..##.#########....',
+'..##.#########....',
+'...#.#########....',
+'.....#########....'
+];
+const STAND = ['.....####.####....', '.....####..####...', '.....###....###...', '.....###....###...', '.....###.....###..', '....####.....####.'];
+const ARMS = {
+salute: [[13, 4], [14, 4], [15, 4], [14, 5], [15, 5], [15, 6], [16, 6], [15, 7], [16, 7], [14, 8], [15, 8], [13, 9], [14, 9]],
+down: [[14, 9], [15, 9], [15, 10], [15, 11], [15, 12], [15, 13], [15, 14], [15, 15], [15, 16], [15, 17], [16, 11], [16, 12], [16, 13], [16, 14], [16, 15], [16, 16]],
+mid: [[14, 9], [15, 9], [15, 10], [16, 10], [16, 11], [16, 9], [16, 8], [15, 8], [15, 7], [14, 7]]
+};
+// side-on, facing right
+const SIDE_TOP = [
+'.......####.......',
+'......######......',
+'......#######.....',
+'....###########...',
+'.......#####......',
+'.......######.....',
+'.......#####......',
+'........###.......',
+'.......#####......',
+'......#######.....',
+'......#######.....',
+'......#######.....',
+'......#######.....',
+'......#######.....',
+'......#######.....',
+'......#######.....',
+'......#######.....',
+'......#######.....',
+'......#######.....'
+];
+const SIDE_LEGS = {
+stride: ['......#######.....', '.....###...###....', '....###.....###...', '...###.......###..', '..###.........###.', '.####.........####'],
+half: ['......#######.....', '......###.###.....', '.....###...###....', '.....###....###...', '....###.....###...', '...####.....####..'],
+pass: ['......#######.....', '.......#####......', '.......#####......', '.......###.##.....', '.......###.##.....', '.......#####......'],
+stop: ['......#######.....', '.......##.###.....', '.......##.###.....', '.......##.###.....', '.......##.###.....', '.......#########..']
+};
+const SIDE_ARMS = {
+stride: [[13, 10], [13, 11], [14, 11], [14, 12], [14, 13], [15, 13], [15, 14], [15, 15], [5, 10], [5, 11], [4, 11], [4, 12], [4, 13], [3, 13], [3, 14], [3, 15]],
+half: [[13, 11], [13, 12], [13, 13], [14, 14], [5, 11], [5, 12], [5, 13], [4, 14]],
+pass: [],
+stop: []
+};
+// the turn, in two in-between steps: a quarter round, then three quarters
+const QUARTER = [
+'.......####.......',
+'......######......',
+'......#######.....',
+'....############..',
+'.......######.....',
+'.......######.....',
+'.......#####......',
+'........####......',
+'......########....',
+'.....#########....',
+'.....########.....',
+'.....########.....',
+'.....########.....',
+'.....########.....',
+'.....########.....',
+'.....########.....',
+'.....########.....',
+'.....########.....',
+'.....########.....',
+'.....########.....',
+'......##..###.....',
+'......##..###.....',
+'......###..###....',
+'......###..###....',
+'.....####.#####...'
+];
+const THREE_Q = [
+'.......####.......',
+'......######......',
+'.....#######......',
+'...#############..',
+'......######......',
+'......######......',
+'.......####.......',
+'.......####.......',
+'.....#########....',
+'....###########...',
+'....##########....',
+'....##########....',
+'....##########....',
+'...#.#########....',
+'...#.#########....',
+'...#.#########....',
+'...#.#########....',
+'...#.#########....',
+'.....#########....',
+'.....#########....',
+'.....####.####....',
+'.....###...###....',
+'.....###....###...',
+'.....###....###...',
+'....####....####..'
+];
+function line(x1, y1, x2, y2, thick) {
+const pts = [], n = Math.max(Math.abs(x2 - x1), Math.abs(y2 - y1), 1);
+for (let k = 0; k <= n; k++) {
+const x = Math.round(x1 + (x2 - x1) * k / n), y = Math.round(y1 + (y2 - y1) * k / n);
+pts.push([x, y]); if (thick) pts.push([x + 1, y]);
+}
+return pts;
+}
+function block(x, y, w, h) { const pts = []; for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) pts.push([x + i, y + j]); return pts; }
+// hammer poses, in sprite pixels (row 25 is the ground); the stake stands at columns 15-16
+const HAMMER = {
+hold: () => line(10, 9, 12, 16, true).concat(line(13, 16, 13, 19), block(11, 19, 4, 2)),
+lift: () => line(10, 9, 14, 10, true).concat(line(15, 10, 15, 5), block(13, 3, 5, 2)),
+up: () => line(10, 9, 10, 2, true).concat(line(10, 2, 9, -2), block(7, -4, 5, 2)),
+back: () => line(10, 9, 8, 3, true).concat(line(8, 3, 5, 0), block(2, -2, 3, 4)),
+swing: () => line(10, 9, 15, 6, true).concat(line(16, 6, 19, 5), block(19, 3, 2, 5)),
+strike: (top) => line(10, 9, 13, 14, true).concat(line(14, 14, 15, top - 3), block(14, top - 2, 4, 2)),
+rebound: (top) => line(10, 9, 13, 13, true).concat(line(14, 13, 15, top - 7), block(14, top - 6, 4, 2))
+};
+const STAKE_X = 15;
+// sparks at the moment of the hit, then the same sparks flung further out a frame later
+function sparks(top, big) {
+const near = [[12, top - 2], [19, top - 3], [18, top - 5]];
+return big ? near.concat([[11, top - 5], [21, top - 2], [16, top - 7], [20, top - 7], [13, top - 8], [22, top - 5]]) : near;
+}
+function sparksOut(top, big) {
+const far = [[10, top - 3], [21, top - 4], [20, top - 8]];
+return big ? far.concat([[8, top - 7], [24, top - 2], [17, top - 10], [23, top - 9], [12, top - 11]]) : far;
+}
+const W = 66, H = 36, HZ = 30, CX = 32, R = 28, FX = 21;
+function scene(o) {
+const s = o.s ?? 1, fx = o.x ?? FX, y0 = HZ - 25;
+const p = Array.from({ length: H }, () => Array(W).fill(null));
+const cy = HZ + R * (1 - s);
+for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+if (y >= HZ) {
+const k = y - HZ;
+p[y][x] = s > 0.4 && k % 2 === 1 && Math.abs(x - CX) < R * s - k * 4 ? C.d : C.g;
+continue;
+}
+const d = Math.hypot(x - CX, y - cy);
+if (d < R) p[y][x] = d / R < 0.55 ? C.y : d / R < 0.85 ? C.o : C.r;
+else if (d < R + 2) p[y][x] = C.l;
+else if (d < R + 3) p[y][x] = C.h3;
+}
+const dot = (i, j, v) => { const x = fx + i, y = y0 + j; if (x >= 0 && x < W && y >= 0 && y < H) p[y][x] = v; };
+(o.body || TOP.concat(STAND)).forEach((row, j) => Array.from(row).forEach((ch, i) => { if (ch === '#') dot(i, j, C.f); }));
+(o.arms || []).forEach(([i, j]) => dot(i, j, C.f));
+// the stake stays put in the ground; it does not move with the walker
+if (o.stake) for (let y = HZ - o.stake; y < HZ; y++) { p[y][FX + STAKE_X] = C.f; p[y][FX + STAKE_X + 1] = C.f; }
+(o.sparks || []).forEach(([i, j]) => dot(i, j, C.spark));
+const texts = o.sound ? [{ x: fx + o.sound.at[0], y: y0 + o.sound.at[1], t: o.sound.t, bold: o.sound.bold }] : [];
+return half(p, texts);
+}
+function half(p, texts) {
+const rows = [];
+for (let y = 0; y < p.length; y += 2) {
+const cells = [];
+for (let x = 0; x < p[y].length; x++) {
+const t = p[y][x], b = p[y + 1] ? p[y + 1][x] : null;
+if (!t && !b) cells.push({ ch: ' ', st: '' });
+else if (t === b) cells.push({ ch: '█', st: 'color: ' + t });
+else if (!t) cells.push({ ch: '▄', st: 'color: ' + b });
+else if (!b) cells.push({ ch: '▀', st: 'color: ' + t });
+else cells.push({ ch: '▀', st: 'color: ' + t + '; background: ' + b });
+}
+texts.filter((tx) => Math.floor(tx.y / 2) === y / 2).forEach((tx) => Array.from(tx.t).forEach((ch, k) => {
+const x = tx.x + k, bg = p[y][x] || p[y + 1][x];
+if (x < cells.length) cells[x] = { ch: ch, st: 'color: ' + C.f + (bg ? '; background: ' + bg : '') + (tx.bold ? '; font-weight: 700' : '') };
+}));
+const out = [];
+cells.forEach((c) => { const last = out[out.length - 1]; if (last && last.style === c.st) last.t += c.ch; else out.push({ t: c.ch, style: c.st }); });
+rows.push({ runs: out });
+}
+return rows;
+}
+const ease = (t) => 1 - Math.pow(1 - Math.min(1, t), 2);
+const side = (ph, extra) => Object.assign({ body: SIDE_TOP.concat(SIDE_LEGS[ph]), arms: SIDE_ARMS[ph] }, extra);
+const strike = (h, big, word) => side('stop', { arms: HAMMER.strike(25 - h), stake: h, sparks: sparks(25 - h, big), sound: { t: word, at: [big ? 20 : 19, 25 - h - (big ? 9 : 6)], bold: big } });
+const FRAMES = [
+{ label: 'first light', o: { s: 0.2, stake: 6 } },
+{ label: 'the sun comes up', o: { s: 0.4, stake: 6 } }
+];
+const WALK = [-3, 0, 3, 6, 9, 12, 15, 18, 21];
+WALK.forEach((x, i) => FRAMES.push({
+label: i < 4 ? 'walks in' : 'walks into the light',
+o: side(['stride', 'half', 'pass', 'half'][i % 4], { x: x, s: 0.5 + 0.5 * ease((i + 1) / WALK.length), stake: 6 })
+}));
+FRAMES.push(
+{ label: 'stops at the stake', o: side('stop', { stake: 6 }) },
+{ label: 'takes the hammer', o: side('stop', { arms: HAMMER.hold(), stake: 6 }) },
+{ label: 'lifts it', o: side('stop', { arms: HAMMER.lift(), stake: 6 }) },
+{ label: 'hammer up', o: side('stop', { arms: HAMMER.up(), stake: 6 }) },
+{ label: 'swings', o: side('stop', { arms: HAMMER.swing(), stake: 6 }) },
+{ label: 'tink', o: strike(4, false, 'tink') },
+{ label: 'bounces off', o: side('stop', { arms: HAMMER.rebound(21), stake: 4, sparks: sparksOut(21, false) }) },
+{ label: 'hammer up', o: side('stop', { arms: HAMMER.up(), stake: 4 }) },
+{ label: 'swings', o: side('stop', { arms: HAMMER.swing(), stake: 4 }) },
+{ label: 'tink', o: strike(2, false, 'tink') },
+{ label: 'bounces off', o: side('stop', { arms: HAMMER.rebound(23), stake: 2, sparks: sparksOut(23, false) }) },
+{ label: 'hammer up', o: side('stop', { arms: HAMMER.up(), stake: 2 }) },
+{ label: 'winds right back', o: side('stop', { arms: HAMMER.back(), stake: 2 }) },
+{ label: 'swings hard', o: side('stop', { arms: HAMMER.swing(), stake: 2 }) },
+{ label: 'TONK, flush with the ground', o: strike(0, true, 'TONK') },
+{ label: 'sparks fly', o: side('stop', { arms: HAMMER.strike(25), sparks: sparksOut(25, true) }) },
+{ label: 'lets it rest', o: side('stop', { arms: HAMMER.rebound(25) }) },
+{ label: 'puts the hammer away', o: side('stop', { arms: HAMMER.hold() }) },
+{ label: 'starts to turn', o: side('stop') },
+{ label: 'turns a quarter', o: { body: QUARTER } },
+{ label: 'turns three quarters', o: { body: THREE_Q } },
+{ label: 'faces the sun', o: { arms: ARMS.down } },
+{ label: 'lifts a hand', o: { arms: ARMS.mid } },
+{ label: 'shades the eyes', o: { arms: ARMS.salute } },
+{ label: 'looks to the horizon', o: { arms: ARMS.salute } }
+);
+const RENDERED = FRAMES.map((f) => ({ label: f.label, rows: scene(f.o) }));
+class Component extends DCLogic {
+constructor(p) { super(p); this.state = { frame: 0 }; }
+componentDidMount() { this.play(); }
+componentWillUnmount() { clearInterval(this.timer); }
+play() {
+clearInterval(this.timer);
+this.setState({ frame: 0 });
+const ms = this.props.stepMs ?? 70;
+this.timer = setInterval(() => {
+const next = this.state.frame + 1;
+if (next >= RENDERED.length) { clearInterval(this.timer); return; }
+this.setState({ frame: next });
+}, ms);
+}
+renderVals() {
+const i = this.state.frame, ms = this.props.stepMs ?? 70;
+const f = RENDERED[i], last = i === RENDERED.length - 1;
+const t = (i * ms / 1000).toFixed(1) + 's';
+return {
+rows: f.rows,
+caption: '   frame ' + (i + 1) + ' of ' + RENDERED.length + '  ·  ' + t + '  ·  ' + f.label + (last ? '  (holds; the run starts below)' : ''),
+clock: t + ' / ' + ((RENDERED.length - 1) * ms / 1000).toFixed(1) + 's',
+done: last,
+chips: RENDERED.map((fr, k) => ({
+label: String(k + 1),
+title: fr.label,
+pick: () => { clearInterval(this.timer); this.setState({ frame: k }); },
+style: 'height: 44px; width: 22px; font-size: 11px; padding: 0; border-radius: 6px; border: 1px solid ' + (k === i ? '#e0a84a' : '#3a3732') + '; background: ' + (k === i ? '#2a2216' : '#171614') + '; color: ' + (k === i ? '#e0a84a' : (k < i ? '#ece8e1' : '#a8a299')) + ';'
+})),
+replay: () => this.play()
+};
+}
+}
+</script>
+</body>
+</html>

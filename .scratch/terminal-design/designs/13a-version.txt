@@ -1,0 +1,17 @@
+~/projects/app $ foreman version
+
+    ▄▄▀▀▀███▀▀▀▄▄
+  ▄▀██▀▀▀██▀▀▀▀██▀▄    FOREMAN  59c405c
+▄▀██▀█▀█▀██▀██▀█▀██▀   installed at ~/.foreman
+▀█▀█▀██▀████▀███▀█▀█   one ticket per iteration, until the batch is done
+██████▀██▀▀███▀█████
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+
+~/projects/app $ foreman version | cat
+foreman 59c405c
+/home/you/.foreman
+
+
+~/projects/app $ foreman --version
+the same as foreman version

@@ -1,0 +1,22 @@
+[0;38;2;168;162;153m~/projects/app $[0m foreman order .scratch/human-tickets[0m
+[0m
+[0;38;2;224;168;74m▄█▄[0m [0;1mforeman order[0m [0;38;2;168;162;153m·[0m .scratch/human-tickets [0;38;2;168;162;153m·  10 tickets  ·  claude-sonnet-5-5[0m
+[0m
+[0m  [0;38;2;224;168;74m⠹[0m [0;38;2;168;162;153mthe agent is reading the tickets[0m   [0;38;2;168;162;153m0:19[0m        [0;38;2;92;87;79m← while it works, on one line[0m
+[0m
+[0;1morder.md[0m  [0;38;2;168;162;153m·  ordered in 31s for $0.08[0m
+[0m
+[0m  [0;38;2;92;87;79m┬[0m  [0;38;2;168;162;153m1[0m  01  the-loop-stops-before-a-human-ticket                 [0m
+[0m  [0;38;2;92;87;79m├[0m  [0;38;2;168;162;153m2[0m  [0;1m03  status-shows-human-and-check-tickets[0m          [0;38;2;168;162;153mmoved[0m  [0m
+[0m  [0;38;2;92;87;79m├[0m  [0;38;2;168;162;153m3[0m  [0;1m02  a-check-ticket-verifies-or-sends-back[0m         [0;38;2;168;162;153mmoved[0m  [0m
+[0m  [0;38;2;92;87;79m├[0m  [0;38;2;168;162;153m4[0m  04  foreman-order-places-human-and-check-tickets         [0m
+[0m  [0;38;2;92;87;79m├[0m  [0;38;2;168;162;153m5[0m  [0;1m06  a-skill-writes-followup-tickets[0m               [0;38;2;168;162;153mmoved[0m  [0m
+[0m  [0;38;2;92;87;79m├[0m  [0;38;2;168;162;153m6[0m  [0;1m05  document-human-tickets[0m                        [0;38;2;168;162;153mmoved[0m  [0m
+[0m  [0;38;2;92;87;79m├[0m  [0;38;2;168;162;153m7[0m  07  try-the-followup-skill-on-a-real-batch               [0;1;38;2;23;22;20;48;2;224;168;74m HUMAN [0m  [0;38;2;168;162;153mthe loop stops here[0m
+[0m  [0;38;2;92;87;79m├[0m  [0;38;2;168;162;153m8[0m  07a followup-try-the-followup-skill                      [0;1;48;2;92;87;79m CHECK [0m  [0;38;2;168;162;153mchecks 07[0m
+[0m  [0;38;2;92;87;79m├[0m  [0;38;2;168;162;153m9[0m  08  readme-human-tickets-section                         [0m
+[0m  [0;38;2;92;87;79m└[0m [0;38;2;168;162;153m10[0m  09  end-to-end-check-on-this-machine                     [0m
+[0m
+[0;38;2;224;168;74m▲[0m 07 has no [0;1m**Handoff:**[0m line — add one so foreman status can point at the file[0m
+[0m
+[0;38;2;168;162;153mreview it, then[0m [0;38;2;224;168;74mforeman dry-run[0m

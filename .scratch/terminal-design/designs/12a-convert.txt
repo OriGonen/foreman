@@ -1,0 +1,26 @@
+~/projects/app $ foreman convert
+
+▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+ RALPH   FOREMAN       FOREMAN  repaints the sign  ~/projects/app
+▀▀▀▀▄▀▀▀▀▀▀▀▀▀▀▀▀▄▀▀▀▀   ralph → foreman, in this repository and on this machine
+    █            █   3 renamed  ·  14 files rewritten  ·  1 deleted  ·  2 for you
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+
+RENAMED   .scratch/human-tickets/ralph.conf → foreman.conf
+          .scratch/human-tickets/ralph-runs.jsonl → foreman-runs.jsonl
+          .scratch/human-tickets/ralph-runs.log → foreman-runs.log
+REWROTE   README.md 12  ·  Makefile 3  ·  .github/workflows/ci.yml 2  ·  11 more, 41 changes
+DELETED   .scratch/human-tickets/.ralph-iter.bundle  rebuilt on the next iteration
+
+KEPT      credit to the technique, and your own files named ralph:
+          docs/ralph-notes.md  ·  rename with git mv if you want to
+          4 mentions of the Ralph loop
+
+THIS MACHINE
+  ✓ ~/.config/ralph/env → ~/.config/foreman/env  (the old one stays)
+  ▲ RALPH_MODEL is set in your shell — rename it to FOREMAN_MODEL
+  ▲ the old sandbox ralph-sbx is still there — docker sandbox rm ralph-sbx
+
+nothing is committed.  git diff, then commit.

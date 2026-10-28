@@ -1,0 +1,2016 @@
+── checking 1 of 12 — the run across and back is about 3.2s, as long as the checks take
+
+
+
+
+▄  ▄███▄
+   ▀▀▀▀▀▀▀
+    ▀█▀▀
+  ▄████▄██
+   ████ ▀▀
+   ▀███
+   ▄▀ ▀▄
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ⠹ bash 5.2                          │  · git work tree, clean               ║
+║  · git 2.47                          │  · .gitattributes keeps LF            ║
+║  · node 22.11                        │  · foreman-runs.log not ignored       ║
+║  · claude 2.4, signed in             │  · skill copy is current              ║
+║  · docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  · .scratch/human-tickets          6 of 10 done                              ║
+║  · .scratch/smoke-test-speed       10 of 10 done                             ║
+║  · .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║                                                                              ║
+║  inspecting   0 of 12   ░░░░░░░░░░░░░░░░░░░░░░░░                             ║
+║                                                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+inspecting…
+
+── checking 1 of 12 — the run across and back is about 3.2s, as long as the checks take
+
+
+
+
+         ▄███▄
+     ▀   ▀▀▀▀▀▀▀
+   ▀      ▀█▀▀
+        ▄████▄██
+         ████ ▀▀
+        ▄█▀▀█▄
+       ▀▀    ▀▀▄
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ⠹ bash 5.2                          │  · git work tree, clean               ║
+║  · git 2.47                          │  · .gitattributes keeps LF            ║
+║  · node 22.11                        │  · foreman-runs.log not ignored       ║
+║  · claude 2.4, signed in             │  · skill copy is current              ║
+║  · docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  · .scratch/human-tickets          6 of 10 done                              ║
+║  · .scratch/smoke-test-speed       10 of 10 done                             ║
+║  · .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║                                                                              ║
+║  inspecting   0 of 12   ░░░░░░░░░░░░░░░░░░░░░░░░                             ║
+║                                                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+inspecting…
+
+── checking 2 of 12 — the run across and back is about 3.2s, as long as the checks take
+
+
+
+
+               ▄███▄
+          ▄    ▀▀▀▀▀▀▀
+        ▄       ▀█▀▀
+              ▄████▄██
+               ████ ▀▀
+               ▀███
+               ▄▀ ▀▄
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  · git work tree, clean               ║
+║  ⠹ git 2.47                          │  · .gitattributes keeps LF            ║
+║  · node 22.11                        │  · foreman-runs.log not ignored       ║
+║  · claude 2.4, signed in             │  · skill copy is current              ║
+║  · docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  · .scratch/human-tickets          6 of 10 done                              ║
+║  · .scratch/smoke-test-speed       10 of 10 done                             ║
+║  · .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║                                                                              ║
+║  inspecting   1 of 12   ██░░░░░░░░░░░░░░░░░░░░░░                             ║
+║                                                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+inspecting…
+
+── checking 2 of 12 — the run across and back is about 3.2s, as long as the checks take
+
+
+
+
+                  ▄  ▄███▄
+                ▄    ▀▀▀▀▀▀▀
+                      ▀█▀▀
+                    ▄████▄██
+                     ████ ▀▀
+                    ▄█▀▀█▄
+                   ▀▀    ▀▀▄
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  · git work tree, clean               ║
+║  ⠹ git 2.47                          │  · .gitattributes keeps LF            ║
+║  · node 22.11                        │  · foreman-runs.log not ignored       ║
+║  · claude 2.4, signed in             │  · skill copy is current              ║
+║  · docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  · .scratch/human-tickets          6 of 10 done                              ║
+║  · .scratch/smoke-test-speed       10 of 10 done                             ║
+║  · .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║                                                                              ║
+║  inspecting   1 of 12   ██░░░░░░░░░░░░░░░░░░░░░░                             ║
+║                                                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+inspecting…
+
+── checking 3 of 12 — the run across and back is about 3.2s, as long as the checks take
+
+
+
+
+                           ▄███▄
+                       ▀   ▀▀▀▀▀▀▀
+                     ▀      ▀█▀▀
+                          ▄████▄██
+                           ████ ▀▀
+                           ▀███
+                           ▄▀ ▀▄
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  · git work tree, clean               ║
+║  ■ git 2.47                          │  · .gitattributes keeps LF            ║
+║  ⠹ node 22.11                        │  · foreman-runs.log not ignored       ║
+║  · claude 2.4, signed in             │  · skill copy is current              ║
+║  · docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  · .scratch/human-tickets          6 of 10 done                              ║
+║  · .scratch/smoke-test-speed       10 of 10 done                             ║
+║  · .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║                                                                              ║
+║  inspecting   2 of 12   ████░░░░░░░░░░░░░░░░░░░░                             ║
+║                                                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+inspecting…
+
+── checking 3 of 12 — the run across and back is about 3.2s, as long as the checks take
+
+
+
+
+                                 ▄███▄
+                            ▄    ▀▀▀▀▀▀▀
+                          ▄       ▀█▀▀
+                                ▄████▄██
+                                 ████ ▀▀
+                                ▄█▀▀█▄
+                               ▀▀    ▀▀▄
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  · git work tree, clean               ║
+║  ■ git 2.47                          │  · .gitattributes keeps LF            ║
+║  ⠹ node 22.11                        │  · foreman-runs.log not ignored       ║
+║  · claude 2.4, signed in             │  · skill copy is current              ║
+║  · docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  · .scratch/human-tickets          6 of 10 done                              ║
+║  · .scratch/smoke-test-speed       10 of 10 done                             ║
+║  · .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║                                                                              ║
+║  inspecting   2 of 12   ████░░░░░░░░░░░░░░░░░░░░                             ║
+║                                                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+inspecting…
+
+── checking 4 of 12 — the run across and back is about 3.2s, as long as the checks take
+
+
+
+
+                                    ▄  ▄███▄
+                                  ▄    ▀▀▀▀▀▀▀
+                                        ▀█▀▀
+                                      ▄████▄██
+                                       ████ ▀▀
+                                       ▀███
+                                       ▄▀ ▀▄
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  · git work tree, clean               ║
+║  ■ git 2.47                          │  · .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  · foreman-runs.log not ignored       ║
+║  ⠹ claude 2.4, signed in             │  · skill copy is current              ║
+║  · docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  · .scratch/human-tickets          6 of 10 done                              ║
+║  · .scratch/smoke-test-speed       10 of 10 done                             ║
+║  · .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║                                                                              ║
+║  inspecting   3 of 12   ██████░░░░░░░░░░░░░░░░░░                             ║
+║                                                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+inspecting…
+
+── checking 4 of 12 — the run across and back is about 3.2s, as long as the checks take
+
+
+
+
+                                             ▄███▄
+                                         ▀   ▀▀▀▀▀▀▀
+                                       ▀      ▀█▀▀
+                                            ▄████▄██
+                                             ████ ▀▀
+                                            ▄█▀▀█▄
+                                           ▀▀    ▀▀▄
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  · git work tree, clean               ║
+║  ■ git 2.47                          │  · .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  · foreman-runs.log not ignored       ║
+║  ⠹ claude 2.4, signed in             │  · skill copy is current              ║
+║  · docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  · .scratch/human-tickets          6 of 10 done                              ║
+║  · .scratch/smoke-test-speed       10 of 10 done                             ║
+║  · .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║                                                                              ║
+║  inspecting   3 of 12   ██████░░░░░░░░░░░░░░░░░░                             ║
+║                                                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+inspecting…
+
+── checking 5 of 12 — the run across and back is about 3.2s, as long as the checks take
+
+
+
+
+                                                   ▄███▄
+                                              ▄    ▀▀▀▀▀▀▀
+                                            ▄       ▀█▀▀
+                                                  ▄████▄██
+                                                   ████ ▀▀
+                                                   ▀███
+                                                   ▄▀ ▀▄
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  · git work tree, clean               ║
+║  ■ git 2.47                          │  · .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  · foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  · skill copy is current              ║
+║  ⠹ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  · .scratch/human-tickets          6 of 10 done                              ║
+║  · .scratch/smoke-test-speed       10 of 10 done                             ║
+║  · .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║                                                                              ║
+║  inspecting   4 of 12   ████████░░░░░░░░░░░░░░░░                             ║
+║                                                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+inspecting…
+
+── checking 5 of 12 — the run across and back is about 3.2s, as long as the checks take
+
+
+
+
+                                                      ▄  ▄███▄
+                                                    ▄    ▀▀▀▀▀▀▀
+                                                          ▀█▀▀
+                                                        ▄████▄██
+                                                         ████ ▀▀
+                                                        ▄█▀▀█▄
+                                                       ▀▀    ▀▀▄
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  · git work tree, clean               ║
+║  ■ git 2.47                          │  · .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  · foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  · skill copy is current              ║
+║  ⠹ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  · .scratch/human-tickets          6 of 10 done                              ║
+║  · .scratch/smoke-test-speed       10 of 10 done                             ║
+║  · .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║                                                                              ║
+║  inspecting   4 of 12   ████████░░░░░░░░░░░░░░░░                             ║
+║                                                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+inspecting…
+
+── checking 6 of 12 — the run across and back is about 3.2s, as long as the checks take
+
+
+
+
+                                                               ▄███▄
+                                                           ▀   ▀▀▀▀▀▀▀
+                                                         ▀      ▀█▀▀
+                                                              ▄████▄██
+                                                               ████ ▀▀
+                                                               ▀███
+                                                               ▄▀ ▀▄
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ⠹ git work tree, clean               ║
+║  ■ git 2.47                          │  · .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  · foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  · skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  · .scratch/human-tickets          6 of 10 done                              ║
+║  · .scratch/smoke-test-speed       10 of 10 done                             ║
+║  · .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║                                                                              ║
+║  inspecting   5 of 12   ██████████░░░░░░░░░░░░░░                             ║
+║                                                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+inspecting…
+
+── checking 7 of 12 — the run across and back is about 3.2s, as long as the checks take
+
+
+
+
+                                                                     ▄███▄
+                                                                ▄    ▀▀▀▀▀▀▀
+                                                              ▄       ▀█▀▀
+                                                                    ▄████▄██
+                                                                     ████ ▀▀
+                                                                    ▄█▀▀█▄
+                                                                   ▀▀    ▀▀▄
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ⠹ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  · foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  · skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  · .scratch/human-tickets          6 of 10 done                              ║
+║  · .scratch/smoke-test-speed       10 of 10 done                             ║
+║  · .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║                                                                              ║
+║  inspecting   6 of 12   ████████████░░░░░░░░░░░░                             ║
+║                                                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+inspecting…
+
+── checking 7 of 12 — the run across and back is about 3.2s, as long as the checks take
+
+
+
+
+                                                                   ▄███▄  ▄
+                                                                 ▀▀▀▀▀▀▀    ▄
+                                                                   ▀▀█▀
+                                                                 ██▄████▄
+                                                                 ▀▀ ████
+                                                                    ███▀
+                                                                   ▄▀ ▀▄
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ⠹ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  · foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  · skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  · .scratch/human-tickets          6 of 10 done                              ║
+║  · .scratch/smoke-test-speed       10 of 10 done                             ║
+║  · .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║                                                                              ║
+║  inspecting   6 of 12   ████████████░░░░░░░░░░░░                             ║
+║                                                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+inspecting…
+
+── checking 8 of 12 — the run across and back is about 3.2s, as long as the checks take
+
+
+
+
+                                                             ▄███▄
+                                                           ▀▀▀▀▀▀▀   ▀
+                                                             ▀▀█▀      ▀
+                                                           ██▄████▄
+                                                           ▀▀ ████
+                                                             ▄█▀▀█▄
+                                                           ▄▀▀    ▀▀
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ⠹ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  · skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  · .scratch/human-tickets          6 of 10 done                              ║
+║  · .scratch/smoke-test-speed       10 of 10 done                             ║
+║  · .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║                                                                              ║
+║  inspecting   7 of 12   ██████████████░░░░░░░░░░                             ║
+║                                                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+inspecting…
+
+── checking 8 of 12 — the run across and back is about 3.2s, as long as the checks take
+
+
+
+
+                                                       ▄███▄
+                                                     ▀▀▀▀▀▀▀    ▄
+                                                       ▀▀█▀       ▄
+                                                     ██▄████▄
+                                                     ▀▀ ████
+                                                        ███▀
+                                                       ▄▀ ▀▄
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ⠹ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  · skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  · .scratch/human-tickets          6 of 10 done                              ║
+║  · .scratch/smoke-test-speed       10 of 10 done                             ║
+║  · .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║                                                                              ║
+║  inspecting   7 of 12   ██████████████░░░░░░░░░░                             ║
+║                                                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+inspecting…
+
+── checking 9 of 12 — the run across and back is about 3.2s, as long as the checks take
+
+
+
+
+                                                 ▄███▄  ▄
+                                               ▀▀▀▀▀▀▀    ▄
+                                                 ▀▀█▀
+                                               ██▄████▄
+                                               ▀▀ ████
+                                                 ▄█▀▀█▄
+                                               ▄▀▀    ▀▀
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ⠹ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  · .scratch/human-tickets          6 of 10 done                              ║
+║  · .scratch/smoke-test-speed       10 of 10 done                             ║
+║  · .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║                                                                              ║
+║  inspecting   8 of 12   ████████████████░░░░░░░░                             ║
+║                                                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+inspecting…
+
+── checking 9 of 12 — the run across and back is about 3.2s, as long as the checks take
+
+
+
+
+                                           ▄███▄
+                                         ▀▀▀▀▀▀▀   ▀
+                                           ▀▀█▀      ▀
+                                         ██▄████▄
+                                         ▀▀ ████
+                                            ███▀
+                                           ▄▀ ▀▄
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ⠹ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  · .scratch/human-tickets          6 of 10 done                              ║
+║  · .scratch/smoke-test-speed       10 of 10 done                             ║
+║  · .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║                                                                              ║
+║  inspecting   8 of 12   ████████████████░░░░░░░░                             ║
+║                                                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+inspecting…
+
+── checking 10 of 12 — the run across and back is about 3.2s, as long as the checks take
+
+
+
+
+                                     ▄███▄
+                                   ▀▀▀▀▀▀▀    ▄
+                                     ▀▀█▀       ▄
+                                   ██▄████▄
+                                   ▀▀ ████
+                                     ▄█▀▀█▄
+                                   ▄▀▀    ▀▀
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ⠹ .scratch/human-tickets          6 of 10 done                              ║
+║  · .scratch/smoke-test-speed       10 of 10 done                             ║
+║  · .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║                                                                              ║
+║  inspecting   9 of 12   ██████████████████░░░░░░                             ║
+║                                                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+inspecting…
+
+── checking 10 of 12 — the run across and back is about 3.2s, as long as the checks take
+
+
+
+
+                               ▄███▄  ▄
+                             ▀▀▀▀▀▀▀    ▄
+                               ▀▀█▀
+                             ██▄████▄
+                             ▀▀ ████
+                                ███▀
+                               ▄▀ ▀▄
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ⠹ .scratch/human-tickets          6 of 10 done                              ║
+║  · .scratch/smoke-test-speed       10 of 10 done                             ║
+║  · .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║                                                                              ║
+║  inspecting   9 of 12   ██████████████████░░░░░░                             ║
+║                                                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+inspecting…
+
+── checking 11 of 12 — the run across and back is about 3.2s, as long as the checks take
+
+
+
+
+                         ▄███▄
+                       ▀▀▀▀▀▀▀   ▀
+                         ▀▀█▀      ▀
+                       ██▄████▄
+                       ▀▀ ████
+                         ▄█▀▀█▄
+                       ▄▀▀    ▀▀
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ⠹ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  · .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║                                                                              ║
+║  inspecting  10 of 12   ████████████████████░░░░                             ║
+║                                                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+inspecting…
+
+── checking 11 of 12 — the run across and back is about 3.2s, as long as the checks take
+
+
+
+
+                   ▄███▄
+                 ▀▀▀▀▀▀▀    ▄
+                   ▀▀█▀       ▄
+                 ██▄████▄
+                 ▀▀ ████
+                    ███▀
+                   ▄▀ ▀▄
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ⠹ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  · .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║                                                                              ║
+║  inspecting  10 of 12   ████████████████████░░░░                             ║
+║                                                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+inspecting…
+
+── checking 12 of 12 — the run across and back is about 3.2s, as long as the checks take
+
+
+
+
+             ▄███▄  ▄
+           ▀▀▀▀▀▀▀    ▄
+             ▀▀█▀
+           ██▄████▄
+           ▀▀ ████
+             ▄█▀▀█▄
+           ▄▀▀    ▀▀
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ⠹ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║                                                                              ║
+║  inspecting  11 of 12   ██████████████████████░░                             ║
+║                                                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+inspecting…
+
+── checking 12 of 12 — the run across and back is about 3.2s, as long as the checks take
+
+
+
+
+       ▄███▄
+     ▀▀▀▀▀▀▀   ▀
+       ▀▀█▀      ▀
+     ██▄████▄
+     ▀▀ ████
+        ███▀
+       ▄▀ ▀▄
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║                                                                              ║
+║  inspecting  12 of 12   ████████████████████████                             ║
+║                                                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+inspecting…
+
+── the verdict: a whistle and a red sign, or a hop, a thumbs up and a check
+
+
+
+
+                                    ▄▄███▄
+                                  ▄  ▀▀▀▀▀▀▀
+                                      ▀█▀▀
+                                    ▄████▄██
+                                     ████ ▀▀
+                                     ▀█▀█
+                                     ▄▀ ▀▄
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║                                                                              ║
+║  inspecting  12 of 12   ████████████████████████                             ║
+║                                                                              ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+inspecting…
+
+── the verdict: a whistle and a red sign, or a hop, a thumbs up and a check
+
+
+                                       !
+
+                                     ▄███▄    ▄▀
+                                     ▀▀▀▀▀▀▀ ▀
+                                      ▀█▀▀▀▀ ▀▀▀  TWEEEET!
+                                   ▄▄████▀   ▀▄
+                                     ████      ▀
+                                     ▀█▀█
+                                     ▄▀ ▀▄
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict: a whistle and a red sign, or a hop, a thumbs up and a check
+
+
+                                   ▄███▄    ▄▀
+                                   ▀▀▀▀▀▀▀ ▀
+                                    ▀█▀▀▀▀ ▀▀▀  TWEEEET!
+                                 ▄▄████▀   ▀▄
+                                   ████      ▀
+                                  ▄█▀▀█▄      ▄
+                                 ▀▀    ▀▀▄  ▄▀
+
+
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict: a whistle and a red sign, or a hop, a thumbs up and a check
+                                  ▄▄▄
+                                 █████▄▄  ▄▀
+                                  ▄▄▄    ▀
+                                  ▀█▀▀▀▀ ▀▀▀  TWEEEET!
+                               ▄▄████▀   ▀▄
+                                 ████      ▀
+                                ▄█▀▀█▄      ▄
+                               ▀▀    ▀▀▄  ▄▀
+
+
+
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict: a whistle and a red sign, or a hop, a thumbs up and a check
+
+                               ▄███▄     ▄
+                               ▀▀▀▀▀▀▀ ▄▀
+                                ███▄▄▄ ▄▄▄  TWEEEET!
+                               ▄▄▀▄█▀  ▄
+                             ▀▀████     ▀▄
+                               ▀▀▀▀
+                             ▄█▀  ▀█▄    ▄▀
+                             ▀▀     ▀▀  ▀
+
+
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict: a whistle and a red sign, or a hop, a thumbs up and a check
+
+
+
+                              ▄▄▄      ▄
+                             █████▄▄ ▄▀
+                              ███▄▄▄ ▄▄▄  TWEEEET!
+                             ▄▄▀▄█▀  ▄
+                           ▀▀████     ▀▄
+                             ▀▀▀▀
+                           ▄█▀  ▀█▄    ▄▀
+                           ▀▀     ▀▀  ▀
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict: a whistle and a red sign, or a hop, a thumbs up and a check
+
+
+
+
+                             ▄███▄    ▄▀
+                             ▀▀▀▀▀▀▀ ▀
+                              ▀█▀▀▀▀ ▀▀▀  TWEEEET!
+                           ▄▄████▀   ▀▄
+                             ████      ▀
+                             ▀█▀█
+                             ▄▀ ▀▄
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict: a whistle and a red sign, or a hop, a thumbs up and a check
+                                  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                  █ NOT PASSED █
+                                  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                    █
+                             ▄███▄  █
+                             ▀▀▀▀▀▀▀█
+                              ▀█▀▀ ▄█
+                            ▄████▀▀▀█
+                             ████   █
+                            ▄█▀▀█▄
+                           ▀▀    ▀▀▄
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict: a whistle and a red sign, or a hop, a thumbs up and a check
+                                        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                        █ NOT PASSED █
+                                        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                          █
+                                   ▄███▄  █
+                                   ▀▀▀▀▀▀▀█
+                                    ▀█▀▀ ▄█
+                                  ▄████▀▀▀█
+                                   ████   █
+                                   ▀█▀█
+                                   ▄▀ ▀▄
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict: a whistle and a red sign, or a hop, a thumbs up and a check
+
+
+                                        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                        █ NOT PASSED █
+                                   ▄███▄▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                   ▀▀▀▀▀▀▀█
+                                    ▀█▀▀ ▄█
+                                  ▄████▀▀▀█
+                                   ████   █
+                                   ▀█▀█   █
+                                   ▄▀ ▀▄  █
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict: a whistle and a red sign, or a hop, a thumbs up and a check
+
+
+
+                                        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                   ▄███▄█ NOT PASSED █
+                                   ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                    ▀█▀▀ ▄█
+                                  ▄████▀▀▀█
+                                   ████   █
+                                   ▀█▀█   █
+                                   ▄▀ ▀▀  █  ▀▀
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict holds a moment, then it loops
+
+
+
+                                        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                               ▄███▄    █ NOT PASSED █
+                               ▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                ▀█▀▀      █
+                              ▄████▄██    █
+                               ████ ▀▀    █
+                               ▀█▀█       █
+                               ▄▀ ▀▄      █
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict holds a moment, then it loops
+
+
+
+                                        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                               ▄███▄    █ NOT PASSED █
+                               ▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                ▀█▀▀      █
+                              ▄████▄██    █
+                               ████ ▀▀    █
+                               ▀█▀█       █
+                               ▄▀ ▀▄      █
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict holds a moment, then it loops
+
+
+
+                                        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                               ▄███▄    █ NOT PASSED █
+                               ▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                ▀█▀▀      █
+                              ▄████▄██    █
+                               ████ ▀▀    █
+                               ▀█▀█       █
+                               ▄▀ ▀▄      █
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict holds a moment, then it loops
+
+
+
+                                        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                               ▄███▄    █ NOT PASSED █
+                               ▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                ▀█▀▀      █
+                              ▄████▄██    █
+                               ████ ▀▀    █
+                               ▀█▀█       █
+                               ▄▀ ▀▄      █
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict holds a moment, then it loops
+
+
+
+                                        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                               ▄███▄    █ NOT PASSED █
+                               ▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                ▀█▀▀      █
+                              ▄████▄██    █
+                               ████ ▀▀    █
+                               ▀█▀█       █
+                               ▄▀ ▀▄      █
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict holds a moment, then it loops
+
+
+
+                                        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                               ▄███▄    █ NOT PASSED █
+                               ▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                ▀█▀▀      █
+                              ▄████▄██    █
+                               ████ ▀▀    █
+                               ▀█▀█       █
+                               ▄▀ ▀▄      █
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict holds a moment, then it loops
+
+
+
+                                        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                               ▄███▄    █ NOT PASSED █
+                               ▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                ▀█▀▀      █
+                              ▄████▄██    █
+                               ████ ▀▀    █
+                               ▀█▀█       █
+                               ▄▀ ▀▄      █
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict holds a moment, then it loops
+
+
+
+                                        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                               ▄███▄    █ NOT PASSED █
+                               ▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                ▀█▀▀      █
+                              ▄████▄██    █
+                               ████ ▀▀    █
+                               ▀█▀█       █
+                               ▄▀ ▀▄      █
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict holds a moment, then it loops
+
+
+
+                                        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                               ▄███▄    █ NOT PASSED █
+                               ▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                ▀█▀▀      █
+                              ▄████▄██    █
+                               ████ ▀▀    █
+                               ▀█▀█       █
+                               ▄▀ ▀▄      █
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict holds a moment, then it loops
+
+
+
+                                        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                               ▄███▄    █ NOT PASSED █
+                               ▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                ▀█▀▀      █
+                              ▄████▄██    █
+                               ████ ▀▀    █
+                               ▀█▀█       █
+                               ▄▀ ▀▄      █
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict holds a moment, then it loops
+
+
+
+                                        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                               ▄███▄    █ NOT PASSED █
+                               ▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                ▀█▀▀      █
+                              ▄████▄██    █
+                               ████ ▀▀    █
+                               ▀█▀█       █
+                               ▄▀ ▀▄      █
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict holds a moment, then it loops
+
+
+
+                                        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                               ▄███▄    █ NOT PASSED █
+                               ▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                ▀█▀▀      █
+                              ▄████▄██    █
+                               ████ ▀▀    █
+                               ▀█▀█       █
+                               ▄▀ ▀▄      █
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict holds a moment, then it loops
+
+
+
+                                        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                               ▄███▄    █ NOT PASSED █
+                               ▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                ▀█▀▀      █
+                              ▄████▄██    █
+                               ████ ▀▀    █
+                               ▀█▀█       █
+                               ▄▀ ▀▄      █
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict holds a moment, then it loops
+
+
+
+                                        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                               ▄███▄    █ NOT PASSED █
+                               ▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                ▀█▀▀      █
+                              ▄████▄██    █
+                               ████ ▀▀    █
+                               ▀█▀█       █
+                               ▄▀ ▀▄      █
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict holds a moment, then it loops
+
+
+
+                                        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                               ▄███▄    █ NOT PASSED █
+                               ▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                ▀█▀▀      █
+                              ▄████▄██    █
+                               ████ ▀▀    █
+                               ▀█▀█       █
+                               ▄▀ ▀▄      █
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict holds a moment, then it loops
+
+
+
+                                        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                               ▄███▄    █ NOT PASSED █
+                               ▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                ▀█▀▀      █
+                              ▄████▄██    █
+                               ████ ▀▀    █
+                               ▀█▀█       █
+                               ▄▀ ▀▄      █
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict holds a moment, then it loops
+
+
+
+                                        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                               ▄███▄    █ NOT PASSED █
+                               ▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                ▀█▀▀      █
+                              ▄████▄██    █
+                               ████ ▀▀    █
+                               ▀█▀█       █
+                               ▄▀ ▀▄      █
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict holds a moment, then it loops
+
+
+
+                                        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                               ▄███▄    █ NOT PASSED █
+                               ▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                ▀█▀▀      █
+                              ▄████▄██    █
+                               ████ ▀▀    █
+                               ▀█▀█       █
+                               ▄▀ ▀▄      █
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict holds a moment, then it loops
+
+
+
+                                        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                               ▄███▄    █ NOT PASSED █
+                               ▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                ▀█▀▀      █
+                              ▄████▄██    █
+                               ████ ▀▀    █
+                               ▀█▀█       █
+                               ▄▀ ▀▄      █
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────��───────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict holds a moment, then it loops
+
+
+
+                                        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                               ▄███▄    █ NOT PASSED █
+                               ▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                ▀█▀▀      █
+                              ▄████▄██    █
+                               ████ ▀▀    █
+                               ▀█▀█       █
+                               ▄▀ ▀▄      █
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict holds a moment, then it loops
+
+
+
+                                        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                               ▄███▄    █ NOT PASSED █
+                               ▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                ▀█▀▀      █
+                              ▄████▄██    █
+                               ████ ▀▀    █
+                               ▀█▀█       █
+                               ▄▀ ▀▄      █
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+
+── the verdict holds a moment, then it loops
+
+
+
+                                        ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                               ▄███▄    █ NOT PASSED █
+                               ▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+                                ▀█▀▀      █
+                              ▄████▄██    █
+                               ████ ▀▀    █
+                               ▀█▀█       █
+                               ▄▀ ▀▄      █
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION   ~/projects/app  ·  23 Oct 2026  ·  foreman 59c405c        ║
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ bash 5.2                          │  ■ git work tree, clean               ║
+║  ■ git 2.47                          │  ■ .gitattributes keeps LF            ║
+║  ■ node 22.11                        │  ▲ foreman-runs.log not ignored       ║
+║  ■ claude 2.4, signed in             │  ■ skill copy is current              ║
+║  ■ docker sbx, sandbox ready         │                                       ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ .scratch/human-tickets          6 of 10 done                              ║
+║  ■ .scratch/smoke-test-speed       10 of 10 done                             ║
+║  ✗ .scratch/old-batch              no foreman.conf                           ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it  ✗ needs you             ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  1 blocker    │      ║
+║  then: foreman init .scratch/old-batch --no-order     └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+exit 1  ·  1 blocker  ·  1 thing --fix can do
+

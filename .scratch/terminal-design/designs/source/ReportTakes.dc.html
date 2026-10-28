@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Report takes</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&amp;family=Inter:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+pre{margin:0;font:inherit;white-space:pre}
+.y{color:#f6d58e}.w{color:#e0a84a}.r{color:#c9772f}.o{color:#8fcf8f}.e{color:#f08078}.m{color:#a8a299}.d{color:#5c574f}.b{font-weight:700}
+.tag{background:#e0a84a;color:#171614;font-weight:700}.tagE{background:#f08078;color:#171614;font-weight:700}.tagO{background:#8fcf8f;color:#171614;font-weight:700}
+</style>
+</helmet>
+<div style="width: 3080px; height: 800px; box-sizing: border-box; background: #0d0c0b; padding: 20px; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; font-size: 13.5px; line-height: 19px; color: #ece8e1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px;">
+<div style="display: flex; flex-direction: column; min-width: 0;">
+<div style="padding: 0 4px 10px; font-family: 'Inter', system-ui, sans-serif; font-size: 18px; color: #ece8e1;">10a · The bill up top, then the ledger</div>
+<div style="flex-grow: 1; display: flex; flex-direction: column; border: 1px solid #3a3732; border-radius: 6px; background: #171614; overflow: hidden;">
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #3a3732; color: #a8a299; font-size: 12px;">
+<span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span>
+<span style="margin-left: 8px;">~/projects/app — foreman</span>
+</div>
+<pre style="flex-grow: 1; padding: 14px 20px;"><span class="m">~/projects/app $</span> foreman report
+
+    <span style="color:#30231a">▄▄</span><span style="color:#30231a;background:#3a2a18">▀▀</span><span style="color:#30231a;background:#0a0908">▀</span><span style="color:#0a0908">███</span><span style="color:#30231a;background:#0a0908">▀</span><span style="color:#30231a;background:#3a2a18">▀▀</span><span style="color:#30231a">▄▄</span>      
+  <span style="color:#30231a">▄</span><span style="color:#30231a;background:#3a2a18">▀</span><span style="color:#3a2a18">██</span><span style="color:#3a2a18;background:#c9772f">▀</span><span style="color:#0a0908;background:#c9772f">▀▀</span><span style="color:#0a0908">██</span><span style="color:#0a0908;background:#c9772f">▀▀▀</span><span style="color:#3a2a18;background:#c9772f">▀</span><span style="color:#3a2a18">██</span><span style="color:#30231a;background:#3a2a18">▀</span><span style="color:#30231a">▄</span>    <span class="w b">FOREMAN</span>  <span class="m">what it cost</span>  .scratch/human-tickets
+<span style="color:#30231a">▄</span><span style="color:#30231a;background:#3a2a18">▀</span><span style="color:#3a2a18">██</span><span style="color:#3a2a18;background:#c9772f">▀</span><span style="color:#c9772f">█</span><span style="color:#c9772f;background:#e0a84a">▀</span><span style="color:#e0a84a">█</span><span style="color:#e0a84a;background:#0a0908">▀</span><span style="color:#0a0908">██</span><span style="color:#e0a84a;background:#0a0908">▀</span><span style="color:#e0a84a">██</span><span style="color:#c9772f;background:#e0a84a">▀</span><span style="color:#c9772f">█</span><span style="color:#3a2a18;background:#c9772f">▀</span><span style="color:#3a2a18">██</span><span style="color:#30231a;background:#3a2a18">▀</span>   <span class="y b">$14.20</span>  <span class="m">over 3 runs  ·  14 iterations  ·  96.3 model-minutes</span>
+<span style="color:#30231a;background:#3a2a18">▀</span><span style="color:#3a2a18">█</span><span style="color:#3a2a18;background:#c9772f">▀</span><span style="color:#c9772f">█</span><span style="color:#c9772f;background:#e0a84a">▀</span><span style="color:#e0a84a">██</span><span style="color:#0a0908;background:#e0a84a">▀</span><span style="color:#0a0908">████</span><span style="color:#0a0908;background:#f6d58e">▀</span><span style="color:#e0a84a">███</span><span style="color:#c9772f;background:#e0a84a">▀</span><span style="color:#c9772f">█</span><span style="color:#3a2a18;background:#c9772f">▀</span><span style="color:#3a2a18">█</span>   <span style="color:#8fcf8f">████████████████████</span><span style="color:#e0a84a">██</span><span style="color:#c9772f">██</span><span style="color:#f08078">████</span>
+<span style="color:#3a2a18">██</span><span style="color:#c9772f">█</span><span style="color:#e0a84a">███</span><span style="color:#e0a84a;background:#f6d58e">▀</span><span style="color:#f6d58e">█</span><span style="color:#0a0908">█</span><span style="color:#0a0908;background:#f6d58e">▀▀</span><span style="color:#0a0908">█</span><span style="color:#f6d58e">██</span><span style="color:#e0a84a;background:#f6d58e">▀</span><span style="color:#e0a84a">███</span><span style="color:#c9772f">█</span><span style="color:#3a2a18">█</span>   <span class="o">10 landed</span>  <span class="w">1 progressed</span>  <span class="r">1 stalled</span>  <span class="e">2 unproductive</span>
+<span style="color:#3a2a18;background:#1c1a17">▀▀</span><span style="color:#c9772f;background:#1c1a17">▀</span><span style="color:#e0a84a;background:#1c1a17">▀▀▀</span><span style="color:#f6d58e;background:#1c1a17">▀▀</span><span style="color:#0a0908;background:#1c1a17">▀</span><span style="color:#f6d58e;background:#1c1a17">▀▀</span><span style="color:#0a0908;background:#1c1a17">▀</span><span style="color:#f6d58e;background:#1c1a17">▀▀▀</span><span style="color:#e0a84a;background:#1c1a17">▀▀▀</span><span style="color:#c9772f;background:#1c1a17">▀</span><span style="color:#3a2a18;background:#1c1a17">▀</span>   
+<span style="color:#3a2a18">▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔</span>
+
+<span class="w b">TOTAL</span>
+  <span class="m">tokens</span>     in 41.2k  out 388k  cache-read 12.4M  cache-write 1.1M
+  <span class="m">billed</span>     429k tokens  <span class="m">·</span>  812 turns
+  <span class="m">average</span>    $1.01 and 30.7k billed tokens per iteration
+
+<span class="w b">BY RUN</span>                         <span class="m">iters  landed   minutes      cost</span>
+  20261021T091200Z-4411            5       4      31.2     $4.12   <span style="color:#c9772f">██████████▎</span>
+  20261022T140533Z-9020            6       4      44.0     $6.38   <span style="color:#c9772f">████████████████</span>
+  20261023T081014Z-1207            3       2      21.1     $3.70   <span style="color:#c9772f">█████████▎</span>
+
+<span class="m">by ticket:</span> foreman report --by-ticket   <span class="m">·   what went wrong:</span> foreman report --failures</pre>
+<pre style="padding: 6px 20px; border-top: 1px solid #3a3732;"><span class="m">the money first, an outcome bar under it, then the ledger with aligned columns</span></pre>
+</div>
+</div><div style="display: flex; flex-direction: column; min-width: 0;">
+<div style="padding: 0 4px 10px; font-family: 'Inter', system-ui, sans-serif; font-size: 18px; color: #ece8e1;">10b · Cost per ticket as bars, failures flagged</div>
+<div style="flex-grow: 1; display: flex; flex-direction: column; border: 1px solid #3a3732; border-radius: 6px; background: #171614; overflow: hidden;">
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #3a3732; color: #a8a299; font-size: 12px;">
+<span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span>
+<span style="margin-left: 8px;">~/projects/app — foreman</span>
+</div>
+<pre style="flex-grow: 1; padding: 14px 20px;"><span class="m">~/projects/app $</span> foreman report --by-ticket
+
+<span class="w b">FOREMAN</span>  <span class="m">what each ticket cost  ·</span> .scratch/human-tickets  <span class="m">·</span>  <span class="y b">$14.20</span>
+
+  01  the-loop-stops-before-a-human-tick <span class="o">✓</span>  <span style="color:#8fcf8f">████████▌</span>                       $1.12  <span class="m">1 try</span>
+  02  a-check-ticket-verifies-or-sends-b <span class="o">✓</span>  <span style="color:#8fcf8f">█████████████▋</span>                  $1.80  <span class="m">1 try</span>
+  03  status-shows-human-and-check-ticke <span class="o">✓</span>  <span style="color:#8fcf8f">███████████████████▊</span>            $2.61  <span class="m">2 tries</span>
+  04  foreman-order-places-human-and-che <span class="o">✓</span>  <span style="color:#8fcf8f">███████▌</span>                        $0.99  <span class="m">1 try</span>
+  05  document-human-tickets             <span class="o">✓</span>  <span style="color:#8fcf8f">██████████▍</span>                     $1.38  <span class="m">1 try</span>
+  06  a-skill-writes-followup-tickets    <span class="w">◐</span>  <span style="color:#e0a84a">██████████████████████████████</span>  $3.95  <span class="m">3 tries</span>
+  07  try-the-followup-skill-on-a-real-b <span class="m">–</span>  <span class="m">yours; nothing spent</span>
+  07a followup-try-the-followup-skill    <span class="o">✓</span>  <span style="color:#8fcf8f">██████▍</span>                         $0.84  <span class="m">1 try</span>
+  08  readme-human-tickets-section       <span class="e">✗</span>  <span style="color:#f08078">███████████▍</span>                    $1.51  <span class="m">4 tries</span>
+
+  <span class="o">✓</span> <span class="m">landed</span>   <span class="w">◐</span> <span class="m">landed after a stall</span>   <span class="e">✗</span> <span class="m">not landed yet</span>   <span class="m">–</span> <span class="m">a human ticket</span>
+
+
+<span class="m">~/projects/app $</span> foreman report --failures
+
+<span class="e b">UNPRODUCTIVE</span>  <span class="m">2 of 14 iterations</span>
+
+<span class="e">✗</span> <span class="b">08-readme-human-tickets-section</span>  <span class="m">20261023T081014Z-1207 #3</span>
+  <span class="e">not-landed</span>  <span class="m">·</span>  <span class="e">out-of-context</span>  <span class="m">·</span>  no-commit      <span class="m">$0.62  ·  exit 1  ·  23 Oct 08:41</span>
+<span class="e">✗</span> <span class="b">08-readme-human-tickets-section</span>  <span class="m">20261023T081014Z-1207 #2</span>
+  <span class="w">limit</span> <span class="m">(resets 09:00)</span>  <span class="m">·</span>  <span class="e">not-landed</span>       <span class="m">$0.31  ·  exit 1  ·  23 Oct 08:29</span></pre>
+<pre style="padding: 6px 20px; border-top: 1px solid #3a3732;"><span class="m">--by-ticket as bars of cost; --failures with each flag coloured by how bad it is</span></pre>
+</div>
+</div><div style="display: flex; flex-direction: column; min-width: 0;">
+<div style="padding: 0 4px 10px; font-family: 'Inter', system-ui, sans-serif; font-size: 18px; color: #ece8e1;">10c · The foreman&#x27;s timesheet</div>
+<div style="flex-grow: 1; display: flex; flex-direction: column; border: 1px solid #3a3732; border-radius: 6px; background: #171614; overflow: hidden;">
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #3a3732; color: #a8a299; font-size: 12px;">
+<span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span>
+<span style="margin-left: 8px;">~/projects/app — foreman</span>
+</div>
+<pre style="flex-grow: 1; padding: 14px 20px;"><span class="m">~/projects/app $</span> foreman report
+
+<span class="w">╭─</span> <span class="w b">TIMESHEET</span> <span class="w">─────────────────────────────────</span> .scratch/human-tickets <span class="w">─╮</span>
+<span class="w">│</span>  <span class="m">run</span>                   <span class="m">iters  landed  model-min  turns       cost</span>      <span class="w">│</span>
+<span class="w">│</span><span class="d">  ────────────────────────────────────────────────────────────────────</span>  <span class="w">│</span>
+<span class="w">│</span>  Tue 21 Oct  09:12         5       4       31.2    264      $4.12      <span class="w">│</span>
+<span class="w">│</span>  Wed 22 Oct  14:05         6       4       44.0    371      $6.38      <span class="w">│</span>
+<span class="w">│</span>  Thu 23 Oct  08:10         3       2       21.1    177      $3.70      <span class="w">│</span>
+<span class="w">│</span><span class="d">  ────────────────────────────────────────────────────────────────────</span>  <span class="w">│</span>
+<span class="w">│</span>  <span class="b">total</span>                    <span class="b">14</span>      <span class="b">10</span>       <span class="b">96.3</span>    <span class="b">812</span>     <span class="y b">$14.20</span>      <span class="w">│</span>
+<span class="w">╰────────────────────────────────────────────────────────────────────────╯</span>
+  <span class="m">tokens</span>   in 41.2k  <span class="m">·</span>  out 388k  <span class="m">·</span>  cache-read 12.4M  <span class="m">·</span>  cache-write 1.1M
+  <span class="m">average</span>  $1.01 per iteration
+  <span class="e">2 unproductive</span>  <span class="m">→</span> foreman report --failures
+
+
+<span class="m">A run&#x27;s id is the UTC time it started, so the sheet shows it as a day and a</span>
+<span class="m">time; the id itself is under</span> foreman report --failures <span class="m">and in the logs.</span>
+
+<span class="m">piped: the same lines without the frame, which is what --by-run prints today.</span></pre>
+<pre style="padding: 6px 20px; border-top: 1px solid #3a3732;"><span class="m">the foreman&#x27;s timesheet: a day per run, the hours, the bill</span></pre>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":3080,"height":800}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

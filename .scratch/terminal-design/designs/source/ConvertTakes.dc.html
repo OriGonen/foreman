@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Convert takes</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&amp;family=Inter:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+pre{margin:0;font:inherit;white-space:pre}
+.y{color:#f6d58e}.w{color:#e0a84a}.r{color:#c9772f}.o{color:#8fcf8f}.e{color:#f08078}.m{color:#a8a299}.d{color:#5c574f}.b{font-weight:700}
+.tag{background:#e0a84a;color:#171614;font-weight:700}.tagE{background:#f08078;color:#171614;font-weight:700}.tagO{background:#8fcf8f;color:#171614;font-weight:700}
+</style>
+</helmet>
+<div style="width: 3080px; height: 800px; box-sizing: border-box; background: #0d0c0b; padding: 20px; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; font-size: 13.5px; line-height: 19px; color: #ece8e1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px;">
+<div style="display: flex; flex-direction: column; min-width: 0;">
+<div style="padding: 0 4px 10px; font-family: 'Inter', system-ui, sans-serif; font-size: 18px; color: #ece8e1;">12a · Repainting the sign</div>
+<div style="flex-grow: 1; display: flex; flex-direction: column; border: 1px solid #3a3732; border-radius: 6px; background: #171614; overflow: hidden;">
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #3a3732; color: #a8a299; font-size: 12px;">
+<span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span>
+<span style="margin-left: 8px;">~/projects/app — foreman</span>
+</div>
+<pre style="flex-grow: 1; padding: 14px 20px;"><span class="m">~/projects/app $</span> foreman convert
+
+<span style="color:#e0a84a">▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄</span>   
+<span style="background:#e0a84a;color:#171614;font-weight:700"> <span style="text-decoration:line-through;color:#8a5a24">RALPH</span>   FOREMAN    </span>   <span class="w b">FOREMAN</span>  <span class="m">repaints the sign</span>  ~/projects/app
+<span style="color:#e0a84a">▀▀▀▀</span><span style="color:#8a5a24;background:#e0a84a">▄</span><span style="color:#e0a84a">▀▀▀▀▀▀▀▀▀▀▀▀</span><span style="color:#8a5a24;background:#e0a84a">▄</span><span style="color:#e0a84a">▀▀▀▀</span>   <span class="m">ralph → foreman, in this repository and on this machine</span>
+    <span style="color:#8a5a24">█</span>            <span style="color:#8a5a24">█</span>   <span class="o">3 renamed</span>  <span class="m">·</span>  <span class="o">14 files rewritten</span>  <span class="m">·</span>  <span class="o">1 deleted</span>  <span class="m">·</span>  <span class="w">2 for you</span>
+<span style="color:#3a2a18">▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀</span>   
+   
+<span style="color:#3a2a18">▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔</span>
+
+<span class="w b">RENAMED</span>   .scratch/human-tickets/<span class="d">ralph.conf</span> <span class="m">→</span> <span class="o">foreman.conf</span>
+          .scratch/human-tickets/<span class="d">ralph-runs.jsonl</span> <span class="m">→</span> <span class="o">foreman-runs.jsonl</span>
+          .scratch/human-tickets/<span class="d">ralph-runs.log</span> <span class="m">→</span> <span class="o">foreman-runs.log</span>
+<span class="w b">REWROTE</span>   README.md <span class="m">12</span>  ·  Makefile <span class="m">3</span>  ·  .github/workflows/ci.yml <span class="m">2</span>  ·  <span class="m">11 more, 41 changes</span>
+<span class="w b">DELETED</span>   .scratch/human-tickets/.ralph-iter.bundle  <span class="m">rebuilt on the next iteration</span>
+
+<span class="w b">KEPT</span>      <span class="m">credit to the technique, and your own files named ralph:</span>
+          docs/ralph-notes.md  <span class="m">·  rename with git mv if you want to</span>
+          <span class="m">4 mentions of the Ralph loop</span>
+
+<span class="w b">THIS MACHINE</span>
+  <span class="o">✓</span> ~/.config/ralph/env <span class="m">→</span> ~/.config/foreman/env  <span class="m">(the old one stays)</span>
+  <span class="w">▲</span> RALPH_MODEL is set in your shell — rename it to FOREMAN_MODEL
+  <span class="w">▲</span> the old sandbox ralph-sbx is still there — docker sandbox rm ralph-sbx
+
+<span class="m">nothing is committed.</span>  <span class="w">git diff</span><span class="m">, then commit.</span></pre>
+<pre style="padding: 6px 20px; border-top: 1px solid #3a3732;"><span class="m">the old name struck through on the sign; old names dim, new names green</span></pre>
+</div>
+</div><div style="display: flex; flex-direction: column; min-width: 0;">
+<div style="padding: 0 4px 10px; font-family: 'Inter', system-ui, sans-serif; font-size: 18px; color: #ece8e1;">12b · A count per kind, a taste of the diff</div>
+<div style="flex-grow: 1; display: flex; flex-direction: column; border: 1px solid #3a3732; border-radius: 6px; background: #171614; overflow: hidden;">
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #3a3732; color: #a8a299; font-size: 12px;">
+<span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span>
+<span style="margin-left: 8px;">~/projects/app — foreman</span>
+</div>
+<pre style="flex-grow: 1; padding: 14px 20px;"><span class="m">~/projects/app $</span> foreman convert --dry-run
+
+<span class="w">▄█▄</span> <span class="b">foreman convert</span> <span class="m">·</span> ~/projects/app  <span class="tag"> DRY RUN </span>  <span class="m">nothing is changed</span>
+
+<span class="o">▸</span> <span class="b">renames</span>          <span class="m">3</span>     <span class="d">ralph.conf, ralph-runs.jsonl, ralph-runs.log</span>
+<span class="o">▸</span> <span class="b">rewrites</span>         <span class="m">14</span>    <span class="d">files, 41 changes</span>
+    <span class="e">−</span> <span class="d">RALPH_CHECK_CMD=&quot;make check&quot;</span>
+    <span class="o">+</span> FOREMAN_CHECK_CMD="make check"
+    <span class="e">−</span> <span class="d">run:  ralph run .scratch/human-tickets</span>
+    <span class="o">+</span> run:  foreman run .scratch/human-tickets
+    <span class="m">… the rest with --verbose, or after the run in git diff</span>
+<span class="o">▸</span> <span class="b">deletes</span>          <span class="m">1</span>     <span class="d">.ralph-iter.bundle</span>
+<span class="w">▸</span> <span class="b">keeps</span>            <span class="m">5</span>     <span class="d">docs/ralph-notes.md, 4 mentions of the Ralph loop</span>
+<span class="w">▸</span> <span class="b">on this machine</span>  <span class="m">3</span>     <span class="d">env file copied · RALPH_MODEL · the old sandbox</span>
+
+<span class="m">run it without --dry-run to make these changes</span>
+
+
+<span class="m">~/projects/app $</span> foreman convert
+<span class="e">✗</span> <span class="b">~/projects/app has uncommitted changes</span>
+    <span class="w">M</span> src/app.ts
+    <span class="o">?</span> notes.txt
+  <span class="m">commit or stash them first, so the conversion is a diff of its own</span>
+  <span class="m">(or pass --allow-dirty)</span>
+
+
+<span class="m">~/projects/app $</span> foreman convert
+<span class="o">✓</span> <span class="m">nothing to convert — it already speaks foreman</span></pre>
+<pre style="padding: 6px 20px; border-top: 1px solid #3a3732;"><span class="m">a count per kind of change, two sample diff lines, and the refusals in red</span></pre>
+</div>
+</div><div style="display: flex; flex-direction: column; min-width: 0;">
+<div style="padding: 0 4px 10px; font-family: 'Inter', system-ui, sans-serif; font-size: 18px; color: #ece8e1;">12c · Done in one line each, then your move</div>
+<div style="flex-grow: 1; display: flex; flex-direction: column; border: 1px solid #3a3732; border-radius: 6px; background: #171614; overflow: hidden;">
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #3a3732; color: #a8a299; font-size: 12px;">
+<span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span>
+<span style="margin-left: 8px;">~/projects/app — foreman</span>
+</div>
+<pre style="flex-grow: 1; padding: 14px 20px;"><span class="m">~/projects/app $</span> foreman convert
+
+<span class="w">▄█▄</span> <span class="b">foreman convert</span> <span class="m">·</span> ~/projects/app
+
+<span class="o">✓</span> 3 files renamed       <span class="m">ralph.conf and the run logs → foreman</span>
+<span class="o">✓</span> 14 files rewritten    <span class="m">41 changes, case for case</span>
+<span class="o">✓</span> 1 file deleted        <span class="m">.ralph-iter.bundle, rebuilt on the next iteration</span>
+<span class="o">✓</span> env file copied       <span class="m">~/.config/foreman/env, the old one stays</span>
+<span class="m">–</span> <span class="m">5 left as they are</span>    <span class="m">credit to the Ralph loop · docs/ralph-notes.md</span>
+
+<span class="w">┌</span> <span class="w b">YOUR MOVE</span>  <span class="m">— the converter cannot do these for you</span>
+<span class="w">│</span>
+<span class="w">│</span>  <span class="w b">1</span>  review the change              <span class="w">git diff</span>
+<span class="w">│</span>  <span class="w b">2</span>  rename the variable in your shell profile
+<span class="w">│</span>       <span class="d">RALPH_MODEL</span> <span class="m">→</span> FOREMAN_MODEL         <span class="m">~/.bashrc, line 41</span>
+<span class="w">│</span>  <span class="w b">3</span>  remove the old sandbox          <span class="w">docker sandbox rm ralph-sbx</span>
+<span class="w">│</span>  <span class="w b">4</span>  commit                          <span class="w">git commit -am &quot;Rename ralph to foreman&quot;</span>
+<span class="w">└</span>
+
+<span class="m">a second run finds nothing to do.</span></pre>
+<pre style="padding: 6px 20px; border-top: 1px solid #3a3732;"><span class="m">what it did folded to one line each; what only you can do as the 4b numbered box</span></pre>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":3080,"height":800}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

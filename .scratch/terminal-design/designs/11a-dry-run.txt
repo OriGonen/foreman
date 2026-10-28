@@ -1,0 +1,30 @@
+~/projects/app $ foreman dry-run
+
+
+                       FOREMAN  dry run  .scratch/human-tickets
+                       a walk round before work starts: no prompt is sent, no sandbox starts
+     ▄▄▄▀▀▀▀▀▄▄▄       7 of 10 done  ·  3 would run
+  ▄▄▀███▀▀▀▀▀███▀▄▄
+▄▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+WOULD RUN
+▶ 07a followup-try-the-followup-skill            CHECK
+  08  readme-human-tickets-section
+  09  end-to-end-check-on-this-machine
+
+SETTINGS   exec     local                 perms    acceptEdits
+           model    claude-sonnet-5-5     effort   high
+           live     off — add --live to watch   budgets  $25  ·  90m  ·  iterations unlimited
+           logs     .scratch/human-tickets/foreman-runs.jsonl  and  foreman-runs.log
+
+PROMPT for 07a  ·  122 lines
+  1 │ @.scratch/human-tickets/issues/07a-followup-try-the-followup-skill.md
+  2 │
+  3 │ Implement the attached ticket, and only that ticket, to a high standard.
+  4 │
+  5 │ Work on tickets in the order of .scratch/human-tickets/order.md. Do not pick a
+  6 │ …
+  7 │ ## 1. Agree the seams before writing code
+  ⋮ │
+122 │ </progress-excerpt>
+─── nothing was sent; no sandbox was started ────────────────────────────────────────

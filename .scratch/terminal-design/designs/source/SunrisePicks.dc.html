@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sunrise picks</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.w{color:#e0a84a}.m{color:#a8a299}.b{font-weight:700}
+.px{white-space:pre;height:19px}
+</style>
+</helmet>
+<div style="width: 2080px; height: 1040px; box-sizing: border-box; background: #0d0c0b; padding: 24px; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; font-size: 15px; line-height: 19px; color: #ece8e1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 24px;">
+<sc-for list="{{panels}}" as="p" hint-placeholder-count="4">
+<div style="display: flex; flex-direction: column; border: 1px solid #3a3732; border-radius: 6px; background: #171614; overflow: hidden;">
+<div style="padding: 10px 16px; border-bottom: 1px solid #3a3732; display: flex; gap: 12px;"><span class="w b">{{p.key}}</span><span>{{p.name}}</span><span class="m" style="margin-left: auto;">{{p.note}}</span></div>
+<div style="flex-grow: 1; display: flex; align-items: center; justify-content: center;">
+<div>
+<sc-for list="{{p.rows}}" as="row" hint-placeholder-count="18"><div class="px"><sc-for list="{{row.runs}}" as="r" hint-placeholder-count="4"><span style="{{r.style}}">{{r.t}}</span></sc-for></div></sc-for>
+</div>
+</div>
+</div>
+</sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":2080,"height":1040}}'>
+const C = { bg: '#171614', y: '#f6d58e', o: '#e0a84a', r: '#c9772f', d: '#8a5a24', f: '#0a0908', g: '#1c1a17', l: '#3a2a18', h3: '#30231a' };
+const SKY = ['#1b1815', '#211b16', '#291f17', '#33251a', '#3d2a1b'];
+const TOP = [
+'.......####.......',
+'......######......',
+'.....########.....',
+'..##############..',
+'......######......',
+'......######......',
+'.......####.......',
+'.......####.......',
+'.....########.....',
+'....##########....',
+'...###########....',
+'...###########....',
+'...###########....',
+'..##.#########....',
+'..##.#########....',
+'..##.#########....',
+'..##.#########....',
+'...#.#########....',
+'.....#########....'
+];
+const LEGS = {
+stand: ['.....####.####....', '.....####..####...', '.....###....###...', '.....###....###...', '.....###.....###..', '....####.....####.'],
+a: ['.....####.####....', '....####...####...', '...####.....####..', '..####.......###..', '.####.........###.', '####..........####'],
+b: ['.....########.....', '......######......', '......##.###......', '......##..###.....', '......##...##.....', '.....####..####...']
+};
+const ARMS = {
+salute: [[13, 4], [14, 4], [15, 4], [14, 5], [15, 5], [15, 6], [16, 6], [15, 7], [16, 7], [14, 8], [15, 8], [13, 9], [14, 9]],
+down: [[14, 9], [15, 9], [15, 10], [15, 11], [15, 12], [15, 13], [15, 14], [15, 15], [15, 16], [15, 17], [16, 11], [16, 12], [16, 13], [16, 14], [16, 15], [16, 16]],
+mid: [[14, 9], [15, 9], [15, 10], [16, 10], [16, 11], [16, 9], [16, 8], [15, 8], [15, 7], [14, 7]]
+};
+function mix(a, b, t) {
+const pa = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16)), pb = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16));
+return '#' + pa.map((v, k) => Math.round(v + (pb[k] - v) * t).toString(16).padStart(2, '0')).join('');
+}
+function scene(o) {
+const w = 64, h = 36, hz = 30, cx = o.cx ?? 34, r = o.r ?? 24;
+const s = o.s ?? 1, fx = o.x ?? 19;
+const p = Array.from({ length: h }, () => Array(w).fill(null));
+const cy = hz + r * (1 - s);
+for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+if (y >= hz) {
+const k = y - hz;
+p[y][x] = (o.refl ?? s > 0.4) && k % 2 === 1 && Math.abs(x - cx) < r * s - k * 4 ? C.d : C.g;
+continue;
+}
+if (o.sky && y >= 8) p[y][x] = mix(C.bg, SKY[Math.floor((y - 8) / 5)], s);
+const d = Math.hypot(x - cx, y - cy);
+if (d < r) p[y][x] = d / r < 0.55 ? C.y : d / r < 0.85 ? C.o : C.r;
+else if (d < r + 2) p[y][x] = C.l;
+else if (d < r + 3) p[y][x] = o.sky ? mix(p[y][x] || C.bg, C.h3, 0.6) : C.h3;
+}
+if (o.shadow) for (let k = 0; k < 4; k++) for (let x = fx + 5 - k * 2; x <= fx + 14 + k * 2; x++) if (x >= 0 && x < w) p[hz + k][x] = C.f;
+const fig = new Set();
+const y0 = hz - 25;
+TOP.concat(LEGS[o.legs || 'stand']).forEach((row, j) => Array.from(row).forEach((ch, i) => { if (ch === '#') fig.add((fx + i) + ',' + (y0 + j)); }));
+ARMS[o.arm || 'salute'].forEach(([i, j]) => fig.add((fx + i) + ',' + (y0 + j)));
+const isFig = (x, y) => fig.has(x + ',' + y);
+const sunCol = new Set([C.y, C.o, C.r]);
+for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+if (isFig(x, y)) { p[y][x] = C.f; continue; }
+if (o.rim && y < hz && !sunCol.has(p[y][x]) && (isFig(x - 1, y) || isFig(x + 1, y) || isFig(x, y - 1) || isFig(x, y + 1))) p[y][x] = C.r;
+}
+return half(p);
+}
+function half(p) {
+const rows = [];
+for (let y = 0; y < p.length; y += 2) {
+const out = [];
+for (let x = 0; x < p[y].length; x++) {
+const t = p[y][x], b = p[y + 1] ? p[y + 1][x] : null;
+let ch, st;
+if (!t && !b) { ch = ' '; st = ''; }
+else if (t === b) { ch = '█'; st = 'color: ' + t; }
+else if (!t) { ch = '▄'; st = 'color: ' + b; }
+else if (!b) { ch = '▀'; st = 'color: ' + t; }
+else { ch = '▀'; st = 'color: ' + t + '; background: ' + b; }
+const last = out[out.length - 1];
+if (last && last.style === st) last.t += ch; else out.push({ t: ch, style: st });
+}
+rows.push({ runs: out });
+}
+return rows;
+}
+const PANELS = [
+{ key: 'D1', name: 'Big sun, redrawn', note: 'bigger sun · the whole figure sits inside it', rows: scene({ r: 28, cx: 32, x: 21 }) },
+{ key: 'D1 + D6', name: 'Rim light', note: 'orange edge where the figure meets dark sky', rows: scene({ rim: true }) },
+{ key: 'D1 + D3', name: 'Warm sky, cast shadow', note: 'sky bands to the horizon · shadow falls toward you', rows: scene({ sky: true, shadow: true }) },
+{ key: 'D1 + D6 + D3', name: 'All three', note: 'rim, warm sky and shadow together', rows: scene({ rim: true, sky: true, shadow: true }) }
+];
+class Component extends DCLogic {
+renderVals() { return { panels: PANELS }; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,22 @@
+~/projects/app $ foreman order .scratch/human-tickets
+
+▄█▄ foreman order · .scratch/human-tickets ·  10 tickets  ·  claude-sonnet-5-5
+
+  ⠹ the agent is reading the tickets   0:19        ← while it works, on one line
+
+order.md  ·  ordered in 31s for $0.08
+
+  ┬  1  01  the-loop-stops-before-a-human-ticket
+  ├  2  03  status-shows-human-and-check-tickets          moved
+  ├  3  02  a-check-ticket-verifies-or-sends-back         moved
+  ├  4  04  foreman-order-places-human-and-check-tickets
+  ├  5  06  a-skill-writes-followup-tickets               moved
+  ├  6  05  document-human-tickets                        moved
+  ├  7  07  try-the-followup-skill-on-a-real-batch                HUMAN   the loop stops here
+  ├  8  07a followup-try-the-followup-skill                       CHECK   checks 07
+  ├  9  08  readme-human-tickets-section
+  └ 10  09  end-to-end-check-on-this-machine
+
+▲ 07 has no **Handoff:** line — add one so foreman status can point at the file
+
+review it, then foreman dry-run

@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dry-run takes</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&amp;family=Inter:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+pre{margin:0;font:inherit;white-space:pre}
+.y{color:#f6d58e}.w{color:#e0a84a}.r{color:#c9772f}.o{color:#8fcf8f}.e{color:#f08078}.m{color:#a8a299}.d{color:#5c574f}.b{font-weight:700}
+.tag{background:#e0a84a;color:#171614;font-weight:700}.tagE{background:#f08078;color:#171614;font-weight:700}.tagO{background:#8fcf8f;color:#171614;font-weight:700}
+</style>
+</helmet>
+<div style="width: 3080px; height: 800px; box-sizing: border-box; background: #0d0c0b; padding: 20px; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; font-size: 13.5px; line-height: 19px; color: #ece8e1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px;">
+<div style="display: flex; flex-direction: column; min-width: 0;">
+<div style="padding: 0 4px 10px; font-family: 'Inter', system-ui, sans-serif; font-size: 18px; color: #ece8e1;">11a · A walk round at dawn — plan, settings, the prompt numbered</div>
+<div style="flex-grow: 1; display: flex; flex-direction: column; border: 1px solid #3a3732; border-radius: 6px; background: #171614; overflow: hidden;">
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #3a3732; color: #a8a299; font-size: 12px;">
+<span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span>
+<span style="margin-left: 8px;">~/projects/app — foreman</span>
+</div>
+<pre style="flex-grow: 1; padding: 14px 20px;"><span class="m">~/projects/app $</span> foreman dry-run
+
+                       
+                       <span class="w b">FOREMAN</span>  <span class="m">dry run</span>  .scratch/human-tickets
+                       <span class="m">a walk round before work starts: no prompt is sent, no sandbox starts</span>
+     <span style="color:#30231a">▄▄▄</span><span style="color:#30231a;background:#3a2a18">▀▀▀▀▀</span><span style="color:#30231a">▄▄▄</span>       <span class="o">7 of 10 done</span>  <span class="m">·  3 would run</span>
+  <span style="color:#30231a">▄▄</span><span style="color:#30231a;background:#3a2a18">▀</span><span style="color:#3a2a18">███</span><span style="color:#3a2a18;background:#c9772f">▀▀▀▀▀</span><span style="color:#3a2a18">███</span><span style="color:#30231a;background:#3a2a18">▀</span><span style="color:#30231a">▄▄</span>    
+<span style="color:#1c1a17">▄</span><span style="color:#30231a;background:#1c1a17">▀▀</span><span style="color:#3a2a18;background:#1c1a17">▀▀▀</span><span style="color:#c9772f;background:#1c1a17">▀▀▀▀▀▀▀▀▀</span><span style="color:#3a2a18;background:#1c1a17">▀▀▀</span><span style="color:#30231a;background:#1c1a17">▀▀</span>   
+<span style="color:#3a2a18">▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔</span>
+<span class="w b">WOULD RUN</span>
+<span class="w">▶</span> <span class="y b">07a</span> <span class="b">followup-try-the-followup-skill</span>           <span style="background:#5c574f;color:#ece8e1;font-weight:700"> CHECK </span>
+  08  readme-human-tickets-section
+  09  end-to-end-check-on-this-machine
+
+<span class="w b">SETTINGS</span>   <span class="m">exec</span>     local                 <span class="m">perms</span>    acceptEdits
+           <span class="m">model</span>    claude-sonnet-5-5     <span class="m">effort</span>   high
+           <span class="m">live</span>     off <span class="m">— add --live to watch</span>   <span class="m">budgets</span>  $25  <span class="m">·</span>  90m  <span class="m">·</span>  iterations unlimited
+           <span class="m">logs</span>     .scratch/human-tickets/foreman-runs.jsonl  <span class="m">and</span>  foreman-runs.log
+
+<span class="w b">PROMPT</span> <span class="m">for 07a  ·  122 lines</span>
+<span class="d">  1 │ </span><span class="w">@.scratch/human-tickets/issues/07a-followup-try-the-followup-skill.md</span>
+<span class="d">  2 │ </span>
+<span class="d">  3 │ </span>Implement the attached ticket, and only that ticket, to a high standard.
+<span class="d">  4 │ </span>
+<span class="d">  5 │ </span>Work on tickets in the order of .scratch/human-tickets/order.md. Do not pick a
+<span class="d">  6 │ </span><span class="d">…</span>
+<span class="d">  7 │ </span><span class="y b">## 1. Agree the seams before writing code</span>
+<span class="d">  ⋮ │</span>
+<span class="d">122 │ </span><span class="m">&lt;/progress-excerpt&gt;</span>
+<span class="d">───</span> <span class="o">nothing was sent; no sandbox was started</span> <span class="d">────────────────────────────────────────</span></pre>
+<pre style="padding: 6px 20px; border-top: 1px solid #3a3732;"><span class="m">the sun barely up: nothing has started  ·  the prompt with line numbers, headings picked out</span></pre>
+</div>
+</div><div style="display: flex; flex-direction: column; min-width: 0;">
+<div style="padding: 0 4px 10px; font-family: 'Inter', system-ui, sans-serif; font-size: 18px; color: #ece8e1;">11b · Drawings only — dashed lines, the next stake marked</div>
+<div style="flex-grow: 1; display: flex; flex-direction: column; border: 1px solid #3a3732; border-radius: 6px; background: #171614; overflow: hidden;">
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #3a3732; color: #a8a299; font-size: 12px;">
+<span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span>
+<span style="margin-left: 8px;">~/projects/app — foreman</span>
+</div>
+<pre style="flex-grow: 1; padding: 14px 20px;"><span class="m">~/projects/app $</span> foreman dry-run
+
+<span style="color:#e0a84a">┌┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┐</span>
+<span style="color:#e0a84a">┆</span>  <span class="w b">DRAWINGS ONLY</span>  <span class="m">— the plan for the next iteration; nothing is built, nothing is spent</span>       <span style="color:#e0a84a">┆</span>
+<span style="color:#e0a84a">└┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┘</span>
+
+                                                              
+                                            <span style="color:#8a5a24">█</span><span style="color:#f6d58e">██▀</span>  <span style="color:#8a5a24">█</span><span style="color:#5c574f">██▀</span>  <span style="color:#8a5a24">█</span><span style="color:#5c574f">██▀</span>  
+                                            <span style="color:#8a5a24">█</span>     <span style="color:#8a5a24">█</span>     <span style="color:#8a5a24">█</span>     
+  <span style="color:#e0a84a">██</span>    <span style="color:#e0a84a">██</span>    <span style="color:#e0a84a">██</span>    <span style="color:#e0a84a">██</span>    <span style="color:#e0a84a">██</span>    <span style="color:#e0a84a">██</span>    <span style="color:#e0a84a">██</span>    <span style="color:#8a5a24">█</span>     <span style="color:#8a5a24">█</span>     <span style="color:#8a5a24">█</span>     
+<span style="color:#3a2a18">▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀</span>
+  <span class="o">01    02    03    04    05    06    07</span>    <span class="y">07a</span>   <span class="m">08    09</span>
+  <span class="m">the next stake would go in at</span> <span class="y b">07a</span> <span class="m">— then 08, then 09</span>
+
+  <span class="m">on</span> local  <span class="m">with</span> claude-sonnet-5-5 <span class="m">(high)</span>  <span class="m">·</span>  acceptEdits  <span class="m">·</span>  quiet <span class="m">(--live to watch)</span>
+  <span class="m">stops at</span> $25 <span class="m">or</span> 90m  <span class="m">·</span>  <span class="m">logs to</span> .scratch/human-tickets/foreman-runs.*
+
+<span class="d">┄┄┄</span> <span class="w b">the prompt it would send</span> <span class="d">┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄</span>
+<span class="d">│ </span><span class="w">@.scratch/human-tickets/issues/07a-followup-try-the-followup-skill.md</span>
+<span class="d">│ </span>
+<span class="d">│ </span>Implement the attached ticket, and only that ticket, to a high standard.
+<span class="d">│ </span>
+<span class="d">│ </span>Work on tickets in the order of .scratch/human-tickets/order.md. Do not pick a
+<span class="d">│ </span><span class="d">…</span>
+<span class="d">│ </span><span class="y b">## 1. Agree the seams before writing code</span>
+<span class="d">┆</span>
+<span class="d">│ </span><span class="m">&lt;/progress-excerpt&gt;</span>
+<span class="d">┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄</span>
+
+<span class="m">~/projects/app $</span> foreman dry-run   <span class="m">(when the next ticket is a human one)</span>
+<span class="r">■</span> <span class="m">would stop before</span> <span class="b">07</span> <span class="tag"> HUMAN </span>  <span class="m">— no prompt would be sent; the handoff is</span> handoff/07-….md</pre>
+<pre style="padding: 6px 20px; border-top: 1px solid #3a3732;"><span class="m">dashed lines for what is only planned; the next stake shown as marked, not driven</span></pre>
+</div>
+</div><div style="display: flex; flex-direction: column; min-width: 0;">
+<div style="padding: 0 4px 10px; font-family: 'Inter', system-ui, sans-serif; font-size: 18px; color: #ece8e1;">11c · Labels in a column, the prompt between rules</div>
+<div style="flex-grow: 1; display: flex; flex-direction: column; border: 1px solid #3a3732; border-radius: 6px; background: #171614; overflow: hidden;">
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #3a3732; color: #a8a299; font-size: 12px;">
+<span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span><span style="width: 10px; height: 10px; border-radius: 5px; background: #3a3732;"></span>
+<span style="margin-left: 8px;">~/projects/app — foreman</span>
+</div>
+<pre style="flex-grow: 1; padding: 14px 20px;"><span class="m">~/projects/app $</span> foreman dry-run
+
+<span class="w">▄█▄</span> <span class="b">foreman dry-run</span> <span class="m">·</span> .scratch/human-tickets <span class="m">·  7 of 10 done  ·  free</span>
+
+<span class="m">PLAN       </span>07a  →  08  →  09
+<span class="m">EXEC       </span>local
+<span class="m">MODEL      </span>claude-sonnet-5-5  <span class="m">effort</span> high
+<span class="m">PERMS      </span>acceptEdits
+<span class="m">LIVE       </span>off  <span class="m">(--live to watch the iteration)</span>
+<span class="m">BUDGETS    </span>cost $25  <span class="m">·</span>  time 90m  <span class="m">·</span>  iterations unlimited
+<span class="m">LOGS       </span>.scratch/human-tickets/foreman-runs.jsonl
+           .scratch/human-tickets/foreman-runs.log
+
+<span class="d">─── prompt for 07a ─────────────────────────────────────────────────────────────────────────────</span>
+<span class="w">@.scratch/human-tickets/issues/07a-followup-try-the-followup-skill.md</span>
+
+Implement the attached ticket, and only that ticket, to a high standard.
+
+Work on tickets in the order of .scratch/human-tickets/order.md. Do not pick a
+<span class="d">…</span>
+<span class="y b">## 1. Agree the seams before writing code</span>
+<span class="d">   …  112 more lines  …</span>
+<span class="m">&lt;/progress-excerpt&gt;</span>
+<span class="d">─── end of prompt ──────────────────────────────────────────────────────────────────────────────</span>
+<span class="o">✓</span> <span class="m">nothing was sent; no sandbox was started</span></pre>
+<pre style="padding: 6px 20px; border-top: 1px solid #3a3732;"><span class="m">the 3c ledger: labels in a column, the prompt between two rules, the headings in amber</span></pre>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":3080,"height":800}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
