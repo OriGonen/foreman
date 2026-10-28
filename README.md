@@ -400,6 +400,24 @@ log and the jsonl never contain colour codes. It is off when `NO_COLOR` is set o
 FOREMAN_COLOR=always foreman run .scratch/my-batch | less -R
 ```
 
+### The show — `FOREMAN_SHOW`
+
+Some commands draw a picture, made of block characters in the same palette, above their usual
+text: `foreman help` prints a sunrise. That is the **show**. It is drawn only on a terminal with
+colour on, at least as wide as the picture (64 columns for the sunrise), and not when `CI` is set;
+in a pipe, a file, a narrow terminal, with `NO_COLOR`, or under `FOREMAN_COLOR=never` you get the
+plain text, byte for byte, so scripts that read a command's output are unaffected.
+
+| `FOREMAN_SHOW` | |
+|---|---|
+| `auto` | the default: the rule above |
+| `always` | draw it on any stream, whatever `CI`, `NO_COLOR` or `TERM` say — at the terminal's best colour, or the tier `FOREMAN_COLOR` pins. `FOREMAN_COLOR=never` still means plain. The width is `COLUMNS`, else the terminal's, else 80 |
+| `never` | the plain text, always |
+
+```bash
+FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 foreman help | less -R
+```
+
 ### Tickets bigger than one turn
 
 `claude --print --output-format json` is **one turn**. It prints a single JSON object and

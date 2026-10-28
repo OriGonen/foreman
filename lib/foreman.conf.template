@@ -104,6 +104,15 @@ FOREMAN_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)")
 # Whatever the setting, foreman-runs.log and foreman-runs.jsonl never contain colour codes.
 #FOREMAN_COLOR=auto
 
+# The pictures some commands draw above their text (`foreman help` has the sunrise), built from
+# block characters in the same colours.
+#   auto       on a terminal with colour, wide enough for the picture, and not in CI.  DEFAULT.
+#   always     draw them anywhere — a pipe, a file. At the terminal's best colour; FOREMAN_COLOR
+#              =never still means none.
+#   never      the plain text, always.
+# Piped output, CI and a narrow terminal always get the plain text under auto, byte for byte.
+#FOREMAN_SHOW=auto
+
 # Anything else that is specific to this batch goes in prompt-extra.md next to this file.
 # It is spliced into the prompt between Verify and Review, under its own heading. Leave
 # the file out entirely if there is nothing to add.

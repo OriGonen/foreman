@@ -49,6 +49,20 @@ usage() {
     sed "s|\$FOREMAN_HOME|$FOREMAN_HOME|g"
 }
 
+# The sunrise drawn above the help on a terminal that can show it: foreman-ui.sh says whether the
+# show is wanted and how wide the terminal is, and lib/foreman-draw.cjs draws it. The width it
+# needs is the renderer's own for the `help` scene (a smoke case holds the two together); it is
+# here so a narrow terminal is plain without starting node. Asking for help is the only thing
+# that draws it, not the usage printed after a mistyped command.
+_help_min_cols=64
+usage_show() {
+  local tier cols
+  # shellcheck source=../lib/foreman-ui.sh
+  source "$LIB/foreman-ui.sh" || return 0
+  ui_show 1 tier && ui_cols cols 1 && [ "$cols" -ge "$_help_min_cols" ] || return 0
+  node "$LIB/foreman-draw.cjs" help --tier "$tier" --cols "$cols" </dev/null 2>/dev/null || true
+}
+
 version() {
   local rev
   rev="$(git -C "$FOREMAN_HOME" rev-parse --short HEAD 2>/dev/null)" || rev="unknown"
@@ -71,7 +85,7 @@ case "$cmd" in
   report)    exec node "$LIB/foreman-report.cjs" "$@" ;;
   doctor)    exec bash "$LIB/foreman-doctor.sh" "$@" ;;
   convert)   exec node "$LIB/foreman-convert.cjs" "$@" ;;
-  help|--help|-h)        usage; exit 0 ;;
+  help|--help|-h)        usage_show; usage; exit 0 ;;
   version|--version|-V)  version; exit 0 ;;
   '')        usage; exit 1 ;;
   *)

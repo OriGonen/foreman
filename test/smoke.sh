@@ -3364,6 +3364,324 @@ if case_is "convert --dry-run changes nothing, and a dirty tree or the toolkit i
   assert_contains "$OUT" "the foreman toolkit itself" "and says so"
 fi
 
+# --- the show (foreman-ui.sh, foreman-draw.cjs) -------------------------------------
+# The show is the drawn rendering of a command; plain is today's text. `ui_show` decides which,
+# per stream, and `ui_cols` asks how wide the terminal is. A real terminal is made with `script`,
+# which not every machine has; the pipe cases need nothing.
+
+# What ui_show says about one stream, in an environment of its own: "no", or "show:<tier>". $1 is
+# tty or pipe, $2 the file descriptor, and the rest are VAR=value settings. A bare `bool` as the
+# first setting asks for the status alone, with no variable to receive the tier.
+SHOW_PROBE="$WORK/show-probe.sh"
+printf '%s\n' '. "$1/lib/foreman-ui.sh"' \
+  'if [ "${3:-}" = bool ]; then if ui_show "$2"; then printf show; else printf no; fi; exit; fi' \
+  'if ui_show "$2" t; then printf "show:%s" "$t"; else printf no; fi' > "$SHOW_PROBE"
+show_of() {
+  local kind="$1" fd="$2" cmd out probe_arg="" setting; shift 2
+  if [ "${1:-}" = bool ]; then probe_arg=bool; shift; fi
+  printf -v cmd '%q ' env -u COLORTERM -u WT_SESSION -u NO_COLOR -u FOREMAN_COLOR -u TERM -u CI -u FOREMAN_SHOW \
+    "$@" bash "$SHOW_PROBE" "$FOREMAN_HOME" "$fd" $probe_arg
+  if [ "$kind" = tty ]; then
+    [ "$fd" != 2 ] || cmd+='2>/dev/null'
+    out="$(script -qec "$cmd" /dev/null </dev/null 2>/dev/null)"
+    printf '%s' "${out//$'\r'/}"
+  else
+    eval "$cmd" 2>/dev/null
+  fi
+}
+
+if case_is "ui_show: a stream that is not a terminal never gets the show unless FOREMAN_SHOW=always"; then
+  assert_eq "$(show_of pipe 1 FOREMAN_COLOR=truecolor)" no "a pinned tier on a pipe is still not a terminal"
+  assert_eq "$(show_of pipe 1 FOREMAN_COLOR=always COLORTERM=truecolor)" no "colour on a pipe is not the show"
+  assert_eq "$(show_of pipe 1 FOREMAN_SHOW=sometimes FOREMAN_COLOR=truecolor)" no "an unknown FOREMAN_SHOW is auto"
+  assert_eq "$(show_of pipe 1 FOREMAN_SHOW=auto)" no "auto on a pipe"
+  assert_eq "$(show_of pipe 1 FOREMAN_SHOW=always)" show:16 "always forces it, and a tier of at least 16"
+  assert_eq "$(show_of pipe 1 FOREMAN_SHOW=always TERM=xterm-256color)" show:256 "at the best tier the terminal says"
+  assert_eq "$(show_of pipe 1 FOREMAN_SHOW=always COLORTERM=truecolor)" show:24 "24 bits"
+  assert_eq "$(show_of pipe 1 FOREMAN_SHOW=always WT_SESSION=1c3e)" show:24 "and Windows Terminal"
+  assert_eq "$(show_of pipe 1 FOREMAN_SHOW=always FOREMAN_COLOR=truecolor)" show:24 "a pinned tier is the show's tier"
+  assert_eq "$(show_of pipe 1 FOREMAN_SHOW=always FOREMAN_COLOR=16 COLORTERM=truecolor)" show:16 "and a pinned 16 holds it down"
+  assert_eq "$(show_of pipe 1 FOREMAN_SHOW=always FOREMAN_COLOR=256)" show:256 "256"
+  assert_eq "$(show_of pipe 2 FOREMAN_SHOW=always)" show:16 "on stderr too"
+  assert_eq "$(show_of pipe 1 FOREMAN_SHOW=always NO_COLOR=1 TERM=dumb)" show:16 "naming it wins over NO_COLOR and a dumb TERM"
+  assert_eq "$(show_of pipe 1 FOREMAN_SHOW=always CI=true)" show:16 "and over CI"
+  assert_eq "$(show_of pipe 1 FOREMAN_SHOW=always FOREMAN_COLOR=never COLORTERM=truecolor)" no "but never colouring is plain"
+  assert_eq "$(show_of pipe 1 FOREMAN_SHOW=never FOREMAN_COLOR=truecolor)" no "never is plain"
+  assert_eq "$(show_of pipe 1 bool FOREMAN_SHOW=always)" show "ui_show FD alone is a status"
+  assert_eq "$(show_of pipe 1 bool)" no "and says no"
+fi
+
+if case_is "ui_show: a terminal with colour on gets the show, unless CI, NO_COLOR, a dumb TERM or FOREMAN_SHOW=never says no"; then
+  if command -v script >/dev/null 2>&1 && [ "$(show_of tty 1 FOREMAN_SHOW=always)" = show:16 ]; then
+    assert_eq "$(show_of tty 1 TERM=xterm)" show:16 "a plain terminal"
+    assert_eq "$(show_of tty 1 bool TERM=xterm)" show "ui_show FD alone, on a terminal"
+    assert_eq "$(show_of tty 1 TERM=xterm-256color)" show:256 "a 256-colour one"
+    assert_eq "$(show_of tty 1 TERM=xterm COLORTERM=truecolor)" show:24 "a 24-bit one"
+    assert_eq "$(show_of tty 1 TERM=xterm WT_SESSION=1c3e)" show:24 "Windows Terminal"
+    assert_eq "$(show_of tty 1 TERM=xterm FOREMAN_COLOR=256)" show:256 "a pinned tier is used"
+    assert_eq "$(show_of tty 1 TERM=xterm FOREMAN_SHOW=auto)" show:16 "auto named"
+    assert_eq "$(show_of tty 1 TERM=xterm CI=true)" no "CI set"
+    assert_eq "$(show_of tty 1 TERM=xterm CI=)" show:16 "CI set to nothing is not set"
+    assert_eq "$(show_of tty 1 TERM=xterm NO_COLOR=1)" no "NO_COLOR"
+    assert_eq "$(show_of tty 1 TERM=dumb)" no "a dumb terminal"
+    assert_eq "$(show_of tty 1 TERM=xterm FOREMAN_COLOR=never)" no "colour never"
+    assert_eq "$(show_of tty 1 TERM=xterm FOREMAN_SHOW=never)" no "the show never"
+    assert_eq "$(show_of tty 1 TERM=xterm FOREMAN_SHOW=never FOREMAN_COLOR=truecolor)" no "never beats a pinned tier"
+    assert_eq "$(show_of tty 1 TERM=xterm FOREMAN_SHOW=always CI=true)" show:16 "always beats CI"
+    assert_eq "$(show_of tty 1 TERM=xterm FOREMAN_SHOW=always FOREMAN_COLOR=never)" no "and loses to colour never"
+    assert_eq "$(show_of tty 2 TERM=xterm)" no "the stream asked about is stderr, a pipe here"
+  else
+    printf '  (skipped: no `script` to give a terminal)\n'
+  fi
+fi
+
+# What ui_cols says. $1 is tty or pipe; the rest are settings, run after `stty rows 30 cols 101`
+# on a terminal, so the terminal's own answer is known.
+COLS_PROBE="$WORK/cols-probe.sh"
+printf '%s\n' '. "$1/lib/foreman-ui.sh"' 'ui_cols w "$2"' 'printf "%s" "$w"' > "$COLS_PROBE"
+cols_of() {
+  local kind="$1" cmd out; shift
+  printf -v cmd '%q ' env -u COLUMNS "$@" bash "$COLS_PROBE" "$FOREMAN_HOME" 1
+  if [ "$kind" = tty ]; then
+    out="$(script -qec "stty rows 30 cols 101; $cmd" /dev/null </dev/null 2>/dev/null)"
+    out="${out//$'\r'/}"
+    printf '%s' "${out##*$'\n'}"
+  else
+    eval "$cmd" 2>/dev/null
+  fi
+}
+
+if case_is "ui_cols: COLUMNS, else the terminal's own width, else 80"; then
+  assert_eq "$(cols_of pipe COLUMNS=120)" 120 "COLUMNS"
+  assert_eq "$(cols_of pipe COLUMNS=64)" 64 "a narrow one"
+  assert_eq "$(cols_of pipe)" 80 "nothing known is the classic 80"
+  assert_eq "$(cols_of pipe COLUMNS=wide)" 80 "a COLUMNS that is not a number is not an answer"
+  assert_eq "$(cols_of pipe COLUMNS=0)" 80 "nor is 0"
+  assert_eq "$(cols_of pipe COLUMNS=-5)" 80 "nor a negative"
+  if command -v script >/dev/null 2>&1 && [ "$(cols_of tty COLUMNS=120)" = 120 ]; then
+    assert_eq "$(cols_of tty)" 101 "a terminal is asked"
+    assert_eq "$(cols_of tty COLUMNS=130)" 130 "but COLUMNS wins, and is not asked"
+  else
+    printf '  (skipped: no `script` to give a terminal)\n'
+  fi
+fi
+
+if case_is "foreman-draw reads the palette from foreman-ui.sh and keeps no copy"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  assert_eq "$(node -e '
+    const d = require(process.argv[1]); const p = d.loadPalette();
+    console.log(Object.keys(p).join(" "));
+    console.log(JSON.stringify([p.sun.hex, p.sun.rgb, p.sun.x256, p.sun.sgr16]));
+    console.log(JSON.stringify([p.text.hex, p.text.x256, p.text.sgr16]));
+    console.log(JSON.stringify([p.ink.hex, p.ink.x256, p.ink.sgr16]));
+  ' "$DRAW")" 'sun amber rust post earth shade night ok error muted dim text ink
+["#f6d58e",[246,213,142],222,33]
+["#ece8e1",null,0]
+["#171614",233,30]' "the table, as foreman-ui.sh has it"
+  # Change one row in a copy, and the reader follows it: nothing is cached or written twice.
+  sed 's/^sun   #f6d58e 222 33$/sun   #010203 17 36/' "$FOREMAN_HOME/lib/foreman-ui.sh" > "$WORK/ui-changed.sh"
+  assert_eq "$(node -e 'const p = require(process.argv[1]).loadPalette(process.argv[2]); console.log(JSON.stringify([p.sun.hex, p.sun.rgb, p.sun.x256, p.sun.sgr16]))' "$DRAW" "$WORK/ui-changed.sh")" \
+    '["#010203",[1,2,3],17,36]' "a changed row is read as changed"
+  assert_eq "$(grep -ci 'f6d58e\|e0a84a\|c9772f' "$DRAW")" 0 "and no palette hex is written in the renderer"
+  assert_eq "$(node -e 'try { require(process.argv[1]).loadPalette(process.argv[2]) } catch (e) { console.log("threw: " + e.message) }' "$DRAW" "$FOREMAN_HOME/README.md")" \
+    "threw: no _UI_PALETTE in $FOREMAN_HOME/README.md" "a file without the table is an error that names it"
+fi
+
+if case_is "foreman-draw's encoder writes 24-bit, 256 and 16-colour SGR, half-blocks, and resets every line"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  enc() {    # enc TIER ROWS_JSON — the encoded rows, with ESC shown as <E>
+    node -e 'const d = require(process.argv[1]); process.stdout.write(d.encode(JSON.parse(process.argv[3]), +process.argv[2]))' \
+      "$DRAW" "$1" "$2" | sed $'s/\033/<E>/g'
+  }
+  half='[[{"t":"▀▀","style":{"fg":"sun","bg":"rust"}}]]'
+  assert_eq "$(enc 24 "$half")" '<E>[0;38;2;246;213;142;48;2;201;119;47m▀▀<E>[0m' "24 bits: a foreground and a background"
+  assert_eq "$(enc 256 "$half")" '<E>[0;38;5;222;48;5;172m▀▀<E>[0m' "256: the palette's indexes"
+  assert_eq "$(enc 16 "$half")" '<E>[0;33;41m▀▀<E>[0m' "16: yellow on red"
+  assert_eq "$(enc 24 '[[{"t":"x","style":{"fg":"ok"}}]]')" '<E>[0;38;2;143;207;143mx<E>[0m' "a foreground alone"
+  assert_eq "$(enc 24 '[[{"t":"x","style":{"bg":"ok"}}]]')" '<E>[0;48;2;143;207;143mx<E>[0m' "a background alone"
+  assert_eq "$(enc 24 '[[{"t":"x","style":{"fg":"ok","bold":true}}]]')" '<E>[0;1;38;2;143;207;143mx<E>[0m' "bold"
+  # Colours the art computes (a figure, a sky band) are hex, not names.
+  assert_eq "$(enc 24 '[[{"t":"▀","style":{"fg":"#0a0908"}}]]')" '<E>[0;38;2;10;9;8m▀<E>[0m' "a hex colour, exact at 24"
+  assert_eq "$(enc 256 '[[{"t":"▀","style":{"fg":"#0a0908"}}]]')" '<E>[0;38;5;232m▀<E>[0m' "its nearest shade at 256"
+  assert_eq "$(enc 16 '[[{"t":"▀","style":{"fg":"#0a0908"}}]]')" '<E>[0;30m▀<E>[0m' "and black at 16, being nearest to ink"
+  assert_eq "$(enc 16 '[[{"t":"▀","style":{"fg":"#f4d08c","bg":"#c8782e"}}]]')" '<E>[0;33;41m▀<E>[0m' "a hex shade folds to its nearest name at 16"
+  # The terminal's own default stands in for text below 24 bits, and dim is not a background.
+  assert_eq "$(enc 24 '[[{"t":"x","style":{"fg":"text"}}]]')" '<E>[0;38;2;236;232;225mx<E>[0m' "text is its hex at 24"
+  assert_eq "$(enc 256 '[[{"t":"x","style":{"fg":"text"}}]]')" '<E>[0mx<E>[0m' "and the terminal's own at 256"
+  assert_eq "$(enc 16 '[[{"t":"x","style":{"fg":"dim"}}]]')" '<E>[0;2mx<E>[0m' "dim is the attribute at 16"
+  assert_eq "$(enc 16 '[[{"t":"▄","style":{"fg":"sun","bg":"dim"}}]]')" '<E>[0;33m▄<E>[0m' "and a dim background is none"
+  # Lines: every one ends with a reset, an unstyled run drops the style before it, an empty row is a reset.
+  assert_eq "$(enc 24 '[[{"t":"a","style":{"fg":"sun"}},{"t":"b"}],[],[{"t":"c"}]]')" \
+    '<E>[0;38;2;246;213;142ma<E>[0mb<E>[0m
+<E>[0m
+c<E>[0m' "a reset at the end of every line, and before an unstyled run"
+  assert_eq "$(enc 24 '[[{"t":"a","style":{"fg":"sun"}}]]' | wc -l | tr -d ' ')" 1 "one line per row"
+fi
+
+if case_is "foreman-draw parses the facts a shell pipes in"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  facts() { node -e 'process.stdout.write(JSON.stringify(require(process.argv[1]).parseFacts(process.argv[2])))' "$DRAW" "$1"; }
+  assert_eq "$(facts $'batch\tterminal-design\ndone\t2')" '{"batch":"terminal-design","done":"2"}' "key<TAB>value lines"
+  assert_eq "$(facts $'item\ta\nitem\tb\nitem\tc')" '{"item":["a","b","c"]}' "a repeated key is a list"
+  assert_eq "$(facts $'a\tx\ty\n')" '{"a":"x\ty"}' "the value is everything after the first tab"
+  assert_eq "$(facts $'a\tx\r\n\r\nb\t\nc')" '{"a":"x","b":"","c":""}' "CRLF, blank lines, an empty value and a key alone"
+  assert_eq "$(facts '')" '{}' "nothing is no facts"
+fi
+
+if case_is "foreman-draw help draws the D1 sunrise at the tier it is given, and refuses a narrow screen"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  ESC=$'\033'
+  OUT24="$(node "$DRAW" help --tier 24 --cols 120 </dev/null)"; ST=$?
+  assert_eq "$ST" 0 "the scene runs"
+  assert_eq "$(printf '%s\n' "$OUT24" | wc -l | tr -d ' ')" 19 "eighteen rows and a blank line"
+  assert_contains "$OUT24" "${ESC}[0;38;2;" "24 bits"
+  assert_contains "$OUT24" ";48;2;" "half blocks carry a background"
+  assert_contains "$OUT24" "38;2;224;168;74" "the sun's amber, exactly"
+  assert_contains "$OUT24" "▀" "block characters"
+  assert_eq "$(printf '%s\n' "$OUT24" | grep -vc "${ESC}\[0m\$")" 0 "every line ends with a reset"
+  stripped="$(printf '%s\n' "$OUT24" | sed "s/${ESC}\[[0-9;]*m//g")"
+  assert_eq "$(printf '%s\n' "$stripped" | head -n 1)" "                      ▄▄▄▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄▄▄" "the top of the dome, as designed"
+  assert_eq "$(printf '%s\n' "$stripped" | sed -n 18p)" "█████████████████████████▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀████████████████████████" "and the ground, as designed"
+  assert_eq "$(printf '%s\n' "$stripped" | sed -n 19p)" "" "then a blank line"
+
+  OUT256="$(node "$DRAW" help --tier 256 --cols 120 </dev/null)"
+  assert_contains "$OUT256" "${ESC}[0;38;5;" "256 colours"
+  assert_missing "$OUT256" "38;2;" "and not 24 bits"
+  OUT16="$(node "$DRAW" help --tier 16 --cols 120 </dev/null)"
+  assert_missing "$OUT16" "38;2;" "16 colours: no 24 bits"
+  assert_missing "$OUT16" "38;5;" "no 256"
+  assert_missing "$OUT16" "48;5;" "no 256 background"
+  assert_missing "$OUT16" "48;2;" "no 24-bit background"
+  assert_contains "$OUT16" "${ESC}[0;33" "yellow for the sun"
+  assert_contains "$OUT16" "${ESC}[0;31;43m" "the rust rim over the yellow"
+  assert_contains "$OUT16" "${ESC}[0;30;43m" "and the figure, black, in front of it"
+  assert_eq "$(printf '%s\n' "$OUT16" | wc -l | tr -d ' ')" 19 "the same eighteen rows and blank line"
+  # The ground and the dome's rim are the dark shades, which 16 colours leave to the terminal.
+  assert_missing "$(printf '%s\n' "$OUT16" | sed -n 18p)" "█" "no ground at 16"
+  assert_eq "$(printf '%s\n' "$OUT256" | sed "s/${ESC}\[[0-9;]*m//g")" "$stripped" "256 colours draw the same shapes as 24 bits"
+
+  assert_eq "$(printf 'batch\tx\n' | node "$DRAW" help --tier 24 --cols 120)" "$OUT24" "facts on stdin are read, and help has no use for them"
+  assert_eq "$(node "$DRAW" help --tier 24 --cols 64 </dev/null)" "$OUT24" "64 columns is wide enough"
+  OUT="$(node "$DRAW" help --tier 24 --cols 63 </dev/null 2>"$WORK/draw-err")"; ST=$?
+  assert_eq "$ST" 3 "one column short is refused, with its own status"
+  assert_eq "$OUT" "" "and draws nothing"
+  assert_contains "$(cat "$WORK/draw-err")" "too narrow" "and says so"
+  OUT="$(node "$DRAW" nosuch --tier 24 --cols 120 </dev/null 2>&1)"; ST=$?
+  assert_eq "$ST" 2 "an unknown scene is a usage error"
+  assert_contains "$OUT" "unknown scene 'nosuch'" "and names it"
+  OUT="$(node "$DRAW" help --cols 120 </dev/null 2>&1)"; ST=$?
+  assert_eq "$ST" 2 "no tier is a usage error"
+  OUT="$(node "$DRAW" help --tier none --cols 120 </dev/null 2>&1)"; ST=$?
+  assert_eq "$ST" 2 "none is not a tier to draw at"
+  OUT="$(node "$DRAW" help --tier 24 </dev/null 2>&1)"; ST=$?
+  assert_eq "$ST" 2 "no width is a usage error"
+  OUT="$(node "$DRAW" help --tier 24 --cols wide </dev/null 2>&1)"; ST=$?
+  assert_eq "$ST" 2 "and so is one that is not a number"
+
+  # The module does the same as the script.
+  assert_eq "$(node -e 'process.stdout.write(require(process.argv[1]).draw("help", {}, { tier: 24, cols: 120 }))' "$DRAW")" \
+    "$OUT24" "draw(scene, facts, opts) is the script's output"
+  assert_eq "$(node -e 'process.stdout.write(String(require(process.argv[1]).draw("help", {}, { tier: 24, cols: 10 })))' "$DRAW")" \
+    "" "and is empty below the scene's minimum"
+  # The shell decides plain or show before it starts node, so it needs the minimum: it must agree.
+  assert_eq "$(node -e 'console.log(require(process.argv[1]).SCENES.help.min)' "$DRAW")" \
+    "$(sed -n 's/^_help_min_cols=\([0-9]*\).*/\1/p' "$FOREMAN_HOME/bin/foreman")" "the renderer's minimum for help is the dispatcher's"
+fi
+
+# `foreman help`: the plain text is today's, and the show is the sunrise above it.
+help_text() {    # the help text as the dispatcher's own header comment has it
+  awk 'NR==1 { next } !/^#/ { exit } { sub(/^# ?/, ""); print }' "$FOREMAN" | sed "s|\$FOREMAN_HOME|$FOREMAN_HOME|g"
+}
+
+if case_is "foreman help is the header comment on a pipe, and the sunrise above it when the show is forced"; then
+  ESC=$'\033'
+  want="$(help_text)"
+  assert_contains "$want" "foreman init    <batch>" "(the help text read from the header)"
+  OUT="$("$FOREMAN" help 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "help exits 0"
+  assert_eq "$OUT" "$want" "captured, help is today's text"
+  assert_missing "$OUT" "$ESC" "with no escape code"
+  OUT="$("$FOREMAN" 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "bare foreman exits as it did"
+  assert_eq "$OUT" "$want" "and prints the same"
+  OUT="$("$FOREMAN" --help 2>&1)"; assert_eq "$OUT" "$want" "--help"
+  OUT="$("$FOREMAN" -h 2>&1)"; assert_eq "$OUT" "$want" "-h"
+
+  OUT="$(FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" help 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "the forced show exits 0"
+  assert_contains "$OUT" "38;2;" "it is drawn in 24 bits"
+  assert_contains "$OUT" "38;2;224;168;74" "in the palette's amber"
+  stripped="$(printf '%s\n' "$OUT" | sed "s/${ESC}\[[0-9;]*m//g")"
+  assert_contains "$stripped" "▄▄▄▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄▄▄" "the sunrise"
+  assert_eq "${stripped: -${#want}}" "$want" "above the help text, which ends it unchanged"
+  assert_eq "$(printf '%s\n' "$stripped" | wc -l | tr -d ' ')" "$(( $(printf '%s\n' "$want" | wc -l) + 19 ))" "and nothing else is added: eighteen rows and a blank line"
+  show24="$OUT"
+
+  OUT="$(FOREMAN_SHOW=always FOREMAN_COLOR=16 COLUMNS=120 "$FOREMAN" help 2>&1)"
+  assert_contains "$(printf '%s\n' "$OUT" | sed "s/${ESC}\[[0-9;]*m//g")" "▄▄██████▀▀▀▀███████████▄▄" "at 16 colours it is still drawn"
+  assert_missing "$OUT" "38;2;" "but not in 24 bits"
+  assert_missing "$OUT" "38;5;" "nor 256"
+  assert_contains "$OUT" "${ESC}[0;33" "it is yellow"
+  assert_contains "$OUT" "foreman init    <batch>" "and the help follows"
+  OUT="$(FOREMAN_SHOW=always FOREMAN_COLOR=256 COLUMNS=120 "$FOREMAN" help 2>&1)"
+  assert_contains "$OUT" "38;5;" "256"
+  assert_missing "$OUT" "38;2;" "not 24"
+
+  OUT="$(FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=40 "$FOREMAN" help 2>&1)"
+  assert_eq "$OUT" "$want" "a narrow screen gets today's text"
+  OUT="$(FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=63 "$FOREMAN" help 2>&1)"
+  assert_eq "$OUT" "$want" "one column short of the sunrise"
+  OUT="$(FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=64 "$FOREMAN" help 2>&1)"
+  assert_contains "$OUT" "38;2;" "and exactly enough"
+  OUT="$(FOREMAN_SHOW=never FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" help 2>&1)"
+  assert_eq "$OUT" "$want" "FOREMAN_SHOW=never"
+  OUT="$(FOREMAN_SHOW=always FOREMAN_COLOR=never COLUMNS=120 "$FOREMAN" help 2>&1)"
+  assert_eq "$OUT" "$want" "FOREMAN_COLOR=never"
+  OUT="$(FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" help 2>&1)"
+  assert_eq "$OUT" "$want" "colour alone is not the show: this is a pipe"
+
+  OUT="$(FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "bare foreman, forced"
+  assert_eq "$OUT" "$show24" "draws what help draws"
+
+  # The error path is not a help request: it keeps its text, on stderr, and its exit code.
+  OUT="$(FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" bogus 2>&1 >/dev/null)"; ST=$?
+  assert_eq "$ST" 1 "an unknown command still exits 1"
+  assert_missing "$OUT" "$ESC" "and draws nothing"
+  assert_contains "$OUT" "foreman: unknown command 'bogus'" "it says what was wrong"
+  assert_contains "$OUT" "foreman init    <batch>" "and prints the usage"
+  OUT="$("$FOREMAN" '' 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "an empty command is help, as it always was"
+  assert_eq "$OUT" "$want" "and prints the same"
+
+  if command -v script >/dev/null 2>&1 && [ "$(show_of tty 1 FOREMAN_SHOW=always)" = show:16 ]; then
+    OUT="$(env -u CI -u NO_COLOR -u WT_SESSION -u FOREMAN_COLOR -u FOREMAN_SHOW TERM=xterm COLORTERM=truecolor COLUMNS=100 \
+      script -qec "$FOREMAN help" /dev/null </dev/null 2>/dev/null)"
+    assert_contains "$OUT" "38;2;" "on a real terminal that says 24 bits, help is drawn"
+    OUT="$(env -u NO_COLOR -u WT_SESSION -u FOREMAN_COLOR -u FOREMAN_SHOW CI=true TERM=xterm COLORTERM=truecolor COLUMNS=100 \
+      script -qec "$FOREMAN help" /dev/null </dev/null 2>/dev/null)"
+    assert_missing "$OUT" "38;2;" "but not in CI"
+    assert_contains "$OUT" "foreman init    <batch>" "which still has the help"
+  else
+    printf '  (skipped: no `script` to give a terminal)\n'
+  fi
+fi
+
+if case_is "FOREMAN_SHOW takes auto, always and never, and a batch's foreman.conf may set it"; then
+  repo="$(make_repo 2 show-values-repo)"
+  for v in auto always never; do
+    FOREMAN_SHOW=$v run_foreman "$repo" status batch
+    assert_eq "$ST" 0 "FOREMAN_SHOW=$v is accepted"
+  done
+  FOREMAN_SHOW=sometimes run_foreman "$repo" status batch
+  assert_eq "$ST" 1 "an unknown value is refused"
+  assert_contains "$OUT" "FOREMAN_SHOW must be auto, always or never (got 'sometimes')" "and the message says why"
+  printf 'FOREMAN_SHOW=never\n' >> "$repo/batch/foreman.conf"
+  git -C "$repo" commit --quiet -am "no show"
+  run_foreman "$repo" status batch
+  assert_eq "$ST" 0 "foreman.conf can set it"
+fi
+
 # ---------------------------------------------------------------------------
 # A case process that ran the last case in the file ends here.
 [ "$CASE_OPEN" = 1 ] && case_finish

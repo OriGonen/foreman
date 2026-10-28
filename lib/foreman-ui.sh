@@ -52,8 +52,27 @@
 # The terminal's best tier: 24 when COLORTERM is truecolor or 24bit, or WT_SESSION is set
 # (Windows Terminal does not set COLORTERM); else 256 when TERM contains 256color; else 16.
 #
-# Nothing here starts a process: `[ -t ]`, `printf -v` and `case` are builtins, which is the
-# point under MSYS, where a fork is the expensive thing and these run once per event line.
+# THE SHOW. Beside the five styles, a command can draw a picture: a scene made of block
+# characters, in the palette, by lib/foreman-draw.cjs. Each command prints either the show or
+# its plain text, and chooses once per call:
+#   ui_show FD [VAR]   success when the show is wanted on FD: its colour tier is not none, FD is
+#                      a terminal, CI is unset (or empty) and FOREMAN_SHOW is not never. With a
+#                      VAR, it is set to the tier to draw at (16, 256 or 24).
+#   ui_cols VAR FD     sets VAR to the width to draw for: COLUMNS if it is a positive number,
+#                      else what `stty size` says of FD, else 80. Ask it only after ui_show has
+#                      said yes — it may start a process, which a plain run must not.
+# FOREMAN_SHOW overrides the first:
+#   auto      (default) the rule above
+#   always    the show on any stream — a pipe, a file, a test's capture — whatever CI or NO_COLOR
+#             or TERM say, at the terminal's best tier (16 when nothing says better) or the one
+#             FOREMAN_COLOR pins. FOREMAN_COLOR=never still wins: a show with no colour is plain.
+#   never     plain, ever
+# The scene draws in the width it is given and has a minimum below which the caller prints its
+# plain text instead; the caller checks that against ui_cols before it starts the renderer.
+#
+# Nothing here starts a process but `stty` in ui_cols: `[ -t ]`, `printf -v` and `case` are
+# builtins, which is the point under MSYS, where a fork is the expensive thing and these run once
+# per event line.
 
 [ -z "${_FOREMAN_UI_LOADED:-}" ] || return 0
 _FOREMAN_UI_LOADED=1
@@ -94,9 +113,21 @@ _ui_palette_load() {
   _UI_PALETTE_LOADED=1
 }
 
+# _ui_best_tier VAR — sets VAR to the best tier the terminal says it has: 24 when COLORTERM is
+# truecolor or 24bit or WT_SESSION is set, else 256 when TERM contains 256color, else 16.
+_ui_best_tier() {
+  local _bt_best=16
+  case "${COLORTERM:-}" in
+    truecolor|24bit) _bt_best=24 ;;
+    *) if [ -n "${WT_SESSION:-}" ]; then _bt_best=24
+       else case "${TERM:-}" in *256color*) _bt_best=256 ;; esac
+       fi ;;
+  esac
+  printf -v "$1" '%s' "$_bt_best"
+}
+
 # ui_color_tier VAR FD — sets VAR to none, 16, 256 or 24: the colour tier for that stream.
 ui_color_tier() {
-  local _ct_best=16
   case "${FOREMAN_COLOR:-auto}" in
     never)     printf -v "$1" none; return 0 ;;
     16)        printf -v "$1" 16; return 0 ;;
@@ -109,13 +140,7 @@ ui_color_tier() {
       fi
       ;;
   esac
-  case "${COLORTERM:-}" in
-    truecolor|24bit) _ct_best=24 ;;
-    *) if [ -n "${WT_SESSION:-}" ]; then _ct_best=24
-       else case "${TERM:-}" in *256color*) _ct_best=256 ;; esac
-       fi ;;
-  esac
-  printf -v "$1" '%s' "$_ct_best"
+  _ui_best_tier "$1"
 }
 
 # ui_color_on FD — success when colour is wanted on that file descriptor: its tier is not none.
@@ -123,6 +148,43 @@ ui_color_on() {
   local _co_tier
   ui_color_tier _co_tier "$1"
   [ "$_co_tier" != none ]
+}
+
+# ui_show FD [VAR] — success when the show is wanted on that file descriptor; sets VAR, when
+# given, to the tier to draw at. See THE SHOW above.
+ui_show() {
+  local _us_tier
+  ui_color_tier _us_tier "$1"
+  case "${FOREMAN_SHOW:-auto}" in
+    never) return 1 ;;
+    always)
+      if [ "$_us_tier" = none ]; then
+        [ "${FOREMAN_COLOR:-auto}" != never ] || return 1
+        _ui_best_tier _us_tier
+      fi
+      ;;
+    *)
+      [ "$_us_tier" != none ] && [ -t "$1" ] && [ -z "${CI:-}" ] || return 1
+      ;;
+  esac
+  [ $# -lt 2 ] || printf -v "$2" '%s' "$_us_tier"
+}
+
+# ui_cols VAR FD — sets VAR to the width of the terminal FD is, or 80 when nothing says.
+ui_cols() {
+  local _uc_size
+  if [[ ${COLUMNS:-} =~ ^[0-9]+$ ]] && [ "$((10#$COLUMNS))" -gt 0 ]; then
+    printf -v "$1" '%s' "$((10#$COLUMNS))"
+    return 0
+  fi
+  # The redirect is on the group, not inside the substitution, where FD 1 would be the capture.
+  { _uc_size="$(stty size 2>/dev/null)"; } <&"$2" 2>/dev/null
+  _uc_size="${_uc_size#* }"
+  if [[ $_uc_size =~ ^[0-9]+$ ]] && [ "$((10#$_uc_size))" -gt 0 ]; then
+    printf -v "$1" '%s' "$((10#$_uc_size))"
+  else
+    printf -v "$1" 80
+  fi
 }
 
 # ui_paint VAR FD STYLE TEXT — sets VAR to TEXT, wrapped in STYLE's colour at FD's tier.

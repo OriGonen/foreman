@@ -390,6 +390,10 @@ FOREMAN_STREAM="${FOREMAN_STREAM:-0}"
 # NO_COLOR set, at the best tier the terminal has; always / never force it; 16, 256 and
 # truecolor pin the tier. Piped and logged output is never coloured under auto.
 FOREMAN_COLOR="${FOREMAN_COLOR:-auto}"
+# The drawn pictures some commands print (the "show") — see foreman-ui.sh. auto: on a terminal
+# with colour, wide enough, and not in CI; always draws them anywhere (a pipe, a file); never
+# prints the plain text.
+FOREMAN_SHOW="${FOREMAN_SHOW:-auto}"
 # How much context a ticket is expected to fit well inside. A prompt slot, not a limit
 # anything enforces — the CLI has no such flag, and --autocompact is the real backstop. It
 # lives here rather than as a literal in the shared template because it is model- and
@@ -432,6 +436,14 @@ case "$FOREMAN_COLOR" in
   auto|always|never|16|256|truecolor) ;;
   *)
     echo "foreman: FOREMAN_COLOR must be auto, always or never (got '$FOREMAN_COLOR'), or 16, 256 or truecolor" >&2
+    return 1 2>/dev/null || exit 1
+    ;;
+esac
+
+case "$FOREMAN_SHOW" in
+  auto|always|never) ;;
+  *)
+    echo "foreman: FOREMAN_SHOW must be auto, always or never (got '$FOREMAN_SHOW')" >&2
     return 1 2>/dev/null || exit 1
     ;;
 esac
