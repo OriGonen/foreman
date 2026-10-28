@@ -46,3 +46,14 @@
 - Deliberate deviation: NEXT steps 3/4 include the batch path (design omits it) so they can be pasted. FOREMAN_SHOW is env-only for init (it runs before any conf is read). `$SECONDS` is whole seconds, so smoke avoids exact times.
 - Remaining for a human: look at `foreman init` in a real window (Windows Terminal, mintty) — not checkable here.
 
+
+
+## 13 version mark — implemented
+- Built the `version` scene in `lib/foreman-draw.cjs` (blank, mark, `FOREMAN  <rev>` bold amber / `installed at <path>` / description, blank; min 72 = text column 23 + the 49-char description) and `tilde(path, home)` (exported). `version()` in bin/foreman draws it through `ui_show`/`ui_cols`, else prints today's two lines; node failing falls back to them too. `_version_min_cols=72` is tied to SCENES by a smoke case. `--version`/`-V` already dispatched to `version`, now tested equal.
+- Facts sent: `rev`, `path` (whole), `home`; only the picture shortens the path (`~/.foreman`), the plain text keeps it whole. FOREMAN_SHOW is env-only here too.
+- Test-driven (smoke): scene cell for cell vs 13a-version.ans (mark and words) and .txt, 16-colour words, tilde edge cases (whole-directory only, trailing slash, `/`, empty, undefined), min width 71/72, pipe byte for byte, forced show at 3 tiers, HOME-above-checkout, never/colour never/narrow, failing renderer, pty case (unforced, CI plain).
+- Plain path adds no process (only builtins run before the show is decided; checked by reading, no strace here).
+- Full smoke: 1419 passed in 1m 17s, 1 failed (the same pre-existing CRLF `convert` case).
+- Review: reverted an edit to the header comment (it is the help text, out of scope). Skipped: none.
+- Known limit: a install path long enough to pass the terminal's width wraps beside the mark (the plain text wraps the same way); not handled.
+- Remaining for a human: look at `foreman version` in a real window (not checkable here). README/docs mention is ticket 14's.

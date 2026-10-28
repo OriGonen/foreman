@@ -8,9 +8,11 @@ The design is `designs/13a-version.ans`, from `designs/source/VersionTakes.dc.ht
 
 **Blocked by:** 08
 
-**Status:** ready-for-agent
+**Status:** implemented
 
-- [ ] `--version` is the same as `version`
-- [ ] Piped output is byte for byte today's two lines
-- [ ] Smoke: the forced show holds the rev and the install path; plain output is two lines
-- [ ] Full smoke suite passes; the closing note records `Full smoke suite: N passed in Mm Ss`
+- [x] `--version` is the same as `version`
+- [x] Piped output is byte for byte today's two lines
+- [x] Smoke: the forced show holds the rev and the install path; plain output is two lines
+- [x] Full smoke suite passes; the closing note records `Full smoke suite: N passed in Mm Ss`
+
+Full smoke suite: 1419 passed in 1m 17s (1 failed: the CRLF `convert` case, failing before this ticket).

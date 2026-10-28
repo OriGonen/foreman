@@ -13,7 +13,7 @@
 #   foreman report  [batch] [--by-ticket|--failures] what it cost               (free)
 #   foreman doctor  [--fix]                is this repo (and this machine) ready (free)
 #   foreman convert [<project>] [--dry-run]  move a project from ralph to foreman
-#   foreman help | foreman version        (also --help, --version)
+#   foreman help | foreman version
 #
 # <batch> is any directory in the current repository holding tickets and a foreman.conf.
 # It may be omitted when exactly one directory in the repo has one.
