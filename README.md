@@ -418,6 +418,32 @@ plain text, byte for byte, so scripts that read a command's output are unaffecte
 FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 foreman help | less -R
 ```
 
+### The intro — `FOREMAN_INTRO`
+
+Bare `foreman` and `foreman help` on a terminal first play a short film, 36 frames over two and a
+half seconds: the sun comes up, the foreman walks in, drives a stake into the ground and turns to
+the light. It ends on the same sunrise `foreman help` draws, left on the screen, and the help text
+follows below it. **Any key skips to the end.** The cursor is hidden while it plays and shown
+again however it ends — at the end, on a key, on Ctrl-C (which ends the command, exit 130), or on
+an error — and the terminal is only in raw mode while it plays.
+
+| | |
+|---|---|
+| `FOREMAN_INTRO=0` | no intro: you get the still sunrise, as with a pipe |
+| anything else, or unset | play it when it can be shown |
+
+It plays only where there is someone to watch and a key to skip with, so it is never in the way
+of a script: not when stdout or stdin is not a terminal, and not when `CI` is set (even with
+`FOREMAN_SHOW=always`). On a terminal under 66 columns wide or 20 rows high you get the still
+sunrise instead, and wherever the show is not drawn at all (`NO_COLOR`, `FOREMAN_SHOW=never`, a
+terminal under 64 columns) `foreman help` prints today's text.
+
+`FOREMAN_INTRO` is read from the environment, not from a batch's `foreman.conf`: `foreman help`
+runs before any batch is looked at. To turn it off for good, export it in your shell profile.
+
+Frames can be looked at one at a time with the renderer itself, which is how the smoke suite checks
+them: `node lib/foreman-draw.cjs intro --tier 24 --cols 120 --frame 25` draws frame 25 (0 to 35).
+
 ### Tickets bigger than one turn
 
 `claude --print --output-format json` is **one turn**. It prints a single JSON object and

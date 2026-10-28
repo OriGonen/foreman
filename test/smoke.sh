@@ -3883,10 +3883,23 @@ if case_is "foreman help plays the intro on a terminal, once, and then prints th
   want="$(help_text)"
   if command -v script >/dev/null 2>&1 && [ "$(show_of tty 1 FOREMAN_SHOW=always)" = show:16 ]; then
     term_env=(env -u CI -u NO_COLOR -u WT_SESSION -u FOREMAN_COLOR -u FOREMAN_SHOW -u FOREMAN_INTRO TERM=xterm COLORTERM=truecolor COLUMNS=100)
-    # No key for three seconds: the whole thing plays.
-    start_s=$SECONDS
-    OUT="$( (sleep 3) | "${term_env[@]}" script -qec "$FOREMAN help" /dev/null 2>/dev/null)"
-    OUT="${OUT//$'\r'/}"
+    # The keys come from the test, not from the clock: it waits for the terminal's output to show
+    # what it is waiting for (the cursor hidden, or shown again) and then sends the keys, so a
+    # machine too busy to start node on time cannot make a key early or a run late. script sends an
+    # end-of-file as soon as its input ends, and that arrives as a key, so the input stays open.
+    intro_run() {    # intro_run WAIT_FOR KEYS COMMAND — runs COMMAND on a terminal; sets OUT
+      local f="$WORK/intro-out" i
+      : > "$f"
+      ( for i in $(seq 200); do grep -qaF "$1" "$f" 2>/dev/null && break; sleep 0.1; done
+        [ -z "$2" ] || printf "$2"
+        sleep 0.2 ) | "${term_env[@]}" script -qec "$3" /dev/null > "$f" 2>/dev/null
+      OUT="$(<"$f")"
+      OUT="${OUT//$'\r'/}"
+    }
+    HIDE="${ESC}[?25l"; SHOWN="${ESC}[?25h"
+
+    # No key: the whole thing plays.
+    intro_run "$SHOWN" "" "$FOREMAN help"
     assert_eq "$(printf '%s' "$OUT" | grep -o "${ESC}\[19A" | wc -l | tr -d ' ')" 35 "thirty-five frames drawn over the first, each moving up its nineteen lines"
     assert_eq "$(printf '%s' "$OUT" | grep -o "${ESC}\[?25l" | wc -l | tr -d ' ')" 1 "the cursor is hidden once"
     assert_eq "$(printf '%s' "$OUT" | grep -o "${ESC}\[?25h" | wc -l | tr -d ' ')" 2 "and shown after it, by the player and by the dispatcher"
@@ -3896,9 +3909,8 @@ if case_is "foreman help plays the intro on a terminal, once, and then prints th
     last_up="${OUT##*"${ESC}[19A"}"
     assert_eq "$(printf '%s' "$last_up" | sed "s/${ESC}\[[0-9;?]*[A-Za-z]//g" | grep -c "▄▄▄▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄▄▄")" 1 "after the last frame the sunrise is on screen once, not drawn again by the help"
 
-    # A key at half a second: the last frame at once, and the help.
-    OUT="$( (sleep 0.5; printf x; sleep 1) | "${term_env[@]}" script -qec "$FOREMAN help" /dev/null 2>/dev/null)"
-    OUT="${OUT//$'\r'/}"
+    # A key as soon as it is playing: the last frame at once, and the help.
+    intro_run "$HIDE" x "$FOREMAN help"
     ups="$(printf '%s' "$OUT" | grep -o "${ESC}\[19A" | wc -l | tr -d ' ')"
     assert_eq "$([ "$ups" -ge 1 ] && [ "$ups" -le 12 ] && echo yes || echo "no:$ups")" yes "a key stops the frames part way through"
     assert_eq "$(printf '%s' "$OUT" | grep -o "${ESC}\[?25h" | wc -l | tr -d ' ')" 2 "the cursor is shown again"
@@ -3907,15 +3919,15 @@ if case_is "foreman help plays the intro on a terminal, once, and then prints th
     assert_contains "$stripped" "█████████████████████████▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀██████████████████████████" "and the last frame was drawn"
 
     # Ctrl-C part way through: raw mode hands it over as a byte. It ends the command, with the
-    # cursor back, and no help.
-    OUT="$( (sleep 0.5; printf '\003'; sleep 1) | "${term_env[@]}" script -qec "$FOREMAN help; echo status=\$?; stty -a" /dev/null 2>/dev/null)"
-    OUT="${OUT//$'\r'/}"
+    # cursor back and the terminal out of raw mode, and no help.
+    intro_run "$HIDE" '\003' "$FOREMAN help; echo status=\$?; stty -a"
     assert_contains "$OUT" "status=130" "Ctrl-C exits 130"
     flat=" ${OUT//$'\n'/ } "
     assert_contains "$flat" " icanon " "and the terminal is out of raw mode: lines are read whole"
     assert_contains "$flat" " echo " "and typed keys are shown again"
     assert_missing "$OUT" "foreman init    <batch>" "without going on to the help"
     assert_eq "$(printf '%s' "$OUT" | grep -o "${ESC}\[?25[hl]" | tr -d '\n')" "${ESC}[?25l${ESC}[?25h${ESC}[?25h" "the cursor was hidden once and shown again"
+
     # Off: FOREMAN_INTRO=0, CI, and a terminal too narrow for the intro but not for the sunrise. With
     # no key to wait for (script sends an end-of-file at once) a wrongly played intro would still
     # show its first frame and its cursor.
@@ -3933,7 +3945,7 @@ if case_is "foreman help plays the intro on a terminal, once, and then prints th
     OUT="$("${term_env[@]}" COLUMNS=60 script -qec "$FOREMAN help" /dev/null </dev/null 2>/dev/null)"
     assert_missing "$OUT" "38;2;" "60 columns: plain, as before"
     # Bare foreman plays too and exits 0 as help does.
-    OUT="$( (sleep 0.3; printf x; sleep 1) | "${term_env[@]}" script -qec "$FOREMAN; echo status=\$?" /dev/null 2>/dev/null)"
+    intro_run "$HIDE" x "$FOREMAN; echo status=\$?"
     assert_contains "$OUT" "status=0" "bare foreman exits 0"
     assert_contains "$OUT" "?25l" "and plays the intro"
   else
