@@ -54,12 +54,31 @@ usage() {
 # needs is the renderer's own for the `help` scene (a smoke case holds the two together); it is
 # here so a narrow terminal is plain without starting node. Asking for help is the only thing
 # that draws it, not the usage printed after a mistyped command.
+#
+# On a terminal — stdin and stdout both, so there is a key to skip with and a cursor to move —
+# and not in CI (even when FOREMAN_SHOW=always forces the picture), the sunrise is first played as
+# the intro (FOREMAN_INTRO=0 turns that off). Its last frame is the sunrise, left on the screen,
+# and the help text goes on below it. The intro needs a little more width than the sunrise
+# (`intro` in the renderer; a smoke case holds that too), and the renderer may decline to play
+# (exit 4), when the plain sunrise is drawn instead. Ctrl-C during it ends the command.
 _help_min_cols=64
+_intro_min_cols=66
 usage_show() {
-  local tier cols
+  local tier cols status
   # shellcheck source=../lib/foreman-ui.sh
   source "$LIB/foreman-ui.sh" || return 0
   ui_show 1 tier && ui_cols cols 1 && [ "$cols" -ge "$_help_min_cols" ] || return 0
+  if [ -t 0 ] && [ -t 1 ] && [ -z "${CI:-}" ] && [ "${FOREMAN_INTRO:-1}" != 0 ] && [ "$cols" -ge "$_intro_min_cols" ]; then
+    node "$LIB/foreman-draw.cjs" intro --tier "$tier" --cols "$cols" --play 2>/dev/null
+    status=$?
+    # The renderer shows the cursor itself on every way out; this is for the way it cannot be
+    # trusted to have taken (killed, or never started), and costs nothing.
+    printf '\033[?25h'
+    case "$status" in
+      0) return 0 ;;
+      130) exit 130 ;;
+    esac
+  fi
   node "$LIB/foreman-draw.cjs" help --tier "$tier" --cols "$cols" </dev/null 2>/dev/null || true
 }
 

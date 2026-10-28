@@ -3591,6 +3591,8 @@ if case_is "foreman-draw help draws the D1 sunrise at the tier it is given, and 
   # The shell decides plain or show before it starts node, so it needs the minimum: it must agree.
   assert_eq "$(node -e 'console.log(require(process.argv[1]).SCENES.help.min)' "$DRAW")" \
     "$(sed -n 's/^_help_min_cols=\([0-9]*\).*/\1/p' "$FOREMAN_HOME/bin/foreman")" "the renderer's minimum for help is the dispatcher's"
+  assert_eq "$(node -e 'console.log(require(process.argv[1]).SCENES.intro.min)' "$DRAW")" \
+    "$(sed -n 's/^_intro_min_cols=\([0-9]*\).*/\1/p' "$FOREMAN_HOME/bin/foreman")" "and the renderer's minimum for the intro is the dispatcher's"
 fi
 
 # `foreman help`: the plain text is today's, and the show is the sunrise above it.
@@ -3660,7 +3662,7 @@ if case_is "foreman help is the header comment on a pipe, and the sunrise above 
   assert_eq "$OUT" "$want" "and prints the same"
 
   if command -v script >/dev/null 2>&1 && [ "$(show_of tty 1 FOREMAN_SHOW=always)" = show:16 ]; then
-    OUT="$(env -u CI -u NO_COLOR -u WT_SESSION -u FOREMAN_COLOR -u FOREMAN_SHOW TERM=xterm COLORTERM=truecolor COLUMNS=100 \
+    OUT="$(env -u CI -u NO_COLOR -u WT_SESSION -u FOREMAN_COLOR -u FOREMAN_SHOW FOREMAN_INTRO=0 TERM=xterm COLORTERM=truecolor COLUMNS=100 \
       script -qec "$FOREMAN help" /dev/null </dev/null 2>/dev/null)"
     assert_contains "$OUT" "38;2;" "on a real terminal that says 24 bits, help is drawn"
     OUT="$(env -u NO_COLOR -u WT_SESSION -u FOREMAN_COLOR -u FOREMAN_SHOW CI=true TERM=xterm COLORTERM=truecolor COLUMNS=100 \
@@ -3670,6 +3672,285 @@ if case_is "foreman help is the header comment on a pipe, and the sunrise above 
   else
     printf '  (skipped: no `script` to give a terminal)\n'
   fi
+fi
+
+# The intro: Intro3, 36 frames over 2.5s, played in place on a terminal and left on its last frame.
+if case_is "foreman-draw intro draws a frame at a time, and holds the design's key rows"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g"; }
+  F0="$(node "$DRAW" intro --tier 24 --cols 120 --frame 0 </dev/null)"; ST=$?
+  assert_eq "$ST" 0 "--frame 0 draws and exits"
+  assert_eq "$(printf '%s\n' "$F0" | wc -l | tr -d ' ')" 19 "eighteen rows and a blank line, as the help is"
+  assert_eq "$(printf '%s\n' "$F0" | strip | sed -n 3p)" "                            ▄▄▄▄" "frame 0: the top of the hat"
+  assert_eq "$(printf '%s\n' "$F0" | strip | sed -n 13p)" "                  ▄▄▀▀▀███████▀▀███▀██████▀▀▀▄▄" "frame 0: the dome just rising behind him"
+  assert_eq "$(printf '%s\n' "$F0" | strip | sed -n 16p)" "██████████████████████████████████████████████████████████████████" "frame 0: sixty-six columns of ground"
+  assert_contains "$F0" "38;2;" "in 24 bits"
+  assert_eq "$(printf '%s\n' "$F0" | grep -vc "${ESC}\[0m\$")" 0 "every line ends with a reset"
+  assert_missing "$F0" "${ESC}[K" "a single frame has nothing to erase"
+
+  F35="$(node "$DRAW" intro --tier 24 --cols 120 --frame 35 </dev/null)"; ST=$?
+  assert_eq "$ST" 0 "--frame 35, the last"
+  S35="$(printf '%s\n' "$F35" | strip)"
+  assert_eq "$(printf '%s\n' "$S35" | sed -n 1p)" "                      ▄▄▄▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄▄▄" "frame 35: the top of the sun, as in the help"
+  assert_eq "$(printf '%s\n' "$S35" | sed -n 18p)" "█████████████████████████▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀██████████████████████████" "frame 35: the ground, two columns wider than the help's"
+  assert_eq "$(printf '%s\n' "$S35" | sed -n 19p)" "" "then a blank line, where the help text starts"
+  assert_eq "$(node "$DRAW" intro --tier 24 --cols 120 </dev/null)" "$F35" "no --frame is the last frame, where the intro rests"
+  # The rest of the sun is the help's: the rows above the ground differ only by the figure's
+  # extra width on the sides, none of which shows on the first rows.
+  HELP="$(node "$DRAW" help --tier 24 --cols 120 </dev/null | strip)"
+  assert_eq "$(printf '%s\n' "$S35" | sed -n 1,15p)" "$(printf '%s\n' "$HELP" | sed -n 1,15p)" "the last frame is the help's sunrise, row for row down to the ground"
+  assert_eq "$(printf '%s\n' "$S35" | node -e 'for (const l of require("fs").readFileSync(0, "utf8").split("\n").slice(15, 18)) process.stdout.write(Array.from(l).length + " ")')" "66 66 66 " "and the ground is the design's width"
+
+  # The frames between: the stake driven in, the sounds, the turn.
+  stripped_of() { node "$DRAW" intro --tier 24 --cols 120 --frame "$1" </dev/null | strip; }
+  assert_contains "$(stripped_of 20)" "tink" "frame 20 is the first tink"
+  assert_contains "$(stripped_of 25)" "TONK" "frame 25 is TONK"
+  assert_missing "$(stripped_of 24)" "TONK" "and the winding back before it is not"
+  assert_missing "$F0" "tink" "(frame 0 has no sound)"
+  assert_contains "$(node "$DRAW" intro --tier 24 --cols 120 --frame 25 </dev/null)" "38;2;255;248;232" "the sparks are the design's white"
+  # The design ends on two takes of the same pose: the hold the help starts under.
+  assert_eq "$(node -e 'const d = require(process.argv[1]); const f = d.drawFrames("intro", {}, { tier: 24, cols: 120 }); console.log(f.length, new Set(f).size, f[34] === f[35])' "$DRAW")" "36 35 true" "thirty-six frames, no two alike but the last two"
+
+  # Colour tiers, as in every scene.
+  assert_contains "$(node "$DRAW" intro --tier 256 --cols 120 --frame 12 </dev/null)" "38;5;" "256 colours"
+  OUT16="$(node "$DRAW" intro --tier 16 --cols 120 --frame 25 </dev/null)"
+  assert_missing "$OUT16" "38;2;" "16 colours: no 24 bits"
+  assert_missing "$OUT16" "38;5;" "no 256"
+  assert_contains "$(printf '%s\n' "$OUT16" | strip)" "TONK" "the sound is still there"
+
+  # Errors.
+  for bad in 36 -1 x 1.5 ""; do
+    OUT="$(node "$DRAW" intro --tier 24 --cols 120 --frame "$bad" </dev/null 2>&1)"; ST=$?
+    assert_eq "$ST" 2 "--frame '$bad' is a usage error"
+  done
+  assert_contains "$OUT" "--frame" "which says what was wrong"
+  OUT="$(node "$DRAW" intro --tier 24 --cols 120 --frame 36 </dev/null 2>&1)"
+  assert_contains "$OUT" "0 to 35" "and what frames there are"
+  OUT="$(node "$DRAW" help --tier 24 --cols 120 --frame 1 </dev/null 2>&1)"; ST=$?
+  assert_eq "$ST" 2 "the help has one frame, 0"
+  assert_eq "$(node "$DRAW" help --tier 24 --cols 120 --frame 0 </dev/null)" "$(node "$DRAW" help --tier 24 --cols 120 </dev/null)" "and it is the sunrise"
+  OUT="$(node "$DRAW" intro --tier 24 --cols 65 --frame 0 </dev/null 2>&1)"; ST=$?
+  assert_eq "$ST" 3 "one column short of the intro's sixty-six"
+  assert_contains "$OUT" "too narrow" "and says so"
+  OUT="$(node "$DRAW" intro --tier 24 --cols 66 --frame 0 </dev/null 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "and exactly enough"
+  OUT="$(node "$DRAW" intro --tier 24 --cols 120 --play --frame 3 </dev/null 2>&1)"; ST=$?
+  assert_eq "$ST" 2 "--play and --frame together are a usage error"
+
+  # The module's frames: one string each, rows cleared to the end of the line for playing over
+  # the last, but never at the terminal's last column, where a clear would eat a cell.
+  assert_eq "$(node -e 'const d = require(process.argv[1]); console.log(d.SCENES.intro.frames, d.SCENES.intro.min, d.SCENES.help.frames)' "$DRAW")" "36 66 1" "SCENES say how many frames and how wide"
+  assert_eq "$(node -e 'const d = require(process.argv[1]); console.log(d.drawFrames("intro", {}, { tier: 24, cols: 120 }).length)' "$DRAW")" 36 "drawFrames gives all of them"
+  assert_eq "$(node -e 'const d = require(process.argv[1]); process.stdout.write(d.drawFrames("intro", {}, { tier: 24, cols: 120 })[0])' "$DRAW" | grep -c "${ESC}\[K")" 19 "each row of a frame to play ends by clearing the rest of the line"
+  assert_eq "$(node -e 'const d = require(process.argv[1]); process.stdout.write(d.drawFrames("intro", {}, { tier: 24, cols: 66 })[0])' "$DRAW" | grep -c "${ESC}\[K")" 16 "except the three ground rows, as wide as a sixty-six column terminal"
+  assert_eq "$(node -e 'const d = require(process.argv[1]); console.log(d.drawFrames("intro", {}, { tier: 24, cols: 65 }).length)' "$DRAW")" 0 "and none below the minimum"
+fi
+
+if case_is "foreman-draw's player hides the cursor, plays in place, skips on a key and puts everything back"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  PLAY_JS="$WORK/play-test.cjs"
+  cat > "$PLAY_JS" <<'JS'
+const { EventEmitter } = require('events');
+const { play } = require(process.argv[2]);
+const E = '\x1b';
+const HIDE = E + '[?25l', SHOW = E + '[?25h';
+const frames = ['a1\na2\n', 'b1\nb2\n', 'c1\nc2\n', 'd1\nd2\n'];
+const fakeOut = () => ({ chunks: [], write(s) { this.chunks.push(s); return true; }, get text() { return this.chunks.join(''); } });
+const fakeIn = () => Object.assign(new EventEmitter(), {
+  raw: [], resumed: 0, paused: 0,
+  setRawMode(on) { this.raw.push(on); return this; },
+  resume() { this.resumed++; return this; },
+  pause() { this.paused++; return this; },
+});
+const show = (s) => JSON.stringify(s.split(E).join('<E>'));
+// Runs fn just after the chunk that contains `text` is written, so a key arrives between frames
+// rather than at a time the machine may be too busy to keep.
+const after = (out, text, fn) => {
+  const real = out.write.bind(out);
+  out.write = (s) => { const r = real(s); if (s.includes(text)) setImmediate(fn); return r; };
+};
+async function main() {
+  // A run to the end.
+  let out = fakeOut(), input = fakeIn(), signals = new EventEmitter();
+  const t0 = Date.now();
+  let how = await play(frames, { out, input, stepMs: 30, signals });
+  const took = Date.now() - t0;
+  console.log('end', how, show(out.text));
+  console.log('timer', took >= 80 && took < 1000);
+  console.log('raw', JSON.stringify(input.raw), input.paused > 0, input.listenerCount('data'), signals.listenerCount('SIGINT'));
+  console.log('writes', out.chunks.length === frames.length + 2);
+
+  // A key on the second frame: the last frame at once.
+  out = fakeOut(); input = fakeIn(); signals = new EventEmitter();
+  after(out, 'b1', () => input.emit('data', Buffer.from('x')));
+  how = await play(frames, { out, input, stepMs: 200, signals });
+  console.log('key', how, show(out.text));
+  console.log('key raw', JSON.stringify(input.raw), input.listenerCount('data'));
+
+  // An escape sequence (an arrow key) is one key, not three.
+  out = fakeOut(); input = fakeIn(); signals = new EventEmitter();
+  after(out, 'a1', () => input.emit('data', Buffer.from('\x1b[A')));
+  how = await play(frames, { out, input, stepMs: 200, signals });
+  console.log('arrow', how, out.text.endsWith(E + '[2A' + 'd1\nd2\n' + SHOW));
+
+  // Ctrl-C arrives as a byte in raw mode: stop, no last frame, everything put back.
+  out = fakeOut(); input = fakeIn(); signals = new EventEmitter();
+  after(out, 'b1', () => input.emit('data', Buffer.from('\x03')));
+  how = await play(frames, { out, input, stepMs: 200, signals });
+  console.log('ctrl-c', how, show(out.text));
+  console.log('ctrl-c raw', JSON.stringify(input.raw), input.listenerCount('data'));
+
+  // And as a signal, when raw mode did not take.
+  for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+    out = fakeOut(); input = fakeIn(); signals = new EventEmitter();
+    after(out, 'a1', () => signals.emit(sig));
+    how = await play(frames, { out, input, stepMs: 200, signals });
+    console.log(sig, how, out.text.endsWith(SHOW), out.text.includes('d1'), signals.listenerCount(sig));
+  }
+
+  // A write that throws: the cursor is still shown, the terminal put back, and the error is the caller's.
+  out = fakeOut(); input = fakeIn(); signals = new EventEmitter();
+  let n = 0;
+  const real = out.write.bind(out);
+  // the third frame fails; hiding and showing the cursor do not
+  out.write = (s) => { if (s === HIDE || s === SHOW || ++n < 3) return real(s); throw new Error('disk full'); };
+  try { await play(frames, { out, input, stepMs: 5, signals }); console.log('error: no throw'); }
+  catch (e) { console.log('error', e.message, out.text.endsWith(SHOW), JSON.stringify(input.raw), input.listenerCount('data')); }
+
+  // No input: nothing to skip with, no raw mode asked for.
+  out = fakeOut(); signals = new EventEmitter();
+  how = await play(frames, { out, input: null, stepMs: 5, signals });
+  console.log('no input', how, out.text.startsWith(HIDE), out.text.endsWith(SHOW));
+
+  // One frame: drawn, cursor back.
+  out = fakeOut(); input = fakeIn();
+  how = await play(['only\n'], { out, input, stepMs: 5, signals: new EventEmitter() });
+  console.log('one', how, show(out.text));
+
+  // A key pressed before the first frame is drawn is still a skip; no frames is nothing to do.
+  out = fakeOut(); input = fakeIn();
+  how = await play([], { out, input, stepMs: 5, signals: new EventEmitter() });
+  console.log('none', how, JSON.stringify(out.text), JSON.stringify(input.raw));
+}
+main().catch((e) => { console.log('crashed', e.stack); process.exit(1); });
+JS
+  OUT="$(node "$PLAY_JS" "$DRAW" 2>&1)"
+  line() { printf '%s\n' "$OUT" | grep "^$1 " | head -n 1; }
+  assert_eq "$(line end)" 'end done "<E>[?25la1\na2\n<E>[2Ab1\nb2\n<E>[2Ac1\nc2\n<E>[2Ad1\nd2\n<E>[?25h"' "plays in place: hide, the frames each over the last, show"
+  assert_eq "$(line timer)" "timer true" "frames come at the step, not all at once"
+  assert_eq "$(line raw)" "raw [true,false] true 0 0" "raw only while it plays, then restored, paused, and no listener left"
+  assert_eq "$(line writes)" 'writes true' "one write per frame, so a frame is not drawn half"
+  assert_eq "$(line key)" 'key skipped "<E>[?25la1\na2\n<E>[2Ab1\nb2\n<E>[2Ad1\nd2\n<E>[?25h"' "a key jumps to the last frame"
+  assert_eq "$(line 'key raw')" 'key raw [true,false] 0' "and restores the terminal"
+  assert_eq "$(line arrow)" 'arrow skipped true' "an arrow key is one key"
+  assert_eq "$(line ctrl-c)" 'ctrl-c interrupted "<E>[?25la1\na2\n<E>[2Ab1\nb2\n<E>[?25h"' "Ctrl-C stops where it is, with the cursor back"
+  assert_eq "$(line 'ctrl-c raw')" 'ctrl-c raw [true,false] 0' "and the terminal put back"
+  for sig in SIGINT SIGTERM SIGHUP; do
+    assert_eq "$(line $sig)" "$sig interrupted true false 0" "$sig stops it, shows the cursor, and leaves no listener"
+  done
+  assert_eq "$(line error)" 'error disk full true [true,false] 0' "an error shows the cursor and restores the terminal, and is raised"
+  assert_eq "$(line 'no input')" 'no input done true true' "without input it plays and asks for no raw mode"
+  assert_eq "$(line one)" 'one done "<E>[?25lonly\n<E>[?25h"' "a single frame is drawn between hide and show"
+  assert_eq "$(line none)" 'none done "" []' "no frames is nothing: no cursor change"
+  assert_eq "$(printf '%s\n' "$OUT" | grep -c '^crashed')" 0 "and the harness did not crash"
+fi
+
+if case_is "foreman-draw intro --play will not play unless stdin and stdout are terminals"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  OUT="$(node "$DRAW" intro --tier 24 --cols 120 --play </dev/null 2>&1)"; ST=$?
+  assert_eq "$ST" 4 "with a pipe for stdout: status 4, so the caller prints the plain sunrise"
+  assert_eq "$OUT" "" "and nothing is drawn"
+  if command -v script >/dev/null 2>&1 && [ "$(show_of tty 1 FOREMAN_SHOW=always)" = show:16 ]; then
+    # script gives its command a terminal for both; stdin is taken away inside.
+    OUT="$(script -qec "node $DRAW intro --tier 24 --cols 120 --play </dev/null; echo status=\$?" /dev/null </dev/null 2>/dev/null)"
+    assert_contains "$OUT" "status=4" "stdin not a terminal, stdout a terminal: also 4"
+    assert_missing "$OUT" "?25l" "and the cursor is left alone"
+    # stdin a terminal, stdout a pipe.
+    OUT="$(script -qec "node $DRAW intro --tier 24 --cols 120 --play | cat; echo status=\${PIPESTATUS[0]}" /dev/null </dev/null 2>/dev/null)"
+    assert_contains "$OUT" "status=4" "stdin a terminal, stdout a pipe: also 4"
+    assert_missing "$OUT" "?25l" "and the cursor is left alone"
+    # A terminal too short for the picture and its blank line.
+    OUT="$( (sleep 1) | script -qec "stty rows 12 2>/dev/null; node $DRAW intro --tier 24 --cols 120 --play; echo status=\$?" /dev/null 2>/dev/null)"
+    assert_contains "$OUT" "status=4" "a terminal twelve rows high cannot hold it in place: 4"
+  else
+    printf '  (skipped: no `script` to give a terminal)\n'
+  fi
+fi
+
+if case_is "foreman help plays the intro on a terminal, once, and then prints the help; any key skips it"; then
+  ESC=$'\033'
+  want="$(help_text)"
+  if command -v script >/dev/null 2>&1 && [ "$(show_of tty 1 FOREMAN_SHOW=always)" = show:16 ]; then
+    term_env=(env -u CI -u NO_COLOR -u WT_SESSION -u FOREMAN_COLOR -u FOREMAN_SHOW -u FOREMAN_INTRO TERM=xterm COLORTERM=truecolor COLUMNS=100)
+    # No key for three seconds: the whole thing plays.
+    start_s=$SECONDS
+    OUT="$( (sleep 3) | "${term_env[@]}" script -qec "$FOREMAN help" /dev/null 2>/dev/null)"
+    OUT="${OUT//$'\r'/}"
+    assert_eq "$(printf '%s' "$OUT" | grep -o "${ESC}\[19A" | wc -l | tr -d ' ')" 35 "thirty-five frames drawn over the first, each moving up its nineteen lines"
+    assert_eq "$(printf '%s' "$OUT" | grep -o "${ESC}\[?25l" | wc -l | tr -d ' ')" 1 "the cursor is hidden once"
+    assert_eq "$(printf '%s' "$OUT" | grep -o "${ESC}\[?25h" | wc -l | tr -d ' ')" 2 "and shown after it, by the player and by the dispatcher"
+    stripped="$(printf '%s\n' "$OUT" | sed "s/${ESC}\[[0-9;?]*[A-Za-z]//g")"
+    assert_eq "${stripped: -${#want}}" "$want" "the help text follows, unchanged"
+    assert_contains "$stripped" "TONK" "the hammer came down on the way"
+    last_up="${OUT##*"${ESC}[19A"}"
+    assert_eq "$(printf '%s' "$last_up" | sed "s/${ESC}\[[0-9;?]*[A-Za-z]//g" | grep -c "▄▄▄▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▄▄▄")" 1 "after the last frame the sunrise is on screen once, not drawn again by the help"
+
+    # A key at half a second: the last frame at once, and the help.
+    OUT="$( (sleep 0.5; printf x; sleep 1) | "${term_env[@]}" script -qec "$FOREMAN help" /dev/null 2>/dev/null)"
+    OUT="${OUT//$'\r'/}"
+    ups="$(printf '%s' "$OUT" | grep -o "${ESC}\[19A" | wc -l | tr -d ' ')"
+    assert_eq "$([ "$ups" -ge 1 ] && [ "$ups" -le 12 ] && echo yes || echo "no:$ups")" yes "a key stops the frames part way through"
+    assert_eq "$(printf '%s' "$OUT" | grep -o "${ESC}\[?25h" | wc -l | tr -d ' ')" 2 "the cursor is shown again"
+    stripped="$(printf '%s\n' "$OUT" | sed "s/${ESC}\[[0-9;?]*[A-Za-z]//g")"
+    assert_eq "${stripped: -${#want}}" "$want" "the help follows the skip"
+    assert_contains "$stripped" "█████████████████████████▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀██████████████████████████" "and the last frame was drawn"
+
+    # Ctrl-C part way through: raw mode hands it over as a byte. It ends the command, with the
+    # cursor back, and no help.
+    OUT="$( (sleep 0.5; printf '\003'; sleep 1) | "${term_env[@]}" script -qec "$FOREMAN help; echo status=\$?; stty -a" /dev/null 2>/dev/null)"
+    OUT="${OUT//$'\r'/}"
+    assert_contains "$OUT" "status=130" "Ctrl-C exits 130"
+    flat=" ${OUT//$'\n'/ } "
+    assert_contains "$flat" " icanon " "and the terminal is out of raw mode: lines are read whole"
+    assert_contains "$flat" " echo " "and typed keys are shown again"
+    assert_missing "$OUT" "foreman init    <batch>" "without going on to the help"
+    assert_eq "$(printf '%s' "$OUT" | grep -o "${ESC}\[?25[hl]" | tr -d '\n')" "${ESC}[?25l${ESC}[?25h${ESC}[?25h" "the cursor was hidden once and shown again"
+    # Off: FOREMAN_INTRO=0, CI, and a terminal too narrow for the intro but not for the sunrise. With
+    # no key to wait for (script sends an end-of-file at once) a wrongly played intro would still
+    # show its first frame and its cursor.
+    for setting in FOREMAN_INTRO=0 CI=true; do
+      OUT="$("${term_env[@]}" "$setting" FOREMAN_SHOW=always script -qec "$FOREMAN help" /dev/null </dev/null 2>/dev/null)"
+      assert_missing "$OUT" "[19A" "$setting: no frames"
+      assert_missing "$OUT" "?25l" "$setting: the cursor is not touched"
+    done
+    OUT="$("${term_env[@]}" FOREMAN_INTRO=0 script -qec "$FOREMAN help" /dev/null </dev/null 2>/dev/null)"
+    assert_contains "$OUT" "38;2;" "FOREMAN_INTRO=0 still draws the sunrise"
+    assert_contains "$OUT" "foreman init    <batch>" "and the help"
+    OUT="$("${term_env[@]}" COLUMNS=65 script -qec "$FOREMAN help" /dev/null </dev/null 2>/dev/null)"
+    assert_missing "$OUT" "[19A" "65 columns: too narrow to play"
+    assert_contains "$OUT" "38;2;" "but wide enough for the static sunrise"
+    OUT="$("${term_env[@]}" COLUMNS=60 script -qec "$FOREMAN help" /dev/null </dev/null 2>/dev/null)"
+    assert_missing "$OUT" "38;2;" "60 columns: plain, as before"
+    # Bare foreman plays too and exits 0 as help does.
+    OUT="$( (sleep 0.3; printf x; sleep 1) | "${term_env[@]}" script -qec "$FOREMAN; echo status=\$?" /dev/null 2>/dev/null)"
+    assert_contains "$OUT" "status=0" "bare foreman exits 0"
+    assert_contains "$OUT" "?25l" "and plays the intro"
+  else
+    printf '  (skipped: no `script` to give a terminal)\n'
+  fi
+
+  # Forced into a capture, stdout is a pipe: there is no terminal to play on, whatever stdin is.
+  start_ms=$SECONDS
+  OUT="$(FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" help </dev/null 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "a forced show with stdin from /dev/null exits 0"
+  assert_missing "$OUT" "?25l" "with no intro"
+  assert_missing "$OUT" "[19A" "and no frames"
+  assert_contains "$OUT" "38;2;" "just the sunrise"
+  assert_eq "$([ $((SECONDS - start_ms)) -lt 2 ] && echo fast)" fast "and it does not wait"
+  OUT="$(FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 FOREMAN_INTRO=1 "$FOREMAN" help 2>&1 <&-)"; ST=$?
+  assert_eq "$ST" 0 "and with stdin closed"
+  assert_missing "$OUT" "?25l" "no intro either"
 fi
 
 if case_is "FOREMAN_SHOW takes auto, always and never, and a batch's foreman.conf may set it"; then
