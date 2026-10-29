@@ -6591,6 +6591,179 @@ JS
   assert_eq "$(printf '%s\n' "$OUT" | grep -c '^crashed')" 0 "and the harness did not crash"
 fi
 
+if case_is "foreman doctor, piped, is the box on a ready repo and on one that is not, with the exit code it always had"; then
+  ESC=$'\033'
+  WIDTHS='for (const l of require("fs").readFileSync(0, "utf8").split("\n")) if (l && l[0] !== " ") process.stdout.write(Array.from(l).length + " ")'
+  repo="$(make_repo 2 doctor-box-ready)"
+  run_foreman "$repo" doctor
+  assert_eq "$ST" 0 "ready: exit 0"
+  assert_missing "$OUT" "$ESC" "no escape in a pipe"
+  assert_contains "$OUT" "║  SITE INSPECTION   …" "the title says which repository, cut at its left end if it is long"
+  assert_contains "$OUT" "/doctor-box-ready  ·  " "(its own name is the end of it)"
+  assert_contains "$OUT" "foreman $(git -C "$FOREMAN_HOME" rev-parse --short HEAD)" "and which build"
+  for check in "■ git " "■ node " "■ awk " "■ bash " ; do
+    assert_contains "$OUT" "$check" "ready: ${check% } is checked"
+  done
+  for pat in .foreman-iter.bundle .foreman-stall-marker foreman-runs.jsonl foreman-runs.log; do
+    assert_contains "$OUT" "■ $pat ignored" "ready: $pat is ignored"
+  done
+  assert_contains "$OUT" "■ .gitattributes" "ready: .gitattributes is checked"
+  assert_contains "$OUT" "║  ■ batch                           0 of 2 done" "ready: the batch is listed with its progress"
+  assert_missing "$OUT" "sbx" "a fake batch needs no sandbox"
+  assert_contains "$OUT" "│    PASSED     │" "ready: the sign"
+  assert_contains "$OUT" "next: foreman run batch" "and what to do"
+  assert_eq "${OUT##*$'\n'}" "Ready." "ready: and the closing word comes after the box"
+  assert_eq "$(printf '%s\n' "${OUT%%Ready.*}" | node -e "$WIDTHS" | tr ' ' '\n' | sort -u | tr '\n' ' ')" "80 " "ready: every line of the box is eighty columns"
+  assert_eq "$(printf '%s\n' "$OUT" | grep -c '^╚')" 1 "ready: one box"
+
+  # Not ready: the repo's files are missing, which --fix can write.
+  repo="$(make_repo 2 doctor-box-fixable)"
+  rm -f "$repo/.gitignore"
+  run_foreman "$repo" doctor
+  assert_eq "$ST" 1 "fixable: exit 1"
+  assert_contains "$OUT" "▲ foreman-runs.log not ignored" "fixable: what is missing, with the mark for --fix"
+  assert_contains "$OUT" "│  NOT PASSED   │" "fixable: the sign"
+  assert_contains "$OUT" "│  4 to fix     │" "and how many --fix can do"
+  assert_contains "$OUT" "fix:  foreman doctor --fix" "fixable: the box says how"
+  assert_contains "$OUT" "4 thing(s) to fix. The repo files can be written for you:" "fixable: the closing advice, after the box"
+  assert_eq "${OUT##*$'\n'}" "  foreman doctor --fix" "fixable: which is the last thing said"
+  run_foreman "$repo" doctor --fix
+  assert_eq "$ST" 0 "--fix: exit 0, as it always was once it has written"
+  assert_contains "$OUT" "  wrote  .gitignore  (+4 pattern(s))" "--fix: says what it wrote"
+  assert_contains "$OUT" "  Review the diff and commit it" "and to review it"
+  box_end="$(printf '%s\n' "$OUT" | grep -n '^╚' | cut -d: -f1)"
+  wrote_at="$(printf '%s\n' "$OUT" | grep -n 'wrote  .gitignore' | cut -d: -f1)"
+  assert_eq "$([ "$wrote_at" -gt "$box_end" ] && echo after)" after "--fix: what it wrote comes after the box"
+  assert_contains "$(cat "$repo/.gitignore")" "**/foreman-runs.log" "--fix: and the file has it"
+  assert_eq "${OUT##*$'\n'}" "Ready." "--fix: closes as ready"
+  run_foreman "$repo" doctor
+  assert_eq "$ST" 0 "and the next run is ready"
+
+  # Not ready, and --fix cannot help.
+  repo="$(make_repo 1 doctor-box-blocked)"
+  printf 'FOREMAN_EXEC=bogus\n' > "$repo/batch/foreman.conf"
+  run_foreman "$repo" doctor
+  assert_eq "$ST" 1 "blocked: exit 1"
+  assert_contains "$OUT" "✗ FOREMAN_EXEC=bogus in" "blocked: says what is wrong"
+  assert_contains "$OUT" "batch/foreman.conf — no such" "and where"
+  assert_contains "$OUT" "valid modes: fake local" "and what would do"
+  assert_contains "$OUT" "│  1 blocker    │" "blocked: the sign counts it"
+  assert_contains "$OUT" "1 thing(s) still need fixing by hand." "blocked: and the closing words say it is not for --fix"
+  assert_missing "$OUT" "fix:  foreman doctor --fix" "blocked: no advice to run --fix"
+
+  # No batch at all: the box says so, and what to do.
+  repo="$(make_repo 1 doctor-box-nobatch)"
+  rm -rf "$repo/batch"; git -C "$repo" add -A >/dev/null; git -C "$repo" commit -qm "no batch" >/dev/null
+  run_foreman "$repo" doctor
+  assert_contains "$OUT" "none — no directory here has a foreman.conf." "no batch: said"
+  assert_contains "$OUT" "Create one:  foreman init <batch-dir>" "and how to make one"
+  assert_missing "$OUT" "$ESC" "and still no escape"
+fi
+
+if case_is "foreman doctor forced to show draws the same box in colour, and lists the checks when it cannot draw"; then
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;?]*[A-Za-z]//g"; }
+  repo="$(make_repo 2 doctor-box-forced)"
+  run_foreman "$repo" doctor
+  plain_out="$OUT"; plain_st=$ST
+  FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 run_foreman "$repo" doctor
+  assert_eq "$ST" "$plain_st" "forced: the same exit code"
+  assert_contains "$OUT" "38;2;" "forced: in 24 bits"
+  assert_missing "$OUT" "?25l" "forced into a pipe: no cursor to hide"
+  assert_eq "$(printf '%s\n' "$OUT" | strip | sed 's/ *$//')" "$(printf '%s\n' "$plain_out" | sed 's/ *$//')" "forced: the words are the plain run's, byte for byte"
+  FOREMAN_SHOW=always FOREMAN_COLOR=16 COLUMNS=120 run_foreman "$repo" doctor
+  assert_missing "$OUT" "38;2;" "at 16 colours: no 24 bits"
+  assert_contains "$OUT" "[0;33m" "and the old codes"
+  FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=79 run_foreman "$repo" doctor
+  assert_missing "$OUT" "$ESC" "79 columns is the plain box"
+  assert_contains "$OUT" "PASSED" "which is the whole of it"
+
+  # A repository nothing can be said for, painted: the broken one's marks are in colour.
+  rm -f "$repo/.gitignore"
+  FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 run_foreman "$repo" doctor
+  assert_eq "$ST" 1 "forced, not ready: exit 1"
+  assert_contains "$OUT" "38;2;224;168;74m▲" "the ▲ is amber"
+  assert_contains "$OUT" "38;2;240;128;120" "and the sign is red"
+
+  # No node: nothing can draw it, and doctor says so and lists what it found, as it always did.
+  nonode="$WORK/doctor-nonode-bin"
+  mkdir -p "$nonode"
+  for tool in bash git awk find sed sort grep tail tr diff cat head wc date mkdir rm ls uname stty basename dirname env readlink cut tee sleep dd expr id tput mktemp; do
+    src="$(command -v "$tool" 2>/dev/null)" && ln -sf "$src" "$nonode/$tool"
+  done
+  OUT="$(cd "$repo" && PATH="$nonode" "$(command -v bash)" "$FOREMAN" doctor 2>&1)"; ST=$?
+  assert_eq "$ST" 1 "no node: exit 1"
+  assert_contains "$OUT" "  MISS  node is not on PATH" "no node: it is a MISS, in the old lines"
+  assert_contains "$OUT" "  ok    git" "and the rest are listed"
+  assert_contains "$OUT" "Machine" "under their headings"
+  assert_missing "$OUT" "╔" "with no box"
+  assert_contains "$OUT" "thing(s)" "and the closing words"
+fi
+
+if case_is "foreman doctor on a terminal: the inspector runs while the checks do, the box stays, and Ctrl-C leaves the cursor"; then
+  ESC=$'\033'
+  if command -v script >/dev/null 2>&1 && [ "$(show_of tty 1 FOREMAN_SHOW=always)" = show:16 ]; then
+    repo="$(make_repo 2 doctor-pty)"
+    term_env=(env -u CI -u NO_COLOR -u WT_SESSION -u FOREMAN_COLOR -u FOREMAN_SHOW -u COLUMNS TERM=xterm COLORTERM=truecolor)
+    doctor_pty() {    # doctor_pty ROWS COLS [VAR=value...] — runs doctor on a terminal of that size; sets OUT
+      local rows="$1" cols="$2"; shift 2
+      OUT="$(cd "$repo" && "${term_env[@]}" "$@" script -qec "stty rows $rows cols $cols; $FOREMAN doctor; echo status=\$?" /dev/null </dev/null 2>/dev/null)"
+      OUT="${OUT//$'\r'/}"
+    }
+    flat() { sed "s/${ESC}\[[0-9;?]*[A-Za-z]//g"; }
+
+    doctor_pty 45 100
+    assert_contains "$OUT" "status=0" "a ready repo: exit 0"
+    assert_eq "$(printf '%s' "$OUT" | grep -o "${ESC}\[?25l" | wc -l | tr -d ' ')" 1 "the cursor is hidden once"
+    assert_eq "$(printf '%s' "$OUT" | grep -o "${ESC}\[?25h" | wc -l | tr -d ' ')" 2 "and shown after it, by the renderer and by doctor"
+    ups="$(printf '%s' "$OUT" | grep -o "${ESC}\[[0-9]*A" | wc -l | tr -d ' ')"
+    assert_eq "$([ "$ups" -ge 12 ] && echo many || echo "few:$ups")" many "the frames are drawn over one another ($ups of them)"
+    # the frame on screen at the end, as words: what follows the last move up, without the escapes
+    last="$(printf '%s' "$OUT" | node -e 'const t = require("fs").readFileSync(0, "utf8").split(/\x1b\[\d+A/).pop(); process.stdout.write(t.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, ""))')"
+    assert_contains "$last" "all " "the last frame is the verdict: all passed"
+    assert_contains "$last" "│    PASSED     │" "with the sign"
+    assert_contains "$last" "0 of 2 done" "and every check on the box"
+    assert_missing "$last" "inspecting" "and the bar gone"
+    assert_eq "$(printf '%s\n' "$OUT" | flat | grep -c '^Ready\.')" 1 "and 'Ready.' follows the box, once"
+    assert_eq "$(printf '%s' "$OUT" | flat | grep -c 'SITE INSPECTION')" "$((ups + 1))" "a title for each frame, the first not drawn over another"
+
+    doctor_pty 45 100 CI=true
+    assert_missing "$OUT" "?25l" "CI: no animation"
+    assert_missing "$OUT" "38;" "CI: no colour"
+    assert_contains "$OUT" "PASSED" "CI: the box"
+    doctor_pty 45 79
+    assert_missing "$OUT" "?25l" "79 columns: no animation"
+    assert_contains "$OUT" "PASSED" "79 columns: the plain box"
+    doctor_pty 45 100 FOREMAN_SHOW=never
+    assert_missing "$OUT" "?25l" "FOREMAN_SHOW=never: no animation"
+    doctor_pty 20 100
+    assert_missing "$OUT" "[0-9]A" "a terminal too short to draw in place: no frames over one another"
+    assert_contains "$OUT" "38;2;" "but still the painted box"
+    assert_contains "$OUT" "│    PASSED     │" "with the verdict, once the checks are in"
+    assert_eq "$(printf '%s' "$OUT" | grep -o "${ESC}\[?25h" | wc -l | tr -d ' ')" 1 "and the cursor was never hidden: shown once, by doctor"
+
+    # Ctrl-C part way through. git is made slow, so that there is a part way: the first of the
+    # repository's checks asks it. The key comes from the test, once the film has started.
+    slow="$WORK/doctor-slow-bin"
+    mkdir -p "$slow"
+    printf '#!/bin/bash\nif [ "$1" = config ]; then sleep 20; fi\nexec %q "$@"\n' "$(command -v git)" > "$slow/git"
+    chmod +x "$slow/git"
+    f="$WORK/doctor-ctrlc-out"; : > "$f"
+    ( for i in $(seq 100); do grep -qaF "${ESC}[?25l" "$f" 2>/dev/null && break; sleep 0.1; done
+      sleep 1; printf '\003'; sleep 1 ) |
+      (cd "$repo" && "${term_env[@]}" PATH="$slow:$PATH" script -qec "trap : INT; stty rows 45 cols 100; $FOREMAN doctor; echo status=\$?; stty -a" /dev/null > "$f" 2>/dev/null)
+    OUT="$(<"$f")"; OUT="${OUT//$'\r'/}"
+    assert_missing "$OUT" "│    PASSED     │" "Ctrl-C: no verdict"
+    assert_contains "$OUT" "status=130" "Ctrl-C: the doctor exits 130"
+    tail_codes="$(printf '%s' "$OUT" | grep -o "${ESC}\[?25[hl]" | tail -n 1)"
+    assert_eq "$tail_codes" "${ESC}[?25h" "Ctrl-C: the last thing done to the cursor was to show it"
+    flat_out=" ${OUT//$'\n'/ } "
+    assert_contains "$flat_out" " icanon " "Ctrl-C: and the terminal is as it was"
+  else
+    printf '  (skipped: no `script` to give a terminal)\n'
+  fi
+fi
+
 if case_is "foreman doctor still reads a batch's progress as numbers when the show is forced"; then
   repo="$(make_repo 3 next-doctor-repo)"
   FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 run_foreman "$repo" doctor
