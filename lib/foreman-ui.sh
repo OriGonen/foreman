@@ -72,7 +72,7 @@
 # The scene draws in the width it is given and has a minimum below which the caller prints its
 # plain text instead; the caller checks that against ui_cols before it starts the renderer.
 #
-# Nothing here starts a process but `stty` in ui_cols: `[ -t ]`, `printf -v` and `case` are
+# Nothing here starts a process but `stty` in ui_cols and ui_rows: `[ -t ]`, `printf -v` and `case` are
 # builtins, which is the point under MSYS, where a fork is the expensive thing and these run once
 # per event line.
 

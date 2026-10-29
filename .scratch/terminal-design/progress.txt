@@ -75,3 +75,14 @@
 - Full smoke: 1556 passed in 1m 6s, 1 failed (the same pre-existing CRLF `convert` case).
 - Deliberate deviations: "N human tickets remaining" sits under the ground at the text column (the design has no place; every other row is pinned by it); closing says `foreman run <batch>` without the resume count. Known limit: the closing line (~93 cols with a batch path) and long paths wrap below ~95 columns.
 - Remaining for a human: look at `foreman status` in a real window.
+
+
+## 05 dry-run walk round — implemented
+- Scene `dryrun` (min 92) in `lib/foreman-draw.cjs`: the 11a low sun (r9, s0.25, 20 wide, matches the design cell for cell), header, WOULD RUN (▶, HUMAN/CHECK tags), SETTINGS in two columns, numbered prompt folded with ⋮, closing rule. `foreman-loop.sh`: `dry_run_facts`/`dry_run_picture`, `_dryrun_min_cols=92`; plain path untouched. New `ui_rows VAR FD` (LINES, else `stty size`, else 24) in foreman-ui.sh for the fold.
+- Facts: batch/name, done/total, `ticket` (status's format, first is `next`), exec/perms/model/effort/live, cost/time/iterations as `budget_label` gives them, `logs`×2, `warning`, `screen`, then `promptfor` + one `prompt` fact per line, or `stop` + `handoff` when a human ticket is next (a `■ would stop before` row, no prompt, rule still closes).
+- Fold: room = screen − rows above − 2, never under 9; keeps the head, ⋮, last 2 lines; whole if it fits. Prompt is not truncated (terminal wraps); control chars in it are shown as `·`.
+- Test-driven (smoke): scene vs 11a .ans/.txt cells and words, tiers 24/16/256, fold sizes, exact prompt round-trip, settings/budget variants, tags, warnings, human stop, 91/92 width and the shell/renderer tie, `ui_rows`, forced show, plain byte for byte (pipe, never, colour never, narrow, failing renderer), pty.
+- Full smoke: 1706 passed in 1m 23s, 1 failed (the same pre-existing CRLF `convert` case).
+- Deliberate: second SETTINGS column follows the design (starts at col 42, or 3 on from a longer value), so a long exec/live makes it ragged, as the design's own `live` row is. Human-next adds the handoff path (from 11b); plain says only that it would stop.
+- Known limit: a prompt line wider than the terminal wraps and the fold counts it as one row, so a very narrow window can scroll the header off. Skipped: none.
+- Remaining for a human: look at `foreman dry-run` in a real window (not checkable here).

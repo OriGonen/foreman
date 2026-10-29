@@ -9,10 +9,10 @@ whole prompt, is unchanged. See `spec.md`, "Per command". The design is
 
 **Blocked by:** 04
 
-**Status:** ready-for-agent
+**Status:** implemented
 
-- [ ] Settings show exec, perms, model, effort, live and budgets, from the same values `budget_label` and the conf give today
-- [ ] The prompt is exactly `$FOREMAN_PROMPT`, numbered; the fold keeps the first lines and the last, and says how many lines there are in all
-- [ ] Plain dry-run is byte for byte today's, including the full prompt between the `===` lines
-- [ ] Smoke: the forced show holds the ticket list, each setting, line 1 of the prompt and the closing rule
-- [ ] Full smoke suite passes; the closing note records `Full smoke suite: N passed in Mm Ss`
+- [x] Settings show exec, perms, model, effort, live and budgets, from the same values `budget_label` and the conf give today
+- [x] The prompt is exactly `$FOREMAN_PROMPT`, numbered; the fold keeps the first lines and the last, and says how many lines there are in all
+- [x] Plain dry-run is byte for byte today's, including the full prompt between the `===` lines
+- [x] Smoke: the forced show holds the ticket list, each setting, line 1 of the prompt and the closing rule
+- [x] Full smoke suite passes; the closing note records `Full smoke suite: N passed in Mm Ss`
