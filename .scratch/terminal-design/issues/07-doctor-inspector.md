@@ -11,14 +11,14 @@ print after the box. See `spec.md`, "Per command". The designs are
 
 **Blocked by:** 03
 
-**Status:** ready-for-agent
+**Status:** implemented
 
-- [ ] Each check is recorded as it completes (section, ok / miss / stale, text) instead of printed
-- [ ] The box holds Machine, Skill, Repository, Batches, and "From before the rename" when it applies, in a layout that fits 80 columns
-- [ ] On the show path the renderer starts before the first check and is fed each result as it completes; at the end of input the verdict plays and the box stays on screen
-- [ ] Off the show path the box is drawn once, without colour or animation
-- [ ] The exit code, `--fix`'s writes and its messages are unchanged
-- [ ] The smoke suite's doctor assertions are updated to the box, with each check still asserted
-- [ ] Smoke: `--t` frames of both verdicts, and a piped doctor on a ready fixture and an unready one
+- [x] Each check is recorded as it completes (section, ok / miss / stale, text) instead of printed
+- [x] The box holds Machine, Skill, Repository, Batches, and "From before the rename" when it applies, in a layout that fits 80 columns
+- [x] On the show path the renderer starts before the first check and is fed each result as it completes; at the end of input the verdict plays and the box stays on screen
+- [x] Off the show path the box is drawn once, without colour or animation
+- [x] The exit code, `--fix`'s writes and its messages are unchanged
+- [x] The smoke suite's doctor assertions are updated to the box, with each check still asserted
+- [x] Smoke: `--t` frames of both verdicts, and a piped doctor on a ready fixture and an unready one
 - [ ] Checked by hand: the run lasts as long as the checks, and Ctrl-C leaves a visible cursor
-- [ ] Full smoke suite passes; the closing note records `Full smoke suite: N passed in Mm Ss`
+- [x] Full smoke suite passes; the closing note records `Full smoke suite: N passed in Mm Ss`
