@@ -14,3 +14,7 @@ bin/foreman text eol=lf
 # The Windows shim is the one file that must NOT be LF: cmd.exe mis-parses a CRLF-less
 # batch file's last line.
 *.cmd text eol=crlf
+# Foreman: foreman.conf is sourced by bash, so a CRLF checkout would append a carriage return
+# to every value it sets — FOREMAN_EXEC would become "sandbox<CR>" and fail validation with
+# a message that looks like a lie.
+foreman.conf text eol=lf

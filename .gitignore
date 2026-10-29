@@ -2,3 +2,21 @@
 # that a stray editor or OS artifact has somewhere to be listed.
 Thumbs.db
 .DS_Store
+# Foreman: per-batch run state. Every one of these lives in the batch directory, which is
+# why the patterns match anywhere rather than under one directory — a batch is any
+# directory with a foreman.conf.
+#
+# The git bundle an iteration's commits travel in, from the sandbox's clone back to this
+# repo. Written and deleted within one iteration.
+**/.foreman-iter.bundle
+
+# The marker a run leaves when a stall could not be salvaged, so that a rerun may rescue the
+# tree instead of refusing it. Disposable: deleting it only costs the automatic rescue. It
+# has to stay untracked, or the checkpoint commit that rescues the work would sweep it in.
+**/.foreman-stall-marker
+
+# Append-only run telemetry. Untracked deliberately — the loop appends to these after each
+# iteration, so tracking them would put unrelated churn in every ticket's commit.
+# Inspect with `foreman report <batch>`.
+**/foreman-runs.jsonl
+**/foreman-runs.log
