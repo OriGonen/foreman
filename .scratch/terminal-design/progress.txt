@@ -97,3 +97,15 @@
 - Full smoke suite: 1847 passed in 1m 24s, 1 failed (the same pre-existing CRLF `convert` case). One earlier run showed a second failure once; found and fixed the cause (foot tests assumed the second never ticks over).
 - Known limit: header lines (batch path, model) wrap below ~95 columns when long.
 - Remaining for a human: `foreman run 2 --live` in Windows Terminal, including a resize (bar painting and the `│` lines scrolling over it are not checkable here); that item in the ticket stays unticked.
+
+
+## 09 order stake line — implemented
+- Scenes `order-head` + `order` (min 80) in `lib/foreman-draw.cjs`, `movedTickets(before, after)` exported. `foreman-order.sh`: `_order_min_cols=80`, `order_draw` (all or nothing), `order_spinner`/`order_stop_spinner` (background, terminal only, `\r\033[2K` redraw, cleared on done, failure, EXIT/INT/TERM), `order_say_plain` (today's three lines, also the fallback if the result cannot be drawn).
+- Never the show when the caller set `FOREMAN_ORDER_RESULT` (init draws its own); otherwise the script keeps a temp facts file of its own and adds `batch`, `invoke`, `seconds` (init's facts are unchanged, no extra `seconds`). Header drawn only after the no-claude/empty exits, so those stay plain words.
+- `moved` = a ticket whose removal from both orders does not shorten their longest common subsequence: a swapped pair are both marked (the design's 03/02 and 06/05), a ticket taken to the front is alone. This is not init's "N moved" (`movedCount`, one for a swap); both stand.
+- Test-driven (smoke): `movedTickets` table; header + result vs 08b .ans cells (header, result line, all ten stake lines) and words, tiers 24/16/256, tags, both-tags, single ticket, nothing moved, name cut to width, no cost/time, empty; forced-show order with a stub that swaps two tickets; plain byte for byte (pipe, never, colour never, 79 and 40 cols, facts asked for, failing renderer, one failing only the result); failed call; pty (spinner one line, 0:00 then 0:01, cleared before the result and before a failure; CI plain); shell/renderer width tie.
+- Review: caught my `orderRows` shadowing init's function of the same name (42 failures in the full run); renamed to `stakeRows`. Help text no longer names an internal variable. Skipped: none.
+- Deliberate deviations: the footer is `foreman dry-run <batch>` (the design has no batch, a command needs one); the design's warning wording is not used, the ticket asks for `foreman_human_warnings`' own text, shown whole after `▲`; the failure stays plain words under the header (the ticket draws only the ordered result); the spinner row is replaced by the result, not left as a gap.
+- Full smoke suite: 1949 passed in 1m 32s, 1 failed (the same pre-existing CRLF `convert` case).
+- Known limit: the header wraps when a batch path is long and the terminal near 80 columns; a claude warning on stderr during the wait can garble the spinner line.
+- Remaining for a human: `foreman order` in a real window (spinner look, Ctrl-C leaves a clean line); not checkable here.

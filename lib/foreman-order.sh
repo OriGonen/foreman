@@ -19,7 +19,7 @@
 # cleared when it is done or has failed, then the new order on a numbered stake line: `moved`
 # beside the tickets that changed place, HUMAN and CHECK beside the ones that stop the loop or
 # check another, and the batch's warnings below. Anywhere else, or when the terminal is narrower
-# than `_order_min_cols`, or when a picture cannot be drawn, it prints the text it always did. A
+# than 80 columns, or when a picture cannot be drawn, it prints the text it always did. A
 # caller that asks for the facts draws the result itself, so it is never the show.
 #
 # Costs one model call, on FOREMAN_MODEL by default — ordering rarely needs the same model

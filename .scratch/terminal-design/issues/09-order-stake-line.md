@@ -8,11 +8,11 @@ design is `designs/08b-order.ans`, from `designs/source/OrderTakes.dc.html` (pan
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** implemented
 
-- [ ] The spinner redraws one line and is cleared when the agent finishes or fails
-- [ ] `moved` is computed from order.md before and after
-- [ ] The human-ticket warnings are the ones `foreman_human_warnings` gives today
-- [ ] Plain order output is byte for byte today's
-- [ ] Smoke: a forced-show order with a stub agent that moves two tickets
-- [ ] Full smoke suite passes; the closing note records `Full smoke suite: N passed in Mm Ss`
+- [x] The spinner redraws one line and is cleared when the agent finishes or fails
+- [x] `moved` is computed from order.md before and after
+- [x] The human-ticket warnings are the ones `foreman_human_warnings` gives today
+- [x] Plain order output is byte for byte today's
+- [x] Smoke: a forced-show order with a stub agent that moves two tickets
+- [x] Full smoke suite passes; the closing note records `Full smoke suite: N passed in Mm Ss`
