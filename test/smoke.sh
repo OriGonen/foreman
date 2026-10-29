@@ -7211,6 +7211,503 @@ if case_is "foreman report on a real terminal shows without being forced, and no
 fi
 
 # ---------------------------------------------------------------------------
+# convert as the repainted sign (ticket 12)
+# ---------------------------------------------------------------------------
+
+# The facts `foreman convert` sends the renderer, for the design's project: three renames, fourteen
+# files rewritten (forty-one changes), one file deleted, a file of the project's own, four mentions of
+# the Ralph loop, the credentials copied, a variable and a sandbox left for the person.
+convert_design_facts() {
+  printf 'project\t/home/you/projects/app\nhome\t/home/you\n'
+  printf 'rename\t.scratch/human-tickets/ralph.conf\t.scratch/human-tickets/foreman.conf\n'
+  printf 'rename\t.scratch/human-tickets/ralph-runs.jsonl\t.scratch/human-tickets/foreman-runs.jsonl\n'
+  printf 'rename\t.scratch/human-tickets/ralph-runs.log\t.scratch/human-tickets/foreman-runs.log\n'
+  printf 'rewrite\tREADME.md\t12\nrewrite\tMakefile\t3\nrewrite\t.github/workflows/ci.yml\t2\n'
+  local i
+  for i in 1 2 3 4 5 6 7 8 9 10; do printf 'rewrite\tsrc/f%s.js\t2\n' "$i"; done
+  printf 'rewrite\tsrc/g.js\t4\n'
+  printf 'delete\t.scratch/human-tickets/.ralph-iter.bundle\n'
+  printf 'own\tdocs/ralph-notes.md\ncredit\t4\n'
+  printf 'envfile\tcopied\nvar\tRALPH_MODEL\tFOREMAN_MODEL\nsandbox\tralph-sbx\n'
+}
+
+if case_is "foreman-draw convert is the 12a design, cell for cell, in its colours and in its words"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  ANS="$FOREMAN_HOME/.scratch/terminal-design/designs/12a-convert.ans"
+  TXT="$FOREMAN_HOME/.scratch/terminal-design/designs/12a-convert.txt"
+  CELLS="$FOREMAN_HOME/test/ans-cells.cjs"
+  OUT24="$(convert_design_facts | node "$DRAW" convert --tier 24 --cols 100)"; ST=$?
+  assert_eq "$ST" 0 "the convert scene runs"
+  # The design's first line is the prompt; its second is the blank line the picture starts with.
+  # All of it but the last line of the machine's, which the design words as fact and the toolkit as what it may be.
+  assert_eq "$(printf '%s\n' "$OUT24" | node "$CELLS" --cells 100 | head -n 25 | sed 23d)" \
+    "$(sed -n '2,26p' "$ANS" | node "$CELLS" --cells 100 | sed 23d)" "the picture is the design's, in its colours"
+  assert_eq "$(printf '%s\n' "$OUT24" | strip | head -n 25 | sed 23d)" "$(sed -n '2,26p' "$TXT" | sed 's/ *$//' | sed 23d)" "and it reads as 12a-convert.txt does"
+  assert_eq "$(printf '%s\n' "$OUT24" | strip | sed -n 23p)" "  ▲ the old sandbox ralph-sbx may be left — sbx rm ralph-sbx" "(that one: the sandbox may be left, and it is sbx that removes it)"
+  assert_eq "$(printf '%s\n' "$OUT24" | wc -l | tr -d ' ')" 26 "a blank line follows it"
+  # What the cells do not hold: the name that was is struck through (SGR 9) and nothing else is, and the
+  # tag the names are painted on is bold, as in the design.
+  assert_eq "$(printf '%s' "$OUT24" | grep -c "${ESC}\[0;1;9;38;2;138;90;36;48;2;224;168;74mRALPH${ESC}")" 1 "RALPH is struck through, bold, in the dim shade of the posts, on the sign"
+  assert_eq "$(printf '%s' "$OUT24" | grep -o "${ESC}\[[0-9;]*9[0-9;]*m" | grep -c ';9;')" 1 "and it is the only thing that is"
+  assert_contains "$OUT24" "${ESC}[0;1;38;2;23;22;20;48;2;224;168;74m   FOREMAN    ${ESC}[0m" "the new name is painted on beside it, in ink"
+fi
+
+if case_is "foreman-draw convert: the strike-through is only a strike, the sign reads without it, and at each tier"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  ESC=$'\033'
+  words() { sed "s/${ESC}\[[0-9;]*[mK]//g"; }
+  # Where a terminal ignores SGR 9 the words are the same and the old name is still the dim one.
+  OUT="$(convert_design_facts | node "$DRAW" convert --tier 24 --cols 100)"
+  NO9="$(printf '%s' "$OUT" | sed "s/${ESC}\[0;1;9;/${ESC}[0;1;/")"
+  assert_eq "$(printf '%s' "$NO9" | words)" "$(printf '%s' "$OUT" | words)" "a terminal that ignores SGR 9 draws the same words"
+  assert_contains "$NO9" "${ESC}[0;1;38;2;138;90;36;48;2;224;168;74mRALPH" "with RALPH in a shade of its own, dimmer than the new name"
+  assert_eq "$(printf '%s' "$OUT" | words | sed -n '3p' | cut -c1-16)" " RALPH   FOREMAN" "and both names on the sign, the old one first"
+  OUT="$(convert_design_facts | node "$DRAW" convert --tier 256 --cols 100)"
+  assert_contains "$OUT" "${ESC}[0;1;9;38;5;94;48;5;179mRALPH" "256 colours: struck, in the post shade, on amber"
+  assert_missing "$OUT" "38;2;" "and no 24-bit colour"
+  OUT="$(convert_design_facts | node "$DRAW" convert --tier 16 --cols 100)"
+  assert_contains "$OUT" "${ESC}[0;1;9;31;43mRALPH" "16 colours: struck, red on yellow"
+  assert_contains "$OUT" "${ESC}[0;1;30;43m   FOREMAN    " "and the new name black on yellow, so the two differ without the strike"
+  assert_missing "$OUT" "38;5;" "no 256-colour code"
+  assert_eq "$(printf '%s' "$OUT" | words | sed -n '4,5p' | sed 's/ *$//')" "▀▀▀▀▄▀▀▀▀▀▀▀▀▀▀▀▀▄▀▀▀▀   ralph → foreman, in this repository and on this machine
+    █            █   3 renamed  ·  14 files rewritten  ·  1 deleted  ·  2 for you" "the sign's feet are there; its dim underside, which 16 colours cannot draw, is left out"
+  assert_eq "$(printf '%s' "$OUT" | words | sed -n '3p;9,$p' | sed 's/ *$//')" \
+    "$(convert_design_facts | node "$DRAW" convert --tier 24 --cols 100 | words | sed -n '3p;9,$p' | sed 's/ *$//')" "and the rest says what the 24-bit picture does"
+fi
+
+if case_is "foreman-draw convert: the counts, the lists, what is kept and what is left for the person"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  conv() { node "$DRAW" convert --tier 24 --cols "${COLS:-100}" | strip; }
+  base() { printf 'project\t/p/app\nhome\t/p\nrename\ta/ralph.conf\ta/foreman.conf\n'; }
+  line() { sed -n "$1p"; }
+  counts() { sed -n 5p | sed 's/^[^0-9]*//'; }
+
+  # The counts: singular and plural, and a count of nothing is not said.
+  OUT="$({ base; printf 'rewrite\tx.md\t1\ndelete\ta/.ralph-iter.bundle\nvar\tRALPH_X\tFOREMAN_X\n'; } | conv)"
+  assert_eq "$(printf '%s\n' "$OUT" | counts)" "1 renamed  ·  1 file rewritten  ·  1 deleted  ·  1 for you" "one of each"
+  OUT="$({ base; printf 'rename\tb/ralph.conf\tb/foreman.conf\nrewrite\tx.md\t1\nrewrite\ty.md\t2\n'; } | conv)"
+  assert_eq "$(printf '%s\n' "$OUT" | counts)" "2 renamed  ·  2 files rewritten" "two of each, and no deletes and nothing for you"
+  OUT="$(printf 'project\t/p/app\nhome\t/p\nrewrite\tx.md\t1\n' | conv)"
+  assert_eq "$(printf '%s\n' "$OUT" | counts)" "1 file rewritten" "a single kind of change"
+
+  # The renamed files: the directory as it is, the old name dim, the new one's name only.
+  OUT="$({ base; printf 'rename\tralph.conf\tforeman.conf\n'; } | node "$DRAW" convert --tier 24 --cols 100)"
+  assert_contains "$(printf '%s' "$OUT" | strip)" "          ralph.conf → foreman.conf" "a file in the project's own directory has no directory to say"
+  assert_contains "$OUT" "${ESC}[0;38;2;92;87;79mralph.conf${ESC}[0m ${ESC}[0;38;2;168;162;153m→${ESC}[0m ${ESC}[0;38;2;143;207;143mforeman.conf" "old names dim, the arrow muted, new names green"
+
+  # The rewritten files: the busiest first, and as many as fit the line, the rest and the changes counted.
+  rewrites() { printf 'project\t/p/app\nhome\t/p\n'; local f; for f in "$@"; do printf 'rewrite\t%s\t%s\n' "${f%%=*}" "${f##*=}"; done; }
+  assert_eq "$(rewrites b.md=5 a.md=1 | conv | grep '^REWROTE')" "REWROTE   b.md 5  ·  a.md 1" "two files, in the order given, and nothing more to say"
+  assert_eq "$(rewrites a=9 b=8 c=7 d=6 e=5 | conv | grep '^REWROTE')" "REWROTE   a 9  ·  b 8  ·  c 7  ·  2 more, 35 changes" "five files: the three busiest, then how many more and all the changes"
+  assert_eq "$(rewrites a=1 b=1 c=1 d=1 | conv | grep '^REWROTE')" "REWROTE   a 1  ·  b 1  ·  c 1  ·  1 more, 4 changes" "four files: three are named and one more is said as one"
+  assert_eq "$(rewrites a=3 b=2 c=1 | conv | grep '^REWROTE')" "REWROTE   a 3  ·  b 2  ·  c 1" "three files are all named"
+  assert_eq "$(COLS=86 convert_design_facts | COLS=86 conv | grep '^REWROTE')" "REWROTE   README.md 12  ·  Makefile 3  ·  12 more, 41 changes" "a file that does not fit the line is counted instead of named"
+  assert_eq "$(rewrites "$(printf 'd/%.0s' $(seq 35))f=2" b=1 | COLS=86 conv | grep '^REWROTE')" "REWROTE   $(printf 'd/%.0s' $(seq 35))f 2  ·  1 more, 3 changes" "and the first is always named"
+
+  # Kept: the heading says what is there, the files first, then the credit, then the mentions to look over.
+  kept() { { base; cat; } | conv | sed -n '/^KEPT/,/^$/p' | sed '$d'; }
+  assert_eq "$(printf 'own\tdocs/ralph-notes.md\n' | kept)" "KEPT      your own files named ralph:
+          docs/ralph-notes.md  ·  rename with git mv if you want to" "a file of your own, with what to do about it"
+  assert_eq "$(printf 'credit\t1\n' | kept)" "KEPT      credit to the technique:
+          1 mention of the Ralph loop" "credit alone, singular"
+  assert_eq "$(printf 'own\ta/ralph.md\nown\tb/ralph.md\ncredit\t4\n' | kept)" "KEPT      credit to the technique, and your own files named ralph:
+          a/ralph.md  ·  rename with git mv if you want to
+          b/ralph.md
+          4 mentions of the Ralph loop" "both, as the design has it: the advice once, at the first file"
+  assert_eq "$(printf 'mention\tdocs/guide.md:3\tSee docs/ralph-notes.md.\n' | kept)" "KEPT      mentions to look over:
+          docs/guide.md:3  See docs/ralph-notes.md." "a mention that is not credit is shown where it is"
+  assert_eq "$(printf 'own\ta/ralph.md\ncredit\t2\nmention\tx.md:1\ty\n' | kept)" "KEPT      credit to the technique, and your own files named ralph:
+          a/ralph.md  ·  rename with git mv if you want to
+          2 mentions of the Ralph loop
+          mentions to look over:
+          x.md:1  y" "all three: the mentions to look over are said under the others, not in the heading"
+  OUT="$(printf 'credit\t2\nmention\tx.md:1\t%s\n' "$(printf 'x%.0s' $(seq 200))" | { base; cat; } | COLS=90 conv | grep '^          x.md')"
+  assert_eq "$(printf '%s' "$OUT" | node -e 'console.log(Array.from(require("fs").readFileSync(0, "utf8")).length)')" 90 "a long mention is cut to the screen"
+  assert_contains "$OUT" "x…" "with an ellipsis"
+  OUT="$({ i=1; while [ $i -le 12 ]; do printf 'own\tdocs/ralph-%s.md\n' $i; i=$((i + 1)); done; } | kept)"
+  assert_eq "$(printf '%s\n' "$OUT" | sed -n '12,$p')" "          … and 2 more" "a dozen files of your own: ten, and how many more"
+  OUT="$(base | conv)"
+  assert_missing "$OUT" "KEPT" "nothing kept, nothing said"
+
+  # This machine: what was done and what is left, a mark each.
+  machine() { { base; cat; } | COLS=140 conv | sed -n '/^THIS MACHINE/,/^$/p' | sed '$d'; }
+  assert_eq "$(printf 'envfile\tcopied\n' | machine)" "THIS MACHINE
+  ✓ ~/.config/ralph/env → ~/.config/foreman/env  (the old one stays)" "the credentials copied"
+  assert_eq "$(printf 'envfile\texists\n' | machine)" "THIS MACHINE
+  ▲ ~/.config/ralph/env is no longer read (~/.config/foreman/env is)
+    delete it once nothing in it is missing from the new one" "and when the new one was there already, nothing copied and a note for you"
+  assert_eq "$(printf 'var\tRALPH_A\tFOREMAN_A\nvar\tRALPH_B\tFOREMAN_B\n' | machine)" "THIS MACHINE
+  ▲ RALPH_A is set in your shell — rename it to FOREMAN_A
+  ▲ RALPH_B is set in your shell — rename it to FOREMAN_B" "each variable"
+  assert_eq "$(printf 'windows\t1\nvar\tRALPH_A\tFOREMAN_A\n' | machine)" "THIS MACHINE
+  ▲ RALPH_A is set in your environment
+    setx FOREMAN_A \"<its value>\", then reg delete HKCU\\Environment /v RALPH_A /f" "and on Windows how it is done there"
+  assert_eq "$(printf 'sandbox\tralph-app\n' | machine)" "THIS MACHINE
+  ▲ the old sandbox ralph-app may be left — sbx rm ralph-app" "the sandbox that may be left"
+  assert_missing "$(base | conv)" "THIS MACHINE" "nothing to say about the machine, nothing said"
+  assert_eq "$(printf 'envfile\tcopied\nvar\tRALPH_A\tFOREMAN_A\nsandbox\tralph-app\n' | { base; cat; } | conv | counts)" "1 renamed  ·  2 for you" "the copy is done, not for you; the other two are"
+  assert_eq "$(printf 'envfile\texists\n' | { base; cat; } | conv | counts)" "1 renamed  ·  1 for you" "a note is for you"
+
+  # A rename that cannot be done is left for you, in the block of the others.
+  OUT="$({ base; printf 'blocked\tb/ralph.conf\tb/foreman.conf\n'; } | conv)"
+  assert_contains "$OUT" "LEFT      b/ralph.conf  foreman.conf is already there — merge the two by hand, then delete the old one" "it says where, and what to do"
+  assert_eq "$(printf '%s\n' "$OUT" | counts)" "1 renamed  ·  1 for you" "and counts as yours"
+  assert_eq "$(printf 'project\t/p/app\nhome\t/p\nblocked\tb/ralph.conf\tb/foreman.conf\n' | conv | counts)" "1 for you" "and a project with only that is not 'nothing to repaint'"
+
+  # The closing line.
+  assert_eq "$(base | conv | tail -n 2 | head -n 1)" "nothing is committed.  git diff, then commit." "nothing is committed"
+  assert_eq "$(printf 'project\t/p/app\nhome\t/p\nrewrite\tx.md\t1\n' | conv | tail -n 2 | head -n 1)" "nothing is committed.  git diff, then commit." "whatever was done"
+
+  # Width: the scene's minimum is the widest of the rows that do not depend on a path: the counts line, in its dry run.
+  OUT="$(convert_design_facts | node "$DRAW" convert --tier 24 --cols 85 2>/dev/null)"; ST=$?
+  assert_eq "$ST" 3 "85 columns is refused"
+  assert_eq "$OUT" "" "and nothing drawn"
+  widest() { node -e 'console.log(Math.max(...require("fs").readFileSync(0, "utf8").split("\n").map((l) => Array.from(l).length)))'; }
+  assert_eq "$({ convert_design_facts; printf 'dry\t1\n'; } | node "$DRAW" convert --tier 24 --cols 86 | strip | sed -n 5p | widest)" 86 "86 is wide enough for the counts line of the dry run, and that is exactly its width"
+  assert_eq "$(convert_design_facts | node "$DRAW" convert --tier 24 --cols 86 | strip | widest)" 86 "and for every row of the design's own, the rule filling what is left up to its 96"
+  assert_eq "$(node -e 'console.log(require(process.argv[1]).SCENES.convert.min)' "$DRAW")" \
+    "$(sed -n 's/^_convert_min_cols=\([0-9]*\).*/\1/p' "$FOREMAN_HOME/bin/foreman")" "the renderer's minimum for convert is the dispatcher's"
+fi
+
+if case_is "foreman-draw convert --dry-run says would throughout and the sign is not repainted"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  OUT24="$({ convert_design_facts; printf 'dry\t1\n'; } | node "$DRAW" convert --tier 24 --cols 100)"
+  rule96="$(printf '▔%.0s' $(seq 96))"
+  assert_eq "$(printf '%s\n' "$OUT24" | strip)" "
+▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+ RALPH                 FOREMAN  would repaint the sign  ~/projects/app
+▀▀▀▀▄▀▀▀▀▀▀▀▀▀▀▀▀▄▀▀▀▀   ralph → foreman, in this repository and on this machine
+    █            █   3 to rename  ·  14 files to rewrite  ·  1 to delete  ·  2 for you
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+$rule96
+
+WOULD RENAME   .scratch/human-tickets/ralph.conf → foreman.conf
+               .scratch/human-tickets/ralph-runs.jsonl → foreman-runs.jsonl
+               .scratch/human-tickets/ralph-runs.log → foreman-runs.log
+WOULD REWRITE  README.md 12  ·  Makefile 3  ·  .github/workflows/ci.yml 2  ·  11 more, 41 changes
+WOULD DELETE   .scratch/human-tickets/.ralph-iter.bundle  rebuilt on the next iteration
+
+WOULD KEEP     credit to the technique, and your own files named ralph:
+               docs/ralph-notes.md  ·  rename with git mv if you want to
+               4 mentions of the Ralph loop
+
+THIS MACHINE
+  ✓ would copy ~/.config/ralph/env → ~/.config/foreman/env  (the old one stays)
+  ▲ RALPH_MODEL is set in your shell — rename it to FOREMAN_MODEL
+  ▲ the old sandbox ralph-sbx may be left — sbx rm ralph-sbx
+
+nothing was changed.  run it without --dry-run to make these changes." "every line says what would happen, and nothing is done"
+  assert_missing "$OUT24" ";9;" "the old name is not struck through"
+  assert_contains "$OUT24" "${ESC}[0;1;38;2;23;22;20;48;2;224;168;74m RALPH              ${ESC}[0m" "it is the name on the sign, in ink, and nothing is painted on"
+  assert_missing "$(printf '%s\n' "$OUT24" | sed -n 3p | strip)" "RALPH   FOREMAN" "so the sign does not say FOREMAN"
+fi
+
+if case_is "foreman-draw convert with nothing to convert is a short 'nothing to repaint'"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  OUT="$(printf 'project\t/home/you/projects/app\nhome\t/home/you\n' | node "$DRAW" convert --tier 24 --cols 100)"
+  assert_eq "$(printf '%s\n' "$OUT" | strip)" "
+▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+ FOREMAN               FOREMAN  nothing to repaint  ~/projects/app
+▀▀▀▀▄▀▀▀▀▀▀▀▀▀▀▀▀▄▀▀▀▀   the project already speaks foreman
+    █            █
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀" "the sign already says FOREMAN, and that is all"
+  assert_missing "$OUT" ";9;" "nothing is struck through"
+  OUT="$(printf 'project\t/home/you/projects/app\nhome\t/home/you\nvar\tRALPH_A\tFOREMAN_A\nown\tdocs/ralph-notes.md\n' | node "$DRAW" convert --tier 24 --cols 100 | strip)"
+  rule96="$(printf '▔%.0s' $(seq 96))"
+  assert_eq "$OUT" "
+▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+ FOREMAN               FOREMAN  nothing to repaint  ~/projects/app
+▀▀▀▀▄▀▀▀▀▀▀▀▀▀▀▀▀▄▀▀▀▀   the project already speaks foreman
+    █            █   1 for you
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+$rule96
+
+KEPT      your own files named ralph:
+          docs/ralph-notes.md  ·  rename with git mv if you want to
+
+THIS MACHINE
+  ▲ RALPH_A is set in your shell — rename it to FOREMAN_A" "what is kept and what is left for you are still said, and no closing line: nothing was or would be changed in the project"
+fi
+
+# A ralph project with a credentials file to copy at $WORK/NAME (its home at $WORK/NAME-home). Prints the project's path.
+convert_fixture() {    # convert_fixture NAME
+  local repo
+  repo="$(make_ralph_repo "$1")"
+  mkdir -p "$WORK/$1-home/.config/ralph"
+  printf 'RALPH_DOCKER_USERNAME=someone\n' > "$WORK/$1-home/.config/ralph/env"
+  printf '%s' "$repo"
+}
+
+# `foreman convert` in the project at $1 with a stray old variable set and the rest of the arguments and
+# settings: VAR=value words before the command, the command's own after `--`.
+convert_in() {    # convert_in REPO [VAR=value...] -- [args...]
+  local repo="$1"; shift
+  local settings=()
+  while [ $# -gt 0 ] && [ "$1" != -- ]; do settings+=("$1"); shift; done
+  [ $# -eq 0 ] || shift
+  (cd "$repo" && env -u FOREMAN_CREDENTIALS_FILE RALPH_MODEL=x HOME="$repo-home" "${settings[@]}" "$FOREMAN" convert "$@" 2>&1)
+}
+
+# What `foreman convert` printed before it drew anything, in the project at $1: the golden file for $2.
+convert_golden() {    # convert_golden REPO run|dry-run|nothing
+  sed "s|@PROJECT@|$1|g; s|@NAME@|${1##*/}|g" "$FOREMAN_HOME/test/golden/convert-$2.txt"
+}
+
+if case_is "foreman convert is today's text, byte for byte, wherever the show is not drawn"; then
+  # Each environment gets a project of its own: converting changes it. The text is the same in all of them.
+  n=0
+  while IFS='|' read -r label settings; do
+    n=$((n + 1))
+    repo="$(convert_fixture "convert-plain-$n")"
+    # shellcheck disable=SC2086
+    convert_in "$repo" $settings -- > "$WORK/convert-plain-got.txt"; ST=$?
+    assert_eq "$ST" 0 "$label: exits 0"
+    convert_golden "$repo" run > "$WORK/convert-plain-want.txt"
+    cmp -s "$WORK/convert-plain-want.txt" "$WORK/convert-plain-got.txt" && pass || fail "$label: the same bytes as before the show"
+  done <<'EOF'
+in a pipe|
+colour alone is not the show: this is a pipe|FOREMAN_COLOR=truecolor COLUMNS=120
+FOREMAN_SHOW=never|FOREMAN_SHOW=never FOREMAN_COLOR=truecolor COLUMNS=120
+FOREMAN_COLOR=never|FOREMAN_SHOW=always FOREMAN_COLOR=never COLUMNS=120
+one column short of the picture|FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=85
+a narrow screen|FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=40
+the variables are the dispatcher's to set, not the environment's|FOREMAN_DRAW_TIER=24 FOREMAN_DRAW_COLS=120
+EOF
+  repo="$(convert_fixture convert-plain-direct)"
+  (cd "$repo" && env -u FOREMAN_CREDENTIALS_FILE RALPH_MODEL=x HOME="$repo-home" node "$FOREMAN_HOME/lib/foreman-convert.cjs" > "$WORK/convert-plain-got.txt" 2>&1)
+  convert_golden "$repo" run > "$WORK/convert-plain-want.txt"
+  cmp -s "$WORK/convert-plain-want.txt" "$WORK/convert-plain-got.txt" && pass || fail "foreman-convert.cjs alone, with no variables, is the text"
+
+  # The dry run, and a project with nothing to convert: also the same bytes, the same environments.
+  repo="$(convert_fixture convert-plain-dry)"
+  convert_golden "$repo" dry-run > "$WORK/convert-plain-want.txt"
+  for settings in "" "FOREMAN_SHOW=never FOREMAN_COLOR=truecolor COLUMNS=120" "FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=85"; do
+    # shellcheck disable=SC2086
+    convert_in "$repo" $settings -- --dry-run > "$WORK/convert-plain-got.txt"
+    cmp -s "$WORK/convert-plain-want.txt" "$WORK/convert-plain-got.txt" && pass || fail "--dry-run (${settings:-in a pipe}): the same bytes"
+  done
+  assert_eq "$(git -C "$repo" status --porcelain)" "" "and a dry run changes nothing"
+  repo="$(convert_fixture convert-plain-nothing)"
+  convert_in "$repo" -- >/dev/null; git -C "$repo" commit --quiet -am converted
+  convert_golden "$repo" nothing > "$WORK/convert-plain-want.txt"
+  for settings in "" "FOREMAN_SHOW=never FOREMAN_COLOR=truecolor COLUMNS=120" "FOREMAN_SHOW=always FOREMAN_COLOR=never COLUMNS=120" "FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=85"; do
+    # shellcheck disable=SC2086
+    convert_in "$repo" $settings -- > "$WORK/convert-plain-got.txt"; ST=$?
+    assert_eq "$ST" 0 "nothing to convert (${settings:-in a pipe}): exits 0"
+    cmp -s "$WORK/convert-plain-want.txt" "$WORK/convert-plain-got.txt" && pass || fail "nothing to convert (${settings:-in a pipe}): the same bytes"
+  done
+  # The refusals are errors, and stay words.
+  OUT="$(FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" convert "$WORK/not-a-directory" 2>&1)"; ST=$?
+  assert_eq "$ST" 1 "a project that is not there is refused"
+  assert_eq "$OUT" "foreman convert: $WORK/not-a-directory is not a directory" "in words, with no picture"
+fi
+
+if case_is "foreman convert draws the repainted sign and what changed when the show is forced"; then
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  repo="$(convert_fixture convert-show)"
+  OUT="$(convert_in "$repo" FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 --)"; ST=$?
+  assert_eq "$ST" 0 "the forced show exits 0"
+  assert_contains "$OUT" "${ESC}[0;1;9;38;2;138;90;36;48;2;224;168;74mRALPH" "it is drawn in 24 bits, and RALPH is struck through"
+  rule96="$(printf '▔%.0s' $(seq 96))"
+  assert_eq "$(printf '%s\n' "$OUT" | strip)" "
+▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+ RALPH   FOREMAN       FOREMAN  repaints the sign  $repo
+▀▀▀▀▄▀▀▀▀▀▀▀▀▀▀▀▀▄▀▀▀▀   ralph → foreman, in this repository and on this machine
+    █            █   2 renamed  ·  3 files rewritten  ·  1 deleted  ·  2 for you
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+$rule96
+
+RENAMED   batch/ralph-runs.jsonl → foreman-runs.jsonl
+          batch/ralph.conf → foreman.conf
+REWROTE   batch/ralph.conf 5  ·  .gitignore 2  ·  docs/guide.md 2
+DELETED   batch/.ralph-iter.bundle  rebuilt on the next iteration
+
+KEPT      credit to the technique, and your own files named ralph:
+          docs/ralph-notes.md  ·  rename with git mv if you want to
+          1 mention of the Ralph loop
+          mentions to look over:
+          docs/guide.md:3  See docs/ralph-notes.md.
+
+THIS MACHINE
+  ✓ ~/.config/ralph/env → ~/.config/foreman/env  (the old one stays)
+  ▲ RALPH_MODEL is set in your shell — rename it to FOREMAN_MODEL
+  ▲ the old sandbox ralph-convert-show may be left — sbx rm ralph-convert-show
+
+nothing is committed.  git diff, then commit." "the whole of it, for the ralph fixture: the busiest file first, and the rest as the text had it"
+  # The work is done all the same: what the text says it did.
+  assert_contains "$(git -C "$repo" status --porcelain)" "RM batch/ralph.conf -> batch/foreman.conf" "the conf is a staged git mv, as in the text"
+  assert_eq "$(cat "$repo-home/.config/foreman/env")" "FOREMAN_DOCKER_USERNAME=someone" "and the credentials are copied under the new names"
+  [ ! -e "$repo/batch/.ralph-iter.bundle" ] && pass || fail "and the bundle is gone"
+  # 256 colours and 16: the same picture at its own tier.
+  repo="$(convert_fixture convert-show-256)"
+  OUT="$(convert_in "$repo" FOREMAN_SHOW=always FOREMAN_COLOR=256 COLUMNS=120 --)"
+  assert_contains "$OUT" "${ESC}[0;1;9;38;5;94;48;5;179mRALPH" "at 256 colours RALPH is struck through in the post shade"
+  repo="$(convert_fixture convert-show-16)"
+  OUT="$(convert_in "$repo" FOREMAN_SHOW=always FOREMAN_COLOR=16 COLUMNS=120 --)"
+  assert_contains "$OUT" "${ESC}[0;1;9;31;43mRALPH" "and at 16 red on yellow"
+  # Exactly as wide as the picture needs is wide enough.
+  repo="$(convert_fixture convert-show-86)"
+  OUT="$(convert_in "$repo" FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=86 --)"
+  assert_contains "$(printf '%s\n' "$OUT" | strip)" "ralph → foreman, in this repository and on this machine" "86 columns is enough for the picture, when the paths fit"
+fi
+
+if case_is "foreman convert --dry-run draws the unpainted sign with would throughout, and changes nothing"; then
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  repo="$(convert_fixture convert-show-dry)"
+  OUT="$(convert_in "$repo" FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 -- --dry-run)"; ST=$?
+  assert_eq "$ST" 0 "the forced dry run exits 0"
+  assert_missing "$OUT" ";9;" "the old name is not struck through: the sign is not repainted"
+  rule96="$(printf '▔%.0s' $(seq 96))"
+  assert_eq "$(printf '%s\n' "$OUT" | strip)" "
+▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+ RALPH                 FOREMAN  would repaint the sign  $repo
+▀▀▀▀▄▀▀▀▀▀▀▀▀▀▀▀▀▄▀▀▀▀   ralph → foreman, in this repository and on this machine
+    █            █   2 to rename  ·  3 files to rewrite  ·  1 to delete  ·  2 for you
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+$rule96
+
+WOULD RENAME   batch/ralph-runs.jsonl → foreman-runs.jsonl
+               batch/ralph.conf → foreman.conf
+WOULD REWRITE  batch/ralph.conf 5  ·  .gitignore 2  ·  docs/guide.md 2
+WOULD DELETE   batch/.ralph-iter.bundle  rebuilt on the next iteration
+
+WOULD KEEP     credit to the technique, and your own files named ralph:
+               docs/ralph-notes.md  ·  rename with git mv if you want to
+               1 mention of the Ralph loop
+               mentions to look over:
+               docs/guide.md:3  See docs/ralph-notes.md.
+
+THIS MACHINE
+  ✓ would copy ~/.config/ralph/env → ~/.config/foreman/env  (the old one stays)
+  ▲ RALPH_MODEL is set in your shell — rename it to FOREMAN_MODEL
+  ▲ the old sandbox ralph-convert-show-dry may be left — sbx rm ralph-convert-show-dry
+
+nothing was changed.  run it without --dry-run to make these changes." "the same project, in 'would', and the last line says nothing was changed"
+  assert_eq "$(git -C "$repo" status --porcelain)" "" "nothing tracked is changed"
+  [ -f "$repo/batch/ralph-runs.jsonl" ] && [ -f "$repo/batch/.ralph-iter.bundle" ] && pass || fail "nor the run files"
+  [ ! -e "$repo-home/.config/foreman/env" ] && pass || fail "nor is the credentials file copied"
+fi
+
+if case_is "foreman convert with nothing to convert draws the short form"; then
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  repo="$(convert_fixture convert-show-nothing)"
+  convert_in "$repo" -- >/dev/null; git -C "$repo" commit --quiet -am converted
+  OUT="$(convert_in "$repo" FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 --)"; ST=$?
+  assert_eq "$ST" 0 "a project that is converted already exits 0, as it did"
+  rule96="$(printf '▔%.0s' $(seq 96))"
+  assert_eq "$(printf '%s\n' "$OUT" | strip)" "
+▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+ FOREMAN               FOREMAN  nothing to repaint  $repo
+▀▀▀▀▄▀▀▀▀▀▀▀▀▀▀▀▀▄▀▀▀▀   the project already speaks foreman
+    █            █   2 for you
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+$rule96
+
+KEPT      credit to the technique, and your own files named ralph:
+          docs/ralph-notes.md  ·  rename with git mv if you want to
+          1 mention of the Ralph loop
+          mentions to look over:
+          docs/guide.md:3  See docs/ralph-notes.md.
+
+THIS MACHINE
+  ▲ ~/.config/ralph/env is no longer read (~/.config/foreman/env is)
+    delete it once nothing in it is missing from the new one
+  ▲ RALPH_MODEL is set in your shell — rename it to FOREMAN_MODEL" "the sign already says FOREMAN; what is kept and left for you is still said, and no closing line"
+  assert_missing "$OUT" ";9;" "nothing is struck through"
+  # With nothing at all left, it is the sign and nothing under it.
+  repo="$(make_repo 1 convert-show-clean)"
+  OUT="$(cd "$repo" && FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 HOME="$WORK/convert-clean-home" "$FOREMAN" convert 2>&1)"
+  assert_eq "$(printf '%s\n' "$OUT" | strip | tail -n 4)" "▀▀▀▀▄▀▀▀▀▀▀▀▀▀▀▀▀▄▀▀▀▀   the project already speaks foreman
+    █            █
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀" "a clean project is the sign and a blank line, nothing under it"
+fi
+
+if case_is "foreman convert is the text when the picture cannot be made"; then
+  repo="$(convert_fixture convert-fallback)"
+  # The renderer fails to load, or is not there: the conversion is the same and the text is printed alone.
+  fake_home="$WORK/convert-fallback-home-toolkit"
+  mkdir -p "$fake_home/lib" "$fake_home/bin"
+  cp "$FOREMAN" "$fake_home/bin/foreman"; cp "$FOREMAN_HOME/lib/foreman-ui.sh" "$FOREMAN_HOME/lib/foreman-convert.cjs" "$fake_home/lib/"
+  printf 'throw new Error("no")\n' > "$fake_home/lib/foreman-draw.cjs"
+  (cd "$repo" && env -u FOREMAN_CREDENTIALS_FILE RALPH_MODEL=x HOME="$repo-home" FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 bash "$fake_home/bin/foreman" convert > "$WORK/convert-fallback-got.txt" 2>&1); ST=$?
+  assert_eq "$ST" 0 "a renderer that fails does not fail the conversion"
+  convert_golden "$repo" run > "$WORK/convert-fallback-want.txt"
+  cmp -s "$WORK/convert-fallback-want.txt" "$WORK/convert-fallback-got.txt" && pass || fail "and the text is printed alone, no half a picture before it"
+  assert_contains "$(git -C "$repo" status --porcelain)" "RM batch/ralph.conf -> batch/foreman.conf" "the project is converted all the same"
+  repo="$(convert_fixture convert-fallback-gone)"
+  rm "$fake_home/lib/foreman-draw.cjs"
+  (cd "$repo" && env -u FOREMAN_CREDENTIALS_FILE RALPH_MODEL=x HOME="$repo-home" FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 bash "$fake_home/bin/foreman" convert --dry-run > "$WORK/convert-fallback-got.txt" 2>&1)
+  convert_golden "$repo" dry-run > "$WORK/convert-fallback-want.txt"
+  cmp -s "$WORK/convert-fallback-want.txt" "$WORK/convert-fallback-got.txt" && pass || fail "nor one that is not there"
+
+  # A picture wider than the screen is not drawn: a file of the project's with a path too long for its row.
+  repo="$(convert_fixture convert-fallback-wide)"
+  long="$(printf 'a-directory-%.0s' $(seq 8))"
+  mkdir -p "$repo/$long"; printf 'ralph\n' > "$repo/$long/ralph.conf"; git -C "$repo" add -A; git -C "$repo" commit --quiet -m wide
+  OUT="$(convert_in "$repo" FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=100 --)"
+  assert_contains "$OUT" "   renamed  $long/ralph.conf → foreman.conf" "a row that would not fit is the text"
+  assert_missing "$OUT" "▀" "with no picture"
+  assert_contains "$OUT" "Nothing is committed." "and the whole of the text"
+  repo="$(convert_fixture convert-fallback-wide-ok)"
+  mkdir -p "$repo/$long"; printf 'ralph\n' > "$repo/$long/ralph.conf"; git -C "$repo" add -A; git -C "$repo" commit --quiet -m wide
+  OUT="$(convert_in "$repo" FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=140 --)"
+  assert_contains "$(printf '%s\n' "$OUT" | sed "s/$(printf '\033')\[[0-9;]*[mK]//g")" "RENAMED   $long/ralph.conf → foreman.conf" "and the same project on a wider screen is the picture"
+fi
+
+if case_is "foreman convert that fails half way prints what it had done, picture or not"; then
+  # A lock on the index makes `git mv` fail after the files are rewritten: the text said what it had
+  # rewritten and then the error, and the show must not swallow the first for the sake of the picture.
+  repo="$(convert_fixture convert-fails)"
+  : > "$repo/.git/index.lock"
+  convert_in "$repo" -- > "$WORK/convert-fails-plain.txt"; PLAIN_ST=$?
+  assert_missing "$(cat "$WORK/convert-fails-plain.txt")" "Nothing is committed" "(a conversion that stops does not say it finished)"
+  assert_contains "$(cat "$WORK/convert-fails-plain.txt")" "rewrote  docs/guide.md" "the plain run says what it had rewritten before it stopped"
+  [ "$PLAIN_ST" -ne 0 ] && pass || fail "and fails"
+  git -C "$repo" checkout --quiet -- . 2>/dev/null; rm -f "$repo/.git/index.lock"
+  repo="$(convert_fixture convert-fails-show)"
+  : > "$repo/.git/index.lock"
+  convert_in "$repo" FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 -- > "$WORK/convert-fails-show.txt"; ST=$?
+  assert_eq "$ST" "$PLAIN_ST" "with the show forced it fails the same way"
+  assert_contains "$(cat "$WORK/convert-fails-show.txt")" "rewrote  docs/guide.md" "and says what it had rewritten, in words"
+  assert_missing "$(cat "$WORK/convert-fails-show.txt")" "▀" "with no picture of a conversion that did not finish"
+fi
+
+if case_is "foreman convert on a real terminal shows without being forced, and not in CI"; then
+  if command -v script >/dev/null 2>&1 && [ "$(show_of tty 1 FOREMAN_SHOW=always)" = show:16 ]; then
+    ESC=$'\033'
+    repo="$(convert_fixture convert-tty)"
+    tty_convert() {    # tty_convert VAR=value...
+      (cd "$repo" && env -u CI -u NO_COLOR -u WT_SESSION -u FOREMAN_COLOR -u FOREMAN_SHOW -u FOREMAN_CREDENTIALS_FILE TERM=xterm COLORTERM=truecolor COLUMNS=100 RALPH_MODEL=x HOME="$repo-home" "$@" \
+        script -qec "$FOREMAN convert --dry-run" /dev/null </dev/null 2>/dev/null); }
+    OUT="$(tty_convert)"; OUT="${OUT//$'\r'/}"
+    assert_contains "$OUT" "38;2;" "a terminal that says truecolor gets 24 bits"
+    assert_contains "$(printf '%s\n' "$OUT" | sed "s/${ESC}\[[0-9;]*[mK]//g")" "would repaint the sign" "and the show, unforced"
+    OUT="$(tty_convert CI=true)"; OUT="${OUT//$'\r'/}"
+    assert_eq "$OUT" "$(convert_golden "$repo" dry-run)" "CI is plain, terminal or not"
+    OUT="$(tty_convert NO_COLOR=1)"; OUT="${OUT//$'\r'/}"
+    assert_eq "$OUT" "$(convert_golden "$repo" dry-run)" "and NO_COLOR"
+  else
+    printf '  (skipped: no `script` to give a terminal)\n'
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 # A case process that ran the last case in the file ends here.
 [ "$CASE_OPEN" = 1 ] && case_finish
 exit 0

@@ -1,0 +1,15 @@
+Project: @PROJECT@
+Nothing in the project to convert — it already speaks foreman.
+
+Kept as they are (look them over):
+  the project's own files whose names say ralph — rename with `git mv` if you want to,
+  and the references to them along with it:
+    docs/ralph-notes.md
+  mentions left (credit to the Ralph loop, or a name above):
+    docs/guide.md:2: Built on the Ralph loop, after Ralph Wiggum.
+    docs/guide.md:3: See docs/ralph-notes.md.
+
+On this machine:
+  ~/.config/ralph/env is no longer read (~/.config/foreman/env is); delete it once you have checked nothing in it is missing from the new one
+  RALPH_MODEL is set in your environment: export FOREMAN_MODEL in its place, wherever you set it
+

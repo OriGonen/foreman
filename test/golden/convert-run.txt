@@ -1,0 +1,23 @@
+Project: @PROJECT@
+
+   rewrote  .gitignore  (2 changes)
+   rewrote  batch/ralph.conf  (5 changes)
+   rewrote  docs/guide.md  (2 changes)
+   renamed  batch/ralph-runs.jsonl → foreman-runs.jsonl
+   renamed  batch/ralph.conf → foreman.conf
+   deleted  batch/.ralph-iter.bundle  (rebuilt on the next iteration)
+
+Kept as they are (look them over):
+  the project's own files whose names say ralph — rename with `git mv` if you want to,
+  and the references to them along with it:
+    docs/ralph-notes.md
+  mentions left (credit to the Ralph loop, or a name above):
+    docs/guide.md:2: Built on the Ralph loop, after Ralph Wiggum.
+    docs/guide.md:3: See docs/ralph-notes.md.
+
+On this machine:
+  copied ~/.config/ralph/env to ~/.config/foreman/env, names renamed; delete the old one when you are happy
+  RALPH_MODEL is set in your environment: export FOREMAN_MODEL in its place, wherever you set it
+  a sandbox named ralph-@NAME@ may be left from before; foreman makes foreman-@NAME@. Once you no longer need it: sbx rm ralph-@NAME@
+
+Nothing is committed. Review with `git diff`, then commit.

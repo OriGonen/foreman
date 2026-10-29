@@ -116,6 +116,23 @@ report() {
   exec node "$LIB/foreman-report.cjs" "$@"
 }
 
+# `foreman convert` at a terminal is the repainted sign and what changed, drawn by foreman-convert.cjs
+# with the renderer (the `convert` scene, which needs `_convert_min_cols`; a smoke case holds the two
+# together). Like the report it is node's all the way through, so this only says whether the picture
+# is wanted and how to draw it, in the two variables it reads; anywhere else they are cleared, and it
+# prints the text it always has.
+_convert_min_cols=86
+convert() {
+  local tier cols
+  # shellcheck source=../lib/foreman-ui.sh
+  if source "$LIB/foreman-ui.sh" && ui_show 1 tier && ui_cols cols 1 && [ "$cols" -ge "$_convert_min_cols" ]; then
+    export FOREMAN_DRAW_TIER="$tier" FOREMAN_DRAW_COLS="$cols"
+  else
+    unset FOREMAN_DRAW_TIER FOREMAN_DRAW_COLS
+  fi
+  exec node "$LIB/foreman-convert.cjs" "$@"
+}
+
 # Splitting the batch argument out from the flags is what lets `foreman status --help` and
 # `foreman run .scratch/b 5` both work while the loop keeps its own single-argument shape.
 cmd="${1:-help}"
@@ -131,7 +148,7 @@ case "$cmd" in
   next)      exec bash "$LIB/foreman-next.sh" "$@" ;;
   report)    report "$@" ;;
   doctor)    exec bash "$LIB/foreman-doctor.sh" "$@" ;;
-  convert)   exec node "$LIB/foreman-convert.cjs" "$@" ;;
+  convert)   convert "$@" ;;
   help|--help|-h)        usage_show; usage; exit 0 ;;
   version|--version|-V)  version; exit 0 ;;
   '')        usage; exit 1 ;;
