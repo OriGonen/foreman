@@ -6265,6 +6265,206 @@ if case_is "foreman next --all and --count draw the stake row when the show is o
   assert_missing "$OUT" "▀" "and no picture there"
 fi
 
+# `foreman doctor` as the site inspection: the box, then the inspector and the verdict.
+
+# The facts the doctor gives the renderer for the design's box (designs/05b-doctor-*-frames.txt), in
+# the design's two verdicts. A `check` is `section state text [detail]`; the design keeps the skill
+# copy among the repository's rows, so the cells can be compared.
+doctor_facts() {    # doctor_facts issues|good
+  printf 'repo\t/home/you/projects/app\nhome\t/home/you\ndate\t23 Oct 2026\nrev\t59c405c\nexpect\t12\n'
+  printf 'check\tmachine\tok\tbash 5.2\ncheck\tmachine\tok\tgit 2.47\ncheck\tmachine\tok\tnode 22.11\n'
+  printf 'check\tmachine\tok\tclaude 2.4, signed in\ncheck\tmachine\tok\tdocker sbx, sandbox ready\n'
+  printf 'check\trepository\tok\tgit work tree, clean\ncheck\trepository\tok\t.gitattributes keeps LF\n'
+  if [ "$1" = issues ]; then printf 'check\trepository\tfix\tforeman-runs.log not ignored\n'
+  else printf 'check\trepository\tok\tforeman-runs.log ignored\n'; fi
+  printf 'check\trepository\tok\tskill copy is current\n'
+  printf 'check\tbatches\tok\t.scratch/human-tickets\t6 of 10 done\ncheck\tbatches\tok\t.scratch/smoke-test-speed\t10 of 10 done\n'
+  if [ "$1" = issues ]; then
+    printf 'check\tbatches\tmiss\t.scratch/old-batch\tno foreman.conf\n'
+    printf 'advice\tfix:\tforeman doctor --fix\nadvice\tthen:\tforeman init .scratch/old-batch --no-order\n'
+  else
+    printf 'check\tbatches\tok\t.scratch/old-batch\t3 of 8 done\n'
+    printf 'advice\tnext:\tforeman run .scratch/human-tickets\n'
+  fi
+}
+
+if case_is "foreman-draw doctor is the 5b box, cell for cell, in both verdicts"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  CELLS="$FOREMAN_HOME/test/ans-cells.cjs"
+  DESIGNS="$FOREMAN_HOME/.scratch/terminal-design/designs"
+  for verdict in issues good; do
+    ANS="$DESIGNS/05b-doctor-$verdict-frames.ans"
+    OUT24="$(doctor_facts $verdict | node "$DRAW" doctor --tier 24 --cols 80)"; ST=$?
+    assert_eq "$ST" 0 "$verdict: the doctor scene runs"
+    # The design's last frame: 36 lines, of which the box is lines 15 to 34.
+    assert_eq "$(printf '%s\n' "$OUT24" | node "$CELLS" --cells 80)" \
+      "$(sed -n '1995,2014p' "$ANS" | node "$CELLS" --cells 80)" "$verdict: the box is the design's, in its colours"
+  done
+fi
+
+if case_is "foreman-draw doctor --t draws the inspector's track as the design does, tick by tick, in both verdicts"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  CELLS="$FOREMAN_HOME/test/ans-cells.cjs"
+  DESIGNS="$FOREMAN_HOME/.scratch/terminal-design/designs"
+  # The pad he carries and the sparkles' centres are text white in the board (#ece8e1), which the .ans
+  # export left as the terminal's own colour; they are painted here, so that colour is set aside.
+  # The design's frames are every second tick, 36 lines each: a caption, the track's twelve rows,
+  # a blank line, the box, the foot, a blank line. Frame i is tick 2i.
+  for verdict in issues good; do
+    ANS="$DESIGNS/05b-doctor-$verdict-frames.ans"
+    for i in 0 1 5 11 17 22 23 24 25 26 27 28 29 30 32 35 38 40 44 50 55; do
+      t=$((2 * i))
+      from=$((36 * i + 2))
+      MINE="$(doctor_facts $verdict | node "$DRAW" doctor --tier 24 --cols 80 --t $t | head -n 12 | node "$CELLS" --cells 80)"
+      assert_eq "${MINE//\/236;232;225\//\/\/}" "$(sed -n "${from},$((from + 11))p" "$ANS" | node "$CELLS" --cells 80)" "$verdict: tick $t is the design's frame $i"
+    done
+  done
+
+  # A frame is the track, a blank line, the box and a line under it. The box has a row for each check
+  # so far, so a frame never gets shorter as the run goes on (drawing it over the last would leave
+  # lines behind), and the verdict is as tall as the last frame of the run: thirty-four lines in all.
+  prev=0
+  for t in 0 5 12 23 30 40 45 46 47 48 60 80; do
+    h="$(doctor_facts issues | node "$DRAW" doctor --tier 24 --cols 80 --t $t | wc -l | tr -d ' ')"
+    assert_eq "$([ "$h" -ge "$prev" ] && echo grows)" grows "tick $t: no shorter than the tick before ($h lines)"
+    prev=$h
+  done
+  assert_eq "$prev" 34 "and thirty-four lines at the end, with the design's twelve checks"
+  assert_eq "$(doctor_facts issues | node "$DRAW" doctor --tier 24 --cols 80 --t 46 | wc -l | tr -d ' ')" 34 "the verdict is as tall as the run before it"
+  # The box fills in as the run goes on, and is the verdict from the tick after the breath.
+  strip() { sed "s/$(printf '\033')\[[0-9;]*[mK]//g"; }
+  OUT="$(doctor_facts issues | node "$DRAW" doctor --tier 24 --cols 80 --t 0 | strip)"
+  assert_contains "$OUT" "inspecting   0 of 12" "tick 0: nothing checked yet"
+  assert_contains "$OUT" "inspecting…" "and the foot says so"
+  assert_missing "$OUT" "bash 5.2" "with no row yet"
+  OUT="$(doctor_facts issues | node "$DRAW" doctor --tier 24 --cols 80 --t 23 | strip)"
+  assert_contains "$OUT" "inspecting   6 of 12" "half way through the run, half of the checks"
+  assert_contains "$OUT" "bash 5.2" "the first check is on the box"
+  assert_missing "$OUT" "old-batch" "and the last is not"
+  OUT="$(doctor_facts issues | node "$DRAW" doctor --tier 24 --cols 80 --t 46 | strip)"
+  assert_contains "$OUT" "inspecting  12 of 12" "the breath after the run: all twelve"
+  assert_contains "$OUT" ".scratch/old-batch" "every check is there"
+  OUT="$(doctor_facts issues | node "$DRAW" doctor --tier 24 --cols 80 --t 48 | strip)"
+  assert_contains "$OUT" "TWEEEET!" "the whistle"
+  assert_contains "$OUT" "NOT PASSED" "and the verdict, in the box"
+  assert_missing "$OUT" "inspecting" "where the bar was"
+  OUT="$(doctor_facts issues | node "$DRAW" doctor --tier 24 --cols 80 --t 100 | strip)"
+  assert_contains "$OUT" "█ NOT PASSED █" "at rest the red sign stands on the track"
+  OUT="$(doctor_facts good | node "$DRAW" doctor --tier 24 --cols 80 --t 100 | strip)"
+  assert_contains "$OUT" "PASSED" "the good verdict"
+  assert_missing "$OUT" "NOT PASSED" "is not the bad one"
+  assert_contains "$(doctor_facts good | node "$DRAW" doctor --tier 24 --cols 80 --t 100)" "38;2;143;207;143" "and the check is green"
+
+  # Colour tiers: the art folds as everywhere.
+  OUT="$(doctor_facts issues | node "$DRAW" doctor --tier 16 --cols 80 --t 30)"
+  assert_missing "$OUT" "38;2;" "16 colours: no 24 bits"
+  assert_missing "$OUT" "38;5;" "and no 256"
+  assert_contains "$(doctor_facts issues | node "$DRAW" doctor --tier 256 --cols 80 --t 30)" "38;5;" "256 colours"
+
+  # Errors: a tick is a number, and only the doctor has them.
+  for bad in -1 x 1.5 ""; do
+    OUT="$(doctor_facts issues | node "$DRAW" doctor --tier 24 --cols 80 --t "$bad" 2>&1)"; ST=$?
+    assert_eq "$ST" 2 "--t '$bad' is a usage error"
+  done
+  OUT="$(node "$DRAW" help --tier 24 --cols 80 --t 3 </dev/null 2>&1)"; ST=$?
+  assert_eq "$ST" 2 "the help has no ticks"
+  OUT="$(doctor_facts issues | node "$DRAW" doctor --tier 24 --cols 79 --t 3 2>&1)"; ST=$?
+  assert_eq "$ST" 3 "and one column short of the box's eighty"
+fi
+
+if case_is "foreman-draw doctor's box lays the checks out in eighty columns, plain or painted"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  ESC=$'\033'
+  box() { node "$DRAW" doctor --plain --cols 80; }
+  head_facts() { printf 'repo\t/work/app\nhome\t/home/you\ndate\t1 Jan 2027\nrev\tabc1234\n'; }
+  WIDTHS='for (const l of require("fs").readFileSync(0, "utf8").split("\n")) if (l) process.stdout.write(Array.from(l).length + " ")'
+
+  OUT="$( { head_facts; printf 'check\tmachine\tok\tgit\ncheck\tbatches\tinfo\tnone — no directory here has a foreman.conf.\n'; } | box)"; ST=$?
+  assert_eq "$ST" 0 "plain: the box is drawn"
+  assert_missing "$OUT" "$ESC" "with no escape in it"
+  assert_eq "$(printf '%s\n' "$OUT" | node -e "$WIDTHS")" "$(printf '80 %.0s' $(seq 14))" "and every line eighty columns"
+  assert_contains "$OUT" "║  SITE INSPECTION   /work/app  ·  1 Jan 2027  ·  foreman abc1234" "the title says where, when and which build"
+  assert_contains "$OUT" "║  ■ git                               │  " "a check is a mark and its words, in its column"
+  assert_contains "$OUT" "║    none — no directory here has a foreman.conf." "a line with no mark (info) is under BATCHES, its words where a mark's would be"
+  assert_contains "$OUT" "║  ■ all 1 check passed" "the verdict, counted in the singular"
+  assert_contains "$OUT" "│    PASSED     │" "and passed: info is not a check"
+  OUT="$( { head_facts; printf 'check\tmachine\tok\tgit\ncheck\tmachine\tok\tnode\ncheck\tbatches\tok\tb\t1 of 2 done\n'; } | box)"
+  assert_contains "$OUT" "■ all 3 checks passed" "all passing: counted"
+  assert_contains "$OUT" "│    PASSED     │" "PASSED"
+  assert_contains "$OUT" "ready to run" "and ready to run"
+  assert_contains "$OUT" "║  ■ b                               1 of 2 done" "a batch's detail is in a column after its name"
+
+  # Marks, and what each state does to the verdict.
+  facts="$( { head_facts
+    printf 'check\tmachine\tok\tgit\ncheck\tmachine\tmiss\tnode is not on PATH\ncheck\tmachine\tmiss\tawk is not on PATH\n'
+    printf 'check\trepository\tfix\t.gitignore  **/foreman-runs.log\ncheck\trepository\tstale\tskill drifted\ncheck\tbatches\tinfo\tnone\n'; } )"
+  OUT="$(printf '%s\n' "$facts" | box)"
+  assert_contains "$OUT" "✗ node is not on PATH" "miss is ✗"
+  assert_contains "$OUT" "▲ .gitignore  **/foreman-runs.log" "fix is ▲"
+  assert_contains "$OUT" "! skill drifted" "stale is !"
+  assert_contains "$OUT" "■ passed  ▲ --fix can do it  ✗ needs you  ! stale" "the legend names each mark that is on the box"
+  assert_contains "$OUT" "│  2 blockers   │" "two that need you"
+  OUT="$( { head_facts; printf 'check\trepository\tfix\ta\ncheck\trepository\tfix\tb\n'; } | box)"
+  assert_contains "$OUT" "│  2 to fix     │" "only ones --fix can do: how many"
+  OUT="$( { head_facts; printf 'check\tmachine\tok\tgit\ncheck\tskill\tstale\told copy\n'; } | box)"
+  assert_contains "$OUT" "│    PASSED     │" "a stale copy is not a failure"
+  assert_contains "$OUT" "■ passed  ! out of date" "and is said so"
+  assert_missing "$OUT" "all 1 checks passed" "not as an all-clear"
+  assert_contains "$OUT" "║  SKILL" "its section is there when it has something to say"
+  OUT="$( { head_facts; printf 'check\tmachine\tok\tgit\n'; } | box)"
+  assert_missing "$OUT" "SKILL" "and not when it has not"
+  assert_missing "$OUT" "FROM BEFORE" "nor is the rename's"
+  OUT="$( { head_facts; printf 'check\tmachine\tok\tgit\ncheck\trename\tstale\tb/ralph.conf — rename it\n'; } | box)"
+  assert_contains "$OUT" "FROM BEFORE THE RENAME TO FOREMAN" "the rename's section, when something is left"
+
+  # Words that do not fit are wrapped under their own first line, and notes go under their check.
+  OUT="$( { head_facts
+    printf 'check\tmachine\tmiss\tbatch/foreman.conf — FOREMAN_EXEC=local with no way for the agent to commit\n'
+    printf 'note\n' >/dev/null
+    printf 'check\tmachine\tnote\tacceptEdits does not cover Bash\n'
+    printf 'check\tbatches\tmiss\t%s\tno foreman.conf\n' "a/very/long/batch/path/that/goes/on/and/on/and/on/and/on/and/on/and/on/and/on/and/on"; } | box)"
+  assert_eq "$(printf '%s\n' "$OUT" | node -e "$WIDTHS" | tr ' ' '\n' | sort -u | tr '\n' ' ')" "80 " "every line is still eighty columns"
+  assert_contains "$OUT" "║  ✗ batch/foreman.conf —              │" "a long check breaks at a space"
+  assert_contains "$OUT" "║    FOREMAN_EXEC=local with no way    │" "and goes on under its own words"
+  assert_contains "$OUT" "║    for the agent to commit           │" "to as many lines as it takes"
+  assert_contains "$OUT" "  acceptEdits does not cover Bash" "a note goes under its check"
+  assert_contains "$OUT" "║  ✗ a/very/long/batch/path/that/goes/on/and/on/and/on/and/on/and/on/and/on/   ║" "a path longer than the line breaks after a slash"
+  assert_contains "$OUT" "║    no foreman.conf" "and the detail goes under it"
+  OUT="$( { printf 'repo\t/work/%s\nhome\t/home/you\ndate\t1 Jan 2027\nrev\tabc1234\n' "$(printf 'deep/%.0s' $(seq 20))app"; printf 'check\tmachine\tok\tgit\n'; } | box)"
+  assert_eq "$(printf '%s\n' "$OUT" | node -e "$WIDTHS" | tr ' ' '\n' | sort -u | tr '\n' ' ')" "80 " "a long repository path does not break the title"
+  assert_contains "$OUT" "…ep/deep/deep/deep/app  ·  1 Jan 2027  ·  foreman abc1234 ║" "it is cut at its left end"
+
+  # Painted: 24 bits, and folded at 16.
+  assert_contains "$(printf '%s\n' "$facts" | node "$DRAW" doctor --tier 24 --cols 80)" "38;2;" "painted: 24 bits"
+  assert_missing "$(printf '%s\n' "$facts" | node "$DRAW" doctor --tier 16 --cols 80)" "38;2;" "16 colours: no 24 bits"
+  assert_eq "$(printf '%s\n' "$facts" | node "$DRAW" doctor --tier 24 --cols 80 | sed "s/${ESC}\[[0-9;]*[mK]//g")" "$(printf '%s\n' "$facts" | box)" "painted or plain, the words are the same"
+  OUT="$(printf '%s\n' "$facts" | node "$DRAW" doctor --tier 24 --cols 79 2>&1)"; ST=$?
+  assert_eq "$ST" 3 "below eighty columns the renderer will not draw a painted box"
+  OUT="$(printf '%s\n' "$facts" | node "$DRAW" doctor --plain --cols 79 2>&1)"; ST=$?
+  assert_eq "$ST" 3 "nor a plain one: the caller says eighty"
+  OUT="$(node "$DRAW" help --plain --cols 80 </dev/null 2>&1)"; ST=$?
+  assert_eq "$ST" 2 "only the doctor is plain"
+fi
+
+if case_is "foreman-draw doctor's inspector runs as far as the checks have got"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  step() { node -e 'const d = require(process.argv[1]); const [t, done, expect, ended] = process.argv.slice(2).map(Number); console.log(d.inspectorStep(t, { done, expect, ended: ended === 1 }))' "$DRAW" "$@"; }
+  assert_eq "$(step 0 0 12 0)" 0 "no checks in: he waits where he is"
+  assert_eq "$(step 0 6 12 0)" 4 "six of twelve: he runs towards half way, four ticks at a time"
+  assert_eq "$(step 20 6 12 0)" 22 "and the last of them is two"
+  assert_eq "$(step 22 6 12 0)" 22 "then he waits for the next"
+  assert_eq "$(step 40 12 12 0)" 44 "all of them in but the end of the input: the last of the run, not the breath"
+  assert_eq "$(step 44 12 12 0)" 44 "where he stays"
+  assert_eq "$(step 44 99 12 0)" 44 "more than expected is no further"
+  assert_eq "$(step 5 3 0 0)" 9 "an expectation of nothing is no division by zero: they are all in"
+  assert_eq "$(step 0 12 12 1)" 4 "the input ends before he has moved: he runs to the end at his own speed"
+  assert_eq "$(step 42 12 12 1)" 45 "the end of the run is tick 45"
+  assert_eq "$(step 45 12 12 1)" 46 "then the breath and the verdict, a tick at a time"
+  assert_eq "$(step 60 12 12 1)" 61 "all the way"
+  assert_eq "$(step 3 12 12 1)" 7 "an ended input at the start"
+  assert_eq "$(node -e 'const d = require(process.argv[1]); let t = 0, n = 0; while (t < d.RUN - 1) { t = d.inspectorStep(t, { done: 12, expect: 12, ended: true }); n++; } console.log(n)' "$DRAW")" 12 "a run with every check in at once is twelve ticks, under a second"
+fi
+
 if case_is "foreman doctor still reads a batch's progress as numbers when the show is forced"; then
   repo="$(make_repo 3 next-doctor-repo)"
   FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 run_foreman "$repo" doctor
