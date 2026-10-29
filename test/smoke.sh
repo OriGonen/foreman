@@ -6465,6 +6465,126 @@ if case_is "foreman-draw doctor's inspector runs as far as the checks have got";
   assert_eq "$(node -e 'const d = require(process.argv[1]); let t = 0, n = 0; while (t < d.RUN - 1) { t = d.inspectorStep(t, { done: 12, expect: 12, ended: true }); n++; } console.log(n)' "$DRAW")" 12 "a run with every check in at once is twelve ticks, under a second"
 fi
 
+if case_is "foreman-draw's live doctor plays as the checks arrive, and puts the terminal back however it ends"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  LIVE_JS="$WORK/live-doctor-test.cjs"
+  cat > "$LIVE_JS" <<'JS'
+const { EventEmitter } = require('events');
+const { playDoctor } = require(process.argv[2]);
+const E = '\x1b';
+const HIDE = E + '[?25l', SHOW = E + '[?25h';
+const plain = (s) => s.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
+const fakeOut = () => ({ chunks: [], write(s) { this.chunks.push(s); return true; }, get text() { return this.chunks.join(''); } });
+const fakeIn = () => Object.assign(new EventEmitter(), { setEncoding() {}, send(s) { this.emit('data', s); } });
+const head = 'repo\t/work/app\nhome\t/home/you\ndate\t1 Jan 2027\nrev\tabc1234\nexpect\t6\n';
+const check = (n, state = 'ok') => `check\t${n < 3 ? 'machine' : 'repository'}\t${state}\tcheck number ${n}\n`;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const count = (s, re) => (s.match(re) || []).length;
+const opts = { tier: 24, cols: 100, stepMs: 4 };
+
+async function main() {
+  // Facts arrive over the run, a line split between two chunks, and the verdict plays at the end.
+  let out = fakeOut(), input = fakeIn(), signals = new EventEmitter();
+  let run = playDoctor({ input, out, ...opts, rows: 60, signals });
+  input.send(head);
+  await sleep(30);
+  console.log('first', out.text.startsWith(HIDE), plain(out.text).includes('inspecting'), !out.text.includes('check number'));
+  input.send(check(0)); input.send('check\tmachine\tok\tcheck numb'); await sleep(30); input.send('er 1\n');
+  await sleep(30);
+  console.log('arrived', plain(out.text).includes('check number 0'), plain(out.text).includes('check number 1'));
+  for (let n = 2; n < 6; n++) input.send(check(n, n === 4 ? 'miss' : 'ok'));
+  await sleep(300);
+  // every check is in, and he is waiting at the end of his run: no verdict until the input ends
+  console.log('waiting', plain(out.text).includes('inspecting  6 of 6'), !out.text.includes('NOT PASSED'), !out.text.includes(SHOW), !out.text.includes('TWEEEET'));
+  input.emit('end');
+  const how = await run;
+  const text = out.text;
+  console.log('end', how, text.endsWith(SHOW), count(text, /\x1b\[\?25l/g), count(text, /\x1b\[\?25h/g));
+  const last = text.slice(text.lastIndexOf(E + '[') > 0 ? text.indexOf('inspecting', text.length - 20000) : 0);
+  const finalFrame = plain(text.slice(text.lastIndexOf(HIDE)).split(/\x1b\[\d+A/).pop());
+  console.log('verdict', finalFrame.includes('NOT PASSED'), finalFrame.includes('1 blocker'), finalFrame.includes('█ NOT PASSED █'), !finalFrame.includes('inspecting'));
+  console.log('inplace', count(text, /\x1b\[\d+A/g) > 20);
+  console.log('listeners', input.listenerCount('data'), input.listenerCount('end'), signals.listenerCount('SIGINT'));
+  console.log('whistle', plain(text).includes('TWEEEET!'));
+
+  // The same facts and a good verdict.
+  out = fakeOut(); input = fakeIn(); signals = new EventEmitter();
+  run = playDoctor({ input, out, ...opts, rows: 60, signals });
+  input.send(head); for (let n = 0; n < 6; n++) input.send(check(n)); input.emit('end');
+  await run;
+  const good = plain(out.text.slice(out.text.lastIndexOf(HIDE)).split(/\x1b\[\d+A/).pop());
+  console.log('good', good.includes('all 6 checks passed'), !good.includes('NOT PASSED'), out.text.includes('38;2;143;207;143'));
+
+  // Not a terminal to play on: nothing until the input ends, then the box, once, and no cursor.
+  out = fakeOut(); input = fakeIn(); signals = new EventEmitter();
+  run = playDoctor({ input, out, ...opts, rows: 0, animate: false, signals });
+  input.send(head); for (let n = 0; n < 6; n++) input.send(check(n));
+  await sleep(40);
+  console.log('still before', out.chunks.length);
+  input.emit('end');
+  await run;
+  console.log('still after', out.chunks.length, plain(out.text).includes('all 6 checks passed'), !out.text.includes(HIDE), !out.text.includes(SHOW), !/\x1b\[\d+A/.test(out.text), !plain(out.text).includes('inspecting'), !plain(out.text).includes('TWEEEET'));
+
+  // A screen too short for the frame: what was drawn is taken away, and the box is drawn at the end.
+  out = fakeOut(); input = fakeIn(); signals = new EventEmitter();
+  run = playDoctor({ input, out, ...opts, rows: 20, signals });
+  input.send(head); for (let n = 0; n < 6; n++) input.send(check(n));
+  await sleep(60);
+  input.emit('end');
+  await run;
+  const text2 = out.text;
+  console.log('short', text2.endsWith(SHOW), plain(text2).includes('all 6 checks passed'), count(plain(text2), /PASSED/g) === 1, !plain(text2).includes('TWEEEET'));
+
+  // Ctrl-C: where it stands is left, the cursor is shown, and there is no verdict.
+  for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+    out = fakeOut(); input = fakeIn(); signals = new EventEmitter();
+    run = playDoctor({ input, out, ...opts, rows: 60, signals });
+    input.send(head); input.send(check(0));
+    await sleep(30);
+    signals.emit(sig);
+    const r = await run;
+    console.log(sig, r, out.text.endsWith(SHOW), !plain(out.text).includes('PASSED'), signals.listenerCount(sig), input.listenerCount('data'));
+  }
+
+  // A write that fails: the cursor is still shown, and the error is the caller's.
+  out = fakeOut(); input = fakeIn(); signals = new EventEmitter();
+  let n = 0; const real = out.write.bind(out);
+  out.write = (s) => { if (s === HIDE || s === SHOW || ++n < 3) return real(s); throw new Error('disk full'); };
+  try { await playDoctor({ input, out, ...opts, rows: 60, signals }); console.log('error no throw'); }
+  catch (e) { console.log('error', e.message, out.text.endsWith(SHOW), input.listenerCount('data')); }
+
+  // The facts end with nothing in them (the shell died first): what was drawn is taken away, no verdict.
+  out = fakeOut(); input = fakeIn(); signals = new EventEmitter();
+  run = playDoctor({ input, out, ...opts, rows: 60, signals });
+  await sleep(20);
+  input.emit('end');
+  const r = await run;
+  console.log('empty', r, out.text.endsWith(E + '[J' + SHOW) || out.text.endsWith(SHOW), !plain(out.text).includes('all 0'), !plain(out.text).includes('PASSED'));
+}
+main().catch((e) => { console.log('crashed', e.stack); process.exit(1); });
+JS
+  OUT="$(node "$LIVE_JS" "$DRAW" 2>&1)"
+  line() { printf '%s\n' "$OUT" | grep "^$1 " | head -n 1; }
+  assert_eq "$(line first)" "first true true true" "the cursor is hidden and the first frame drawn before a single check is in"
+  assert_eq "$(line arrived)" "arrived true true" "each check is on the box when its line is whole, a split line included"
+  assert_eq "$(line waiting)" "waiting true true true true" "every check in but no end: the bar is full and there is no verdict, and the cursor stays hidden"
+  assert_eq "$(line end)" "end done true 1 1" "the end plays the verdict and shows the cursor, once"
+  assert_eq "$(line verdict)" "verdict true true true true" "the last frame is the verdict, the red sign planted, the bar gone"
+  assert_eq "$(line inplace)" "inplace true" "and the frames are drawn over one another"
+  assert_eq "$(line listeners)" "listeners 0 0 0" "nothing is left listening"
+  assert_eq "$(line whistle)" "whistle true" "the whistle blew on the way"
+  assert_eq "$(line good)" "good true true true" "a good verdict: all passed, the green check"
+  assert_eq "$(line 'still before')" "still before 0" "no terminal to play on: nothing is written while the facts come"
+  assert_eq "$(line 'still after')" "still after 1 true true true true true true" "then the box, in one write, with no cursor, no moving and no inspector"
+  assert_eq "$(line short)" "short true true true true" "a screen too short for the frame: the box at the end, the cursor back, the film taken away"
+  for sig in SIGINT SIGTERM SIGHUP; do
+    assert_eq "$(line $sig)" "$sig interrupted true true 0 0" "$sig stops it with the cursor back and no verdict"
+  done
+  assert_eq "$(line error)" "error disk full true 0" "a failed write shows the cursor and is raised"
+  assert_eq "$(line empty)" "empty done true true true" "no checks at all is no verdict"
+  assert_eq "$(printf '%s\n' "$OUT" | grep -c '^crashed')" 0 "and the harness did not crash"
+fi
+
 if case_is "foreman doctor still reads a batch's progress as numbers when the show is forced"; then
   repo="$(make_repo 3 next-doctor-repo)"
   FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 run_foreman "$repo" doctor

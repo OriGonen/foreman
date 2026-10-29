@@ -4,7 +4,13 @@
 #   foreman doctor          report; exit 0 if ready, 1 if something must be fixed
 #   foreman doctor --fix    also append the .gitignore / .gitattributes lines this repo needs
 #
-# Costs nothing and starts no sandbox. It reports on three things:
+# Costs nothing and starts no sandbox. What it finds is drawn as a box, "the site inspection":
+# MACHINE and REPOSITORY side by side, then SKILL (when a copy is installed), BATCHES, and
+# FROM BEFORE THE RENAME (when something is left), and at the bottom the verdict. On a terminal
+# an inspector runs across the top while the checks run, the box filling in as each one completes,
+# then he blows a whistle and plants a red sign, or hops and gives a thumbs up beside a check.
+# Anywhere else (a pipe, CI, NO_COLOR, a terminal under 80 columns) it is the box alone, once, in
+# plain text. The closing advice and what --fix wrote come after the box. It reports on three things:
 #
 #   the machine   git, node, awk, bash 4+, and either `sbx` or `claude` depending on the
 #                 execution mode the batches here ask for
@@ -60,22 +66,92 @@ FOREMAN_INVOKE="${FOREMAN_INVOKE:-$FOREMAN_HOME/bin/foreman}"
 problems=0
 fixable=0
 
-ok()   { printf '  ok    %s\n' "$*"; }
-bad()  { printf '  MISS  %s\n' "$*"; problems=$((problems + 1)); }
-note() { printf '        %s\n' "$*"; }
+# Nothing is printed as it is found. Each check is recorded, as a `key<TAB>value` fact for the
+# renderer (foreman-draw.cjs, scene `doctor`), in the order it completes: `check`, its section,
+# its state and its words, and for a batch the detail after its name. On the show path each fact
+# is also written to the renderer, on file descriptor 3, the moment it exists, so the box fills
+# in while the rest are still being checked. SECTION is the section the next checks belong to.
+_facts=()
+_live=0
+SECTION=machine
+_fact() {    # _fact LINE
+  _facts+=("$1")
+  [ "$_live" -eq 0 ] || printf '%s\n' "$1" >&3 2>/dev/null || true
+}
+_check() {   # _check STATE TEXT [DETAIL]
+  _fact "check"$'\t'"$SECTION"$'\t'"$1"$'\t'"$2${3:+$'\t'$3}"
+}
+ok()   { _check ok "$@"; }
+bad()  { _check miss "$*"; problems=$((problems + 1)); }
+# A miss that `doctor --fix` writes: it counts the same, and the box says so.
+fix()  { _check fix "$*"; problems=$((problems + 1)); }
+# More words for the check before it.
+note() { _fact "check"$'\t'"$SECTION"$'\tnote\t'"$*"; }
+# A line under its section with no mark of its own.
+info() { _check info "$*"; }
 # Like bad(), but never touches $problems — for something worth flagging that is not a
 # reason to fail the exit code (the skill-copy staleness check is the one user of this).
-warn() { printf '  STALE %s\n' "$*"; }
+warn() { _check stale "$@"; }
 
-echo "foreman doctor"
-echo "  toolkit  $FOREMAN_HOME ($(git -C "$FOREMAN_HOME" rev-parse --short HEAD 2>/dev/null || echo 'not a git checkout'))"
-echo "  repo     $REPO_ROOT"
-echo
+# The facts as lines, one to a check, for when there is nothing to draw them with (no node, or a
+# renderer that failed): the headings, then `ok`, `MISS`, `STALE` and the notes, as doctor has
+# always printed them.
+_doctor_lines() {
+  local fact kind section state text detail last="" head
+  for fact in "${_facts[@]}"; do
+    IFS=$'\t' read -r kind section state text detail <<< "$fact"
+    [ "$kind" = check ] || continue
+    if [ "$section" != "$last" ]; then
+      [ -z "$last" ] || echo
+      case "$section" in
+        machine) head=Machine ;; repository) head=Repository ;; skill) head=Skill ;;
+        batches) head=Batches ;; rename) head="From before the rename to Foreman" ;; *) head="$section" ;;
+      esac
+      echo "$head"; last="$section"
+    fi
+    case "$state" in
+      ok)         printf '  ok    %s\n' "$text" ;;
+      miss|fix)   printf '  MISS  %s\n' "$text" ;;
+      stale)      printf '  STALE %s\n' "$text${detail:+  $detail}" ;;
+      note)       printf '        %s\n' "$text" ;;
+      *)          printf '  %s\n' "$text${detail:+  $detail}" ;;
+    esac
+    [ "$state" != ok ] || [ -z "$detail" ] || printf '        %s\n' "$detail"
+  done
+  echo
+}
+
+# On the show path the renderer starts first and is written to as the checks complete; the show
+# is wanted on a terminal wide enough for the box, not in CI, with node to draw it, and a bash
+# that can wait for a process substitution (4.4). Otherwise the box is drawn at the end, plain.
+# shellcheck source=foreman-ui.sh
+source "$FOREMAN_TOOL_DIR/foreman-ui.sh" 2>/dev/null || true
+_doctor_min_cols=80
+_doctor_draw="$FOREMAN_TOOL_DIR/foreman-draw.cjs"
+_doctor_pid=""
+_doctor_restore_cursor() { printf '\033[?25h'; }
+if command -v ui_show >/dev/null 2>&1 && ui_show 1 _doctor_tier && ui_cols _doctor_cols 1 &&
+   [ "$_doctor_cols" -ge "$_doctor_min_cols" ] && command -v node >/dev/null 2>&1 &&
+   { [ "${BASH_VERSINFO[0]}" -gt 4 ] || { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -ge 4 ]; }; }; then
+  # The renderer shows the cursor again on every way out it can take; this is for the ones it
+  # cannot (killed, or never started). The writes to a renderer that has gone must fail quietly.
+  trap _doctor_restore_cursor EXIT
+  trap '' PIPE
+  exec 3> >(exec node "$_doctor_draw" doctor --stream --tier "$_doctor_tier" --cols "$_doctor_cols" 2>/dev/null)
+  _doctor_pid=$!
+  _live=1
+fi
+
+_doctor_rev="$(git -C "$FOREMAN_HOME" rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
+printf -v _doctor_date '%(%-d %b %Y)T' -1
+_fact "repo"$'\t'"$REPO_ROOT"
+_fact "home"$'\t'"${HOME:-}"
+_fact "date"$'\t'"$_doctor_date"
+_fact "rev"$'\t'"$_doctor_rev"
 
 # ---------------------------------------------------------------------------
 # The machine
 # ---------------------------------------------------------------------------
-echo "Machine"
 for tool in git node awk; do
   if command -v "$tool" >/dev/null 2>&1; then ok "$tool"; else bad "$tool is not on PATH"; fi
 done
@@ -96,6 +172,20 @@ batches=$(find . \
   \( -name node_modules -o -name .git -o -path './.claude/worktrees' -o -name .svelte-kit \) -prune \
   -o \( -name foreman.conf -o -name ralph.conf \) -print 2>/dev/null |
   sed 's|^\./||; s|/foreman\.conf$||; s|/ralph\.conf$||' | sort -u)   # legacy: ralph.conf
+
+# How many checks there will be, as near as is known now, for the box's bar: the machine's four and
+# a runner, the repository's five, the batches (one line each, or the one saying there are none),
+# and a copy of each skill that is installed. The runner and the notes are not counted exactly, and
+# the bar is only as full as the share of this that is done.
+_foreman_skill_marker=".foreman-installed-from"
+_expect=10
+if [ -z "$batches" ]; then _expect=$((_expect + 1)); else _expect=$((_expect + 1 + ${#batches} - ${#batches//$'\n'/})); fi
+for _foreman_skill_md in "$FOREMAN_HOME"/skills/*/SKILL.md; do
+  [ -f "$_foreman_skill_md" ] || continue
+  _foreman_skill_name="${_foreman_skill_md%/SKILL.md}"; _foreman_skill_name="${_foreman_skill_name##*/}"
+  [ ! -f "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/$_foreman_skill_name/$_foreman_skill_marker" ] || _expect=$((_expect + 1))
+done
+_fact "expect"$'\t'"$_expect"
 
 # The last assignment of a scalar FOREMAN_* in a conf, unquoted. doctor deliberately does not
 # source foreman-config.sh (it has to work in a repo with no batch at all), and it must not
@@ -142,37 +232,38 @@ while IFS=' ' read -r tool mode; do
     [ "$tool" = sbx ] && note "set FOREMAN_EXEC=local in that batch's foreman.conf to run without one"
   fi
 done <<< "$runners"
-echo
 
 # ---------------------------------------------------------------------------
 # The installed skill copies, one per skill install.sh put on this machine. Free (no
-# exit-code change) and silent unless one has drifted from this checkout — install.sh always
-# replaces a marked copy wholesale, so drift only means the checkout moved on since.
-# Matches install.sh's own marker file, skill list and CLAUDE_CONFIG_DIR default exactly.
+# exit-code change); each is said to be current, or a warning that it has drifted from this
+# checkout — install.sh always replaces a marked copy wholesale, so drift only means the
+# checkout moved on since. Nothing is said about a skill that is not installed. Matches
+# install.sh's own marker file, skill list and CLAUDE_CONFIG_DIR default exactly.
 # ---------------------------------------------------------------------------
-_foreman_skill_marker=".foreman-installed-from"
+SECTION=skill
 _foreman_skill_drifted=0
 for _foreman_skill_md in "$FOREMAN_HOME"/skills/*/SKILL.md; do
   [ -f "$_foreman_skill_md" ] || continue
   _foreman_skill_src="${_foreman_skill_md%/SKILL.md}"
   _foreman_skill_name="${_foreman_skill_src##*/}"
   _foreman_skill_copy="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/$_foreman_skill_name"
-  if [ -f "$_foreman_skill_copy/$_foreman_skill_marker" ] &&
-     ! diff -rq -x "$_foreman_skill_marker" "$_foreman_skill_src" "$_foreman_skill_copy" >/dev/null 2>&1; then
-    [ "$_foreman_skill_drifted" -eq 1 ] || echo "Skill"
+  [ -f "$_foreman_skill_copy/$_foreman_skill_marker" ] || continue
+  if diff -rq -x "$_foreman_skill_marker" "$_foreman_skill_src" "$_foreman_skill_copy" >/dev/null 2>&1; then
+    ok "$_foreman_skill_name copy is current"
+  else
     _foreman_skill_drifted=1
     warn "$_foreman_skill_name — installed copy differs from $_foreman_skill_src"
   fi
 done
 if [ "$_foreman_skill_drifted" -eq 1 ]; then
   note "run: bash $FOREMAN_HOME/install.sh"
-  echo
 fi
 
 # ---------------------------------------------------------------------------
-# The two files a consuming repo has to provide itself
+# The two files a consuming repo has to provide itself. A .gitignore pattern is said as the file it
+# keeps untracked (`foreman-runs.log ignored`), which is also what fits a column of the box.
 # ---------------------------------------------------------------------------
-echo "Repository"
+SECTION=repository
 
 # `read -d ''` returns non-zero when it hits EOF without finding the delimiter, which is
 # every time here. That is expected; the variable is still set. `set -e` is deliberately
@@ -210,10 +301,10 @@ BLOCK
 missing_ignore=0
 for pat in '**/.foreman-iter.bundle' '**/.foreman-stall-marker' '**/foreman-runs.jsonl' '**/foreman-runs.log'; do
   if grep -qxF "$pat" .gitignore 2>/dev/null; then
-    ok ".gitignore  $pat"
+    ok "${pat#\*\*/} ignored"
   else
     missing_ignore=$((missing_ignore + 1))
-    bad ".gitignore  $pat"
+    fix "${pat#\*\*/} not ignored"
   fi
 done
 
@@ -224,20 +315,21 @@ grep -qE '^\*[[:space:]]+text=auto' .gitattributes 2>/dev/null && needs_attr=1
 
 if [ "$needs_attr" -eq 1 ]; then
   if grep -qE '^foreman\.conf[[:space:]]+text[[:space:]]+eol=lf' .gitattributes 2>/dev/null; then
-    ok ".gitattributes  foreman.conf text eol=lf"
+    ok ".gitattributes keeps foreman.conf LF"
   else
-    bad ".gitattributes  foreman.conf text eol=lf"
+    fix ".gitattributes does not keep foreman.conf LF"
     note "this repo rewrites line endings, so a tracked foreman.conf would come back CRLF"
     needs_attr=2
   fi
 else
-  ok ".gitattributes  not needed (this repo does not rewrite line endings)"
+  ok ".gitattributes not needed: this repo keeps its line endings"
 fi
 
 if [ "$missing_ignore" -gt 0 ] || [ "$needs_attr" -eq 2 ]; then fixable=1; fi
 
-if [ "$fixable" -eq 1 ] && [ "$FIX" -eq 1 ]; then
-  echo
+# What `--fix` writes. It is done after the box is drawn, not in the middle of it: the box says what
+# was found, and what was written to put it right follows.
+_doctor_fix() {
   if [ "$missing_ignore" -gt 0 ]; then
     printf '%s\n' "$GITIGNORE_BLOCK" >> .gitignore
     echo "  wrote  .gitignore  (+$missing_ignore pattern(s))"
@@ -249,8 +341,8 @@ if [ "$fixable" -eq 1 ] && [ "$FIX" -eq 1 ]; then
     problems=$((problems - 1))
   fi
   echo "  Review the diff and commit it — these are the only files foreman asks a repo for."
-fi
-echo
+  echo
+}
 
 # ---------------------------------------------------------------------------
 # The batches
@@ -279,24 +371,23 @@ _check_can_commit() {
   note "  FOREMAN_CLAUDE_ARGS=(--allowed-tools \"Bash(git add:*)\" \"Bash(git commit:*)\")"
 }
 
-echo "Batches"
+SECTION=batches
 if [ -z "$batches" ]; then
-  echo "  none — no directory here has a foreman.conf."
-  echo "  Create one:  $FOREMAN_INVOKE init <batch-dir>"
+  info "none — no directory here has a foreman.conf."
+  info "Create one:  $FOREMAN_INVOKE init <batch-dir>"
 else
   while IFS= read -r b; do
     [ -n "$b" ] || continue
     # Read as numbers, so never the picture `--count` draws when the show is forced.
     if counts=$(FOREMAN_SHOW=never bash "$FOREMAN_TOOL_DIR/foreman-next.sh" "$b" --count 2>/dev/null); then
-      printf '  %-40s %s of %s done\n' "$b" "${counts% *}" "${counts#* }"
+      ok "$b" "${counts% *} of ${counts#* } done"
     else
-      printf '  %-40s (order unreadable — run: %s status %s)\n' "$b" "$FOREMAN_INVOKE" "$b"
+      warn "$b" "order unreadable — run: $FOREMAN_INVOKE status $b"
     fi
     foreman_legacy_conf_path conf "$b" 2>/dev/null
     _check_can_commit "$conf" "$(_conf_value "$conf" FOREMAN_EXEC)"
   done <<< "$batches"
 fi
-echo
 
 # ---------------------------------------------------------------------------
 # legacy: what is left from before the rename from ralph. Warnings only — all of it still
@@ -325,14 +416,43 @@ _legacy_skill="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/ralph-human-followup-t
 ! grep -qE '(^|/)\.?ralph-' .gitignore 2>/dev/null ||
   _legacy_lines+=(".gitignore still lists ralph-* files; those lines can go once the foreman-* ones are in")
 if [ ${#_legacy_lines[@]} -gt 0 ]; then
-  echo "From before the rename to Foreman"
+  SECTION=rename
   for _l in "${_legacy_lines[@]}"; do warn "$_l"; done
   case "$runners" in *sbx*)
     _foreman_basename _legacy_repo "$PWD"
     note "the default sandbox is now foreman-$_legacy_repo; an old one can go:  sbx rm ralph-$_legacy_repo"
   ;; esac
-  echo
 fi
+
+# ---------------------------------------------------------------------------
+# The verdict. What to do next goes in the box; the renderer works out the rest from the checks.
+# ---------------------------------------------------------------------------
+if [ "$problems" -gt 0 ]; then
+  if [ "$fixable" -eq 1 ] && [ "$FIX" -eq 0 ]; then _fact "advice"$'\t'"fix:"$'\t'"$FOREMAN_INVOKE doctor --fix"; fi
+elif [ -n "$batches" ]; then
+  _fact "advice"$'\t'"next:"$'\t'"$FOREMAN_INVOKE run ${batches%%$'\n'*}"
+else
+  _fact "advice"$'\t'"next:"$'\t'"$FOREMAN_INVOKE init <batch-dir>"
+fi
+
+# On the show path the renderer has been drawing all along: closing its input is what tells it that
+# was the last check, and it plays the verdict, so wait for it. Anywhere else the box is drawn now,
+# whole or not at all (what a renderer prints before it fails is not kept), and if it cannot be
+# drawn the checks are listed as they always were.
+if [ "$_live" -eq 1 ]; then
+  exec 3>&-
+  _live=0
+  wait "$_doctor_pid" 2>/dev/null || { _doctor_lines; }
+  trap - EXIT PIPE
+  _doctor_restore_cursor
+elif command -v node >/dev/null 2>&1 &&
+     _doctor_box="$(printf '%s\n' "${_facts[@]}" | node "$_doctor_draw" doctor --plain --cols "$_doctor_min_cols" 2>/dev/null)"; then
+  printf '%s\n\n' "$_doctor_box"
+else
+  _doctor_lines
+fi
+
+[ "$fixable" -eq 1 ] && [ "$FIX" -eq 1 ] && _doctor_fix
 
 if [ "$problems" -gt 0 ]; then
   if [ "$fixable" -eq 1 ] && [ "$FIX" -eq 0 ]; then
