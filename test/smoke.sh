@@ -6265,6 +6265,13 @@ if case_is "foreman next --all and --count draw the stake row when the show is o
   assert_missing "$OUT" "▀" "and no picture there"
 fi
 
+if case_is "foreman doctor still reads a batch's progress as numbers when the show is forced"; then
+  repo="$(make_repo 3 next-doctor-repo)"
+  FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 run_foreman "$repo" doctor
+  assert_contains "$OUT" "0 of 3 done" "the batch is listed with its progress, as it is when the show is not forced"
+  assert_missing "$OUT" "driven" "and not with the picture's count"
+fi
+
 if case_is "foreman next prints bare paths on every stream, the show or not"; then
   repo="$(status_repo next-bare 4 1)"
   make_human_ticket "$repo" 2

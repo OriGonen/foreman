@@ -286,7 +286,8 @@ if [ -z "$batches" ]; then
 else
   while IFS= read -r b; do
     [ -n "$b" ] || continue
-    if counts=$(bash "$FOREMAN_TOOL_DIR/foreman-next.sh" "$b" --count 2>/dev/null); then
+    # Read as numbers, so never the picture `--count` draws when the show is forced.
+    if counts=$(FOREMAN_SHOW=never bash "$FOREMAN_TOOL_DIR/foreman-next.sh" "$b" --count 2>/dev/null); then
       printf '  %-40s %s of %s done\n' "$b" "${counts% *}" "${counts#* }"
     else
       printf '  %-40s (order unreadable — run: %s status %s)\n' "$b" "$FOREMAN_INVOKE" "$b"

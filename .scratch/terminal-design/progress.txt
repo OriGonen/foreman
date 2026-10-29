@@ -109,3 +109,14 @@
 - Full smoke suite: 1949 passed in 1m 32s, 1 failed (the same pre-existing CRLF `convert` case).
 - Known limit: the header wraps when a batch path is long and the terminal near 80 columns; a claude warning on stderr during the wait can garble the spinner line.
 - Remaining for a human: `foreman order` in a real window (spinner look, Ctrl-C leaves a clean line); not checkable here.
+
+
+## 10 next stake row — implemented
+- Scenes `next` + `next-count` (min 40) in `lib/foreman-draw.cjs`; `foreman-next.sh`: `_next_min_cols=40`, `_next_facts`/`_next_picture` (all or nothing, plain on any failure). Only `--all`/`--count`; `foreman_next_answer` untouched so in-process callers never draw.
+- Stake row follows 09b to the cell (ground is 6n+2 wide, tall stake has a cap one column left); wraps after (cols-2)/6 stakes, list labels cut with `…` to leave room for tags and `next`. `driven` = done, `yours` = not-done human (omitted at 0), `to go` = the rest; `--count` is the design's `total - done`.
+- Test-driven (smoke): scene vs 09b .ans cells (stakes, list, count line), tiers 24/256/16, none/all/one done, unnumbered, wrap at 40 and 70 and 100 tickets, min tie; forced `--all`/`--count` incl. order.md and malformed (exit 2, words); bare/`--list`/`--unordered` equal under `FOREMAN_SHOW=always`; plain bytes (pipe, never, colour never, 39 cols, failing renderer); pty (unforced, CI plain).
+- Review: found `doctor` reads `next --count` via `$( )` and a forced show would corrupt it; test first, then `FOREMAN_SHOW=never` on that call. Skipped: none.
+- `test/bench.sh` takes `status|next`; `next batch --all`: 108 spawns before and after.
+- Full smoke suite: 2031 passed in 1m 46s, 1 failed (the same pre-existing CRLF `convert` case).
+- Known limit: the list's minimum label is 12 columns, so very many tags at 40 columns can exceed the width.
+- Remaining for a human: `foreman next --all` in a real window (not checkable here).
