@@ -99,7 +99,9 @@ That appends the only two things a repo has to provide itself:
 - `.gitignore` — `**/.foreman-iter.bundle`, `**/.foreman-stall-marker`, `**/foreman-runs.jsonl`,
   `**/foreman-runs.log`, so a
   batch's run state stays untracked. The patterns match anywhere because a batch is any
-  directory with a `foreman.conf`.
+  directory with a `foreman.conf`. `foreman run` checks for them in preflight and refuses to
+  start without them, before anything is spent: unignored, the run's own telemetry would
+  dirty the tree and the next run would refuse instead.
 - `.gitattributes` — `foreman.conf text eol=lf`, but only if the repo normalises line
   endings. `foreman.conf` is sourced as bash, and a CRLF checkout would make `FOREMAN_EXEC` read
   as `sandbox<CR>` and fail validation with a message that looks like a lie.
@@ -554,7 +556,8 @@ The loop pauses itself, cleanly, when:
 
 A limit or a Ctrl-C that lands part-way through a turn usually leaves its work uncommitted.
 Rerunning reviews that work and commits it as `wip:` before carrying on — see "Rerunning a
-stop like that salvages it" below.
+stop like that salvages it" below. The footer says which it will be: nothing to restore, work
+the rerun will review, or work no marker vouches for, with the `--adopt-dirty` command for it.
 
 All of those exit **10** and print how to resume.
 
@@ -616,7 +619,11 @@ make. With no marker, or one that does not match, the run refuses to sync and pr
 recovery note instead. "Dirty" is judged by the `.gitignore` of the commit the run is about
 to sync to, not the clone's older one, so a build cache you have just ignored here (Kotlin's
 `.kotlin/`, say) does not block the sync that delivers the rule. If you know the work is the next ticket's, `foreman run --adopt-dirty`
-sends it through the same review turn without a marker. The marker is disposable: deleting it
+sends it through the same review turn without a marker. On the `sandbox` adapter the review
+commits in the clone, on the commit the stalled run had; if this branch has moved on since,
+that `wip:` commit is replayed onto it in the clone before it comes back, so both histories
+land. If it conflicts with what landed here, the run stops (exit 20) with the commit kept in
+the sandbox and prints the commands that bring it over as a merge for you to resolve. The marker is disposable: deleting it
 by hand is always safe and costs only the automatic rescue, and it is removed as soon as the
 tree is clean, a checkpoint succeeds, or a reviewer refuses the work. It is only written where
 `.gitignore` ignores it (as `foreman init` and `foreman doctor --fix` arrange), so an agent's

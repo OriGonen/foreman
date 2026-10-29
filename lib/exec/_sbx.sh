@@ -164,7 +164,18 @@ exec_preflight() { _sbx_login && _sbx_preflight; }
 _sbx_recover_bundle_lines() {
   local base="$1"
   printf '%s\n' \
-    "  sbx exec $FOREMAN_SANDBOX git bundle create /tmp/recover.bundle $base..HEAD" \
-    "  sbx cp $FOREMAN_SANDBOX:/tmp/recover.bundle ./recover.bundle" \
-    "  git fetch ./recover.bundle HEAD:refs/foreman/recovered && git merge --ff-only refs/foreman/recovered"
+    "  sbx exec $FOREMAN_SANDBOX sh -c 'git bundle create /tmp/recover.bundle $base..HEAD'" \
+    "  sbx cp $FOREMAN_SANDBOX:/tmp/recover.bundle $(_sbx_recover_bundle_path)" \
+    "  git fetch $(_sbx_recover_bundle_path) HEAD:refs/foreman/recovered && git merge refs/foreman/recovered" \
+    "  rm $(_sbx_recover_bundle_path) && git update-ref -d refs/foreman/recovered"
+}
+
+# Where the recovered bundle lands: the iteration bundle's own path, which every batch
+# already ignores, so the copy never shows up as a dirty tree. Relative to the repo root
+# when it can be, since the commands are run from there.
+_sbx_recover_bundle_path() {
+  local path="$BUNDLE_FILE"
+  [ -n "$path" ] || { printf './recover.bundle'; return; }
+  case "$path" in "$REPO_ROOT"/*) path="./${path#"$REPO_ROOT"/}" ;; esac
+  printf '%s' "$path"
 }

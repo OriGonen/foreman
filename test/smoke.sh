@@ -1003,6 +1003,117 @@ STUB
   assert_eq "$(dirty_against "$target")" clean "leaving a clean clone"
 fi
 
+if case_is "a rescue in a sandbox lands its wip on a host that has moved on, and stops on a conflict"; then
+  # The whole loop on the real sandbox adapter. The stub `sbx` runs every `exec NAME sh -c`
+  # inside $STUB_CLONE, with the sandbox's /tmp and source mount mapped onto real paths, and
+  # `exec NAME env … claude` runs the stub `claude` there: a review turn commits the tree as
+  # wip, any other turn lands the ticket its prompt names.
+  stub="$WORK/sbxrescue-bin"; mkdir -p "$stub"
+  cat > "$stub/sbx" <<'STUB'
+#!/bin/bash
+set -o pipefail
+case "$1" in
+  ls)     printf '%s\r\n' "$2" "$STUB_NAME" ;;
+  cp)     cp "$STUB_TMP/${2#*:/tmp/}" "$3" ;;
+  exec)   shift 2; cd "$STUB_CLONE" || exit 1
+          if [ "$1" = sh ]; then
+            sh -c "$(printf '%s' "$3" | sed "s#/tmp/#$STUB_TMP/#g; s#/run/sandbox/source#$STUB_SOURCE#g")" |
+              sed "s#$STUB_SOURCE#/run/sandbox/source#g"
+          else
+            "$@"
+          fi ;;
+esac
+STUB
+  cat > "$stub/claude" <<'STUB'
+#!/bin/bash
+while [ $# -gt 0 ]; do [ "$1" = -p ] && prompt="$2"; shift; done
+printf '%s\n=====\n' "$prompt" >> "$STUB_PROMPTS"
+commit() { git add -A && git -c user.name=stub -c user.email=stub@stub.invalid commit -qm "$1"; }
+case "$prompt" in
+  *"REVIEW CHECKPOINT TURN"*) commit "wip: stub review" ;;
+  *) ticket="$(printf '%s' "$prompt" | grep -o 'batch/issues/[0-9a-z-]*\.md' | head -1)"
+     sed -i 's/^\*\*Status:\*\*.*/**Status:** implemented/' "$ticket"
+     commit "stub: land $ticket" ;;
+esac >/dev/null 2>&1
+printf '{"type":"result","subtype":"success","is_error":false,"session_id":"stub","num_turns":1,'
+printf '"duration_ms":10,"duration_api_ms":10,"total_cost_usd":0.01,"usage":{"input_tokens":1,'
+printf '"output_tokens":1,"cache_read_input_tokens":0,"cache_creation_input_tokens":0},"result":"ok"}\n'
+STUB
+  chmod +x "$stub/sbx" "$stub/claude"
+  mkdir -p "$WORK/sbxrescue-tmp"
+
+  # A batch on the sandbox adapter, a clone of it as the sandbox left it — synced to the batch's
+  # commit, with a stalled turn's work uncommitted in it — and then one more commit on the host.
+  rescue_setup() {    # rescue_setup NAME — sets repo, clone, host_head
+    repo="$(make_repo 2 "$1")"; clone="$WORK/$1-clone"
+    sed -i 's/^FOREMAN_EXEC=fake$/FOREMAN_EXEC=sandbox/' "$repo/batch/foreman.conf"
+    printf 'shared\n' > "$repo/shared.txt"
+    git -C "$repo" add -A; git -C "$repo" commit -qm "sandbox batch"
+    rm -rf "$clone"; git clone -q "$repo" "$clone"
+    # The host path as git writes it back (C:/… under Git Bash), so the stub can map it both ways.
+    source_path="$(git -C "$clone" remote get-url origin)"
+  }
+  run_sandboxed() {    # run_sandboxed — runs the batch with --adopt-dirty against the stub
+    PATH="$stub:$PATH" STUB_CLONE="$clone" STUB_SOURCE="$source_path" STUB_TMP="$WORK/sbxrescue-tmp" \
+      STUB_NAME="foreman-${repo##*/}" STUB_PROMPTS="$WORK/${repo##*/}-prompts.txt" \
+      run_foreman "$repo" run batch --unlimited --adopt-dirty
+  }
+
+  rescue_setup sbx-moved-repo
+  printf 'half of ticket 1\n' > "$clone/feature.txt"
+  printf 'notes\n' > "$repo/NOTES.md"
+  git -C "$repo" add -A; git -C "$repo" commit -qm "unrelated host commit"
+  host_head="$(git -C "$repo" rev-parse HEAD)"
+
+  run_sandboxed
+  assert_eq "$ST" 0 "the rescue lands and the batch finishes"
+  assert_contains "$OUT" "reviewed and salvaged by a checkpoint turn" "the rescue is announced"
+  assert_eq "$(done_count "$repo")" "2" "both tickets land after it"
+  git -C "$repo" merge-base --is-ancestor "$host_head" HEAD && pass ||
+    fail "the host's own commit is still in the history"
+  wip="$(git -C "$repo" log --format=%H --grep='^wip: stub review' -1)"
+  assert_eq "$(git -C "$repo" rev-parse "$wip^")" "$host_head" "the wip sits on top of it"
+  assert_eq "$(cat "$repo/feature.txt" 2>/dev/null)" "half of ticket 1" "carrying the stalled work"
+  # The host adds its own bookkeeping commits on top; what matters is that the tickets after
+  # the rescue were worked in the sandbox on top of the wip, and came back from there.
+  { git -C "$clone" merge-base --is-ancestor "$wip" HEAD &&
+    git -C "$repo" merge-base --is-ancestor "$(git -C "$clone" rev-parse HEAD)" HEAD; } && pass ||
+    fail "the iterations after the rescue run in the sandbox on top of the wip"
+  review="$(awk '/REVIEW CHECKPOINT TURN/{f=1} f; /^=====$/{if(f)exit}' "$WORK/sbx-moved-repo-prompts.txt")"
+  assert_contains "$review" "git diff HEAD" "the review reads the diff against the clone's own HEAD"
+
+  # The same, but the host's commit touches what the stalled work touched.
+  rescue_setup sbx-conflict-repo
+  printf 'from the sandbox\n' > "$clone/shared.txt"
+  printf 'from the host\n' > "$repo/shared.txt"
+  git -C "$repo" commit -qam "conflicting host commit"
+  host_head="$(git -C "$repo" rev-parse HEAD)"
+  clone_base="$(git -C "$clone" rev-parse HEAD)"
+
+  run_sandboxed
+  assert_eq "$ST" 20 "a conflict stops for a human"
+  assert_contains "$OUT" "conflict with what this repo has committed" "and says why"
+  assert_contains "$OUT" "work exists ONLY in the sandbox" "and where the work is"
+  assert_eq "$(git -C "$repo" rev-parse HEAD)" "$host_head" "the host is untouched"
+  assert_eq "$(git -C "$clone" log -1 --format=%s)" "wip: stub review" "the wip is committed in the sandbox"
+  assert_eq "$(git -C "$clone" rev-parse HEAD^)" "$clone_base" "on the commit it had, the replay undone"
+  assert_eq "$(git -C "$clone" status --porcelain)" "" "with no rebase left half-done"
+  assert_contains "$OUT" "sh -c 'git bundle create /tmp/recover.bundle" \
+    "the recovery command runs in the sandbox's shell, out of reach of Git Bash's path rewriting"
+  assert_contains "$OUT" "git merge refs/foreman/recovered" "and merges rather than fast-forwards"
+  assert_missing "$OUT" "--ff-only" "never --ff-only"
+
+  # The commands as printed, run as printed: they bring the work over and stop on the conflict
+  # for the human to resolve.
+  recovery="$(printf '%s\n' "$OUT" | grep -E "^  (sbx (exec|cp) |git fetch )" | grep -v "git add -A\|git commit")"
+  (cd "$repo" && PATH="$stub:$PATH" STUB_CLONE="$clone" STUB_SOURCE="$source_path" \
+     STUB_TMP="$WORK/sbxrescue-tmp" bash -c "$recovery" >/dev/null 2>&1)
+  assert_contains "$(git -C "$repo" status --porcelain)" "UU shared.txt" \
+    "the recovery commands reach the merge, which stops on the conflict"
+  assert_eq "$(git -C "$repo" rev-parse refs/foreman/recovered)" "$(git -C "$clone" rev-parse HEAD)" \
+    "with the sandbox's wip as the other side"
+fi
+
 if case_is "the sandbox adapters sign in to Docker with a token, only when asked to"; then
   # A stub `sbx` that records how it was called, so this needs no Docker account and the
   # token can be checked for the one property that matters: it is on stdin, not in argv.
@@ -1293,6 +1404,9 @@ check_stopped_mid_turn_resumes() {    # check_stopped_mid_turn_resumes FAKE_BEHA
     assert_contains "$(cat "$marker" 2>/dev/null)" "batch/issues/01-ticket.md" "$stop: it names the ticket"
     assert_contains "$(cat "$marker" 2>/dev/null)" "$base" "$stop: and the base ref"
     [ -n "$(git -C "$repo" status --porcelain)" ] && pass || fail "$stop: the work is still uncommitted"
+    assert_contains "$OUT" "the rerun has an agent review it and commits it as wip" \
+      "$stop: the footer says what the rerun will do with it"
+    assert_missing "$OUT" "nothing to restore" "$stop: and not that there is nothing to restore"
 
     # "Just rerun it", as the footer says — no flag, no override.
     log="$WORK/$stop-prompts.txt"
@@ -1314,6 +1428,33 @@ check_stopped_mid_turn_resumes() {    # check_stopped_mid_turn_resumes FAKE_BEHA
 
 if case_is "a run paused by a usage limit mid-turn is reviewed and continued by the next run"; then
   check_stopped_mid_turn_resumes limit-dirty
+fi
+
+if case_is "a pause that leaves a dirty tree no marker vouches for says the rerun will refuse it"; then
+  repo="$(make_repo 2 pause-unvouched-repo)"
+  FOREMAN_FAKE_DROP_MARKER=1 FOREMAN_FAKE_BEHAVIOUR=limit-dirty \
+    run_foreman "$repo" run batch --unlimited --live
+  assert_eq "$ST" 10 "the run pauses"
+  [ -n "$(git -C "$repo" status --porcelain)" ] && pass || fail "with the work uncommitted"
+  assert_missing "$OUT" "nothing to restore" "the footer does not call the tree clean"
+  assert_contains "$OUT" "rerun will refuse to start" "it says the rerun will refuse"
+  assert_contains "$OUT" "run batch --unlimited --live --adopt-dirty" \
+    "and gives the command that adopts it, keeping the flags this run had"
+  assert_contains "$OUT" "Resume:   foreman run batch --unlimited --live" "the resume line keeps --live too"
+
+  # The rerun does refuse. Past the host's own dirty-tree preflight (which the fake adapter,
+  # working in this tree, trips first), the refusal that names --adopt-dirty keeps --live too.
+  FOREMAN_FAKE_BEHAVIOUR=land run_foreman "$repo" run batch --unlimited --live
+  assert_eq "$ST" 1 "the plain rerun refuses"
+  FOREMAN_ALLOW_DIRTY=1 FOREMAN_FAKE_BEHAVIOUR=land run_foreman "$repo" run batch --unlimited --live
+  assert_contains "$OUT" "run batch --unlimited --live --adopt-dirty" "its hint keeps --live"
+
+  # A clean pause keeps the old wording.
+  repo="$(make_repo 2 pause-clean-repo)"
+  FOREMAN_FAKE_BEHAVIOUR=limit run_foreman "$repo" run batch --unlimited
+  assert_eq "$ST" 10 "a clean pause"
+  assert_contains "$OUT" "nothing to restore" "says there is nothing to restore"
+  assert_missing "$OUT" "--live" "and adds no --live nobody asked for"
 fi
 
 if case_is "a run interrupted mid-turn is reviewed and continued by the next run"; then
@@ -1586,6 +1727,63 @@ if case_is "the prompt tells the agent how to hand a ticket off"; then
   assert_contains "$OUT" "wip: <ticket>" "the handoff names the commit shape"
   assert_contains "$OUT" "Remaining:" "and the note it has to leave"
   assert_missing "$OUT" "__CONTEXT_BUDGET__" "the marker is not left behind"
+fi
+
+if case_is "a run refuses to start in a repo that does not ignore foreman's run state"; then
+  # Unignored, the marker is never written and the telemetry dirties the tree, so it was the
+  # NEXT run that refused — after this one had paid for its turns.
+  repo="$(make_repo 1 unignored-repo)"
+  cp "$repo/.gitignore" "$WORK/unignored.gitignore"
+  printf 'build/\n' > "$repo/.gitignore"
+  git -C "$repo" commit --quiet -am "drop the foreman lines"
+  prompts="$WORK/unignored-prompts.log"
+  FOREMAN_FAKE_PROMPT_LOG="$prompts" run_foreman "$repo" run batch --unlimited
+
+  assert_eq "$ST" 1 "the preflight fails"
+  for pat in '**/.foreman-iter.bundle' '**/.foreman-stall-marker' '**/foreman-runs.jsonl' '**/foreman-runs.log'; do
+    assert_contains "$OUT" "$pat" "it names $pat"
+  done
+  assert_contains "$OUT" "doctor --fix" "and says how to fix it"
+  assert_eq "$([ -e "$prompts" ] && echo ran || echo none)" none "before any agent turn"
+  assert_eq "$([ -e "$repo/batch/foreman-runs.jsonl" ] && echo written || echo none)" none "so nothing is recorded"
+  assert_eq "$(git -C "$repo" status --porcelain)" "" "and the tree is left as it was"
+
+  # A rule that ignores the path counts, whatever it looks like.
+  printf 'build/\n**/.foreman-iter.bundle\nbatch/.foreman-stall-marker\nforeman-runs.*\n' > "$repo/.gitignore"
+  git -C "$repo" commit --quiet -am "ignore it another way"
+  run_foreman "$repo" run batch --unlimited
+  assert_eq "$ST" 0 "any rule that ignores the paths will do"
+
+  repo="$(make_repo 1 unignored-one-repo)"
+  grep -vxF '**/foreman-runs.log' "$WORK/unignored.gitignore" > "$repo/.gitignore"
+  git -C "$repo" commit --quiet -am "drop one line"
+  run_foreman "$repo" run batch --unlimited
+  assert_eq "$ST" 1 "one missing line is enough to refuse"
+  assert_contains "$OUT" '**/foreman-runs.log' "it names that one"
+  assert_missing "$OUT" '**/foreman-runs.jsonl' "and not the ones that are there"
+fi
+
+if case_is "a turn that prints two result objects is recorded as one, not as a failure"; then
+  # The CLI resumed a turn after its own result (a background task reporting back), so the
+  # payload held two result lines. Read as one JSON value it failed to parse: usage zero, and
+  # the failure scan matched `api_error` inside the second object's `api_error_status` key.
+  repo="$(make_repo 1 doubleresult-repo)"
+  FOREMAN_FAKE_BEHAVIOUR=double-result run_foreman "$repo" run batch --unlimited
+
+  assert_eq "$ST" 0 "the batch finishes"
+  assert_eq "$(done_count "$repo")" "1" "the ticket lands"
+  assert_contains "$OUT" "printed 2 result objects" "the run says it saw two"
+  row="$(cat "$repo/DONE_batch/foreman-runs.jsonl")"
+  assert_contains "$row" '"parse_ok":true' "the payload parses"
+  assert_contains "$row" '"result_count":2' "with both objects counted"
+  assert_contains "$row" '"tokens":{"input":1400,"output":300,"cache_read":7000,"cache_creation":350}' \
+    "usage is summed across them"
+  assert_contains "$row" '"cost_usd":0.03,' "cost is the last object's running total"
+  assert_contains "$row" '"num_turns":5,"duration_ms":2000,"duration_api_ms":1500' \
+    "turns and wall time summed, api time from the last"
+  assert_contains "$row" '"transient_error":false' "api_error_status is not a transient error"
+  assert_contains "$row" '"limit_hit":false' "nor is a reply that mentions billing a limit"
+  assert_contains "$row" 'the billing module tests pass' "both replies are kept"
 fi
 
 if case_is "a denied tool call names permissions, not the dirty tree it caused"; then

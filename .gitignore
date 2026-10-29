@@ -1,5 +1,5 @@
-# The toolkit holds no state, so there is nothing here to ignore yet. This file exists so
-# that a stray editor or OS artifact has somewhere to be listed.
+# The toolkit itself holds no state. What is listed here is a stray editor or OS artifact,
+# and the run state foreman writes into a batch directory when it runs batches in this repo.
 Thumbs.db
 .DS_Store
 # Foreman: per-batch run state. Every one of these lives in the batch directory, which is

@@ -20,7 +20,8 @@
 #     limit    print a usage-limit string instead of JSON (the loop should pause)
 #     limit-dirty  a usage limit that lands part-way through the ticket: writes an
 #              uncommitted file first, then hits the limit. The loop should pause, leaving
-#              the marker for the next run's review turn
+#              the marker for the next run's review turn (FOREMAN_FAKE_DROP_MARKER=1 deletes
+#              it before the limit, so nothing vouches for the tree)
 #     interrupt-dirty  Ctrl-C part-way through the ticket: writes an uncommitted file,
 #              then sends the loop SIGINT, as the terminal would. The same pause.
 #     session-limit  the same event as the CLI words it today — valid JSON whose reply is
@@ -49,6 +50,9 @@
 #              the human ticket (exit 30).
 #     auth     exit non-zero with a 401 / "Failed to authenticate" payload: the agent's login
 #              expired. The loop should stop at once, not retry.
+#     double-result  lands the ticket and prints TWO result objects, as a turn the CLI resumes
+#              after its own result does. The second carries "api_error_status":null and a
+#              reply that mentions billing; neither may read as a failure.
 #   FOREMAN_FAKE_KEYS        keys "pressed" while each call runs, as a `:`-separated list
 #              parallel to FOREMAN_FAKE_BEHAVIOUR: `+:` presses + during call 1 and nothing
 #              during call 2, `--` presses - twice during call 1. Unlike the behaviour list it
@@ -246,6 +250,15 @@ exec_run() {
     noop)
       _fake_payload success false "did nothing"
       ;;
+    double-result)
+      _fake_land "$ticket"
+      _fake_payload success false "landed $ticket"
+      printf '{"type":"result","subtype":"success","is_error":false,"api_error_status":null,'
+      printf '"session_id":"fake-session","num_turns":2,"duration_ms":800,"duration_api_ms":1500,'
+      printf '"total_cost_usd":0.03,"usage":{"input_tokens":400,"output_tokens":100,'
+      printf '"cache_read_input_tokens":2000,"cache_creation_input_tokens":50},'
+      printf '"result":"The background check finished; the billing module tests pass."}\n'
+      ;;
     dirty)
       # Appends rather than overwrites (same reasoning as partial-turn below): once a
       # checkpoint turn commits this file, a second `dirty` call must still produce a real,
@@ -276,6 +289,9 @@ exec_run() {
       ;;
     limit-dirty)
       printf 'half-written by the fake adapter (call %s)\n' "$call" >> .foreman-fake-leftover
+      # The marker gone by the time the run stops (deleted by hand, or never written): the
+      # footer then has nothing vouching for the tree it leaves.
+      [ "${FOREMAN_FAKE_DROP_MARKER:-0}" != 1 ] || rm -f "$STALL_MARKER_FILE"
       printf 'Claude AI usage limit reached|%s\n' "$(( $(date +%s) + 3600 ))"
       return 1
       ;;

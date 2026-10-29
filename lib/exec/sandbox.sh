@@ -112,6 +112,22 @@ exec_collect() {
 _sbx_sync_up() {
   local base="$1" sb_head="$2"
 
+  # The clone's commits sit on a commit other than base when the clone was not synced to
+  # it first: a rerun's rescue reviews and commits the work where it lies, on the commit
+  # the stalled run had, and this repo may have moved on since. Replay them onto base
+  # inside the clone, so what comes back fast-forwards with both histories in it. On a
+  # conflict the replay is undone and the commits stay in the clone where they were.
+  if ! _sbx_sh "git merge-base --is-ancestor $base HEAD" >/dev/null 2>&1; then
+    if ! _sbx_sh "git fetch --quiet origin && git rebase --quiet $base" >/dev/null 2>&1; then
+      _sbx_sh "git rebase --abort" >/dev/null 2>&1
+      warn "   the sandbox's commits do not apply on top of $(git rev-parse --short "$base") —"
+      warn "   they conflict with what this repo has committed since the sandbox last synced."
+      return 1
+    fi
+    sb_head="$(_sbx_sh 'git rev-parse HEAD 2>/dev/null' 2>/dev/null | tr -d '\r' | head -1)"
+    EXEC_AGENT_HEAD="$sb_head"
+  fi
+
   rm -f "$BUNDLE_FILE"
   if ! _sbx_sh "rm -f /tmp/foreman-iter.bundle && git bundle create /tmp/foreman-iter.bundle ${base}..HEAD" >/dev/null 2>&1; then
     warn "   could not bundle the sandbox's commits"

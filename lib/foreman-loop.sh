@@ -107,6 +107,7 @@ EXIT_WAITING_ON_HUMAN=30
 MODE=run
 MAX_ITERATIONS=1   # default: one iteration. --unlimited sets this to 0 (no cap).
 ADOPT_DIRTY=0      # --adopt-dirty: review and commit a dirty tree no marker vouches for.
+LIVE_FLAG=0        # --live was given, so the rerun commands this run prints carry it too.
 
 # The header comment above is the help text. Stop at the first non-comment line rather
 # than at a fixed line number, which drifts every time the header grows.
@@ -120,7 +121,7 @@ while [ $# -gt 0 ]; do
     # Exported rather than set, so it lands in foreman-config.sh's environment snapshot and
     # beats a FOREMAN_STREAM in the batch's foreman.conf — the same precedence every other knob
     # has. It has to be a real flag: the parser below rejects any unknown `-*`.
-    --live)      export FOREMAN_STREAM=1 ;;
+    --live)      export FOREMAN_STREAM=1; LIVE_FLAG=1 ;;
     --adopt-dirty) ADOPT_DIRTY=1 ;;
     --help|-h)   show_help; exit 0 ;;
     -*)          echo "Usage: ${FOREMAN_INVOKE:-foreman} run [<batch>] [<iterations>|--unlimited] [--live] [--adopt-dirty]" >&2; exit 1 ;;
@@ -484,10 +485,15 @@ human_tickets_remaining() {
 resume_args() {
   local live=""
   if [ "$MAX_ITERATIONS" -gt 0 ]; then printf ' %s' "$MAX_ITERATIONS"; else printf ' --unlimited'; fi
-  # The live view as the run ended, when L turned it on: --live only adds, and a run that
-  # started live (flag or foreman.conf) will start live again without being told.
+  # The live view as the run ended (L toggles it), or as it began when that is not known yet.
+  # --live only adds, so a run that is live from foreman.conf alone needs no flag to be again;
+  # one that was live from the flag does.
   [ -n "${RUN_CTL_DIR:-}" ] && read -r live 2>/dev/null < "$RUN_CTL_DIR/live"
-  [ "$live" != 1 ] || [ "$FOREMAN_STREAM" = 1 ] || printf ' --live'
+  [ -n "$live" ] || live="$LIVE_FLAG"
+  if [ "$live" = 1 ] && { [ "$LIVE_FLAG" = 1 ] || [ "$FOREMAN_STREAM" != 1 ]; }; then
+    printf ' --live'
+  fi
+  return 0
 }
 
 # What a run says wherever it stops at a human ticket — before it starts, when it gets there
@@ -753,6 +759,27 @@ if [ "$FOREMAN_ALLOW_DIRTY" != "1" ] && [ "$ADOPT_DIRTY" != "1" ] && tree_is_dir
   warn "           Override with FOREMAN_ALLOW_DIRTY=1."
   git status --short >&2
   preflight_failed=1
+fi
+
+# The run state every turn writes into the batch directory must be ignored. Unignored, the
+# stall marker is never written (mark_turn_in_flight checks this same rule and quietly skips
+# it), and the telemetry dirties the tree so the NEXT run refuses to start — after this one
+# has spent. Asked of git rather than grepped out of .gitignore, so any rule that ignores the
+# path counts; --no-index so a file someone committed still reads as the rule it lacks. A path
+# moved outside the repo (exit 128) is not this repo's to ignore.
+if [ "$MODE" = "run" ]; then
+  unignored=()
+  for state_path in "$BUNDLE_FILE" "$STALL_MARKER_FILE" "$RUN_JSONL" "$RUN_LOG"; do
+    git check-ignore -q --no-index "$state_path" 2>/dev/null
+    [ $? -eq 1 ] && unignored+=("**/${state_path##*/}")
+  done
+  if [ "${#unignored[@]}" -gt 0 ]; then
+    warn_preflight "the repo does not ignore the run state foreman writes into the batch:"
+    for state_path in "${unignored[@]}"; do warn "             $state_path"; done
+    warn "           Unignored, it dirties the tree and the next run refuses to start."
+    warn "           Fix with: $FOREMAN_INVOKE doctor --fix   (then commit .gitignore)"
+    preflight_failed=1
+  fi
 fi
 
 [ "$preflight_failed" -eq 0 ] || exit 1
@@ -1141,7 +1168,10 @@ run_checkpoint_turn() {    # run_checkpoint_turn [stall|review]
   local -a checkpoint_args_saved
   CHECKPOINT_REJECTION=""
   if [ "$mode" = review ]; then
-    checkpoint_prompt="$(foreman_review_checkpoint_prompt "$TICKET_FILE" "$BASE_REF")"
+    # Against the agent's own HEAD, not BASE_REF: what is under review is uncommitted, and on
+    # the clone sandbox HEAD is the commit the stalled run had. When this repo has moved on
+    # since, a diff against BASE_REF would show those newer commits, reversed, as the work.
+    checkpoint_prompt="$(foreman_review_checkpoint_prompt "$TICKET_FILE" HEAD)"
     checkpoint_max_turns=$REVIEW_CHECKPOINT_MAX_TURNS
   else
     checkpoint_prompt="$(foreman_checkpoint_prompt "$TICKET_FILE" "$BASE_REF")"
@@ -1545,6 +1575,9 @@ while true; do
   permission_denied=$(verdict_get "$VERDICT_FILE" permission_denied)
   is_error=$(verdict_get "$VERDICT_FILE" is_error)
   PREV_CONTEXT_EXHAUSTED="${context_exhausted:-0}"
+  result_count=$(verdict_get "$VERDICT_FILE" result_count)
+  [ "${result_count:-0}" -le 1 ] 2>/dev/null ||
+    warn_note "the turn printed $result_count result objects; recorded as one (usage summed, cost from the last)"
 
   # The turn is over and nothing killed the loop, so the in-flight marker has done its job —
   # except where the run is about to pause with the turn's work still uncommitted. That is
@@ -1858,7 +1891,20 @@ case "$FINAL_STATUS" in
       log_append "# next up: $remaining"
     fi
     say "Resume:   $FOREMAN_INVOKE run $BATCH_DIR$(resume_args)"
-    say "          (nothing to restore — the tickets' Status lines are the resume point)"
+    # What that rerun will find. A pause mid-turn leaves the turn's work uncommitted, and
+    # whether the rerun takes it or refuses it is the marker's call — say which here, not
+    # only once the rerun has refused.
+    if ! exec_tree_dirty; then
+      say "          (nothing to restore — the tickets' Status lines are the resume point)"
+    elif stall_marker_matches "$remaining"; then
+      say "          The tree holds this run's uncommitted work on $remaining;"
+      say "          the rerun has an agent review it and commits it as wip before carrying on."
+    else
+      say "          The tree holds uncommitted work that no stall marker vouches for, so that"
+      say "          rerun will refuse to start. If it is ${remaining:-the next ticket}'s work, have it"
+      say "          reviewed and committed instead:"
+      say "            $FOREMAN_INVOKE run $BATCH_DIR$(resume_args) --adopt-dirty"
+    fi
     ;;
   "$EXIT_WAITING_ON_HUMAN")
     say ""

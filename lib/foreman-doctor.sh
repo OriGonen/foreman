@@ -341,6 +341,7 @@ _doctor_fix() {
     problems=$((problems - 1))
   fi
   echo "  Review the diff and commit it — these are the only files foreman asks a repo for."
+  echo "  Commit before the next run: \`$FOREMAN_INVOKE run\` refuses to start on a dirty tree."
   echo
 }
 
