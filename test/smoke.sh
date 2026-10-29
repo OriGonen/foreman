@@ -1656,6 +1656,11 @@ if case_is "the model defaults to a pinned full id, and foreman.conf and the env
   assert_contains "$OUT" "Model:   haiku " "and the environment beats foreman.conf"
 fi
 
+# The words of a doctor box as one line: the borders gone and a check that wrapped back in one piece,
+# so an assertion is about what was said and not where the box broke it. Only for a full-width
+# section (batches, skill, rename), where a row holds one check and not two columns.
+box_words() { sed 's/║//g; s/│//g' | tr -s ' \n' ' '; }
+
 if case_is "doctor flags a local batch whose agent could never commit"; then
   repo="$WORK/perm-doctor-repo"
   mkdir -p "$repo/batch/issues"
@@ -1665,13 +1670,14 @@ if case_is "doctor flags a local batch whose agent could never commit"; then
 
   run_foreman "$repo" doctor
   assert_eq "$ST" 1 "doctor reports something to fix"
-  assert_contains "$OUT" "no way for the agent to commit" "says what is wrong"
-  assert_contains "$OUT" 'Bash(git add:*)' "and the line to add"
+  assert_contains "$(printf '%s\n' "$OUT" | box_words)" "✗ batch/foreman.conf — FOREMAN_EXEC=local with no way for the agent to commit" "says what is wrong, under its batch"
+  assert_contains "$(printf '%s\n' "$OUT" | box_words)" 'Add to that file: FOREMAN_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)")' "and the line to add, its quoted words whole"
+  assert_contains "$OUT" "NOT PASSED" "and the verdict agrees"
 
   printf 'FOREMAN_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)")\n' \
     >> "$repo/batch/foreman.conf"
   run_foreman "$repo" doctor
-  assert_missing "$OUT" "no way for the agent to commit" "and is satisfied once it is there"
+  assert_missing "$(printf '%s\n' "$OUT" | box_words)" "no way for the agent to commit" "and is satisfied once it is there"
 fi
 
 if case_is "a usage limit pauses the run"; then
@@ -3035,13 +3041,13 @@ if case_is "foreman doctor warns when the installed skill copy is stale, and is 
   HOME="$doctor_home" CLAUDE_CONFIG_DIR="$doctor_config" bash "$FOREMAN_HOME/install.sh" --to "$doctor_bin" >/dev/null
 
   run_doctor
-  assert_missing "$OUT" "STALE" "silent — the installed copy matches this checkout"
+  assert_missing "$OUT" "!" "no warning — the installed copy matches this checkout"
+  assert_contains "$(printf '%s\n' "$OUT" | box_words)" "■ foreman-human-followup-tickets copy is current" "and the box says it is current"
 
   printf '\n<!-- drift -->\n' >> "$(skill_copy_dir "$doctor_config")/SKILL.md"
   run_doctor
-  assert_contains "$OUT" "STALE" "warns once the installed copy drifts"
-  assert_contains "$OUT" "foreman-human-followup-tickets" "names the skill"
-  assert_contains "$OUT" "install.sh" "and says to re-run it"
+  assert_contains "$OUT" "! foreman-human-followup-tickets — installed copy differs" "warns once the installed copy drifts, and names the skill"
+  assert_contains "$(printf '%s\n' "$OUT" | box_words)" "run: bash $FOREMAN_HOME/install.sh" "and says to re-run install.sh"
 fi
 
 if case_is "foreman finds its toolkit when bash is handed a Windows path, as foreman.cmd does, from any directory"; then

@@ -178,8 +178,9 @@ batches=$(find . \
 # and a copy of each skill that is installed. The runner and the notes are not counted exactly, and
 # the bar is only as full as the share of this that is done.
 _foreman_skill_marker=".foreman-installed-from"
-_expect=10
-if [ -z "$batches" ]; then _expect=$((_expect + 1)); else _expect=$((_expect + 1 + ${#batches} - ${#batches//$'\n'/})); fi
+_expect=9
+_newlines="${batches//[^$'\n']/}"
+if [ -z "$batches" ]; then _expect=$((_expect + 1)); else _expect=$((_expect + 1 + ${#_newlines} + 1)); fi
 for _foreman_skill_md in "$FOREMAN_HOME"/skills/*/SKILL.md; do
   [ -f "$_foreman_skill_md" ] || continue
   _foreman_skill_name="${_foreman_skill_md%/SKILL.md}"; _foreman_skill_name="${_foreman_skill_name##*/}"
