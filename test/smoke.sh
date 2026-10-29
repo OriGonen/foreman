@@ -6069,6 +6069,277 @@ if case_is "foreman order on a real terminal shows without being forced, redraws
   fi
 fi
 
+# --- ticket 10: foreman next --all, the stake row ------------------------------------------
+
+# The 9b design's batch as the renderer's facts: ten tickets, six done, the next a human ticket
+# and the one after it the ticket that checks it.
+next_design_facts() {
+  local f
+  for f in 01-the-loop-stops-before-a-human-ticket 02-a-check-ticket-verifies-or-sends-back 03-status-shows-human-and-check-tickets \
+    04-foreman-order-places-human-and-check-tickets 05-document-human-tickets 06-a-skill-writes-followup-tickets; do
+    printf 'ticket\tdone\t%s.md\t\t\n' "$f"
+  done
+  printf 'ticket\tnext\t07-try-the-followup-skill-on-a-real-batch.md\thuman\t\n'
+  printf 'ticket\ttodo\t07a-followup-try-the-followup-skill.md\t\t07-try-the-followup-skill-on-a-real-batch.md\n'
+  printf 'ticket\ttodo\t08-readme-human-tickets-section.md\t\t\n'
+  printf 'ticket\ttodo\t09-end-to-end-check-on-this-machine.md\t\t\n'
+}
+
+if case_is "foreman-draw next is the 9b design: the stake row with the next one tall, the list, and the count of driven, yours and to go"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  ANS="$FOREMAN_HOME/.scratch/terminal-design/designs/09b-next.ans"
+  TXT="$FOREMAN_HOME/.scratch/terminal-design/designs/09b-next.txt"
+  CELLS="$FOREMAN_HOME/test/ans-cells.cjs"
+  OUT24="$(next_design_facts | node "$DRAW" next --tier 24 --cols 120)"; ST=$?
+  assert_eq "$ST" 0 "the next scene runs"
+  assert_eq "$(printf '%s\n' "$OUT24" | node "$CELLS" --cells 96 --rows 0-6)" "$(node "$CELLS" --cells 96 --rows 1-7 < "$ANS")" "the stake row, the ground and the labels are the design's, every cell of them, in its colours"
+  assert_eq "$(printf '%s\n' "$OUT24" | node "$CELLS" --cells 96 --rows 7-18)" "$(node "$CELLS" --cells 96 --rows 8-19 < "$ANS")" "so are the list and the line under it"
+  assert_eq "$(printf '%s\n' "$OUT24" | strip | sed -n '1,19p')" "$(sed -n '2,20p' "$TXT" | sed 's/ *$//')" "and it reads as 09b-next.txt does"
+  assert_contains "$OUT24" "${ESC}[0;1;38;2;23;22;20;48;2;224;168;74m HUMAN " "HUMAN is bold ink on amber"
+  assert_contains "$OUT24" "${ESC}[0;1;48;2;92;87;79m CHECK " "CHECK is bold on dim"
+  assert_missing "$OUT24" "38;5;" "nothing in 256"
+
+  # 256 and 16 colours: the same text, none of the 24-bit codes.
+  OUT256="$(next_design_facts | node "$DRAW" next --tier 256 --cols 120)"
+  assert_contains "$OUT256" "38;5;" "256 colours use the nearest shades"
+  assert_missing "$OUT256" "38;2;" "and not the exact ones"
+  OUT16="$(next_design_facts | node "$DRAW" next --tier 16 --cols 120)"
+  assert_missing "$OUT16" "38;5;" "16 colours use neither"
+  assert_missing "$OUT16" "38;2;" "of the other two"
+  assert_eq "$(printf '%s\n' "$OUT16" | strip)" "$(printf '%s\n' "$OUT24" | strip)" "and say the same"
+
+  # None done: the first stake stands tall, and there is no stake for what is not yet reached.
+  TEXT="$(printf 'ticket\tnext\t01-a.md\t\t\nticket\ttodo\t02-b.md\t\t\nticket\ttodo\t03-c.md\t\t\n' | node "$DRAW" next --tier 24 --cols 80 | strip)"
+  assert_eq "$TEXT" "
+ ▄▄▄▄
+  ██
+  ██
+  ██
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+  01    02    03
+
+  ▶ 01  a  next
+    02  b
+    03  c
+
+  0 driven  ·  3 to go" "none done: the tall stake first"
+  # All done: every stake is short, and nothing is next.
+  TEXT="$(printf 'ticket\tdone\t01-a.md\t\t\nticket\tdone\t02-b.md\t\t\n' | node "$DRAW" next --tier 24 --cols 80 | strip)"
+  assert_eq "$TEXT" "
+  ██    ██
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+  01    02
+
+  ✓ 01  a
+  ✓ 02  b
+
+  2 driven  ·  0 to go" "all done: short stakes only, and no tall one"
+  # One ticket.
+  TEXT="$(printf 'ticket\tnext\t01-only.md\t\t\n' | node "$DRAW" next --tier 24 --cols 80 | strip)"
+  assert_contains "$TEXT" "  01
+" "one ticket, one label"
+  assert_contains "$TEXT" "  ▶ 01  only  next" "marked next"
+  assert_contains "$TEXT" "  0 driven  ·  1 to go" "and counted"
+  # A human ticket further on is yours, and the next one, with no tag, is still to go.
+  TEXT="$(printf 'ticket\tdone\t01-a.md\t\t\nticket\tnext\t02-b.md\t\t\nticket\ttodo\t03-c.md\thuman\t\n' | node "$DRAW" next --tier 24 --cols 80 | strip)"
+  assert_contains "$TEXT" "  1 driven  ·  1 yours  ·  1 to go" "a human ticket further on is yours"
+  assert_contains "$TEXT" "  ▶ 02  b  next" "and the next, with no tag, is only next"
+  # A ticket with no number has its whole name for a label, cut to fit under its stake.
+  TEXT="$(printf 'ticket\tdone\tnotes-on-the-batch.md\t\t\nticket\tnext\t02-b.md\t\t\n' | node "$DRAW" next --tier 24 --cols 80 | strip)"
+  assert_contains "$TEXT" "  notes 02
+" "an unnumbered ticket's label is cut to what fits under its stake"
+  assert_contains "$TEXT" "  ✓ notes-on-the-batch
+" "and the list has all of it"
+fi
+
+if case_is "foreman-draw next wraps the stake row to the width, and cuts names that do not fit"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  # Ten stakes need 62 columns; at 40 only six fit, so the row wraps after six.
+  TEXT="$(next_design_facts | node "$DRAW" next --tier 24 --cols 40 | strip)"
+  assert_eq "$(printf '%s\n' "$TEXT" | sed -n '1,12p')" "
+  ██    ██    ██    ██    ██    ██
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+  01    02    03    04    05    06
+
+ ▄▄▄▄
+  ██
+  ██
+  ██
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+  07    07a   08    09" "the first six stakes, then the rest: the tall one stands in the row that holds it"
+  # No line is wider than the screen, names included.
+  WIDEST="$(printf '%s\n' "$TEXT" | node -e 'let m = 0; for (const l of require("fs").readFileSync(0, "utf8").split("\n")) m = Math.max(m, Array.from(l).length); console.log(m)')"
+  if [ "$WIDEST" -le 40 ]; then pass; else fail "no line of the picture is wider than 40 columns (widest: $WIDEST)"; fi
+  assert_contains "$TEXT" "  ▶ 07  try-the-followu…   HUMAN   next" "a name too long for the screen is cut with an ellipsis, and the tag and next still fit"
+  # Wider, with the tag and 'next' to fit, the name still gives way to them.
+  TEXT="$(next_design_facts | node "$DRAW" next --tier 24 --cols 70 | strip)"
+  WIDEST="$(printf '%s\n' "$TEXT" | node -e 'let m = 0; for (const l of require("fs").readFileSync(0, "utf8").split("\n")) m = Math.max(m, Array.from(l).length); console.log(m)')"
+  if [ "$WIDEST" -le 70 ]; then pass; else fail "nor is any at 70 (widest: $WIDEST)"; fi
+  assert_contains "$TEXT" "HUMAN   next" "the tag and next stay"
+  # A hundred tickets still draw.
+  TEXT="$(for n in $(seq -w 1 100); do printf 'ticket\ttodo\t%s-t.md\t\t\n' "$n"; done | node "$DRAW" next --tier 24 --cols 80 | strip)"
+  assert_eq "$(printf '%s\n' "$TEXT" | grep -c '^▀')" 8 "a hundred stakes wrap to eight rows at 80 columns (thirteen to a row)"
+  assert_contains "$TEXT" "  0 driven  ·  100 to go" "and the count is the whole"
+  assert_eq "$(node -e 'console.log(require(process.argv[1]).SCENES.next.min)' "$DRAW")" "$(sed -n 's/^_next_min_cols=\([0-9]*\).*/\1/p' "$FOREMAN_HOME/lib/foreman-next.sh")" "the shell and the renderer agree on the width"
+  assert_eq "$(node -e 'console.log(require(process.argv[1]).SCENES["next-count"].min)' "$DRAW")" "$(sed -n 's/^_next_min_cols=\([0-9]*\).*/\1/p' "$FOREMAN_HOME/lib/foreman-next.sh")" "for the count too"
+  # Below its minimum the renderer draws nothing and says why.
+  next_design_facts | node "$DRAW" next --tier 24 --cols 20 >/dev/null 2>&1; ST=$?
+  assert_eq "$ST" 3 "narrower than that the renderer declines, as the other scenes do"
+fi
+
+if case_is "foreman-draw next-count is the one line of the 9b design"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  ANS="$FOREMAN_HOME/.scratch/terminal-design/designs/09b-next.ans"
+  CELLS="$FOREMAN_HOME/test/ans-cells.cjs"
+  OUT24="$(printf 'done\t6\ntotal\t10\n' | node "$DRAW" next-count --tier 24 --cols 80)"; ST=$?
+  assert_eq "$ST" 0 "the next-count scene runs"
+  assert_eq "$(printf '%s\n' "$OUT24" | node "$CELLS" --cells 60)" "$(tail -1 "$ANS" | node "$CELLS" --cells 60)" "the line is the design's, in its colours"
+  assert_eq "$(printf '%s\n' "$OUT24" | strip)" "6 of 10  ·  6 driven  ·  4 to go" "and reads as it does"
+  assert_eq "$(printf 'done\t0\ntotal\t3\n' | node "$DRAW" next-count --tier 16 --cols 80 | strip)" "0 of 3  ·  0 driven  ·  3 to go" "nothing done"
+  assert_eq "$(printf 'done\t3\ntotal\t3\n' | node "$DRAW" next-count --tier 16 --cols 80 | strip)" "3 of 3  ·  3 driven  ·  0 to go" "everything done"
+fi
+
+if case_is "foreman next --all and --count draw the stake row when the show is on"; then
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  show() { FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 run_foreman "$@"; }
+  repo="$(status_repo next-show 5 2)"
+  make_human_ticket "$repo" 3
+  make_followup_ticket "$repo" 4 3
+
+  show "$repo" next batch --all
+  assert_eq "$ST" 0 "--all exits 0"
+  assert_contains "$OUT" "38;2;" "it is drawn in 24 bits"
+  assert_eq "$(printf '%s\n' "$OUT" | strip)" "
+             ▄▄▄▄
+              ██
+              ██
+  ██    ██    ██
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+  01    02    03    04    05
+
+  ✓ 01  ticket
+  ✓ 02  ticket
+  ▶ 03  ticket   HUMAN   next
+    04  ticket   CHECK
+    05  ticket
+
+  2 driven  ·  1 yours  ·  2 to go" "the stakes, the list with its tags, and the count"
+  assert_missing "$OUT" "batch/issues" "no paths"
+
+  show "$repo" next batch --count
+  assert_eq "$ST" 0 "--count exits 0"
+  assert_eq "$(printf '%s\n' "$OUT" | strip)" "2 of 5  ·  2 driven  ·  3 to go" "one line"
+  assert_contains "$OUT" "38;2;" "in 24 bits"
+
+  # At 16 colours it is drawn in the old codes.
+  FOREMAN_SHOW=always FOREMAN_COLOR=16 COLUMNS=120 run_foreman "$repo" next batch --all
+  assert_missing "$OUT" "38;2;" "no 24-bit codes at 16 colours"
+  assert_missing "$OUT" "38;5;" "and no 256-colour ones"
+  assert_contains "$(printf '%s\n' "$OUT" | strip)" "  ▶ 03  ticket   HUMAN   next" "the same picture"
+
+  # The order file decides the order, as it does for the paths.
+  printf '<!-- ORDER:BEGIN -->\n```\nbatch/issues/05-ticket.md\nbatch/issues/01-ticket.md\n```\n<!-- ORDER:END -->\n' > "$repo/batch/order.md"
+  show "$repo" next batch --all
+  assert_eq "$(printf '%s\n' "$OUT" | strip | sed -n '7,12p')" "  05    01
+
+  ▶ 05  ticket  next
+  ✓ 01  ticket
+
+  1 driven  ·  1 to go" "the stakes follow order.md, and the tall one is the first not done"
+
+  # A batch that cannot be read is an error, in words, as before.
+  printf '<!-- ORDER:BEGIN -->\n```\nbatch/issues/99-nope.md\n```\n<!-- ORDER:END -->\n' > "$repo/batch/order.md"
+  show "$repo" next batch --all
+  assert_eq "$ST" 2 "a batch that is malformed exits 2"
+  assert_contains "$OUT" "lists a ticket that does not exist: batch/issues/99-nope.md" "and says so"
+  assert_missing "$OUT" "▀" "with no picture"
+  show "$repo" next batch --count
+  assert_eq "$ST" 2 "for --count too"
+  assert_missing "$OUT" "▀" "and no picture there"
+fi
+
+if case_is "foreman next prints bare paths on every stream, the show or not"; then
+  repo="$(status_repo next-bare 4 1)"
+  make_human_ticket "$repo" 2
+  for mode in "" --list --unordered; do
+    run_foreman "$repo" next batch $mode
+    want="$OUT"
+    FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 run_foreman "$repo" next batch $mode
+    assert_eq "$OUT" "$want" "'next${mode:+ $mode}' under FOREMAN_SHOW=always is what a pipe gets"
+    assert_missing "$OUT" $'\033' "with no escape in it"
+  done
+  run_foreman "$repo" next batch
+  assert_eq "$OUT" "batch/issues/02-ticket.md" "the next ticket's bare path"
+  run_foreman "$repo" next batch --list
+  assert_eq "$OUT" "batch/issues/02-ticket.md
+batch/issues/03-ticket.md
+batch/issues/04-ticket.md" "the list of paths"
+  # The same with the batch left to the config.
+  FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 run_foreman "$repo" next
+  assert_missing "$OUT" $'\033' "a bare 'foreman next' draws nothing"
+fi
+
+if case_is "foreman next --all and --count are today's text, byte for byte, wherever the show is not wanted"; then
+  repo="$(status_repo next-plain 4 1)"
+  make_human_ticket "$repo" 2
+  want_all="batch/issues/01-ticket.md
+batch/issues/02-ticket.md
+batch/issues/03-ticket.md
+batch/issues/04-ticket.md"
+  run_foreman "$repo" next batch --all
+  assert_eq "$OUT" "$want_all" "piped, --all is the paths"
+  run_foreman "$repo" next batch --count
+  assert_eq "$OUT" "1 4" "and --count is 'done total'"
+  same() {    # same WANT ARGS... -- ENV...
+    local want="$1" arg="$2"; shift 2
+    assert_eq "$(cd "$repo" && env "$@" "$FOREMAN" next batch "$arg" 2>&1 | od -c | tr -s ' ')" "$(printf '%s\n' "$want" | od -c | tr -s ' ')" "$arg: $LABEL"
+  }
+  each() { same "$want_all" --all "$@"; same "1 4" --count "$@"; }
+  LABEL="colour alone is not the show: this is a pipe"; each FOREMAN_COLOR=truecolor COLUMNS=120
+  LABEL="FOREMAN_SHOW=never"; each FOREMAN_SHOW=never FOREMAN_COLOR=truecolor COLUMNS=120
+  LABEL="colour never"; each FOREMAN_SHOW=always FOREMAN_COLOR=never COLUMNS=120
+  LABEL="a terminal too narrow for it"; each FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=39
+
+  # A renderer that fails leaves the plain text, with nothing of a half picture before it.
+  fake="$WORK/fake-draw-lib"; rm -rf "$fake"; mkdir -p "$fake"
+  cp -r "$FOREMAN_HOME/lib/." "$fake/"
+  printf 'process.stdout.write("half a picture"); process.exit(1);\n' > "$fake/foreman-draw.cjs"
+  OUT="$(cd "$repo" && FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 bash "$fake/foreman-next.sh" batch --all 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "a renderer that fails does not fail the command"
+  assert_eq "$OUT" "$want_all" "and --all is the paths"
+  OUT="$(cd "$repo" && FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 bash "$fake/foreman-next.sh" batch --count 2>&1)"
+  assert_eq "$OUT" "1 4" "and --count is its two numbers"
+fi
+
+if case_is "foreman next --all on a real terminal shows without being forced, and not in CI"; then
+  if command -v script >/dev/null 2>&1 && [ "$(show_of tty 1 FOREMAN_SHOW=always)" = show:16 ]; then
+    ESC=$'\033'
+    repo="$(status_repo next-tty 3 1)"
+    tty_next() { (cd "$repo" && env -u CI -u NO_COLOR -u WT_SESSION -u FOREMAN_COLOR -u FOREMAN_SHOW TERM=xterm COLORTERM=truecolor COLUMNS=100 "$@" \
+      script -qec "$FOREMAN next batch $MODE" /dev/null </dev/null 2>/dev/null); }
+    MODE=--all OUT="$(tty_next)"; OUT="${OUT//$'\r'/}"
+    assert_contains "$OUT" "38;2;" "a terminal that says truecolor gets 24 bits"
+    assert_contains "$(printf '%s\n' "$OUT" | sed "s/${ESC}\[[0-9;]*[mK]//g")" "1 driven  ·  2 to go" "and the show, unforced"
+    MODE="" OUT="$(tty_next)"
+    assert_eq "${OUT//$'\r'/}" "batch/issues/02-ticket.md" "a bare 'next' on a terminal is the bare path"
+    MODE=--list OUT="$(tty_next)"
+    assert_eq "${OUT//$'\r'/}" "batch/issues/02-ticket.md
+batch/issues/03-ticket.md" "and so is '--list'"
+    MODE=--all OUT="$(tty_next CI=true)"; OUT="${OUT//$'\r'/}"
+    assert_contains "$OUT" "batch/issues/01-ticket.md" "CI is plain, terminal or not"
+    assert_missing "$OUT" "▀" "with no picture"
+  else
+    printf '  (skipped: no `script` to give a terminal)\n'
+  fi
+fi
+
 # ---------------------------------------------------------------------------
 # A case process that ran the last case in the file ends here.
 [ "$CASE_OPEN" = 1 ] && case_finish

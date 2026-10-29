@@ -1,11 +1,14 @@
 #!/bin/bash
-# Benchmark for `foreman status` — a measuring instrument, not a test: it asserts nothing and
+# Benchmark for `foreman status` (or `foreman next`) — a measuring instrument, not a test: it asserts nothing and
 # is not part of the smoke suite. It builds its own 3-ticket batch on the `fake` adapter,
 # times `foreman status` on it over several runs, then traces one call and breaks its spawns
 # down by command, so a change that removes a spawn can be shown to have done so.
 #
 #   bash test/bench.sh            5 timed runs, then the spawn breakdown
 #   bash test/bench.sh 10         10 timed runs
+#   bash test/bench.sh next       the same for `foreman next batch --all`, the plain path of which
+#                                 must start no more processes than it did before it had a show
+#   bash test/bench.sh next 10    (a command, then the runs, in either order)
 #
 # Under Git Bash a run of `foreman status` takes tens of seconds, so the default takes a few
 # minutes. There is no warm-up: the first run includes any cold-cache cost, and is shown.
@@ -28,12 +31,16 @@ FOREMAN_HOME="$(cd "$TEST_DIR/.." && pwd)"
 FOREMAN="$FOREMAN_HOME/bin/foreman"
 
 RUNS=5
-case "${1:-}" in
-  "") ;;
-  -h|--help) sed -n '2,/^set /p' "${BASH_SOURCE[0]}" | sed '$d; s/^# \{0,1\}//'; exit 0 ;;
-  *) if [[ $1 =~ ^[1-9][0-9]*$ ]]; then RUNS="$1"
-     else printf 'usage: bash test/bench.sh [runs]\n' >&2; exit 2; fi ;;
-esac
+BENCH_ARGS=(status batch)
+for arg in "$@"; do
+  case "$arg" in
+    -h|--help) sed -n '2,/^set /p' "${BASH_SOURCE[0]}" | sed '$d; s/^# \{0,1\}//'; exit 0 ;;
+    status) BENCH_ARGS=(status batch) ;;
+    next)   BENCH_ARGS=(next batch --all) ;;
+    *) if [[ $arg =~ ^[1-9][0-9]*$ ]]; then RUNS="$arg"
+       else printf 'usage: bash test/bench.sh [status|next] [runs]\n' >&2; exit 2; fi ;;
+  esac
+done
 
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/foreman-bench-XXXXXX")"
 cleanup() { rm -rf "$WORK"; }
@@ -64,7 +71,7 @@ secs_text() { printf -v SECS_TEXT '%d.%02d' $(($1 / 1000)) $(( ($1 % 1000) / 10 
 # --- timing -----------------------------------------------------------------
 platform="$OSTYPE"
 [ -n "${WSL_DISTRO_NAME:-}" ] && platform="$platform (WSL: $WSL_DISTRO_NAME)"
-printf 'Benchmark: foreman status on a 3-ticket batch (fake adapter)\n'
+printf 'Benchmark: foreman %s on a 3-ticket batch (fake adapter)\n' "${BENCH_ARGS[*]}"
 printf 'Platform:  %s, bash %s\n\n' "$platform" "$BASH_VERSION"
 
 # Standing in the repo, and sending output to a file, keep the timed span to the call itself:
@@ -74,7 +81,7 @@ TIMES=()
 printf 'Timing, %d runs:\n' "$RUNS"
 for ((n = 1; n <= RUNS; n++)); do
   now_ms; start=$NOW_MS
-  bash "$FOREMAN" status batch > "$WORK/out" 2>&1
+  bash "$FOREMAN" "${BENCH_ARGS[@]}" > "$WORK/out" 2>&1
   st=$?
   now_ms
   ms=$((NOW_MS - start))
@@ -96,7 +103,7 @@ printf '  median: %7s s\n' "$SECS_TEXT"
 # shell that ran it, sent to its own file so no redirection inside foreman can swallow it.
 TRACE="$WORK/trace"
 env SHELLOPTS=xtrace BASH_XTRACEFD=9 PS4='+ ${BASHPID} ${BASH_SUBSHELL} ' \
-  bash "$FOREMAN" status batch 9> "$TRACE" > /dev/null 2>&1
+  bash "$FOREMAN" "${BENCH_ARGS[@]}" 9> "$TRACE" > /dev/null 2>&1
 
 # What is not a spawn: builtins, keywords, and the functions foreman itself defines.
 declare -A NOT_SPAWN=()
@@ -151,7 +158,7 @@ while IFS= read -r line; do
   BY_CMD[$cmd]=$(( ${BY_CMD[$cmd]:-0} + 1 ))
 done < "$TRACE"
 
-printf '\nSpawns in one `foreman status batch` call (traced):\n'
+printf '\nSpawns in one `foreman %s` call (traced):\n' "${BENCH_ARGS[*]}"
 if [ "$lines" = 0 ]; then
   printf '  no trace captured — this bash did not honour BASH_XTRACEFD for the child shells\n'
   exit 0

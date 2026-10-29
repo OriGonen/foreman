@@ -31,6 +31,14 @@
 #   2. otherwise, every *.md under FOREMAN_ISSUES_DIRS, sorted by filename. Numeric
 #      prefixes (01-, 02-, …) are what make that meaningful.
 #
+# THE SHOW. `--all` and `--count` are for people as much as for scripts, so at a terminal wide
+# enough for it (see THE SHOW in foreman-ui.sh) they are drawn, with foreman-draw.cjs, as the stake
+# row and its list, or as one line; everywhere else they print what they always did. `next`,
+# `--list` and `--unordered` are only ever read by scripts, and print bare paths on every stream.
+# Nothing of this is in foreman_next_answer (foreman-tickets.sh), which the loop asks in-process:
+# a picture drawn there would be drawn into the loop's pipes. Asking whether to draw starts no
+# process on a plain run.
+#
 # Exit codes: 0 fine · 1 nothing left to do (in `next` mode) · 2 the batch is malformed.
 set -uo pipefail
 
@@ -57,6 +65,55 @@ source "$FOREMAN_TOOL_DIR/foreman-config.sh" || exit 2
 # script once per question. This file is only the command line in front of them.
 # shellcheck source=foreman-tickets.sh
 source "$FOREMAN_TOOL_DIR/foreman-tickets.sh" || exit 2
+
+# The renderer's own minimum width for the scenes is this number, here so a narrow terminal starts no
+# node; a smoke case holds the two together.
+_next_min_cols=40
+
+# The facts for the renderer (scene `next`: a `ticket` line for each, in order, as `foreman status`
+# gives them; scene `next-count`: `done` and `total`). Needs nothing held, and prints nothing and fails
+# if the batch cannot be read, so the plain answer says why.
+_next_facts() {    # _next_facts --all|--count
+  local ticket base state human seen_next=0 done_count=0
+  _foreman_tickets_get ordered || return 1
+  for ticket in "${_FOREMAN_TICKETS[@]}"; do
+    foreman_ticket_status "$ticket"
+    human=""
+    if [ "$_FOREMAN_TICKET_DONE" = 1 ]; then
+      state=done; done_count=$((done_count + 1))
+    else
+      state=todo
+      if [ "$seen_next" = 0 ]; then state=next; seen_next=1; fi
+      [ "$_FOREMAN_TICKET_HUMAN" != 1 ] || human=human
+    fi
+    [ "$1" = --all ] || continue
+    base="${ticket##*/}"
+    [ -z "$FOREMAN_DONE_PREFIX" ] || base="${base#"$FOREMAN_DONE_PREFIX"}"
+    printf 'ticket\t%s\t%s\t%s\t%s\n' "$state" "$base" "$human" "$_FOREMAN_TICKET_CHECKS"
+  done
+  [ "$1" != --count ] || printf 'done\t%s\ntotal\t%s\n' "$done_count" "${#_FOREMAN_TICKETS[@]}"
+}
+
+# Draws the picture, all or nothing: what the renderer prints before it fails is not printed, so the
+# plain answer that follows is never preceded by half a picture. Fails when it cannot be drawn.
+_next_picture() {    # _next_picture --all|--count
+  local facts out code scene=next
+  [ "$1" != --count ] || scene=next-count
+  facts="$(_next_facts "$1" 2>/dev/null)" || return 1
+  out="$(node "$FOREMAN_TOOL_DIR/foreman-draw.cjs" "$scene" --tier "$NEXT_TIER" --cols "$NEXT_COLS" <<< "$facts" 2>/dev/null; printf 'x%s' "$?")"
+  code="${out##*x}"
+  [ "$code" = 0 ] || return 1
+  out="${out%x*}"
+  printf '%s' "$out"
+}
+
+case "$MODE" in
+  --all|--count)
+    if ui_show 1 NEXT_TIER && ui_cols NEXT_COLS 1 && [ "$NEXT_COLS" -ge "$_next_min_cols" ] && _next_picture "$MODE"; then
+      exit 0
+    fi
+    ;;
+esac
 
 foreman_next_answer "$MODE"
 exit $?
