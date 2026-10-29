@@ -5514,14 +5514,19 @@ if case_is "foreman-keys.sh --text draws the design's foot when the loop left on
 
   printf '%s\n' "$((now - 41))" > "$ctl/foot"; printf '0.340000 25\n' > "$ctl/spent"
   foot 130
-  assert_contains "$BAR" "0m41s elapsed  ·  iteration 1 of 3  ·  \$0.34 of \$25  ·  live off" "the foot: elapsed, iteration, spend of budget, live"
+  # The clock moves while the case runs: a second or two is allowed, never a different line.
+  matches() { if [[ "$1" =~ $2 ]]; then pass; else fail "$3: got '$1'"; fi; }
+  matches "$BAR" '^0m4[1-3]s elapsed  ·  iteration 1 of 3  ·  \$0\.34 of \$25  ·  live off' "the foot: elapsed, iteration, spend of budget, live"
   assert_contains "$BAR" "+ more  − fewer  L live" "and the keys"
   assert_missing "$BAR" "q stop" "only keys that exist"
   assert_missing "$BAR" "──" "with no rule in front"
-  assert_eq "${BAR%%+ more*}" "0m41s elapsed  ·  iteration 1 of 3  ·  \$0.34 of \$25  ·  live off$(printf '%14s' '')" "the keys stand at the design's column (78)"
+  matches "$BAR" '^0m4[1-3]s elapsed  ·  iteration 1 of 3  ·  \$0\.34 of \$25  ·  live off {14}\+ more' "the keys stand at the design's column (78)"
   printf '%s\n' "$((now - 975))" > "$ctl/foot"; printf '1\n' > "$ctl/live"; printf '4.4 25\n' > "$ctl/spent"
   foot 130
-  assert_contains "$BAR" "16m15s elapsed  ·  iteration 1 of 3  ·  \$4.40 of \$25  ·  live on" "minutes past ten, and the seconds padded"
+  matches "$BAR" '^16m1[5-7]s elapsed  ·  iteration 1 of 3  ·  \$4\.40 of \$25  ·  live on' "minutes past ten, and the seconds padded"
+  printf '%s\n' "$((now - 5))" > "$ctl/foot"; foot 130
+  matches "$BAR" '^0m0[5-7]s elapsed' "seconds under ten are padded"
+  printf '%s\n' "$((now - 975))" > "$ctl/foot"
   printf '0 0\n' > "$ctl/spent"; printf '0\n' > "$ctl/budget"
   foot 130
   assert_contains "$BAR" "iteration 1 (unlimited)  ·  \$0.00  ·  live on" "no cap on either: the spend is told alone"
@@ -5542,7 +5547,8 @@ if case_is "foreman-keys.sh --text draws the design's foot when the loop left on
   # The live view's row: the design's spinner, the clock, the tool and its argument.
   printf '%s %s\n' "$((now - 75))" "Write skills/followup/SKILL.md" > "$ctl/activity"
   foot 130
-  assert_eq "     ⠹${TICKER:6}" "     ⠹ 01:15  write  skills/followup/SKILL.md" "the tool in lower case, padded, and a spinner"
+  matches "${TICKER:6}" '^ 01:1[5-7]  write  skills/followup/SKILL\.md$' "the tool in lower case, padded, after a spinner"
+  matches "${TICKER:0:6}" '^     [⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]$' "which is one of the design's"
   printf '%s %s\n' "$((now - 75))" "Bash npm test" > "$ctl/activity"
   foot 130
   assert_contains "$TICKER" "  bash   npm test" "the verb is padded to six"

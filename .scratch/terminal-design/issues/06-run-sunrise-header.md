@@ -11,15 +11,15 @@ command". The designs are `designs/03a-run-quiet-steps.ans` and
 
 **Blocked by:** 04
 
-**Status:** ready-for-agent
+**Status:** implemented
 
-- [ ] The header draws at the start with the run id, batch, model, exec, budget, done of total and the next human ticket
-- [ ] After a landed ticket the header draws again with the sun higher; progressed, stalled, sent-back and failed iterations do not move the sun
-- [ ] The iteration line and outcome match the design (`1/3  05-…`, then `✓ landed  sha  ·  time  ·  $`)
-- [ ] The pinned bar shows the elapsed time, the iteration, spend of budget, live on/off and the keys; its keys and resize handling work as before
-- [ ] `--live` prints tool calls as `│ mm:ss verb path` on the show path; plain `--live` is unchanged
-- [ ] One node call per header draw, and none per event line
-- [ ] Plain run output and `foreman-runs.log` are byte for byte today's
-- [ ] Smoke: a forced-show run of the demo fixture holds the header facts, and a second header after a landed ticket
+- [x] The header draws at the start with the run id, batch, model, exec, budget, done of total and the next human ticket
+- [x] After a landed ticket the header draws again with the sun higher; progressed, stalled, sent-back and failed iterations do not move the sun
+- [x] The iteration line and outcome match the design (`1/3  05-…`, then `✓ landed  sha  ·  time  ·  $`)
+- [x] The pinned bar shows the elapsed time, the iteration, spend of budget, live on/off and the keys; its keys and resize handling work as before
+- [x] `--live` prints tool calls as `│ mm:ss verb path` on the show path; plain `--live` is unchanged
+- [x] One node call per header draw, and none per event line
+- [x] Plain run output and `foreman-runs.log` are byte for byte today's
+- [x] Smoke: a forced-show run of the demo fixture holds the header facts, and a second header after a landed ticket
 - [ ] Checked by hand: a real `foreman run 2 --live` in Windows Terminal, including a resize
-- [ ] Full smoke suite passes; the closing note records `Full smoke suite: N passed in Mm Ss`
+- [x] Full smoke suite passes; the closing note records `Full smoke suite: N passed in Mm Ss`
