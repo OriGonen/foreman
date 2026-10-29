@@ -10,12 +10,14 @@ See `spec.md`, "Per command". The design is `designs/04a-status.ans`, from
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** implemented
 
-- [ ] The dome's height follows done / total, from empty to a full sun at the end
-- [ ] Every fact in today's plain status is in the show: next, human tickets remaining, the run-until note, the human warnings
-- [ ] The spend comes from the batch's run log, and is left out when there is none
-- [ ] Plain status (piped, in CI, narrow, no colour) is byte for byte today's
-- [ ] Smoke: the forced show of a fixture batch with none, some and all done, with a human ticket next, and with a followup
-- [ ] `test/bench.sh status`: the plain path adds no process
-- [ ] Full smoke suite passes; the closing note records `Full smoke suite: N passed in Mm Ss`
+- [x] The dome's height follows done / total, from empty to a full sun at the end
+- [x] Every fact in today's plain status is in the show: next, human tickets remaining, the run-until note, the human warnings
+- [x] The spend comes from the batch's run log, and is left out when there is none
+- [x] Plain status (piped, in CI, narrow, no colour) is byte for byte today's
+- [x] Smoke: the forced show of a fixture batch with none, some and all done, with a human ticket next, and with a followup
+- [x] `test/bench.sh status`: the plain path adds no process
+- [x] Full smoke suite passes; the closing note records `Full smoke suite: N passed in Mm Ss`
+
+Full smoke suite: 1556 passed in 1m 6s (1 failed: the pre-existing CRLF `convert` case).
