@@ -4631,6 +4631,357 @@ if case_is "foreman version on a real terminal shows without being forced, and n
 fi
 
 # ---------------------------------------------------------------------------
+# status as the sunrise dome (ticket 04)
+# ---------------------------------------------------------------------------
+
+# The facts `foreman status` sends the renderer, for the design's batch: six of ten done, the
+# seventh a human ticket with a followup after it.
+status_design_facts() {    # status_design_facts [SPENT]
+  printf 'batch\t.scratch/human-tickets\ndone\t6\ntotal\t10\nhumans\t1\ninvoke\tforeman\n'
+  [ -z "${1:-}" ] || printf 'spent\t%s\n' "$1"
+  local t
+  for t in 01-the-loop-stops-before-a-human-ticket 02-a-check-ticket-verifies-or-sends-back \
+    03-status-shows-human-and-check-tickets 04-foreman-order-places-human-and-check-tickets \
+    05-document-human-tickets 06-a-skill-writes-followup-tickets; do
+    printf 'ticket\tdone\t%s.md\t\t\n' "$t"
+  done
+  printf 'ticket\tnext\t07-try-the-followup-skill-on-a-real-batch.md\thuman\t\n'
+  printf 'ticket\ttodo\t07a-followup: try-the-followup-skill.md\t\t07-try-the-followup-skill-on-a-real-batch.md\n'
+  printf 'ticket\ttodo\t08-readme-human-tickets-section.md\t\t\n'
+  printf 'ticket\ttodo\t09-end-to-end-check-on-this-machine.md\t\t\n'
+  printf 'handoff\t.scratch/human-tickets/handoff/07-try-the-followup-skill-on-a-real-batch.md\n'
+}
+
+if case_is "foreman-draw status is the 4a design at 6 of 10: the dome, the words beside it, the list and the closing"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  ANS="$FOREMAN_HOME/.scratch/terminal-design/designs/04a-status.ans"
+  TXT="$FOREMAN_HOME/.scratch/terminal-design/designs/04a-status.txt"
+  CELLS="$FOREMAN_HOME/test/ans-cells.cjs"
+  OUT24="$(status_design_facts 14.2 | node "$DRAW" status --tier 24 --cols 120)"; ST=$?
+  assert_eq "$ST" 0 "the status scene runs"
+  TEXT24="$(printf '%s\n' "$OUT24" | strip)"
+  assert_eq "$(printf '%s\n' "$OUT24" | node "$CELLS" --cells 37 --rows 1-7)" "$(node "$CELLS" --cells 37 --rows 2-8 < "$ANS")" "the dome at 60% is the design's, every cell"
+  assert_eq "$(printf '%s\n' "$OUT24" | node "$CELLS" --cells 70 --rows 3-6)" "$(node "$CELLS" --cells 70 --rows 4-7 < "$ANS")" "and so are the words beside it, in the colours of the .ans"
+  assert_eq "$(printf '%s\n' "$TEXT24" | sed -n '2,8p')" "$(sed -n '3,9p' "$TXT" | sed 's/ *$//')" "the picture and its words read as 04a-status.txt does"
+  assert_eq "$(printf '%s\n' "$TEXT24" | sed -n '10,15p')" "$(sed -n '11,16p' "$TXT" | sed 's/ *$//')" "the six done tickets are ticked, as in the design"
+  assert_eq "$(printf '%s\n' "$OUT24" | node "$CELLS" --cells 46 --rows 9-14)" "$(node "$CELLS" --cells 46 --rows 10-15 < "$ANS")" "in the design's colours"
+  assert_eq "$(printf '%s\n' "$OUT24" | node "$CELLS" --cells 46 --rows 15-18)" "$(node "$CELLS" --cells 46 --rows 16-19 < "$ANS")" "and so are the next ticket and the three after it"
+  assert_contains "$TEXT24" "  ▶ 07  try-the-followup-skill-on-a-real-batch   " "the next ticket has the arrow"
+  assert_contains "$TEXT24" " HUMAN " "and the HUMAN tag"
+  assert_contains "$TEXT24" "    07a followup: try-the-followup-skill " "a followup ticket is its id and its name, indented"
+  assert_contains "$TEXT24" "after 07" "and says what it comes after"
+  assert_contains "$TEXT24" "6 of 10 done  ·  $14.20 spent" "the count and the spend"
+  assert_contains "$TEXT24" "the sun is 60% up" "the percentage"
+  assert_contains "$TEXT24" "next up is yours. Do ticket 07, fill in its handoff, then foreman run .scratch/human-tickets." "the closing line, with the command to type"
+  assert_eq "$(printf '%s\n' "$TEXT24" | tail -1)" ".scratch/human-tickets/handoff/07-try-the-followup-skill-on-a-real-batch.md" "and the handoff path under it"
+  assert_contains "$OUT24" "${ESC}[0;1;38;2;224;168;74m.scratch/human-tickets" "the batch is bold amber"
+  assert_contains "$OUT24" "${ESC}[0;1;38;2;246;213;142m6 of 10" "the count is bold sun"
+  assert_contains "$OUT24" "${ESC}[0;1;38;2;23;22;20;48;2;224;168;74m HUMAN " "HUMAN is dark on amber"
+  assert_contains "$OUT24" "${ESC}[0;1;38;2;224;168;74mnext up is yours." "the closing is bold amber"
+  assert_contains "$OUT24" "${ESC}[0;38;2;143;207;143m✓" "a tick is green"
+  assert_contains "$OUT24" "${ESC}[0;38;2;224;168;74m▶" "and the arrow amber"
+
+  OUT16="$(status_design_facts 14.2 | node "$DRAW" status --tier 16 --cols 120)"
+  assert_missing "$OUT16" "38;2;" "16 colours: no 24 bits"
+  assert_contains "$OUT16" "${ESC}[0;1;30;43m HUMAN " "HUMAN is black on yellow"
+  assert_eq "$(printf '%s\n' "$OUT16" | strip | sed -n '3,9p;11,22p')" "$(printf '%s\n' "$TEXT24" | sed -n '3,9p;11,22p')" "the same words at 16 (the dome's dark shades are the terminal's background)"
+  assert_contains "$(status_design_facts 14.2 | node "$DRAW" status --tier 256 --cols 120)" "38;5;" "and 256 colours are used at 256"
+
+  # What is told is drawn, and nothing else.
+  line_of() { printf '%s\n' "$1" | node "$DRAW" status --tier 24 --cols 120 | strip; }
+  assert_missing "$(status_design_facts | node "$DRAW" status --tier 24 --cols 120 | strip)" "spent" "no spend, no word of it"
+  assert_contains "$(status_design_facts | node "$DRAW" status --tier 24 --cols 120 | strip)" "6 of 10 done" "but the count is there"
+  assert_contains "$(status_design_facts 0 | node "$DRAW" status --tier 24 --cols 120 | strip)" "6 of 10 done  ·  \$0.00 spent" "a spend of nothing is still a spend"
+  assert_contains "$(status_design_facts 1234.5 | node "$DRAW" status --tier 24 --cols 120 | strip)" "\$1234.50 spent" "two decimals"
+  assert_contains "$TEXT24" "1 human ticket remaining" "the human tickets remaining are told"
+  assert_contains "$(status_design_facts | sed 's/^humans\t1/humans\t3/' | node "$DRAW" status --tier 24 --cols 120 | strip)" "3 human tickets remaining" "plural"
+  assert_missing "$(status_design_facts | sed 's/^humans\t1/humans\t0/' | node "$DRAW" status --tier 24 --cols 120 | strip)" "human ticket" "and not when there are none"
+
+  # The run-until note, when the human ticket is further on; a sent-back note; nothing left; warnings.
+  later="$(printf 'batch\tb\ndone\t1\ntotal\t4\nhumans\t1\nuntil\t2\nstop\t04-ticket.md\nticket\tdone\t01-ticket.md\t\t\nticket\tnext\t02-ticket.md\t\t\nticket\ttodo\t03-ticket.md\t\t\nticket\ttodo\t04-ticket.md\thuman\t\n')"
+  OUT="$(printf '%s\n' "$later" | node "$DRAW" status --tier 24 --cols 120 | strip)"
+  assert_contains "$OUT" "The loop will run 2 tickets, then stop at 04-ticket.md for a human." "the loop will run two, then stop at the human ticket"
+  assert_contains "$OUT" "  ▶ 02  " "the next is the second"
+  assert_missing "$OUT" "next up is yours" "the next is not a human ticket"
+  assert_contains "$(printf '%s\n' "$later" | sed 's/^until\t2/until\t1/' | node "$DRAW" status --tier 24 --cols 120 | strip)" "The loop will run 1 ticket, then" "one is not 'tickets'"
+  OUT="$(printf 'batch\tb\ndone\t0\ntotal\t2\nhumans\t1\nsentback\t07a\nhandoff\th/07.md\nticket\tnext\t07-x.md\thuman\t\nticket\ttodo\t07a-y.md\t\t07-x.md\n' | node "$DRAW" status --tier 24 --cols 120 | strip)"
+  assert_contains "$OUT" "↩ sent back by 07a: read '## Sent back by 07a' at the bottom of the ticket" "a ticket sent back says so"
+  OUT="$(printf 'batch\tb\ndone\t0\ntotal\t1\nhumans\t1\nticket\tnext\t01-x.md\thuman\t\n' | node "$DRAW" status --tier 24 --cols 120 | strip)"
+  assert_contains "$OUT" "next up is yours. Do ticket 01, then foreman run b." "a human ticket with no handoff file: nothing to fill in"
+  OUT="$(printf 'batch\tb\nname\tmine\ndone\t2\ntotal\t2\nticket\tdone\t01-x.md\t\t\nticket\tdone\t02-y.md\t\t\n' | node "$DRAW" status --tier 24 --cols 120 | strip)"
+  assert_contains "$OUT" "Nothing left — every ticket in this batch is done." "all done says so"
+  assert_contains "$OUT" "the sun is 100% up" "with the whole sun"
+  assert_contains "$OUT" "b (mine)" "the batch's name is told beside its directory"
+  OUT="$(printf 'batch\tb\ndone\t0\ntotal\t1\nwarning\tbatch/01.md has no Handoff: file\nwarning\tsecond\nticket\tnext\t01-x.md\t\t\n' | node "$DRAW" status --tier 24 --cols 120 | strip)"
+  assert_contains "$OUT" "▲ batch/01.md has no Handoff: file" "a warning is drawn"
+  assert_contains "$OUT" "▲ second" "all of them"
+  assert_eq "$(printf '%s\n' "$OUT" | tail -2 | head -1)" "▲ batch/01.md has no Handoff: file" "last, after a blank line"
+  assert_contains "$(printf 'batch\tb\ndone\t0\ntotal\t1\nticket\tnext\t01-x.md\t\t\n' | node "$DRAW" status --tier 24 --cols 120 | strip)" "the sun is 0% up" "none done"
+  assert_contains "$(printf 'batch\tb\ndone\t1\ntotal\t3\nticket\tnext\t01-x.md\t\t\n' | node "$DRAW" status --tier 24 --cols 120 | strip)" "the sun is 33% up" "a third is 33, not 34"
+  assert_contains "$(printf 'batch\tb\ndone\t299\ntotal\t300\nticket\tnext\t01-x.md\t\t\n' | node "$DRAW" status --tier 24 --cols 120 | strip)" "the sun is 99% up" "and one short of all is never 100"
+  assert_contains "$(printf 'batch\tb\n' | node "$DRAW" status --tier 24 --cols 120 | strip)" "0 of 0 done" "no facts at all still draws"
+  # A ticket with no number is its own name; names with a leading number but no dash are too.
+  OUT="$(printf 'batch\tb\ndone\t0\ntotal\t3\nticket\tnext\tintro.md\t\t\nticket\ttodo\t12.md\t\t\nticket\ttodo\t123-three-digits.md\t\t\n' | node "$DRAW" status --tier 24 --cols 120 | strip)"
+  assert_contains "$OUT" "  ▶ intro" "a name with no number is shown whole, once"
+  assert_missing "$OUT" "intro intro" "not twice"
+  assert_contains "$OUT" "    123  three-digits" "ids are padded to the widest, and to three at least"
+  assert_contains "$OUT" "    12   " "a bare number is its own id"
+
+  # Narrow.
+  OUT="$(status_design_facts 14.2 | node "$DRAW" status --tier 24 --cols 71 2>"$WORK/draw-err")"; ST=$?
+  assert_eq "$ST" 3 "71 columns is refused"
+  assert_eq "$OUT" "" "and nothing drawn"
+  assert_eq "$(status_design_facts 14.2 | node "$DRAW" status --tier 24 --cols 72 | wc -l | tr -d ' ')" 23 "72 is wide enough, for 23 rows"
+  assert_eq "$(node -e 'console.log(require(process.argv[1]).SCENES.status.min)' "$DRAW")" \
+    "$(sed -n 's/^_status_min_cols=\([0-9]*\).*/\1/p' "$FOREMAN_HOME/lib/foreman-loop.sh")" "the renderer's minimum for status is the loop's"
+fi
+
+if case_is "foreman-draw dome rises with the tickets done, from nothing to the whole sun"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  assert_eq "$(node -e '
+    const d = require(process.argv[1]);
+    const lit = (rows) => rows.slice(0, -1).filter((r) => r.some((c) => c.t.trim() !== "")).length;
+    const sun = (rows) => JSON.stringify(rows).includes("\"fg\":\"sun\"");
+    const out = [];
+    for (let k = 0; k <= 10; k++) { const rows = d.dome(k, 10, 24); out.push(`${rows.length}:${lit(rows)}:${sun(rows) ? "sun" : "-"}`); }
+    console.log(out.join(" "))' "$DRAW")" \
+    "7:1:- 7:2:- 7:2:- 7:3:- 7:4:- 7:5:- 7:5:sun 7:5:sun 8:6:sun 9:7:sun 10:8:sun" \
+    "rows of dome by tickets done of ten: it climbs, grows taller once it is past the design's 60%, and the sun is up from six"
+  assert_eq "$(node -e '
+    const d = require(process.argv[1]);
+    const text = (rows) => rows.map((r) => r.map((c) => c.t).join("")).join("\n");
+    console.log(text(d.dome(0, 10, 24)) === text(d.dome(0, 0, 24)), text(d.dome(10, 10, 24)) === text(d.dome(5, 5, 24)), text(d.dome(20, 10, 24)) === text(d.dome(10, 10, 24)), text(d.dome(-3, 10, 24)) === text(d.dome(0, 10, 24)))' "$DRAW")" \
+    "true true true true" "no tickets is nothing done; more done than there are is all of them; below nothing is nothing"
+  assert_eq "$(node -e '
+    const d = require(process.argv[1]);
+    const rows = d.dome(10, 10, 24);
+    console.log(rows[rows.length - 1].map((c) => c.t).join("").length, rows.every((r) => r.map((c) => c.t).join("").length <= 34))' "$DRAW")" \
+    "34 true" "the ground is thirty-four wide and nothing is wider"
+  assert_eq "$(node -e '
+    const d = require(process.argv[1]);
+    const rows = d.dome(10, 10, 16);
+    console.log(JSON.stringify(rows).includes("\"fg\":\"sun\""), rows.length)' "$DRAW")" "true 10" "at 16 colours too"
+fi
+
+# A repository with $2 tickets in batch/, the first $3 of them done.
+status_repo() {    # status_repo NAME COUNT DONE
+  local repo i
+  repo="$(make_repo "$2" "$1")"
+  for ((i = 1; i <= $3; i++)); do
+    sed -i 's/^\*\*Status:\*\* todo/**Status:** implemented/' "$repo/batch/issues/0$i-ticket.md"
+  done
+  [ "$3" -eq 0 ] || git -C "$repo" commit --quiet -am "$3 done"
+  printf '%s' "$repo"
+}
+
+if case_is "foreman status draws the dome when the show is on, with none, some and all of the tickets done"; then
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  show() { FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 run_foreman "$@"; }
+
+  repo="$(status_repo status-show-none 4 0)"
+  show "$repo" status batch
+  assert_eq "$ST" 0 "status exits 0"
+  assert_contains "$OUT" "38;2;" "it is drawn in 24 bits"
+  TEXT="$(printf '%s\n' "$OUT" | strip)"
+  assert_contains "$TEXT" "batch" "the batch"
+  assert_contains "$TEXT" "0 of 4 done" "none done"
+  assert_contains "$TEXT" "the sun is 0% up" "the sun is down"
+  assert_contains "$TEXT" "  ▶ 01  ticket" "the first is next"
+  assert_contains "$TEXT" "    02  ticket" "the rest are waiting"
+  assert_missing "$TEXT" "spent" "no run log, no spend"
+  assert_missing "$TEXT" "Tickets done:" "and none of the plain lines"
+  assert_missing "$TEXT" "Remaining, in order:" "or its heading"
+  assert_eq "$(printf '%s\n' "$OUT" | head -1 | strip)" "" "the picture starts with a blank line"
+  none_rows="$(printf '%s\n' "$TEXT" | wc -l | tr -d ' ')"
+
+  repo="$(status_repo status-show-some 4 2)"
+  show "$repo" status batch
+  TEXT="$(printf '%s\n' "$OUT" | strip)"
+  assert_contains "$TEXT" "2 of 4 done" "two done"
+  assert_contains "$TEXT" "the sun is 50% up" "half up"
+  assert_contains "$TEXT" "  ✓ 01  ticket" "the first is ticked"
+  assert_contains "$TEXT" "  ✓ 02  ticket" "and the second"
+  assert_contains "$TEXT" "  ▶ 03  ticket" "the third is next"
+  assert_contains "$TEXT" "    04  ticket" "the fourth waits"
+  assert_missing "$TEXT" "Nothing left" "there is something left"
+  assert_eq "$(printf '%s\n' "$TEXT" | wc -l | tr -d ' ')" "$none_rows" "as tall as with none done, up to six tenths"
+
+  repo="$(status_repo status-show-all 3 3)"
+  show "$repo" status batch
+  assert_eq "$ST" 0 "all done exits 0"
+  TEXT="$(printf '%s\n' "$OUT" | strip)"
+  assert_contains "$TEXT" "3 of 3 done" "all done"
+  assert_contains "$TEXT" "the sun is 100% up" "the whole sun"
+  assert_contains "$TEXT" "  ✓ 03  ticket" "all ticked"
+  assert_missing "$TEXT" "▶" "none is next"
+  assert_contains "$TEXT" "Nothing left — every ticket in this batch is done." "and it says so"
+  assert_gt() { [ "$1" -gt "$2" ] && pass || fail "$3: expected $1 > $2"; }
+  assert_gt "$(printf '%s\n' "$TEXT" | wc -l | tr -d ' ')" "$none_rows" "the full sun is taller than the empty ground"
+
+  # The spend is the batch's run log; a line that is not a record is not counted.
+  repo="$(status_repo status-show-spend 3 1)"
+  printf '{"cost_usd":1.25,"x":1}\nnot a record\n{"cost_usd":2.5}\n{"kind":"checkpoint","cost_usd":0.01}\n\n' > "$repo/batch/foreman-runs.jsonl"
+  show "$repo" status batch
+  assert_contains "$(printf '%s\n' "$OUT" | strip)" "1 of 3 done  ·  \$3.76 spent" "the spend is the sum of the log"
+  : > "$repo/batch/foreman-runs.jsonl"
+  show "$repo" status batch
+  assert_missing "$OUT" "spent" "an empty log is no spend"
+  printf 'not json at all\n' > "$repo/batch/foreman-runs.jsonl"
+  show "$repo" status batch
+  assert_missing "$OUT" "spent" "a log with no readable record is none either"
+  printf '{"cost_usd":"lots"}\n{"tokens":{}}\n' > "$repo/batch/foreman-runs.jsonl"
+  show "$repo" status batch
+  assert_contains "$(printf '%s\n' "$OUT" | strip)" "\$0.00 spent" "records with no cost spent nothing"
+
+  # A human ticket next, with a followup and a handoff file; the human warnings; the batch name.
+  repo="$(status_repo status-show-human 5 1)"
+  make_human_ticket "$repo" 2
+  make_followup_ticket "$repo" 3 2
+  show "$repo" status batch
+  assert_eq "$ST" 0 "a human ticket next does not change the exit code"
+  TEXT="$(printf '%s\n' "$OUT" | strip)"
+  assert_contains "$TEXT" "1 of 5 done" "one done"
+  assert_contains "$TEXT" "1 human ticket remaining" "one human ticket remaining"
+  assert_contains "$TEXT" "  ▶ 02  ticket" "the human ticket is next"
+  assert_contains "$TEXT" " HUMAN " "and tagged"
+  assert_contains "$TEXT" "    03  ticket" "the followup follows it"
+  assert_contains "$TEXT" "after 02" "and names it"
+  assert_contains "$TEXT" "next up is yours. Do ticket 02, fill in its handoff, then foreman run batch." "the closing line"
+  assert_eq "$(printf '%s\n' "$TEXT" | tail -1)" "batch/handoff/02-ticket.md" "ending on the handoff path"
+  assert_missing "$TEXT" "warning" "nothing to warn about"
+  assert_missing "$TEXT" "▲" "so no warning mark"
+
+  repo="$(status_repo status-show-warn 3 0)"
+  make_human_ticket "$repo" 2 none
+  show "$repo" status batch
+  TEXT="$(printf '%s\n' "$OUT" | strip)"
+  assert_contains "$TEXT" "▲ batch/issues/02-ticket.md has no Handoff: file — run /foreman-human-followup-tickets" "a warning, without the word warning"
+  assert_contains "$TEXT" "▲ batch/issues/02-ticket.md is a human ticket with no ticket that Checks: it" "and the other"
+  assert_contains "$TEXT" "The loop will run 1 ticket, then stop at 02-ticket.md for a human." "the loop runs one, then stops at the human ticket"
+  assert_missing "$TEXT" "next up is yours" "the human ticket is not next"
+  assert_eq "$ST" 0 "warnings do not change the exit code"
+
+  repo="$(status_repo status-show-name 2 0)"
+  printf 'FOREMAN_BATCH_NAME=my-batch\n' >> "$repo/batch/foreman.conf"
+  git -C "$repo" commit --quiet -am "a name"
+  show "$repo" status batch
+  assert_contains "$(printf '%s\n' "$OUT" | strip)" "batch (my-batch)" "the batch's name is beside its directory, as it is in the plain text"
+
+  # A ticket that was renamed once it was done keeps its number in the picture.
+  repo="$(status_repo status-show-renamed 3 1)"
+  git -C "$repo" mv batch/issues/01-ticket.md batch/issues/DONE_01-ticket.md
+  git -C "$repo" commit --quiet -m rename
+  show "$repo" status batch
+  assert_contains "$(printf '%s\n' "$OUT" | strip)" "  ✓ 01  ticket" "DONE_ is not part of its number"
+
+  # The tiers and the width.
+  repo="$(status_repo status-show-tiers 3 1)"
+  FOREMAN_SHOW=always FOREMAN_COLOR=16 COLUMNS=120 run_foreman "$repo" status batch
+  assert_missing "$OUT" "38;2;" "at 16 colours it is still drawn, not in 24 bits"
+  assert_contains "$(printf '%s\n' "$OUT" | strip)" "1 of 3 done" "with the count"
+  FOREMAN_SHOW=always FOREMAN_COLOR=256 COLUMNS=120 run_foreman "$repo" status batch
+  assert_contains "$OUT" "38;5;" "and 256"
+  FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=71 run_foreman "$repo" status batch
+  assert_contains "$OUT" "Tickets done: 1 / 3" "one column short of the picture is plain"
+  FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=72 run_foreman "$repo" status batch
+  assert_contains "$OUT" "1 of 3 done" "and exactly enough is the picture"
+fi
+
+if case_is "foreman status is today's text, byte for byte, wherever the show is not wanted"; then
+  ESC=$'\033'
+  repo="$(status_repo status-plain-human 5 1)"
+  make_human_ticket "$repo" 2
+  make_followup_ticket "$repo" 3 2
+  printf '{"cost_usd":1.25}\n' > "$repo/batch/foreman-runs.jsonl"
+  want="$(cat <<'EOF'
+Batch: batch
+Tickets done: 1 / 5  ·  human tickets remaining: 1
+
+Next: 02-ticket.md   [HUMAN — the loop will not run until you do it]
+
+Remaining, in order:
+  1  02-ticket.md   [HUMAN]
+  2  03-ticket.md   [CHECKS 02-ticket.md]
+  3  04-ticket.md
+  4  05-ticket.md
+
+── batch/issues/02-ticket.md is a human ticket. The loop stops here.
+
+It is marked '**Status:** ready-for-human': no agent is given it, and no ticket
+after it runs until it is done. It is your turn now:
+
+  1. Do what the ticket asks.
+  2. Fill in every section of batch/handoff/02-ticket.md.
+  3. Commit your work and the handoff file.
+  4. Set its status line to '**Status:** done', tick its boxes, and commit.
+  5. Rerun:  foreman run batch 1
+
+Rerunning before step 4 stops here again, and costs nothing.
+EOF
+)"
+  run_foreman "$repo" status batch
+  assert_eq "$OUT" "$want" "piped, the status is the text it always was"
+  assert_eq "$(cd "$repo" && "$FOREMAN" status batch 2>/dev/null | od -c | tr -s ' ')" "$(printf '%s\n' "$want" | od -c | tr -s ' ')" "byte for byte, down to the final newline"
+  assert_eq "$ST" 0 "and exits 0"
+  # A pinned colour tier paints the plain text's tags on any stream, as it always did; the words are the same.
+  uncoloured() { sed "s/${ESC}\[[0-9;]*m//g"; }
+  FOREMAN_COLOR=truecolor COLUMNS=120 run_foreman "$repo" status batch
+  assert_eq "$(printf '%s\n' "$OUT" | uncoloured)" "$want" "colour alone is not the show: this is a pipe"
+  assert_missing "$OUT" "▀" "and there is no picture"
+  FOREMAN_SHOW=never FOREMAN_COLOR=truecolor COLUMNS=120 run_foreman "$repo" status batch
+  assert_eq "$(printf '%s\n' "$OUT" | uncoloured)" "$want" "FOREMAN_SHOW=never"
+  assert_missing "$OUT" "▀" "with no picture"
+  FOREMAN_SHOW=always FOREMAN_COLOR=never COLUMNS=120 run_foreman "$repo" status batch
+  assert_eq "$OUT" "$want" "FOREMAN_COLOR=never"
+  FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=40 run_foreman "$repo" status batch
+  assert_eq "$(printf '%s\n' "$OUT" | uncoloured)" "$want" "a narrow screen gets today's text"
+  assert_missing "$OUT" "▀" "with no picture"
+
+  # If the renderer cannot draw, the text is all there is, and no half of a picture is left before it.
+  fake_home="$WORK/status-nonode-home"
+  mkdir -p "$fake_home"
+  cp -R "$FOREMAN_HOME/bin" "$FOREMAN_HOME/lib" "$fake_home/"
+  printf 'process.stdout.write("half a picture"); process.exit(1)\n' > "$fake_home/lib/foreman-draw.cjs"
+  OUT="$(cd "$repo" && FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 bash "$fake_home/bin/foreman" status batch 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "a renderer that fails does not fail status"
+  assert_eq "$(printf '%s\n' "$OUT" | uncoloured)" "$want" "and the plain text is printed alone"
+  assert_missing "$OUT" "half a picture" "with none of what the renderer got out before it failed"
+
+  # Nothing left, and a broken batch, are as they were.
+  repo="$(status_repo status-plain-all 2 2)"
+  run_foreman "$repo" status batch
+  assert_eq "$OUT" "$(printf 'Batch: batch\nTickets done: 2 / 2\n\nNothing left — every ticket in this batch is done.')" "all done"
+  printf '<!-- ORDER:BEGIN -->\nbatch/issues/nope.md\n<!-- ORDER:END -->\n' > "$repo/batch/order.md"
+  git -C "$repo" add -A >/dev/null; git -C "$repo" commit --quiet -m "a broken order"
+  FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 run_foreman "$repo" status batch
+  assert_eq "$ST" 1 "a batch whose order names a missing ticket still fails status"
+  assert_contains "$OUT" "does not exist" "and says why"
+  assert_missing "$OUT" "▀" "with no picture"
+fi
+
+if case_is "foreman status on a real terminal shows without being forced, and not in CI"; then
+  if command -v script >/dev/null 2>&1 && [ "$(show_of tty 1 FOREMAN_SHOW=always)" = show:16 ]; then
+    ESC=$'\033'
+    repo="$(status_repo status-tty 3 1)"
+    OUT="$(cd "$repo" && env -u CI -u NO_COLOR -u WT_SESSION -u FOREMAN_COLOR -u FOREMAN_SHOW TERM=xterm COLORTERM=truecolor COLUMNS=100 \
+      script -qec "$FOREMAN status batch" /dev/null </dev/null 2>/dev/null)"
+    OUT="${OUT//$'\r'/}"
+    assert_contains "$OUT" "38;2;" "a terminal that says truecolor gets 24 bits"
+    assert_contains "$(printf '%s\n' "$OUT" | sed "s/${ESC}\[[0-9;]*[mK]//g")" "1 of 3 done" "and the show, unforced"
+    OUT="$(cd "$repo" && env -u NO_COLOR -u WT_SESSION -u FOREMAN_COLOR -u FOREMAN_SHOW CI=true TERM=xterm COLORTERM=truecolor COLUMNS=100 \
+      script -qec "$FOREMAN status batch" /dev/null </dev/null 2>/dev/null)"
+    OUT="${OUT//$'\r'/}"
+    assert_contains "$OUT" "Tickets done: 1 / 3" "CI is plain, terminal or not"
+    assert_missing "$OUT" "38;2;" "with no colour at all"
+  else
+    printf '  (skipped: no `script` to give a terminal)\n'
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 # A case process that ran the last case in the file ends here.
 [ "$CASE_OPEN" = 1 ] && case_finish
 exit 0
