@@ -82,7 +82,7 @@
 - Facts: batch/name, done/total, `ticket` (status's format, first is `next`), exec/perms/model/effort/live, cost/time/iterations as `budget_label` gives them, `logs`×2, `warning`, `screen`, then `promptfor` + one `prompt` fact per line, or `stop` + `handoff` when a human ticket is next (a `■ would stop before` row, no prompt, rule still closes).
 - Fold: room = screen − rows above − 2, never under 9; keeps the head, ⋮, last 2 lines; whole if it fits. Prompt is not truncated (terminal wraps); control chars in it are shown as `·`.
 - Test-driven (smoke): scene vs 11a .ans/.txt cells and words, tiers 24/16/256, fold sizes, exact prompt round-trip, settings/budget variants, tags, warnings, human stop, 91/92 width and the shell/renderer tie, `ui_rows`, forced show, plain byte for byte (pipe, never, colour never, narrow, failing renderer), pty.
-- Full smoke: 1706 passed in 1m 23s, 1 failed (the same pre-existing CRLF `convert` case).
+- Full smoke suite: 1706 passed in 1m 23s, 1 failed (the same pre-existing CRLF `convert` case).
 - Deliberate: second SETTINGS column follows the design (starts at col 42, or 3 on from a longer value), so a long exec/live makes it ragged, as the design's own `live` row is. Human-next adds the handoff path (from 11b); plain says only that it would stop.
 - Known limit: a prompt line wider than the terminal wraps and the fold counts it as one row, so a very narrow window can scroll the header off. Skipped: none.
 - Remaining for a human: look at `foreman dry-run` in a real window (not checkable here).
