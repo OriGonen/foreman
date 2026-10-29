@@ -6539,7 +6539,19 @@ async function main() {
   input.emit('end');
   await run;
   const text2 = out.text;
-  console.log('short', text2.endsWith(SHOW), plain(text2).includes('all 6 checks passed'), count(plain(text2), /PASSED/g) === 1, !plain(text2).includes('TWEEEET'));
+  console.log('short', !text2.includes(HIDE), !text2.includes(SHOW), plain(text2).includes('all 6 checks passed'), count(plain(text2), /PASSED/g) === 1, !plain(text2).includes('TWEEEET'));
+
+  // A box that grows past the screen part way: the film is taken away, the cursor shown, the box drawn at the end.
+  out = fakeOut(); input = fakeIn(); signals = new EventEmitter();
+  run = playDoctor({ input, out, ...opts, rows: 28, signals });
+  input.send(head);
+  await sleep(30);
+  for (let n = 0; n < 6; n++) input.send(check(n));
+  await sleep(60);
+  input.emit('end');
+  await run;
+  const text3 = out.text;
+  console.log('grows', text3.startsWith(HIDE), text3.endsWith(SHOW), text3.includes(E + '[J'), plain(text3).includes('all 6 checks passed'), count(plain(text3), /PASSED/g) === 1, !plain(text3).includes('TWEEEET'));
 
   // Ctrl-C: where it stands is left, the cursor is shown, and there is no verdict.
   for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
@@ -6582,7 +6594,8 @@ JS
   assert_eq "$(line good)" "good true true true" "a good verdict: all passed, the green check"
   assert_eq "$(line 'still before')" "still before 0" "no terminal to play on: nothing is written while the facts come"
   assert_eq "$(line 'still after')" "still after 1 true true true true true true" "then the box, in one write, with no cursor, no moving and no inspector"
-  assert_eq "$(line short)" "short true true true true" "a screen too short for the frame: the box at the end, the cursor back, the film taken away"
+  assert_eq "$(line short)" "short true true true true true" "a screen too short from the start: the box at the end, and the cursor never touched"
+  assert_eq "$(line grows)" "grows true true true true true true" "one the box outgrows: the film taken away, the cursor back, the box at the end"
   for sig in SIGINT SIGTERM SIGHUP; do
     assert_eq "$(line $sig)" "$sig interrupted true true 0 0" "$sig stops it with the cursor back and no verdict"
   done
@@ -6695,6 +6708,7 @@ if case_is "foreman doctor forced to show draws the same box in colour, and list
   assert_eq "$ST" 1 "no node: exit 1"
   assert_contains "$OUT" "  MISS  node is not on PATH" "no node: it is a MISS, in the old lines"
   assert_contains "$OUT" "  ok    git" "and the rest are listed"
+  assert_contains "$OUT" "  ok    batch  0 of 2 done" "a batch with its progress on one line"
   assert_contains "$OUT" "Machine" "under their headings"
   assert_missing "$OUT" "╔" "with no box"
   assert_contains "$OUT" "thing(s)" "and the closing words"

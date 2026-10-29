@@ -110,13 +110,12 @@ _doctor_lines() {
       echo "$head"; last="$section"
     fi
     case "$state" in
-      ok)         printf '  ok    %s\n' "$text" ;;
+      ok)         printf '  ok    %s\n' "$text${detail:+  $detail}" ;;
       miss|fix)   printf '  MISS  %s\n' "$text" ;;
       stale)      printf '  STALE %s\n' "$text${detail:+  $detail}" ;;
       note)       printf '        %s\n' "$text" ;;
       *)          printf '  %s\n' "$text${detail:+  $detail}" ;;
     esac
-    [ "$state" != ok ] || [ -z "$detail" ] || printf '        %s\n' "$detail"
   done
   echo
 }
@@ -143,7 +142,7 @@ if command -v ui_show >/dev/null 2>&1 && ui_show 1 _doctor_tier && ui_cols _doct
 fi
 
 _doctor_rev="$(git -C "$FOREMAN_HOME" rev-parse --short HEAD 2>/dev/null || echo 'unknown')"
-printf -v _doctor_date '%(%-d %b %Y)T' -1
+printf -v _doctor_date '%(%-d %b %Y)T' -1 2>/dev/null || _doctor_date=""    # (bash 4.2 has the format)
 _fact "repo"$'\t'"$REPO_ROOT"
 _fact "home"$'\t'"${HOME:-}"
 _fact "date"$'\t'"$_doctor_date"
