@@ -131,3 +131,16 @@
 - Known limit: a terminal under 36 rows (or the box outgrowing it) gets the painted box with no inspector; a long batch path wraps in its row.
 - Full smoke suite: 2276 passed in 2m 0s, 1 failed (the same pre-existing CRLF `convert` case).
 - Remaining for a human: `foreman doctor` in a real window with a slow check (the run lasts as long as the checks) and Ctrl-C — pty-tested here, not by hand; that item in the ticket stays unticked.
+
+
+## 11 report the bill — implemented
+- Scene `report` (min 84) in `lib/foreman-draw.cjs`: the mark beside `$total  over N runs · N iterations · N model-minutes`, a 28-cell outcome bar (largest-remainder shares, an outcome that happened keeps >= 1 cell) and legend, TOTAL (k/M figures; `also` and `skipped` lines only when there is something), BY RUN ledger with a 16-cell rust cost bar per run to the eighth, scaled to the dearest. Facts are numbers; the scene words them. `--by-ticket`/`--failures` pass their tables as `table head|text` facts.
+- `bin/foreman report()` (`_report_min_cols=84`) asks `ui_show`/`ui_cols` and hands tier and width to node in `FOREMAN_DRAW_TIER`/`FOREMAN_DRAW_COLS` (cleared otherwise, so a stray one never draws into a pipe); `foreman-report.cjs` requires the draw module; any failure to draw = today's text. Plain is byte for byte (goldens in `test/golden/`, `.gitattributes` keeps them LF).
+- No log / no readable records: the title (mark, no totals) on stdout, today's message on stderr under it, exit 1 as before.
+- Test-driven (smoke): scene vs 10a .ans cell for cell and .txt; bar apportionment, eighths, scaling, figures table, legend, footer wrap, tiers, min tie; plain bytes in 9 environments x 3 views; forced show of the fixture log (whole output), tables == plain tables; empty/no log; failing/missing renderer; ledger too wide; wide table row still drawn; pty (unforced, CI, NO_COLOR).
+- Review: found a wide `--by-ticket` table row would have dropped the whole picture to plain (guard now measures the drawing only); goldens could be CRLF on a Windows checkout (`.gitattributes`). Skipped: none.
+- Deliberate deviations: footer hints name the batch (`foreman report <batch> --by-ticket`) only when the person named it, so they work with several batches; costs 2 decimals in the picture, 4 in the text; the picture drops the "Run log:" line and "started" times (the header and the ledger carry what the design shows).
+- Known limit: a cost line that outgrows the screen (huge totals near 84 columns) is plain, not wrapped.
+- Full smoke suite: 2414 passed in 2m 2s, 1 failed (the same pre-existing CRLF `convert` case).
+- Remaining for a human: `foreman report` in a real window (not checkable here).
+

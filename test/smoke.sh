@@ -7181,6 +7181,12 @@ if case_is "foreman report is the text when the picture cannot be made"; then
   OUT="$(FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=90 "$FOREMAN" report "$WORK/report-wide/b" 2>&1)"
   assert_contains "$OUT" "Run log: " "a ledger that would not fit is the text"
   assert_missing "$OUT" "▀" "with no picture"
+  # A table row wider than the screen does not cost the picture: tables are words, and wrap as they did.
+  mkdir -p "$WORK/report-bigtable/b"
+  sed 's/"cache_read":1200000/"cache_read":1234567890123456/' "$FOREMAN_HOME/test/golden/report-runs.jsonl" > "$WORK/report-bigtable/b/foreman-runs.jsonl"
+  OUT="$(FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=86 "$FOREMAN" report "$WORK/report-bigtable/b" --by-ticket 2>&1 | sed "s/$(printf '\033')\[[0-9;]*[mK]//g")"
+  assert_contains "$OUT" "FOREMAN  what it cost" "a wide table is under the picture, not instead of it"
+  assert_contains "$OUT" "  tokens     in 4,000  out 30,000  cache-read 1,234,567,890,123,456  cache-write 90,000" "and whole"
   OUT="$(FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" report "$WORK/report-wide/b" 2>&1)"
   assert_contains "$(printf '%s\n' "$OUT" | sed "s/$(printf '\033')\[[0-9;]*[mK]//g")" "FOREMAN  what it cost" "and the same log on a wider screen is the picture"
 fi

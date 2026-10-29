@@ -9,11 +9,13 @@ requiring `foreman-draw.cjs` as a module. See `spec.md`, "Per command". The desi
 
 **Blocked by:** 08
 
-**Status:** ready-for-agent
+**Status:** implemented
 
-- [ ] The tier and width reach the report from the same variables the shell sets
-- [ ] Cost bars scale to the largest run, and use eighth blocks for the remainder
-- [ ] A batch with no runs says so under the header
-- [ ] Plain report output is byte for byte today's
-- [ ] Smoke: a forced-show report of a fixture run log, and of `--by-ticket` and `--failures`
-- [ ] Full smoke suite passes; the closing note records `Full smoke suite: N passed in Mm Ss`
+- [x] The tier and width reach the report from the same variables the shell sets
+- [x] Cost bars scale to the largest run, and use eighth blocks for the remainder
+- [x] A batch with no runs says so under the header
+- [x] Plain report output is byte for byte today's
+- [x] Smoke: a forced-show report of a fixture run log, and of `--by-ticket` and `--failures`
+- [x] Full smoke suite passes; the closing note records `Full smoke suite: N passed in Mm Ss`
+
+Full smoke suite: 2414 passed in 2m 2s (1 failed: the CRLF `convert` case, failing before this ticket).

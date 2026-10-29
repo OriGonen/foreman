@@ -18,3 +18,6 @@ bin/foreman text eol=lf
 # to every value it sets — FOREMAN_EXEC would become "sandbox<CR>" and fail validation with
 # a message that looks like a lie.
 foreman.conf text eol=lf
+
+# The report's golden files are compared byte for byte with what foreman prints, which is LF.
+test/golden/* text eol=lf
