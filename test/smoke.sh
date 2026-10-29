@@ -5770,6 +5770,305 @@ if case_is "foreman run on a real terminal shows without being forced, with the 
   fi
 fi
 
+# --- ticket 09: foreman order, the numbered stake line -------------------------------------
+
+# The 8b design's order, as the renderer's facts: ten tickets, the agent having swapped 02 with 03
+# and 05 with 06, 07 a human ticket and 07a the ticket that checks it.
+order_design_facts() {
+  printf 'batch\t.scratch/human-tickets\ninvoke\tforeman\ntickets\t10\nmodel\tclaude-sonnet-5-5\nseconds\t31\ncost\t0.0831\n'
+  local f
+  for f in 01-the-loop-stops-before-a-human-ticket 02-a-check-ticket-verifies-or-sends-back 03-status-shows-human-and-check-tickets \
+    04-foreman-order-places-human-and-check-tickets 05-document-human-tickets 06-a-skill-writes-followup-tickets \
+    07-try-the-followup-skill-on-a-real-batch 07a-followup-try-the-followup-skill 08-readme-human-tickets-section 09-end-to-end-check-on-this-machine; do
+    printf 'was\t.scratch/human-tickets/issues/%s.md\n' "$f"
+  done
+  for f in 01-the-loop-stops-before-a-human-ticket 03-status-shows-human-and-check-tickets 02-a-check-ticket-verifies-or-sends-back \
+    04-foreman-order-places-human-and-check-tickets 06-a-skill-writes-followup-tickets 05-document-human-tickets \
+    07-try-the-followup-skill-on-a-real-batch 07a-followup-try-the-followup-skill 08-readme-human-tickets-section 09-end-to-end-check-on-this-machine; do
+    printf 'now\t.scratch/human-tickets/issues/%s.md\n' "$f"
+  done
+  printf 'human\t.scratch/human-tickets/issues/07-try-the-followup-skill-on-a-real-batch.md\n'
+  printf 'check\t.scratch/human-tickets/issues/07a-followup-try-the-followup-skill.md\t.scratch/human-tickets/issues/07-try-the-followup-skill-on-a-real-batch.md\n'
+  printf 'warning\t.scratch/human-tickets/issues/07-try-the-followup-skill-on-a-real-batch.md has no Handoff: file — run /foreman-human-followup-tickets\n'
+}
+
+if case_is "movedTickets marks the tickets that changed place, and only those"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  moved() { node -e 'console.log(require(process.argv[1]).movedTickets(process.argv[2].split(","), process.argv[3].split(",")).join(","))' "$DRAW" "$1" "$2"; }
+  assert_eq "$(moved a,b,c,d a,b,c,d)" "" "an order that did not change moves nothing"
+  assert_eq "$(moved a,b,c,d a,c,b,d)" "c,b" "a swap moves both tickets of the pair, as the design marks them"
+  assert_eq "$(moved a,b,c c,a,b)" "c" "a ticket taken to the front is the only one moved, not everything it passed"
+  assert_eq "$(moved a,b,c b,c,a)" "a" "and one sent to the back"
+  assert_eq "$(moved a,b,c,d,e,f a,c,b,d,f,e)" "c,b,f,e" "two swaps are four moved"
+  assert_eq "$(moved a,b,c c,b,a)" "c,b,a" "a reversal moves them all"
+  assert_eq "$(moved a,b,c a,x,b,c)" "" "a ticket that is new, and the ones it passed, are not moved"
+  assert_eq "$(moved a,b,c a,c)" "" "nor are the ones left when a ticket is dropped"
+  assert_eq "$(moved '' a,b)" "" "no earlier order, no moves"
+  assert_eq "$(moved a,b '')" "" "no later order, none either"
+fi
+
+if case_is "foreman-draw order-head and order are the 8b design: the header, the result line, the numbered stake lines and the footer"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  ANS="$FOREMAN_HOME/.scratch/terminal-design/designs/08b-order.ans"
+  TXT="$FOREMAN_HOME/.scratch/terminal-design/designs/08b-order.txt"
+  CELLS="$FOREMAN_HOME/test/ans-cells.cjs"
+  HEAD="$(order_design_facts | node "$DRAW" order-head --tier 24 --cols 120)"; ST=$?
+  assert_eq "$ST" 0 "the order-head scene runs"
+  assert_eq "$(printf '%s\n' "$HEAD" | node "$CELLS" --cells 96)" "$(node "$CELLS" --cells 96 --rows 1-3 < "$ANS")" "the header is the design's, in its colours, between its blank rows"
+  OUT24="$(order_design_facts | node "$DRAW" order --tier 24 --cols 120)"; ST=$?
+  assert_eq "$ST" 0 "the order scene runs"
+  TEXT24="$(printf '%s\n' "$OUT24" | strip)"
+  assert_eq "$(printf '%s\n' "$OUT24" | node "$CELLS" --cells 96 --rows 0-0)" "$(node "$CELLS" --cells 96 --rows 6-6 < "$ANS")" "the result line is the design's"
+  assert_eq "$(printf '%s\n' "$OUT24" | node "$CELLS" --cells 96 --rows 2-11)" "$(node "$CELLS" --cells 96 --rows 8-17 < "$ANS")" "so are the ten stake lines, every cell of them"
+  assert_eq "$(printf '%s\n' "$TEXT24" | sed -n '3,12p')" "$(sed -n '9,18p' "$TXT" | sed 's/ *$//')" "and they read as 08b-order.txt does"
+  assert_eq "$(printf '%s\n' "$TEXT24" | sed -n '1p;2p;13p' | tr '\n' '|')" "order.md  ·  ordered in 31s for \$0.08|||" "the result line, and blank rows round the stake lines"
+  assert_eq "$(printf '%s\n' "$TEXT24" | sed -n '14,$p')" "▲ .scratch/human-tickets/issues/07-try-the-followup-skill-on-a-real-batch.md has no Handoff: file — run /foreman-human-followup-tickets
+
+review it, then foreman dry-run .scratch/human-tickets" "the warning, whole, then the way on"
+  assert_contains "$OUT24" "${ESC}[0;1;38;2;23;22;20;48;2;224;168;74m HUMAN " "HUMAN is bold ink on amber"
+  assert_contains "$OUT24" "${ESC}[0;1;48;2;92;87;79m CHECK " "CHECK is bold on dim"
+  assert_contains "$OUT24" "${ESC}[0;38;2;168;162;153mmoved" "moved is muted"
+  assert_contains "$OUT24" "${ESC}[0;1m03  status-shows-human-and-check-tickets" "a moved ticket is bold"
+  assert_contains "$OUT24" "${ESC}[0;38;2;224;168;74m▲" "the warning mark is amber"
+  assert_contains "$OUT24" "${ESC}[0;38;2;224;168;74mforeman dry-run .scratch/human-tickets" "and the next command is amber"
+
+  OUT16="$(order_design_facts | node "$DRAW" order --tier 16 --cols 120)"
+  assert_missing "$OUT16" "38;2;" "16 colours: no 24 bits"
+  assert_eq "$(printf '%s\n' "$OUT16" | strip)" "$TEXT24" "and it reads the same"
+  assert_contains "$(order_design_facts | node "$DRAW" order --tier 256 --cols 120)" "38;5;" "256 colours are used at 256"
+  assert_eq "$(node -e 'console.log(require(process.argv[1]).SCENES.order.min, require(process.argv[1]).SCENES["order-head"].min)' "$DRAW")" "80 80" "the scenes need 80 columns"
+fi
+
+if case_is "foreman-draw order: tags, a single ticket, nothing moved, long names, and what is not an ordering"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  order_text() { printf '%b' "$1" | node "$DRAW" order --tier 24 --cols "${2:-100}" | strip; }
+
+  TEXT="$(order_text 'batch\tb\ninvoke\tforeman\nwas\tb/issues/01-a.md\nwas\tb/issues/02-b.md\nwas\tb/issues/03-c.md\nnow\tb/issues/01-a.md\nnow\tb/issues/02-b.md\nnow\tb/issues/03-c.md\nseconds\t75\n')"
+  assert_eq "$TEXT" "order.md  ·  ordered in 1m15s
+
+  ┬  1  01  a
+  ├  2  02  b
+  └  3  03  c
+
+review it, then foreman dry-run b" "nothing moved: no moved, no warnings, no cost when there is none, and minutes for a long wait"
+
+  TEXT="$(order_text 'batch\tb\nnow\tb/issues/01-a.md\ncost\t1.5\n')"
+  assert_eq "$TEXT" "order.md  ·  ordered for \$1.50
+
+  ─  1  01  a
+
+review it, then foreman dry-run b" "one ticket, and no time to say"
+
+  TEXT="$(order_text 'batch\tb\nwas\tb/issues/01-a.md\nwas\tb/issues/02-b.md\nnow\tb/issues/02-b.md\nnow\tb/issues/01-a.md\nhuman\tb/issues/02-b.md\ncheck\tb/issues/01-a.md\tb/issues/02-b.md\n')"
+  assert_contains "$TEXT" "  ┬  1  02  b  moved   HUMAN   the loop stops here" "a ticket that moved and is a human ticket has both"
+  assert_contains "$TEXT" "  └  2  01  a  moved   CHECK   checks 02" "a followup says what it checks"
+
+  TEXT="$(order_text 'batch\tb\nnow\tb/issues/01-a.md\nnow\tb/issues/02-b.md\nhuman\tb/issues/02-b.md\ncheck\tb/issues/02-b.md\tb/issues/01-a.md\n')"
+  assert_contains "$TEXT" "  └  2  02  b          HUMAN   CHECK   the loop stops here  ·  checks 01" "a ticket that is both is both"
+
+  TEXT="$(order_text 'batch\tb\nnow\tb/issues/1-one.md\nnow\tb/issues/readme.md\nnow\tb/issues/10-ten.md\n')"
+  assert_contains "$TEXT" "  ├  2  readme" "a ticket with no number is its name"
+  assert_contains "$TEXT" "  └  3  10  ten" "and a number can be two digits"
+
+  names='now\tb/issues/01-a-very-long-ticket-name-that-goes-on-and-on-and-on-and-on-for-so-long.md\nnow\tb/issues/02-x.md\nwas\tb/issues/02-x.md\nwas\tb/issues/01-a-very-long-ticket-name-that-goes-on-and-on-and-on-and-on-for-so-long.md\nhuman\tb/issues/02-x.md\n'
+  TEXT="$(order_text "batch\\tb\\n$names" 80)"
+  assert_eq "$(printf '%s\n' "$TEXT" | node -e 'const w = require("fs").readFileSync(0, "utf8").split("\n").map((l) => Array.from(l).length); console.log(Math.max(...w) < 80 ? "fits" : "wide:" + Math.max(...w))')" fits "a long name is cut to fit the width, with one column to spare"
+  assert_contains "$TEXT" "…" "and the cut is shown"
+  assert_contains "$TEXT" "HUMAN   the loop stops here" "without losing the tag"
+  TEXT="$(order_text "batch\\tb\\n$names" 200)"
+  assert_contains "$TEXT" "a-very-long-ticket-name-that-goes-on-and-on-and-on-and-on-for-so-long  moved" "given room it is whole"
+
+  assert_eq "$(printf 'batch\tb\n' | node "$DRAW" order --tier 24 --cols 100 | strip)" "order.md  ·  ordered
+
+review it, then foreman dry-run b" "no tickets at all is still a whole picture"
+  printf 'batch\tb\n' | node "$DRAW" order --tier 24 --cols 79 2>/dev/null; assert_eq "$?" 3 "below 80 columns the scene says it is too narrow"
+  assert_eq "$(printf 'batch\tb\ntickets\t1\nmodel\tm\n' | node "$DRAW" order-head --tier 24 --cols 100 | strip | sed -n 2p)" "▄█▄ foreman order · b ·  1 ticket  ·  m" "the header counts one ticket"
+  assert_eq "$(printf 'batch\tb\ntickets\t3\n' | node "$DRAW" order-head --tier 24 --cols 100 | strip | sed -n 2p)" "▄█▄ foreman order · b ·  3 tickets" "and leaves out a model it was not told"
+fi
+
+# `foreman order`, the show forced on: 24 bits, 120 wide. The stub agent is the commands stub, which runs
+# STUB_SCRIPT as the agent's edit: here, one that swaps tickets 02 and 03 in order.md.
+order_show() { FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 run_foreman "$@"; }
+ORDER_SWAP='{ echo "<!-- ORDER:BEGIN -->"; echo batch/issues/01-ticket.md; echo batch/issues/03-ticket.md; echo batch/issues/02-ticket.md; echo batch/issues/04-ticket.md; echo "<!-- ORDER:END -->"; } > batch/order.md'
+ORDER_REPLY='{"is_error":false,"total_cost_usd":0.0831,"result":"done"}'
+
+if case_is "foreman order draws the stake line when the show is on: the header, the result, moved, the tags, the warnings and the next step"; then
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  repo="$(make_repo 4 order-show-repo)"
+  make_human_ticket "$repo" 3 none
+  write_order_stub "$repo"
+  stub="$(make_commands_claude_stub)"
+
+  PATH="$stub:$PATH" STUB_SCRIPT="$ORDER_SWAP" STUB_OUT="$ORDER_REPLY" order_show "$repo" order batch
+  assert_eq "$ST" 0 "order exits 0"
+  assert_contains "$OUT" "38;2;" "it is drawn in 24 bits"
+  TEXT="$(printf '%s\n' "$OUT" | strip)"
+  assert_eq "$(printf '%s\n' "$TEXT" | sed -n '1,4p')" "
+▄█▄ foreman order · batch ·  4 tickets  ·  claude-sonnet-5-5
+
+order.md  ·  ordered in 0s for \$0.08" "a blank row, the header, a blank row, and the result where the spinner was"
+  assert_eq "$(printf '%s\n' "$TEXT" | sed -n '5,9p')" "
+  ┬  1  01  ticket
+  ├  2  03  ticket  moved   HUMAN   the loop stops here
+  ├  3  02  ticket  moved
+  └  4  04  ticket" "the new order, numbered, with the two tickets that changed place and the human one marked"
+  assert_contains "$TEXT" "▲ batch/issues/03-ticket.md is a human ticket with no ticket that Checks: it — run /foreman-human-followup-tickets" "the human-ticket warnings are the ones today's order prints"
+  assert_contains "$TEXT" "▲ batch/issues/03-ticket.md has no Handoff: file — run /foreman-human-followup-tickets" "all of them"
+  assert_eq "$(printf '%s\n' "$TEXT" | tail -1)" "review it, then foreman dry-run batch" "and what to do next"
+  assert_eq "$(printf '%s\n' "$TEXT" | grep -c .)" 9 "and nothing else: no line of the plain text"
+  assert_missing "$OUT" "foreman order:" "none of its tagged lines"
+  assert_missing "$OUT" $'\r' "a pipe has nothing to redraw, so no spinner"
+  assert_missing "$OUT" "reading the tickets" "none of it"
+  assert_eq "$(sed -n '2,3p' "$repo/batch/order.md" | tr '\n' ' ')" "batch/issues/01-ticket.md batch/issues/03-ticket.md " "and order.md is what the agent wrote"
+
+  # The model is the ordering model, when there is one; the tickets counted are the ones it was shown.
+  PATH="$stub:$PATH" STUB_SCRIPT="$ORDER_SWAP" STUB_OUT="$ORDER_REPLY" FOREMAN_ORDERING_MODEL=haiku order_show "$repo" order batch
+  assert_contains "$(printf '%s\n' "$OUT" | strip)" "4 tickets  ·  haiku" "the model that does the ordering"
+  # Nothing moved: nothing says so, and nothing is marked.
+  PATH="$stub:$PATH" STUB_OUT="$ORDER_REPLY" order_show "$repo" order batch
+  assert_missing "$OUT" "moved" "an order that did not change marks nothing"
+  assert_contains "$(printf '%s\n' "$OUT" | strip)" "  └  4  04  ticket" "though it is still listed"
+  # No cost in the reply, none in the line.
+  PATH="$stub:$PATH" STUB_OUT='{"is_error":false,"result":"done"}' order_show "$repo" order batch
+  assert_contains "$(printf '%s\n' "$OUT" | strip)" "order.md  ·  ordered in 0s
+" "no cost, none said"
+  # A clean batch has no warnings and no gap for them.
+  repo="$(make_repo 2 order-show-clean-repo)"
+  write_order_stub "$repo"
+  PATH="$stub:$PATH" STUB_OUT="$ORDER_REPLY" order_show "$repo" order batch
+  assert_eq "$(printf '%s\n' "$OUT" | strip | tail -5)" "
+  ┬  1  01  ticket
+  └  2  02  ticket
+
+review it, then foreman dry-run batch" "no warnings, no ▲"
+  assert_missing "$OUT" "▲" "none"
+
+  # Nothing to order, or no agent to order with, is said in words, whatever the show.
+  repo="$(make_repo 0 order-show-empty-repo)"
+  write_order_stub "$repo"
+  PATH="$stub:$PATH" order_show "$repo" order batch
+  assert_contains "$(printf '%s\n' "$OUT" | strip)" "foreman order: batch has no tickets — nothing to order." "an empty batch"
+  assert_missing "$OUT" "▄█▄" "with no picture"
+fi
+
+if case_is "foreman order piped is the text it always was, down to the byte"; then
+  ESC=$'\033'
+  repo="$(make_repo 3 order-plain-bytes-repo)"
+  make_human_ticket "$repo" 2 none
+  write_order_stub "$repo"
+  stub="$(make_commands_claude_stub)"
+  want="$(cat <<'EOF'
+foreman order: reading 3 ticket(s) in batch ...
+foreman order: wrote batch/order.md (cost $0.0831)
+             review it — this is a first pass, not a guarantee.
+warning: batch/issues/02-ticket.md is a human ticket with no ticket that Checks: it — run /foreman-human-followup-tickets
+warning: batch/issues/02-ticket.md has no Handoff: file — run /foreman-human-followup-tickets
+EOF
+)"
+  export PATH="$stub:$PATH" STUB_OUT="$ORDER_REPLY"
+  run_foreman "$repo" order batch
+  assert_eq "$ST" 0 "exits 0"
+  assert_eq "$OUT" "$want" "on a pipe: the lines it printed before the stake line existed"
+  PLAIN_BYTES="$(printf '%s\n' "$OUT" | od -c | tr -s ' ')"
+  uncoloured() { sed "s/${ESC}\[[0-9;]*m//g"; }
+  same() { assert_eq "$(cd "$repo" && env "$@" "$FOREMAN" order batch 2>&1 | uncoloured | od -c | tr -s ' ')" "$PLAIN_BYTES" "$LABEL"; }
+  LABEL="colour alone is not the show: this is a pipe"; same FOREMAN_COLOR=truecolor COLUMNS=120
+  LABEL="FOREMAN_SHOW=never"; same FOREMAN_SHOW=never FOREMAN_COLOR=truecolor COLUMNS=120
+  LABEL="FOREMAN_COLOR=never"; same FOREMAN_SHOW=always FOREMAN_COLOR=never COLUMNS=120
+  LABEL="a screen one column short of the picture"; same FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=79
+  LABEL="a narrow screen"; same FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=40
+  assert_contains "$(cd "$repo" && FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=80 "$FOREMAN" order batch 2>&1)" "▄█▄" "and exactly enough is drawn"
+  # The caller that asked for the facts draws the result itself: init's capture is never the show.
+  facts="$WORK/order-bytes-facts.txt"
+  OUT="$(cd "$repo" && FOREMAN_ORDER_RESULT="$facts" FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" order batch 2>&1 | uncoloured)"
+  assert_eq "$(printf '%s\n' "$OUT" | od -c | tr -s ' ')" "$PLAIN_BYTES" "asked for its facts, it prints what it always printed"
+  assert_eq "$(grep -c '^seconds\|^batch\|^invoke\|^tickets\|^model' "$facts")" 0 "and leaves no more facts than it did"
+
+  # If the renderer cannot draw, the text is all there is, and no half of a picture is left before it.
+  fake_home="$WORK/order-nonode-home"
+  mkdir -p "$fake_home"
+  cp -R "$FOREMAN_HOME/bin" "$FOREMAN_HOME/lib" "$fake_home/"
+  printf 'process.stdout.write("half a picture"); process.exit(1)\n' > "$fake_home/lib/foreman-draw.cjs"
+  OUT="$(cd "$repo" && FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 bash "$fake_home/bin/foreman" order batch 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "a renderer that fails does not fail order"
+  assert_eq "$(printf '%s\n' "$OUT" | uncoloured | od -c | tr -s ' ')" "$PLAIN_BYTES" "and the plain text is printed alone"
+  assert_missing "$OUT" "half a picture" "with none of what the renderer got out before it failed"
+  # One that draws the header but not the result leaves the header and today's closing lines.
+  printf 'const { spawnSync } = require("child_process");\nif (process.argv[2] === "order") { process.stdout.write("half a picture"); process.exit(1); }\nprocess.exit(spawnSync(process.execPath, [%s, ...process.argv.slice(2)], { stdio: "inherit" }).status);\n' \
+    "\"$FOREMAN_HOME/lib/foreman-draw.cjs\"" > "$fake_home/lib/foreman-draw.cjs"
+  OUT="$(cd "$repo" && FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 bash "$fake_home/bin/foreman" order batch 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "nor does one that gets as far as the header"
+  assert_contains "$OUT" "▄█▄" "the header is there"
+  assert_contains "$(printf '%s\n' "$OUT" | uncoloured)" "foreman order: wrote batch/order.md (cost \$0.0831)" "and the result in words"
+  assert_contains "$OUT" "warning: batch/issues/02-ticket.md has no Handoff: file" "with the warnings"
+  assert_missing "$OUT" "half a picture" "and none of the half"
+fi
+
+if case_is "foreman order in the show: a failed call ends in today's words, and the shell and the renderer agree on the width"; then
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  repo="$(make_repo 2 order-show-fail-repo)"
+  write_order_stub "$repo"
+  cp "$repo/batch/order.md" "$WORK/order-show-fail-before.md"
+  PATH="$(make_canned_claude_stub):$PATH" STUB_EXIT=1 STUB_OUT='{"is_error":true,"total_cost_usd":0,"result":"Prompt is too long"}' order_show "$repo" order batch
+  assert_eq "$ST" 1 "a failed call still exits 1"
+  TEXT="$(printf '%s\n' "$OUT" | strip)"
+  assert_contains "$TEXT" "▄█▄ foreman order · batch ·  2 tickets" "the header was drawn before the wait"
+  assert_contains "$TEXT" "foreman order: the agent call failed (exit 1) — batch/order.md is unchanged." "the failure, in its own words"
+  assert_contains "$TEXT" "claude said: Prompt is too long" "and what the agent said"
+  assert_missing "$TEXT" "ordered in" "no result"
+  assert_eq "$(cat "$repo/batch/order.md")" "$(cat "$WORK/order-show-fail-before.md")" "order.md is unchanged"
+
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  assert_eq "$(node -e 'console.log(require(process.argv[1]).SCENES.order.min)' "$DRAW")" "$(sed -n 's/^_order_min_cols=\([0-9]*\).*/\1/p' "$FOREMAN_HOME/lib/foreman-order.sh")" "the shell and the renderer agree on the width"
+  assert_eq "$(node -e 'console.log(require(process.argv[1]).SCENES["order-head"].min)' "$DRAW")" "$(sed -n 's/^_order_min_cols=\([0-9]*\).*/\1/p' "$FOREMAN_HOME/lib/foreman-order.sh")" "for the header, too"
+fi
+
+if case_is "foreman order on a real terminal shows without being forced, redraws one spinner line while it waits, and clears it"; then
+  if command -v script >/dev/null 2>&1 && [ "$(show_of tty 1 FOREMAN_SHOW=always)" = show:16 ]; then
+    ESC=$'\033'
+    repo="$(make_repo 3 order-tty-repo)"
+    write_order_stub "$repo"
+    stub="$(make_commands_claude_stub)"
+    OUT="$(cd "$repo" && env -u CI -u NO_COLOR -u WT_SESSION -u FOREMAN_COLOR -u FOREMAN_SHOW TERM=xterm COLORTERM=truecolor COLUMNS=100 \
+      PATH="$stub:$PATH" STUB_SCRIPT="sleep 1.5" STUB_OUT="$ORDER_REPLY" script -qec "$FOREMAN order batch" /dev/null </dev/null 2>/dev/null)"
+    assert_contains "$OUT" "38;2;" "a terminal that says truecolor gets 24 bits"
+    assert_contains "$OUT" "the agent is reading the tickets" "the spinner says what it waits for"
+    assert_contains "$OUT" "0:00" "starting at nothing"
+    assert_contains "$OUT" "0:01" "and counting the seconds"
+    waiting="${OUT#*reading the tickets}"
+    waiting="${waiting%%order.md*}"
+    assert_missing "$waiting" $'\n' "it never leaves its line: not one newline between its first frame and the result"
+    assert_contains "$waiting" $'\r'"${ESC}[2K" "it redraws by returning to the start of the line and clearing it"
+    waiting="${waiting%"${ESC}[0;1m"}"
+    case "$waiting" in *$'\r'"${ESC}[2K") pass ;; *) fail "the last thing before the result is the clear" ;; esac
+    TEXT="$(printf '%s\n' "${OUT//$'\r'/}" | sed "s/${ESC}\[[0-9;]*[mK]//g")"
+    assert_contains "$TEXT" "▄█▄ foreman order · batch ·  3 tickets" "and the picture, unforced"
+    assert_contains "$TEXT" "  └  3  03  ticket" "with the stake line"
+
+    # A failed call clears it too, before the failure is said.
+    OUT="$(cd "$repo" && env -u CI -u NO_COLOR -u WT_SESSION -u FOREMAN_COLOR -u FOREMAN_SHOW TERM=xterm COLORTERM=truecolor COLUMNS=100 \
+      PATH="$stub:$PATH" STUB_SCRIPT="sleep 0.6" STUB_OUT='{"is_error":true,"result":"no"}' STUB_EXIT=1 script -qec "$FOREMAN order batch" /dev/null </dev/null 2>/dev/null)"
+    waiting="${OUT#*reading the tickets}"
+    waiting="${waiting%%the agent call failed*}"
+    case "$waiting" in *$'\r'"${ESC}[2K"*"foreman order:"*) pass ;; *) fail "the spinner is cleared before the failure is said" ;; esac
+    assert_missing "${waiting%foreman order:*}" $'\n' "still on one line"
+
+    OUT="$(cd "$repo" && env -u NO_COLOR -u WT_SESSION -u FOREMAN_COLOR -u FOREMAN_SHOW CI=true TERM=xterm COLORTERM=truecolor COLUMNS=100 \
+      PATH="$stub:$PATH" STUB_OUT="$ORDER_REPLY" script -qec "$FOREMAN order batch" /dev/null </dev/null 2>/dev/null)"
+    OUT="$(printf '%s\n' "${OUT//$'\r'/}" | sed "s/${ESC}\[[0-9;]*[mK]//g")"
+    assert_contains "$OUT" "foreman order: wrote batch/order.md" "CI is plain, terminal or not"
+    assert_missing "$OUT" "▄█▄" "with no picture"
+  else
+    printf '  (skipped: no `script` to give a terminal)\n'
+  fi
+fi
+
 # ---------------------------------------------------------------------------
 # A case process that ran the last case in the file ends here.
 [ "$CASE_OPEN" = 1 ] && case_finish

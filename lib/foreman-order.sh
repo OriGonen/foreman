@@ -14,6 +14,14 @@
 # renderer (`key<TAB>value` lines, see foreman-draw.cjs): that is how `foreman init` draws the
 # result without reading what this prints. What this prints does not change.
 #
+# THE SHOW. At a terminal (see THE SHOW in foreman-ui.sh) this draws, with foreman-draw.cjs, a
+# header, then a one-line spinner with the seconds that is redrawn while the agent reads and
+# cleared when it is done or has failed, then the new order on a numbered stake line: `moved`
+# beside the tickets that changed place, HUMAN and CHECK beside the ones that stop the loop or
+# check another, and the batch's warnings below. Anywhere else, or when the terminal is narrower
+# than `_order_min_cols`, or when a picture cannot be drawn, it prints the text it always did. A
+# caller that asks for the facts draws the result itself, so it is never the show.
+#
 # Costs one model call, on FOREMAN_MODEL by default — ordering rarely needs the same model
 # the tickets themselves run on, so set FOREMAN_ORDERING_MODEL in foreman.conf to point it at
 # something cheaper without touching FOREMAN_MODEL. If `claude` is not on PATH, this prints a
@@ -177,17 +185,87 @@ $(for t in "${tickets[@]}"; do printf -- '- %s\n' "$t"; done)
 PROMPT_EOF
 )
 
+# The picture is the renderer's width and no narrower; the shell checks it here, so a narrow
+# terminal starts no node, and a smoke case holds the two numbers together.
+_order_min_cols=80
+
+# Draws SCENE from the facts on stdin, all or nothing: what the renderer prints before it fails is
+# not printed, so the plain text that follows is never preceded by half a picture. Fails when it
+# cannot be drawn.
+order_draw() {    # order_draw SCENE
+  local out code
+  out="$(node "$FOREMAN_TOOL_DIR/foreman-draw.cjs" "$1" --tier "$ORDER_TIER" --cols "$ORDER_COLS" 2>/dev/null; printf 'x%s' "$?")"
+  code="${out##*x}"
+  [ "$code" = 0 ] || return 1
+  printf '%s' "${out%x*}"
+}
+
+# The wait, on one line: a spinner and the seconds, redrawn until the agent is done. It runs in the
+# background and is only ever started on a terminal: there is nothing to redraw on a pipe.
+order_spinner() {
+  local frames=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏) i=0 start=$SECONDS s spin text clock
+  ui_paint text 1 muted "the agent is reading the tickets"
+  while :; do
+    s=$((SECONDS - start))
+    ui_paint spin 1 warn "${frames[i++ % 10]}"
+    printf -v clock '%d:%02d' $((s / 60)) $((s % 60))
+    ui_paint clock 1 muted "$clock"
+    printf '\r\033[2K  %s %s   %s' "$spin" "$text" "$clock"
+    sleep 0.2
+  done
+}
+
+ORDER_SPINNER_PID=""
+# Stops the spinner, if it is running, and leaves its line empty.
+order_stop_spinner() {
+  [ -n "$ORDER_SPINNER_PID" ] || return 0
+  kill "$ORDER_SPINNER_PID" 2>/dev/null
+  wait "$ORDER_SPINNER_PID" 2>/dev/null
+  ORDER_SPINNER_PID=""
+  printf '\r\033[2K'
+}
+
+ORDER_OWN_FACTS=""
+order_exit() {
+  order_stop_spinner
+  [ -z "$ORDER_OWN_FACTS" ] || rm -f "$ORDER_OWN_FACTS"
+}
+
+# Whether to show, and at what tier and width. The facts the picture is drawn from are left in a file
+# of this script's own, unless a caller asked for them in its own: then it draws the result, and this
+# prints text.
+ORDER_SHOW=0
+ORDER_TIER=""
+ORDER_COLS=""
+if [ -z "${FOREMAN_ORDER_RESULT:-}" ] && ui_show 1 ORDER_TIER && ui_cols ORDER_COLS 1 && [ "$ORDER_COLS" -ge "$_order_min_cols" ] &&
+  ORDER_OWN_FACTS="$(mktemp "${TMPDIR:-/tmp}/foreman-order.XXXXXX" 2>/dev/null)"; then
+  ORDER_SHOW=1
+  FOREMAN_ORDER_RESULT="$ORDER_OWN_FACTS"
+fi
+trap order_exit EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
 # The order as it stands, for the renderer to compare with the one the agent leaves.
 was=""
 [ -z "${FOREMAN_ORDER_RESULT:-}" ] || was="$(foreman_next_answer --all 2>/dev/null)"
 
-say_tag accent "foreman order:" "reading ${#tickets[@]} ticket(s) in $BATCH_DIR ..."
+if [ "$ORDER_SHOW" -eq 1 ] && printf 'batch\t%s\ntickets\t%s\nmodel\t%s\n' "$BATCH_DIR" "${#tickets[@]}" "$MODEL" | order_draw order-head; then
+  [ ! -t 1 ] || { order_spinner & ORDER_SPINNER_PID=$!; }
+else
+  # No picture to draw it in: today's line, and from here on a plain run.
+  if [ "$ORDER_SHOW" -eq 1 ]; then ORDER_SHOW=0; FOREMAN_ORDER_RESULT=""; fi
+  say_tag accent "foreman order:" "reading ${#tickets[@]} ticket(s) in $BATCH_DIR ..."
+fi
 
 # stdin is closed because claude, finding it is not a terminal, otherwise waits for input
 # that never comes.
+order_start=$SECONDS
 RESPONSE=$(claude --model "$MODEL" --effort "$EFFORT" --permission-mode acceptEdits \
   --print --output-format json -p "$PROMPT" </dev/null)
 status=$?
+order_seconds=$((SECONDS - order_start))
+order_stop_spinner
 
 # Read the payload once: is_error, the cost, and the agent's own message as one line, plus
 # whether that message is a login failure (see foreman-claude-reply.cjs).
@@ -204,11 +282,15 @@ if [ "$status" -ne 0 ] || [ "$is_error" = 1 ]; then
   exit 1
 fi
 
-say_tag accent "foreman order:" "wrote $ORDER_FILE${cost:+ (cost \$$cost)}"
-echo "             review it — this is a first pass, not a guarantee."
-
 warnings="$(foreman_human_warnings)"
-[ -n "$warnings" ] && printf '%s\n' "$warnings"
+
+# What a plain run says, and a show that could not be drawn.
+order_say_plain() {
+  say_tag accent "foreman order:" "wrote $ORDER_FILE${cost:+ (cost \$$cost)}"
+  echo "             review it — this is a first pass, not a guarantee."
+  [ -z "$warnings" ] || printf '%s\n' "$warnings"
+}
+[ "$ORDER_SHOW" -eq 1 ] || order_say_plain
 
 # What the renderer needs to say how the order changed and who it stops for: the order before
 # ($1) and now, one ticket a line; each ticket a person does; and each ticket that checks another,
@@ -240,5 +322,9 @@ if [ -n "${FOREMAN_ORDER_RESULT:-}" ]; then
   while IFS= read -r line; do
     [ -n "$line" ] && order_fact warning "${line#warning: }"
   done <<< "$warnings"
+fi
+
+if [ "$ORDER_SHOW" -eq 1 ]; then
+  { cat "$ORDER_OWN_FACTS"; printf 'batch\t%s\ninvoke\t%s\nseconds\t%s\n' "$BATCH_DIR" "$FOREMAN_INVOKE" "$order_seconds"; } | order_draw order || order_say_plain
 fi
 exit 0
