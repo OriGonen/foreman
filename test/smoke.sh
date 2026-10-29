@@ -4669,10 +4669,10 @@ if case_is "foreman-draw status is the 4a design at 6 of 10: the dome, the words
   assert_eq "$(printf '%s\n' "$OUT24" | node "$CELLS" --cells 46 --rows 9-14)" "$(node "$CELLS" --cells 46 --rows 10-15 < "$ANS")" "in the design's colours"
   assert_eq "$(printf '%s\n' "$OUT24" | node "$CELLS" --cells 46 --rows 15-18)" "$(node "$CELLS" --cells 46 --rows 16-19 < "$ANS")" "and so are the next ticket and the three after it"
   assert_contains "$TEXT24" "  ▶ 07  try-the-followup-skill-on-a-real-batch   " "the next ticket has the arrow"
-  assert_contains "$TEXT24" " HUMAN " "and the HUMAN tag"
+  assert_contains "$TEXT24" "batch    HUMAN" "and the HUMAN tag, three spaces on (its last space is the end of the line)"
   assert_contains "$TEXT24" "    07a followup: try-the-followup-skill " "a followup ticket is its id and its name, indented"
   assert_contains "$TEXT24" "after 07" "and says what it comes after"
-  assert_contains "$TEXT24" "6 of 10 done  ·  $14.20 spent" "the count and the spend"
+  assert_contains "$TEXT24" "6 of 10 done  ·  \$14.20 spent" "the count and the spend"
   assert_contains "$TEXT24" "the sun is 60% up" "the percentage"
   assert_contains "$TEXT24" "next up is yours. Do ticket 07, fill in its handoff, then foreman run .scratch/human-tickets." "the closing line, with the command to type"
   assert_eq "$(printf '%s\n' "$TEXT24" | tail -1)" ".scratch/human-tickets/handoff/07-try-the-followup-skill-on-a-real-batch.md" "and the handoff path under it"
@@ -4686,7 +4686,10 @@ if case_is "foreman-draw status is the 4a design at 6 of 10: the dome, the words
   OUT16="$(status_design_facts 14.2 | node "$DRAW" status --tier 16 --cols 120)"
   assert_missing "$OUT16" "38;2;" "16 colours: no 24 bits"
   assert_contains "$OUT16" "${ESC}[0;1;30;43m HUMAN " "HUMAN is black on yellow"
-  assert_eq "$(printf '%s\n' "$OUT16" | strip | sed -n '3,9p;11,22p')" "$(printf '%s\n' "$TEXT24" | sed -n '3,9p;11,22p')" "the same words at 16 (the dome's dark shades are the terminal's background)"
+  TEXT16="$(printf '%s\n' "$OUT16" | strip)"
+  assert_eq "$(printf '%s\n' "$TEXT16" | sed -n '11,22p')" "$(printf '%s\n' "$TEXT24" | sed -n '11,22p')" "the list and the closing read the same at 16"
+  assert_contains "$TEXT16" "6 of 10 done  ·  \$14.20 spent" "and so do the facts beside the dome (whose dark shades are the terminal's own background)"
+  assert_contains "$TEXT16" "the sun is 60% up" "all of them"
   assert_contains "$(status_design_facts 14.2 | node "$DRAW" status --tier 256 --cols 120)" "38;5;" "and 256 colours are used at 256"
 
   # What is told is drawn, and nothing else.
@@ -4726,8 +4729,8 @@ if case_is "foreman-draw status is the 4a design at 6 of 10: the dome, the words
   OUT="$(printf 'batch\tb\ndone\t0\ntotal\t3\nticket\tnext\tintro.md\t\t\nticket\ttodo\t12.md\t\t\nticket\ttodo\t123-three-digits.md\t\t\n' | node "$DRAW" status --tier 24 --cols 120 | strip)"
   assert_contains "$OUT" "  ▶ intro" "a name with no number is shown whole, once"
   assert_missing "$OUT" "intro intro" "not twice"
-  assert_contains "$OUT" "    123  three-digits" "ids are padded to the widest, and to three at least"
-  assert_contains "$OUT" "    12   " "a bare number is its own id"
+  assert_contains "$OUT" "    123 three-digits" "ids are padded to the widest numbered one, and to three at least, as the design's 07a is"
+  assert_eq "$(printf '%s\n' "$OUT" | grep -c '^    12$')" 1 "a bare number is its own id, with no name after it"
 
   # Narrow.
   OUT="$(status_design_facts 14.2 | node "$DRAW" status --tier 24 --cols 71 2>"$WORK/draw-err")"; ST=$?
@@ -4743,12 +4746,12 @@ if case_is "foreman-draw dome rises with the tickets done, from nothing to the w
   assert_eq "$(node -e '
     const d = require(process.argv[1]);
     const lit = (rows) => rows.slice(0, -1).filter((r) => r.some((c) => c.t.trim() !== "")).length;
-    const sun = (rows) => JSON.stringify(rows).includes("\"fg\":\"sun\"");
+    const sun = (rows) => /"(fg|bg)":"sun"/.test(JSON.stringify(rows));
     const out = [];
     for (let k = 0; k <= 10; k++) { const rows = d.dome(k, 10, 24); out.push(`${rows.length}:${lit(rows)}:${sun(rows) ? "sun" : "-"}`); }
     console.log(out.join(" "))' "$DRAW")" \
-    "7:1:- 7:2:- 7:2:- 7:3:- 7:4:- 7:5:- 7:5:sun 7:5:sun 8:6:sun 9:7:sun 10:8:sun" \
-    "rows of dome by tickets done of ten: it climbs, grows taller once it is past the design's 60%, and the sun is up from six"
+    "7:1:- 7:2:- 7:3:- 7:3:- 7:4:- 7:5:- 7:5:sun 8:6:sun 9:7:sun 9:7:sun 10:8:sun" \
+    "rows of dome by tickets done of ten: it climbs a pixel at a time, is the design's seven rows at 60% and no shorter before it, grows taller after it, and the sun is up from six"
   assert_eq "$(node -e '
     const d = require(process.argv[1]);
     const text = (rows) => rows.map((r) => r.map((c) => c.t).join("")).join("\n");
@@ -4762,7 +4765,7 @@ if case_is "foreman-draw dome rises with the tickets done, from nothing to the w
   assert_eq "$(node -e '
     const d = require(process.argv[1]);
     const rows = d.dome(10, 10, 16);
-    console.log(JSON.stringify(rows).includes("\"fg\":\"sun\""), rows.length)' "$DRAW")" "true 10" "at 16 colours too"
+    console.log(/"(fg|bg)":"sun"/.test(JSON.stringify(rows)), rows.length)' "$DRAW")" "true 10" "at 16 colours too"
 fi
 
 # A repository with $2 tickets in batch/, the first $3 of them done.
@@ -4846,7 +4849,7 @@ if case_is "foreman status draws the dome when the show is on, with none, some a
   assert_contains "$TEXT" "1 of 5 done" "one done"
   assert_contains "$TEXT" "1 human ticket remaining" "one human ticket remaining"
   assert_contains "$TEXT" "  ▶ 02  ticket" "the human ticket is next"
-  assert_contains "$TEXT" " HUMAN " "and tagged"
+  assert_contains "$TEXT" " HUMAN" "and tagged"
   assert_contains "$TEXT" "    03  ticket" "the followup follows it"
   assert_contains "$TEXT" "after 02" "and names it"
   assert_contains "$TEXT" "next up is yours. Do ticket 02, fill in its handoff, then foreman run batch." "the closing line"
@@ -4885,9 +4888,10 @@ if case_is "foreman status draws the dome when the show is on, with none, some a
   FOREMAN_SHOW=always FOREMAN_COLOR=256 COLUMNS=120 run_foreman "$repo" status batch
   assert_contains "$OUT" "38;5;" "and 256"
   FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=71 run_foreman "$repo" status batch
-  assert_contains "$OUT" "Tickets done: 1 / 3" "one column short of the picture is plain"
+  assert_contains "$(printf '%s\n' "$OUT" | strip)" "Tickets done: 1 / 3" "one column short of the picture is plain"
+  assert_missing "$OUT" "▀" "with no picture"
   FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=72 run_foreman "$repo" status batch
-  assert_contains "$OUT" "1 of 3 done" "and exactly enough is the picture"
+  assert_contains "$(printf '%s\n' "$OUT" | strip)" "1 of 3 done" "and exactly enough is the picture"
 fi
 
 if case_is "foreman status is today's text, byte for byte, wherever the show is not wanted"; then
@@ -4974,8 +4978,8 @@ if case_is "foreman status on a real terminal shows without being forced, and no
     OUT="$(cd "$repo" && env -u NO_COLOR -u WT_SESSION -u FOREMAN_COLOR -u FOREMAN_SHOW CI=true TERM=xterm COLORTERM=truecolor COLUMNS=100 \
       script -qec "$FOREMAN status batch" /dev/null </dev/null 2>/dev/null)"
     OUT="${OUT//$'\r'/}"
-    assert_contains "$OUT" "Tickets done: 1 / 3" "CI is plain, terminal or not"
-    assert_missing "$OUT" "38;2;" "with no colour at all"
+    assert_contains "$(printf '%s\n' "$OUT" | sed "s/${ESC}\[[0-9;]*[mK]//g")" "Tickets done: 1 / 3" "CI is plain, terminal or not"
+    assert_missing "$OUT" "▀" "with no picture"
   else
     printf '  (skipped: no `script` to give a terminal)\n'
   fi

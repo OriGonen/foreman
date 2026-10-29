@@ -494,7 +494,85 @@ progress_line() {
   say_tag accent "Tickets done:" "${line#Tickets done: }"
 }
 
+# `status` as the picture: the facts the plain text below is made of, as lines of `key<TAB>value`
+# for the renderer (see foreman-draw.cjs, scene `status`). The renderer's own minimum width for
+# the scene is this number, here so a narrow terminal starts no node; a smoke case holds the two
+# together. Needs the ticket snapshot held; prints nothing and fails if it cannot say how it is.
+_status_min_cols=72
+
+# What the batch's run log says was spent: the sum of every record's cost_usd, or nothing at all
+# when the log is missing or has no record in it (a line that is not one is not counted).
+status_spent() {
+  [ -f "$RUN_JSONL" ] || return 0
+  node -e '
+    let spent = 0, seen = false;
+    for (const line of require("fs").readFileSync(process.argv[1], "utf8").split(/\r?\n/)) {
+      try {
+        const record = JSON.parse(line);
+        if (record && typeof record === "object") { seen = true; spent += Number(record.cost_usd) || 0; }
+      } catch { /* not a record */ }
+    }
+    if (seen) console.log(spent);
+  ' "$RUN_JSONL" 2>/dev/null
+}
+
+status_facts() {
+  local counts done_count total humans=0 ticket state human base next="" spent until_count=0 stop="" pos=0 line
+  counts=$(next_sh --count) || return 1
+  done_count="${counts% *}"; total="${counts#* }"
+  printf 'batch\t%s\ndone\t%s\ntotal\t%s\ninvoke\t%s\n' "$BATCH_DIR" "$done_count" "$total" "$FOREMAN_INVOKE"
+  [ -z "${FOREMAN_BATCH_NAME:-}" ] || printf 'name\t%s\n' "$FOREMAN_BATCH_NAME"
+  spent="$(status_spent)"
+  [ -z "$spent" ] || printf 'spent\t%s\n' "$spent"
+  while IFS= read -r ticket; do
+    [ -n "$ticket" ] || continue
+    foreman_ticket_status "$ticket"
+    human=""; state=todo
+    if [ "$_FOREMAN_TICKET_DONE" = 1 ]; then
+      state=done
+    else
+      if [ -z "$next" ]; then next="$ticket"; state=next; fi
+      if [ "$_FOREMAN_TICKET_HUMAN" = 1 ]; then
+        human=human; humans=$((humans + 1))
+        # The loop runs the tickets before the first human one, when that is not the next.
+        if [ -z "$stop" ] && [ "$state" != next ]; then stop="${ticket##*/}"; until_count=$pos; fi
+      fi
+      pos=$((pos + 1))
+    fi
+    base="${ticket##*/}"
+    [ -z "$FOREMAN_DONE_PREFIX" ] || base="${base#"$FOREMAN_DONE_PREFIX"}"
+    printf 'ticket\t%s\t%s\t%s\t%s\n' "$state" "$base" "$human" "$_FOREMAN_TICKET_CHECKS"
+  done < <(next_sh --all)
+  printf 'humans\t%s\n' "$humans"
+  if [ -n "$stop" ]; then printf 'until\t%s\nstop\t%s\n' "$until_count" "$stop"; fi
+  if [ -n "$next" ] && foreman_ticket_needs_human "$next"; then
+    line="$(foreman_handoff_path "$next")"
+    [ -z "$line" ] || printf 'handoff\t%s\n' "$line"
+    line="$(foreman_was_sent_back "$next")"
+    [ -z "$line" ] || printf 'sentback\t%s\n' "$line"
+  fi
+  while IFS= read -r line; do
+    [ -n "$line" ] && printf 'warning\t%s\n' "${line#warning: }"
+  done < <(foreman_human_warnings)
+}
+
+# Draws the picture, all or nothing: what the renderer prints before it fails is not printed, so the
+# plain text that follows is never preceded by half a picture. Fails when it cannot be drawn.
+status_picture() {
+  local facts out code
+  facts="$(status_facts)" || return 1
+  out="$(node "$FOREMAN_TOOL_DIR/foreman-draw.cjs" status --tier "$STATUS_TIER" --cols "$STATUS_COLS" <<< "$facts" 2>/dev/null; printf 'x%s' "$?")"
+  code="${out##*x}"
+  [ "$code" = 0 ] || return 1
+  out="${out%x*}"
+  printf '%s' "$out"
+}
+
 if [ "$MODE" = "status" ]; then
+  if ui_show 1 STATUS_TIER && ui_cols STATUS_COLS 1 && [ "$STATUS_COLS" -ge "$_status_min_cols" ] &&
+    foreman_tickets_hold 2>/dev/null && status_picture; then
+    exit 0
+  fi
   say_tag accent "Batch:" "$BATCH_DIR${FOREMAN_BATCH_NAME:+ ($FOREMAN_BATCH_NAME)}"
   # Nothing here changes a ticket, so the list is worked out once and every question below is
   # answered from it.
