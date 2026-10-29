@@ -22,6 +22,11 @@
 #              or an L. No file, no bar: each key press prints a line instead.
 #   activity   "EPOCH LABEL" while an iteration runs with a bar open: when it started and what
 #              the agent did last. Written by foreman-stream.cjs, removed by the loop after.
+#   foot       the epoch second the run started, when the loop is showing the design (ticket 06):
+#              the bar is then the design's foot, `0m41s elapsed · iteration 1 of 3 · $0.34 of $25
+#              · live off`, and the live view's row has its spinner. No file, the bar it always was.
+#   spent      "COST BUDGET" for the foot: what the run has spent so far and the cost budget (0 for
+#              none). Written by the loop after every iteration.
 # The loop reads `budget` before each iteration's budget check; a key never touches the
 # iteration already running.
 #
@@ -121,12 +126,70 @@ keys_apply() {    # keys_apply KEY CTL_DIR
   fi
 }
 
+# The design's foot (3a), for keys_bar_text: sets _KEYS_BAR to
+#   0m41s elapsed  ·  iteration 1 of 3  ·  $0.34 of $25  ·  live off              + more  − fewer  L live
+# with the keys at column 78 where the facts leave room. The keys go first when it does not fit, then
+# the end of the line; one column is left spare, as writing the last column of the bottom row wraps.
+# `q stop after this` is in the design and is not a key.
+_KEYS_FOOT_KEYS_AT=78
+keys_foot_text() {    # keys_foot_text COLS STARTED
+  local cols="$1" now s elapsed iter spend spent=0 max=0 line live rest pad keys=""
+  local p_elapsed p_rest p_live p_plus p_minus p_l p_words
+  printf -v now '%(%s)T' -1
+  s=$((now - $2)); [ "$s" -ge 0 ] || s=0
+  printf -v elapsed '%dm%02ds' $((s / 60)) $((s % 60))
+  read -r spent max 2>/dev/null < "$_KEYS_CTL/spent"
+  [[ "$spent" =~ ^[0-9]*\.?[0-9]+$ ]] || spent=0
+  [[ "$max" =~ ^[0-9]*\.?[0-9]+$ ]] || max=0
+  printf -v spend '$%.2f' "$spent"
+  [[ "$max" =~ ^0*\.?0*$ ]] || spend+=" of \$$max"
+
+  if [ "$_KEYS_ITERATION" -eq 0 ]; then iter="before iteration 1"; else iter="iteration $_KEYS_ITERATION"; fi
+  if [ "$_KEYS_BUDGET" -eq 0 ]; then
+    iter+=" (unlimited)"
+  else
+    iter+=" of $_KEYS_BUDGET"
+    [ "$_KEYS_ITERATION" -lt "$_KEYS_BUDGET" ] || iter+="${_UI_SEP}stops after this one"
+  fi
+  live=off; [ "$_KEYS_LIVE" != 1 ] || live=on
+  rest=" elapsed${_UI_SEP}${iter}${_UI_SEP}${spend}${_UI_SEP}live "
+  line="${elapsed}${rest}${live}"
+
+  cols=$((cols - 1))
+  if [ "${#line}" -gt "$cols" ]; then
+    [ "$cols" -gt 0 ] || cols=0
+    ui_paint _KEYS_BAR 2 muted "${line:0:cols}"
+    return 0
+  fi
+  ui_paint p_elapsed 2 accent "$elapsed"
+  ui_paint p_rest 2 muted "$rest"
+  if [ "$live" = on ]; then ui_paint p_live 2 ok on; else ui_paint p_live 2 muted off; fi
+  _KEYS_BAR="$p_elapsed$p_rest$p_live"
+  if [ $((${#line} + 2 + 22)) -le "$cols" ]; then
+    pad=$((_KEYS_FOOT_KEYS_AT - ${#line})); [ "$pad" -ge 2 ] || pad=2
+    [ $((${#line} + pad + 22)) -le "$cols" ] || pad=2
+    printf -v pad '%*s' "$pad" ''
+    ui_paint p_plus 2 warn +; ui_paint p_minus 2 warn −; ui_paint p_l 2 warn L
+    ui_paint p_words 2 muted "more"; keys="$p_plus $p_words  "
+    ui_paint p_words 2 muted "fewer"; keys+="$p_minus $p_words  "
+    ui_paint p_words 2 muted "live"; keys+="$p_l $p_words"
+    _KEYS_BAR+="$pad$keys"
+  fi
+}
+
 # Sets _KEYS_BAR to the status bar's text for the state in <ctl-dir>, fitted to COLS:
 #   ── iteration 2 of 4  ·  live off  ·  + more  - fewer  L live
-# The key hints go first when it does not fit, then the end of the line.
+# The key hints go first when it does not fit, then the end of the line. With a `foot` file in
+# <ctl-dir> it is the design's foot instead (see keys_foot_text).
 keys_bar_text() {    # keys_bar_text CTL_DIR COLS
-  local cols="$2" head hints rule
+  local cols="$2" head hints rule foot=""
   _keys_read_state "$1"
+  read -r foot 2>/dev/null < "$1/foot"
+  if [[ "$foot" =~ ^[0-9]+$ ]]; then
+    _KEYS_CTL="$1"
+    keys_foot_text "$cols" "$foot"
+    return 0
+  fi
   if [ "$_KEYS_ITERATION" -eq 0 ]; then
     head="before iteration 1"
   else
@@ -159,7 +222,7 @@ keys_bar_text() {    # keys_bar_text CTL_DIR COLS
 # The clock runs from the epoch second foreman-stream.cjs wrote with the label, so it keeps
 # moving while the agent is quiet. Empty when there is no activity file (between iterations).
 keys_ticker_text() {    # keys_ticker_text CTL_DIR COLS
-  local cols="$2" started="" label="" now s clock room
+  local cols="$2" started="" label="" now s clock room foot="" verb arg spin
   _KEYS_TICKER=""
   read -r started label 2>/dev/null < "$1/activity"
   [[ "$started" =~ ^[0-9]+$ ]] || return 0
@@ -167,6 +230,21 @@ keys_ticker_text() {    # keys_ticker_text CTL_DIR COLS
   [[ "$now" =~ ^[0-9]+$ ]] || now="$started"
   s=$((now - started)); [ "$s" -ge 0 ] || s=0
   printf -v clock '%02d:%02d' $((s / 60)) $((s % 60))
+  # The design's row, when the foot is: a spinner, the clock, the tool in lower case and its argument.
+  read -r foot 2>/dev/null < "$1/foot"
+  if [[ "$foot" =~ ^[0-9]+$ ]]; then
+    verb="${label%% *}"; arg=""
+    if [ "$verb" != "$label" ]; then arg="${label#* }"; verb="${verb,,}"; printf -v verb '%-6s' "$verb"; label="$verb $arg"; fi
+    room=$((cols - 1 - 5 - 1 - 1 - ${#clock} - 2))
+    if [ "$room" -lt 1 ]; then label=""
+    elif [ "${#label}" -gt "$room" ]; then label="${label:0:room-1}…"
+    fi
+    spin=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
+    ui_paint spin 2 warn "${spin[now % 10]}"
+    ui_paint clock 2 muted "$clock"
+    _KEYS_TICKER="     $spin $clock  $label"
+    return 0
+  fi
   # "   " + clock + " · " + label, one column spare: the line must never wrap.
   room=$((cols - 1 - 3 - ${#clock} - 3))
   if [ "$room" -lt 1 ]; then

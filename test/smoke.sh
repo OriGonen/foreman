@@ -5385,6 +5385,385 @@ if case_is "foreman dry-run on a real terminal shows without being forced, and n
   fi
 fi
 
+# --- ticket 06: foreman run, the figure and the climbing sun ---------------------------------
+
+# The 3a design's frame N (quiet or live), without its caption: the blank row, FOREMAN, the figure
+# and the dome, the rule, then the iteration lines.
+design_step() {    # design_step FILE N
+  awk -v n="$2" '$0 ~ (" step " n " of 18") { f = 1; next } $0 ~ (" step " (n + 1) " of 18") { f = 0 } f' "$1"
+}
+
+# The facts of the design's own run, with $1 tickets done (and, if given, the ticket that just landed in $2).
+run_design_facts() {    # run_design_facts DONE [LANDED]
+  printf 'runid\t20261021-2\nstarted\t14:02\nbatch\t.scratch/human-tickets\nmodel\tclaude-sonnet-5-5\nexec\tlocal\niterations\t3\ncost\t25\ndone\t%s\ntotal\t10\nhuman\t07-try-the-followup-skill-on-a-real-batch.md\n' "$1"
+  [ -z "${2:-}" ] || printf 'landed\t%s\n' "$2"
+}
+
+if case_is "foreman-draw run is the 3a design: the figure, the dome, the facts beside them and the rule"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  QUIET="$FOREMAN_HOME/.scratch/terminal-design/designs/03a-run-quiet-steps.ans"
+  QUIET_TXT="$FOREMAN_HOME/.scratch/terminal-design/designs/03a-run-quiet-steps.txt"
+  CELLS="$FOREMAN_HOME/test/ans-cells.cjs"
+  OUT24="$(run_design_facts 4 | node "$DRAW" run --tier 24 --cols 120)"; ST=$?
+  assert_eq "$ST" 0 "the run scene runs"
+
+  # Four of ten: the first frame, every cell of it, the words and the rule included.
+  assert_eq "$(printf '%s\n' "$OUT24" | node "$CELLS" --cells 100 --rows 0-10)" \
+    "$(design_step "$QUIET" 1 | node "$CELLS" --cells 100 --rows 0-10)" \
+    "at 4 of 10 the header is the design's, cell for cell, in its colours"
+  assert_eq "$(printf '%s\n' "$OUT24" | strip | sed -n '2,10p')" "$(design_step "$QUIET_TXT" 1 | sed -n '2,10p' | sed 's/ *$//')" "and reads as 03a-run-quiet-steps.txt does"
+
+  # Six of ten, the design's last frame; and five, whose art is the settled sun.
+  assert_eq "$(run_design_facts 6 | node "$DRAW" run --tier 24 --cols 120 | node "$CELLS" --cells 100 --rows 0-10)" \
+    "$(design_step "$QUIET" 18 | node "$CELLS" --cells 100 --rows 0-10)" "at 6 of 10 it is the design's last frame"
+  OUT5="$(run_design_facts 5 05-document-human-tickets.md | node "$DRAW" run --tier 24 --cols 120)"
+  assert_eq "$(printf '%s\n' "$OUT5" | node "$CELLS" --cells 34 --rows 0-10)" "$(design_step "$QUIET" 8 | node "$CELLS" --cells 34 --rows 0-10)" "at 5 of 10 the sun is the settled one"
+  TEXT5="$(printf '%s\n' "$OUT5" | strip)"
+  assert_contains "$TEXT5" "5 of 10 done  ·  5 to go  ·  07 is a HUMAN ticket" "five done"
+  assert_contains "$TEXT5" "↑ 05 landed  ·  the sun climbs to 5 of 10" "and a landed ticket adds the design's line under it"
+  assert_contains "$OUT5" "${ESC}[0;1;38;2;246;213;142m↑ 05 landed${ESC}[0;38;2;246;213;142m  ·  the sun climbs to 5 of 10" "that line is in the sun's colour, the first part bold"
+
+  # The colours of the words.
+  assert_contains "$OUT24" "${ESC}[0;1;38;2;224;168;74mFOREMAN" "FOREMAN is bold amber"
+  assert_contains "$OUT24" "${ESC}[0;38;2;168;162;153mrun 20261021-2  ·  started 14:02" "the run's id and start are muted"
+  assert_contains "$OUT24" "${ESC}[0;1;38;2;246;213;142m4 of 10 done" "the count is bold sun"
+  assert_contains "$OUT24" "${ESC}[0;38;2;224;168;74m07 is a HUMAN ticket" "the human ticket is amber"
+
+  # What is told is drawn, and nothing else.
+  line_of() { printf '%s\n' "$1" | node "$DRAW" run --tier 24 --cols 120 | strip; }
+  assert_missing "$(line_of "$(run_design_facts 4)")" "landed" "no ticket has landed, no line of it"
+  assert_missing "$(line_of "$(run_design_facts 4 | grep -v '^human')")" "HUMAN" "no human ticket ahead, none told"
+  assert_contains "$(line_of "$(run_design_facts 4 | grep -v '^human')")" "4 of 10 done  ·  6 to go" "the count and what is left"
+  assert_contains "$(line_of "$(run_design_facts 4 | sed 's/^iterations\t3/iterations\t1/')")" "budget 1 iteration  ·  \$25.00" "one iteration is not 'iterations'"
+  assert_contains "$(line_of "$(run_design_facts 4 | sed 's/^iterations\t3/iterations\tunlimited/')")" "budget unlimited iterations  ·  \$25.00" "no cap on the iterations"
+  assert_contains "$(line_of "$(run_design_facts 4 | sed 's/^cost\t25/cost\tunlimited/')")" "budget 3 iterations  ·  no cost limit" "no cap on the cost"
+  assert_contains "$(line_of "$(run_design_facts 4; printf 'minutes\t180\n')")" "budget 3 iterations  ·  \$25.00  ·  180 min" "a time budget is told after the cost"
+  assert_contains "$(line_of "$(run_design_facts 4 | sed 's/^cost\t25/cost\t0.5/')")" "\$0.50" "the cost has two decimals"
+  assert_contains "$(line_of "$(run_design_facts 4; printf 'name\tmine\n')")" "batch  .scratch/human-tickets (mine)" "the batch's name is told beside its directory"
+  assert_contains "$(line_of "$(run_design_facts 10)")" "10 of 10 done  ·  0 to go" "all done"
+  assert_contains "$(line_of "$(run_design_facts 0)")" "0 of 10 done  ·  10 to go" "none done"
+  assert_contains "$(line_of 'batch	b')" "0 of 0 done" "no facts but the batch still draws"
+  assert_contains "$(line_of "$(run_design_facts 4; printf 'landed\t3.md\n')")" "↑ 3 landed" "a ticket with no number is its own name"
+
+  # Colour tiers, as for every scene.
+  OUT16="$(run_design_facts 4 | node "$DRAW" run --tier 16 --cols 120)"
+  assert_missing "$OUT16" "38;2;" "16 colours: no 24 bits"
+  TEXT16="$(printf '%s\n' "$OUT16" | strip)"
+  assert_contains "$TEXT16" "4 of 10 done  ·  6 to go  ·  07 is a HUMAN ticket" "and it says the same (the dome's dark shades are the terminal's own background)"
+  assert_contains "$TEXT16" "budget 3 iterations  ·  \$25.00" "all of it"
+  assert_contains "$(run_design_facts 4 | node "$DRAW" run --tier 256 --cols 120)" "38;5;" "256 colours are used at 256"
+
+  # Narrow.
+  OUT="$(run_design_facts 4 | node "$DRAW" run --tier 24 --cols 85 2>"$WORK/draw-err")"; ST=$?
+  assert_eq "$ST" 3 "85 columns is refused"
+  assert_eq "$OUT" "" "and nothing drawn"
+  assert_eq "$(run_design_facts 4 | node "$DRAW" run --tier 24 --cols 86 | wc -l | tr -d ' ')" 11 "86 is wide enough, for 11 rows"
+  assert_eq "$(run_design_facts 4 | node "$DRAW" run --tier 24 --cols 86 | strip | node -e 'let m = 0; for (const l of require("fs").readFileSync(0, "utf8").split("\n")) m = Math.max(m, Array.from(l).length); console.log(m)')" 86 "and its widest row is 86 wide"
+  assert_eq "$(node -e 'console.log(require(process.argv[1]).SCENES.run.min)' "$DRAW")" \
+    "$(sed -n 's/^_run_min_cols=\([0-9]*\).*/\1/p' "$FOREMAN_HOME/lib/foreman-loop.sh")" "the renderer's minimum for run is the loop's"
+fi
+
+if case_is "foreman-draw runDome: the sun climbs with the tickets done, as the 3a design has it"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  # The cells of sun, amber and rust right of the figure (column 13 on), in each of the eight rows
+  # of the dome, with 0 to 10 of 10 tickets done: the sun comes up from the ground a step at a time.
+  assert_eq "$(node -e '
+    const d = require(process.argv[1]);
+    const lit = (rows) => rows.map((r) => {
+      let x = 0, n = 0;
+      for (const c of r) for (const ch of Array.from(c.t)) { if (x++ >= 13 && ch !== " " && /"(fg|bg)":"(sun|amber|rust)"/.test(JSON.stringify(c.style))) n++; }
+      return n;
+    }).join(",");
+    const out = [];
+    for (let k = 0; k <= 10; k++) out.push(lit(d.runDome(k, 10, 24)));
+    console.log(out.join(" "))' "$DRAW")" \
+    "0,0,0,0,0,0,0,0 0,0,0,0,0,0,0,0 0,0,0,0,0,0,9,0 0,0,0,0,0,9,13,0 0,0,0,0,9,13,15,0 0,0,0,7,13,15,15,0 0,0,7,13,15,15,15,0 0,7,11,15,15,15,15,0 5,11,15,15,15,15,15,0 11,15,15,15,15,15,13,0 13,15,15,15,15,13,7,0" \
+    "the sun is down for the first two, and then climbs a step for every ticket until it stands whole on the ground"
+  assert_eq "$(node -e '
+    const d = require(process.argv[1]);
+    const text = (rows) => JSON.stringify(rows);
+    console.log(text(d.runDome(0, 10, 24)) === text(d.runDome(0, 0, 24)), text(d.runDome(10, 10, 24)) === text(d.runDome(5, 5, 24)), text(d.runDome(20, 10, 24)) === text(d.runDome(10, 10, 24)), text(d.runDome(-3, 10, 24)) === text(d.runDome(0, 10, 24)))' "$DRAW")" \
+    "true true true true" "no tickets is nothing done; more done than there are is all of them; below nothing is nothing"
+  assert_eq "$(node -e '
+    const d = require(process.argv[1]);
+    const rows = d.runDome(6, 10, 24);
+    const width = (r) => r.reduce((n, c) => n + Array.from(c.t).length, 0);
+    console.log(rows.length, width(rows[7]), rows.every((r) => width(r) <= 34))' "$DRAW")" "8 34 true" "eight rows, the ground the last and thirty-four wide, none wider"
+  assert_eq "$(node -e '
+    const d = require(process.argv[1]);
+    console.log(/"(fg|bg)":"sun"/.test(JSON.stringify(d.runDome(10, 10, 16))), JSON.stringify(d.runDome(10, 10, 16)).includes("#3a2f26"))' "$DRAW")" "true false" "at 16 colours the sun is there, and the figure is folded onto a colour of the palette"
+fi
+
+if case_is "foreman-keys.sh --text draws the design's foot when the loop left one: elapsed, iteration, spend, live and the keys"; then
+  ctl="$WORK/foot-ctl"
+  mkdir -p "$ctl"
+  printf '3\n' > "$ctl/budget"; printf '1\n' > "$ctl/iteration"; printf '0\n' > "$ctl/live"
+  printf -v now '%(%s)T' -1
+  foot() {    # foot COLS
+    OUT="$(FOREMAN_COLOR=never bash "$FOREMAN_HOME/lib/foreman-keys.sh" --text "$ctl" "$1")"
+    BAR="${OUT%%$'\n'*}" TICKER=""
+    [[ "$OUT" != *$'\n'* ]] || TICKER="${OUT#*$'\n'}"
+  }
+  LC_ALL=C.UTF-8
+
+  # Without the loop's say-so the bar is the one it always was.
+  foot 130
+  assert_eq "$BAR" "── iteration 1 of 3  ·  live off  ·  + more  - fewer  L live" "no foot file, the old bar"
+
+  printf '%s\n' "$((now - 41))" > "$ctl/foot"; printf '0.340000 25\n' > "$ctl/spent"
+  foot 130
+  assert_contains "$BAR" "0m41s elapsed  ·  iteration 1 of 3  ·  \$0.34 of \$25  ·  live off" "the foot: elapsed, iteration, spend of budget, live"
+  assert_contains "$BAR" "+ more  − fewer  L live" "and the keys"
+  assert_missing "$BAR" "q stop" "only keys that exist"
+  assert_missing "$BAR" "──" "with no rule in front"
+  assert_eq "${BAR%%+ more*}" "0m41s elapsed  ·  iteration 1 of 3  ·  \$0.34 of \$25  ·  live off$(printf '%14s' '')" "the keys stand at the design's column (78)"
+  printf '%s\n' "$((now - 975))" > "$ctl/foot"; printf '1\n' > "$ctl/live"; printf '4.4 25\n' > "$ctl/spent"
+  foot 130
+  assert_contains "$BAR" "16m15s elapsed  ·  iteration 1 of 3  ·  \$4.40 of \$25  ·  live on" "minutes past ten, and the seconds padded"
+  printf '0 0\n' > "$ctl/spent"; printf '0\n' > "$ctl/budget"
+  foot 130
+  assert_contains "$BAR" "iteration 1 (unlimited)  ·  \$0.00  ·  live on" "no cap on either: the spend is told alone"
+  printf '3\n' > "$ctl/budget"; printf '3\n' > "$ctl/iteration"; rm -f "$ctl/spent"
+  foot 130
+  assert_contains "$BAR" "iteration 3 of 3  ·  stops after this one  ·  \$0.00  ·  live on" "the last iteration says so, and no spend file is nothing spent"
+  printf '0\n' > "$ctl/iteration"; foot 130
+  assert_contains "$BAR" "before iteration 1 of 3  ·" "and before the first"
+  printf '1\n' > "$ctl/iteration"
+
+  # Fitted to the width: the keys go first, then the end of the line; never wider than the terminal less four.
+  foot 80
+  assert_missing "$BAR" "more" "in 80 columns the keys are gone"
+  assert_contains "$BAR" "live on" "and the facts are whole"
+  foot 40
+  assert_eq "${#BAR}" 39 "a line that cannot fit is cut to one column short of the width"
+
+  # The live view's row: the design's spinner, the clock, the tool and its argument.
+  printf '%s %s\n' "$((now - 75))" "Write skills/followup/SKILL.md" > "$ctl/activity"
+  foot 130
+  assert_eq "     ⠹${TICKER:6}" "     ⠹ 01:15  write  skills/followup/SKILL.md" "the tool in lower case, padded, and a spinner"
+  printf '%s %s\n' "$((now - 75))" "Bash npm test" > "$ctl/activity"
+  foot 130
+  assert_contains "$TICKER" "  bash   npm test" "the verb is padded to six"
+  foot 20
+  assert_eq "$((${#TICKER} <= 19))" 1 "and the row never wraps"
+  rm -f "$ctl/foot"
+  foot 130
+  assert_contains "$TICKER" "   01:1" "without the foot the ticker is the old one"
+  assert_contains "$TICKER" " · Bash npm test" "to the letter"
+fi
+
+if case_is "foreman-stream.cjs --show prints a tool call as │ mm:ss verb path, and plain --live is what it was"; then
+  ESC=$'\033'
+  events='{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"src/drawn.js"}}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"npm   test"}}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"README.md"}}]}}
+{"type":"result","subtype":"success","total_cost_usd":0.01}'
+  stream() {    # stream ARGS...
+    local err="$WORK/stream-show-err"
+    OUT="$(printf '%s\n' "$events" | node "$FOREMAN_HOME/lib/foreman-stream.cjs" "$@" 2>"$err")"
+    ERR="$(cat "$err")"
+  }
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g"; }
+
+  stream --live --show 16
+  assert_eq "$OUT" '{"type":"result","subtype":"success","total_cost_usd":0.01}' "the payload is the result object, as ever"
+  assert_eq "$(printf '%s\n' "$ERR" | strip | sed 's/ [0-9][0-9]:[0-9][0-9] / mm:ss /')" "     │ mm:ss  write  src/drawn.js
+     │ mm:ss  bash   npm test" "one line a call, the verb in lower case and padded to six, the argument whole"
+  assert_contains "$ERR" "${ESC}[" "in colour at the tier it is given"
+  assert_missing "$ERR" "38;2;" "which at 16 is not 24 bits"
+  stream --live --show 24
+  assert_contains "$ERR" "${ESC}[0;38;2;92;87;79m│" "the bar is dim"
+  assert_contains "$ERR" "${ESC}[0;38;2;168;162;153m" "and the clock muted"
+  stream --live --show 24 --live-file "$WORK/no-such-live-file"
+  assert_missing "$ERR" "write" "a live file that is not there is off"
+  printf '1\n' > "$WORK/stream-show-live"
+  stream --live-file "$WORK/stream-show-live" --show 24
+  assert_contains "$(printf '%s\n' "$ERR" | strip)" "│ " "the live file on: drawn"
+  stream --live
+  assert_eq "$(printf '%s\n' "$ERR" | sed 's/ [0-9][0-9]:[0-9][0-9] / mm:ss /')" "   mm:ss · Write src/drawn.js
+   mm:ss · Bash npm test" "without --show, today's lines to the letter"
+
+  # With a status bar the key reader draws the latest call; a call that is over is printed as a line when the next one starts.
+  activity="$WORK/stream-show-activity"
+  stream --live-file "$WORK/stream-show-live" --activity-file "$activity" --show 16
+  assert_eq "$(printf '%s\n' "$ERR" | strip | sed 's/ [0-9][0-9]:[0-9][0-9] / mm:ss /')" "     │ mm:ss  write  src/drawn.js
+     │ mm:ss  bash   npm test" "the calls that are over are lines; the latest stays on the bar until the result comes"
+  read -r epoch label < "$activity"
+  assert_eq "$label" "Bash npm test" "and the bar has the latest"
+  printf '0\n' > "$WORK/stream-show-live"
+  stream --live-file "$WORK/stream-show-live" --activity-file "$activity" --show 16
+  assert_eq "$ERR" "" "with the view off nothing is printed"
+  stream --activity-file "$activity"
+  assert_eq "$ERR" "" "and --activity-file alone prints nothing, as before"
+fi
+
+# A forced-show run: 24 bits, 120 columns, stdout and stderr together, stripped of colour into $TEXT.
+show_run() {    # show_run REPO ARGS...
+  local repo="$1"; shift
+  FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 run_foreman "$repo" "$@"
+  TEXT="$(printf '%s\n' "$OUT" | sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//")"
+}
+# How many times the header (FOREMAN beside the figure) is in $TEXT.
+headers_in() { printf '%s\n' "$1" | grep -c '^ \{37\}FOREMAN  run '; }
+
+if case_is "foreman run at a terminal draws the header, then again a step higher after each landed ticket"; then
+  ESC=$'\033'
+  repo="$(make_repo 4 run-show-repo)"
+  make_human_ticket "$repo" 3
+  FOREMAN_MAX_COST_USD=25 show_run "$repo" run batch 5
+  assert_eq "$ST" 30 "stops at the human ticket, as ever"
+  assert_contains "$OUT" "38;2;" "it is drawn in 24 bits"
+  assert_eq "$(headers_in "$TEXT")" 3 "a header at the start, and one after each of the two that landed"
+  first="$(printf '%s\n' "$TEXT" | awk '/FOREMAN  run /{n++; c=0} n==1 && c++ < 10')"
+  assert_contains "$first" "run $(printf '%s\n' "$TEXT" | sed -n 's/^ *FOREMAN  run \([^ ]*\) .*/\1/p' | head -1)" "the run's id"
+  assert_contains "$first" "started " "and when it started"
+  assert_contains "$first" "batch  batch" "the batch"
+  assert_contains "$first" "model  claude-sonnet-5-5  ·  exec fake" "the model and the exec"
+  assert_contains "$first" "budget 5 iterations  ·  \$25.00" "the budget"
+  assert_contains "$first" "0 of 4 done  ·  4 to go  ·  03 is a HUMAN ticket" "done of total, and the next human ticket"
+  assert_missing "$first" "landed" "nothing has landed yet"
+  assert_missing "$TEXT" "Tickets done:" "the header is the picture's, not the line of text"
+  assert_missing "$TEXT" "── iteration" "and so is the iteration's rule"
+  assert_contains "$TEXT" "run $(printf '%s\n' "$TEXT" | sed -n 's/^ *FOREMAN  run \([^ ]*\) .*/\1/p' | head -1)  ·  batch" "the footer, which was never the picture's, is as it was"
+  assert_contains "$TEXT" "iterations run:        2" "with its figures"
+
+  second="$(printf '%s\n' "$TEXT" | awk '/FOREMAN  run /{n++; c=0} n==2 && c++ < 10')"
+  assert_contains "$second" "1 of 4 done  ·  3 to go  ·  03 is a HUMAN ticket" "after the first landed, one more is done"
+  assert_contains "$second" "↑ 01 landed  ·  the sun climbs to 1 of 4" "and the line says what landed"
+  third="$(printf '%s\n' "$TEXT" | awk '/FOREMAN  run /{n++; c=0} n==3 && c++ < 10')"
+  assert_contains "$third" "↑ 02 landed  ·  the sun climbs to 2 of 4" "and so for the second"
+  # The header comes before the next iteration, not after it.
+  assert_eq "$(printf '%s\n' "$TEXT" | grep -n 'FOREMAN  run \|^1/5  \|^2/5  ' | sed 's/^\([0-9]*\):.*\(FOREMAN\|1\/5\|2\/5\).*/\2/' | paste -sd' ')" "FOREMAN 1/5 FOREMAN 2/5 FOREMAN" "header, iteration 1, header, iteration 2, header"
+
+  # The iteration and what came of it.
+  assert_contains "$TEXT" "1/5  01-ticket" "an iteration is its number of the budget, then the ticket"
+  assert_missing "$TEXT" "1/5  batch/issues" "by its name, without the directory"
+  assert_contains "$TEXT" "     ✓ landed  " "and its outcome is indented under it"
+  assert_eq "$(printf '%s\n' "$TEXT" | grep -c '^     ✓ landed  [0-9a-f]\{7,\}  ·  [0-9]*m[0-9][0-9]s  ·  \$0\.01$')" 2 "landed, the commit, how long it took and what it cost"
+  assert_contains "$OUT" "${ESC}[38;2;224;168;74m1/5" "the number is amber"
+  assert_contains "$OUT" "${ESC}[38;2;143;207;143m✓ landed" "landed is green"
+  assert_missing "$TEXT" "usage: billed" "the usage line is the outcome's time and cost"
+fi
+
+if case_is "foreman run's header is drawn once for each landing and for nothing else: not for progress, a retry or a failure"; then
+  ESC=$'\033'
+  repo="$(make_repo 3 run-show-progress-repo)"
+  FOREMAN_FAKE_BEHAVIOUR=partial-turn:land show_run "$repo" run batch 2
+  assert_eq "$ST" 10 "pauses at its budget"
+  assert_contains "$TEXT" "     ⋯ progressed  " "the first iteration progressed"
+  assert_contains "$TEXT" "     ✓ landed  " "the second landed"
+  assert_eq "$(headers_in "$TEXT")" 2 "the start, and the landing: progress does not move the sun"
+  assert_eq "$(printf '%s\n' "$TEXT" | grep -c 'the sun climbs')" 1 "one climb"
+  assert_contains "$TEXT" "2/2  01-ticket" "the ticket is the same on both"
+
+  repo="$(make_repo 3 run-show-retry-repo)"
+  FOREMAN_FAKE_BEHAVIOUR=transient:land show_run "$repo" run batch 3
+  assert_contains "$TEXT" "     ✗ did not land (exit " "a failure"
+  assert_contains "$TEXT" "2/3  01-ticket  attempt 2" "a retry says which attempt it is"
+  assert_eq "$(headers_in "$TEXT")" "$((1 + $(printf '%s\n' "$TEXT" | grep -c 'the sun climbs')))" "a header at the start and one for each landing, none for the failure"
+
+  repo="$(make_repo 3 run-show-noop-repo)"
+  FOREMAN_FAKE_BEHAVIOUR=noop show_run "$repo" run batch 3
+  assert_eq "$ST" 20 "a ticket that does not land stops the run for a human"
+  assert_eq "$(headers_in "$TEXT")" 1 "and the sun has not moved"
+  assert_missing "$TEXT" "the sun climbs" "nor does the run say it did"
+  assert_contains "$TEXT" "is still not 'implemented'" "the stop is as it was"
+
+  repo="$(make_repo 4 run-show-sentback-repo)"
+  make_human_ticket "$repo" 2
+  make_followup_ticket "$repo" 3 2
+  FOREMAN_FAKE_BEHAVIOUR=land show_run "$repo" run batch 3
+  assert_eq "$ST" 30 "stops at the human ticket"
+  assert_eq "$(headers_in "$TEXT")" 2 "the start and the one that landed before it"
+fi
+
+if case_is "foreman run's header costs one node a time, and no event line starts any"; then
+  ESC=$'\033'
+  shim="$WORK/node-shim"; mkdir -p "$shim"
+  real_node="$(command -v node)"
+  printf '#!/bin/bash\nprintf "%%s\\n" "$*" >> "%s"\nexec "%s" "$@"\n' "$WORK/node-calls" "$real_node" > "$shim/node"
+  chmod +x "$shim/node"
+  repo="$(make_repo 3 run-show-spawn-repo)"
+  : > "$WORK/node-calls"
+  PATH="$shim:$PATH" show_run "$repo" run batch 3
+  assert_eq "$(headers_in "$TEXT")" 4 "a header at the start and for each of the three landings"
+  assert_eq "$(grep -c 'foreman-draw.cjs' "$WORK/node-calls")" 4 "one call of the renderer for each header"
+  assert_eq "$(grep -c 'foreman-draw.cjs run ' "$WORK/node-calls")" 4 "all of them for the run scene"
+
+  repo="$(make_repo 3 run-plain-spawn-repo)"
+  : > "$WORK/node-calls"
+  PATH="$shim:$PATH" FOREMAN_SHOW=never run_foreman "$repo" run batch 3
+  assert_eq "$(grep -c 'foreman-draw.cjs' "$WORK/node-calls")" 0 "plain starts no renderer"
+fi
+
+if case_is "foreman run is the text it always was, and writes the logs it always wrote, wherever the show is not wanted"; then
+  ESC=$'\033'
+  # Everything that varies between two runs of the same repository: the run's id, the clock, the commits.
+  norm() { sed -E 's/[0-9]{8}T[0-9]{6}Z-[0-9]+/RUNID/g; s/[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z/TIME/g; s/\b[0-9a-f]{7,40}\b/SHA/g; s/[0-9]+(\.[0-9]+)?s\b/Ns/g; s/"duration_ms":[0-9]+/"duration_ms":N/g'; }
+  repo="$(make_repo 3 run-plain-a)"; run_foreman "$repo" run batch 2
+  PLAIN="$(printf '%s\n' "$OUT" | norm)"
+  LOG_A="$(norm < "$repo/batch/foreman-runs.log")"; JSONL_A="$(norm < "$repo/batch/foreman-runs.jsonl")"
+  assert_contains "$PLAIN" "Tickets done: 0 / 3" "a pipe gets the line of text"
+  assert_contains "$PLAIN" "── iteration 1 of 2  ·  batch/issues/01-ticket.md" "and the iteration's rule"
+  assert_contains "$PLAIN" "   ✓ landed  ·  SHA" "and the outcome"
+  assert_contains "$PLAIN" "   usage: billed 1,200 tok" "and the usage line"
+  assert_missing "$OUT" "▀" "no picture"
+  assert_missing "$OUT" "${ESC}[" "no colour"
+
+  for env in "FOREMAN_SHOW=never FOREMAN_COLOR=truecolor" "FOREMAN_SHOW=always FOREMAN_COLOR=never" "FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=85"; do
+    repo="$WORK/run-plain-b"; rm -rf "$repo"; copy_fixture "$FIXTURE_TEMPLATE" "$repo" 3
+    eval "$env run_foreman \"\$repo\" run batch 2"
+    assert_eq "$(printf '%s\n' "$OUT" | sed "s/${ESC}\[[0-9;]*[mK]//g" | norm)" "$PLAIN" "$env: the same text, colour apart"
+  done
+
+  # The logs of a run that was drawn are those of a run that was not.
+  repo="$(make_repo 3 run-plain-c)"
+  FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 run_foreman "$repo" run batch 2
+  assert_eq "$(norm < "$repo/batch/foreman-runs.log")" "$LOG_A" "foreman-runs.log is the same"
+  assert_eq "$(norm < "$repo/batch/foreman-runs.jsonl")" "$JSONL_A" "and so is foreman-runs.jsonl"
+fi
+
+if case_is "foreman run --live prints tool calls as │ mm:ss verb path when the show is on, and as it did when it is not"; then
+  ESC=$'\033'
+  repo="$(make_repo 2 run-show-live-repo)"
+  FOREMAN_FAKE_BEHAVIOUR=stream show_run "$repo" run batch 1 --live
+  assert_eq "$ST" 10 "pauses at its budget"
+  assert_contains "$TEXT" "│ 00:0" "a call is a line with the bar and a clock"
+  assert_contains "$TEXT" "  write  src/foo.js" "the tool in lower case and its path"
+  assert_contains "$TEXT" "  bash   npm test -- yyy" "a command is the same"
+  assert_missing "$TEXT" "SECRET-BODY-CONTENT" "the body of a file is never drawn"
+  assert_missing "$TEXT" "quiet-read" "nor is a read"
+  assert_missing "$TEXT" "TAIL-SENTINEL" "a long command is cut"
+  assert_contains "$OUT" "${ESC}[0;38;2;92;87;79m│" "the bar is dim"
+
+  repo="$(make_repo 2 run-plain-live-repo)"
+  FOREMAN_SHOW=never FOREMAN_FAKE_BEHAVIOUR=stream run_foreman "$repo" run batch 1 --live
+  assert_contains "$OUT" " · Write src/foo.js" "with the show off, --live is today's line"
+  assert_missing "$OUT" "│" "with no bar"
+  assert_missing "$OUT" "write  src/foo.js" "nor a lower case verb"
+fi
+
+if case_is "foreman run on a real terminal shows without being forced, with the foot as the bar, and not in CI"; then
+  if command -v script >/dev/null 2>&1 && [ "$(show_of tty 1 FOREMAN_SHOW=always)" = show:16 ]; then
+    ESC=$'\033'
+    repo="$(make_repo 2 run-tty-repo)"
+    OUT="$(cd "$repo" && env -u CI -u NO_COLOR -u WT_SESSION -u FOREMAN_COLOR -u FOREMAN_SHOW -u FOREMAN_FAKE_BEHAVIOUR TERM=xterm COLORTERM=truecolor COLUMNS=120 FOREMAN_EXEC=fake \
+      script -qec "$FOREMAN run batch 1" /dev/null </dev/null 2>/dev/null)"
+    OUT="${OUT//$'\r'/}"
+    assert_contains "$OUT" "38;2;" "a terminal that says truecolor gets 24 bits"
+    assert_contains "$(printf '%s\n' "$OUT" | sed "s/${ESC}\[[0-9;]*[mK]//g")" "0 of 2 done  ·  2 to go" "and the header, unforced"
+    OUT="$(cd "$repo" && git checkout -q . && env -u NO_COLOR -u WT_SESSION -u FOREMAN_COLOR -u FOREMAN_SHOW CI=true TERM=xterm COLORTERM=truecolor COLUMNS=120 FOREMAN_EXEC=fake \
+      script -qec "$FOREMAN run batch 1" /dev/null </dev/null 2>/dev/null)"
+    OUT="${OUT//$'\r'/}"
+    assert_contains "$(printf '%s\n' "$OUT" | sed "s/${ESC}\[[0-9;]*[mK]//g")" "Tickets done:" "CI is plain, terminal or not"
+    assert_missing "$OUT" "▀" "with no picture"
+  else
+    printf '  (skipped: no `script` to give a terminal)\n'
+  fi
+fi
+
 # ---------------------------------------------------------------------------
 # A case process that ran the last case in the file ends here.
 [ "$CASE_OPEN" = 1 ] && case_finish

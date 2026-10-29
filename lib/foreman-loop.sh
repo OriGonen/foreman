@@ -193,6 +193,7 @@ accumulate_usage() {
   RUN_OUTPUT=$((RUN_OUTPUT + $(verdict_num "$verdict_file" output_tokens)))
   RUN_CACHE_READ=$((RUN_CACHE_READ + $(verdict_num "$verdict_file" cache_read_tokens)))
   RUN_CACHE_WRITE=$((RUN_CACHE_WRITE + $(verdict_num "$verdict_file" cache_creation_tokens)))
+  [ "${RUN_SHOW:-0}" != 1 ] || run_write_spent
 }
 
 # Shared by a deliberate handoff and a stall a checkpoint turn salvaged: both feed the one
@@ -239,6 +240,105 @@ budget_label() {
 
 tree_is_dirty() { [ -n "$(git status --porcelain)" ]; }
 ticket_is_done() { foreman_ticket_is_done "$1"; }
+
+# ---------------------------------------------------------------------------
+# The run as the picture (ticket 06, foreman-draw.cjs scene `run`)
+# ---------------------------------------------------------------------------
+# On the show path (a terminal that is wide enough, colour on, not CI) `foreman run` draws the
+# header with the figure and the sun when it starts and again, a step higher, after each ticket
+# that lands; an iteration is `1/3  05-name` and what came of it a line under it; the status bar is
+# the design's foot. Everywhere else every one of those is the text it always was. RUN_SHOW is 1 for
+# the first (decided once, below), and the header costs one node a time: nothing here starts one
+# for a line of an iteration. The renderer's own minimum width for the scene is this number, here
+# so a narrow terminal starts no node; a smoke case holds the two together.
+_run_min_cols=86
+RUN_SHOW=0 RUN_TIER="" RUN_COLS="" RUN_STARTED_CLOCK="" RECORD_QUIET=""
+ITER_OPEN=0 ITER_SECONDS=0 ITER_COST_START="0"
+
+# The header's facts, as lines of `key<TAB>value`; $1 is the ticket that has just landed, if one has.
+run_header_facts() {    # run_header_facts [LANDED_TICKET]
+  local counts ticket human=""
+  counts=$(next_sh --count) || return 1
+  printf 'runid\t%s\nstarted\t%s\nbatch\t%s\n' "$RUN_ID" "$RUN_STARTED_CLOCK" "$BATCH_DIR"
+  [ -z "${FOREMAN_BATCH_NAME:-}" ] || printf 'name\t%s\n' "$FOREMAN_BATCH_NAME"
+  printf 'model\t%s\nexec\t%s\n' "$FOREMAN_MODEL" "$FOREMAN_EXEC"
+  printf 'iterations\t%s\ncost\t%s\n' "$(budget_label "$MAX_ITERATIONS")" "$(budget_label "$MAX_COST")"
+  [ "$MAX_MINUTES" -le 0 ] || printf 'minutes\t%s\n' "$MAX_MINUTES"
+  printf 'done\t%s\ntotal\t%s\n' "${counts% *}" "${counts#* }"
+  while IFS= read -r ticket; do
+    if foreman_ticket_needs_human "$ticket"; then human="${ticket##*/}"; break; fi
+  done < <(next_sh --list)
+  [ -z "$human" ] || printf 'human\t%s\n' "$human"
+  [ -z "${1:-}" ] || printf 'landed\t%s\n' "${1##*/}"
+}
+
+# Draws the header, all or nothing: what the renderer prints before it fails is not printed. Fails
+# when it cannot be drawn.
+run_header() {    # run_header [LANDED_TICKET]
+  local facts out code
+  foreman_tickets_hold 2>/dev/null || return 1
+  facts="$(run_header_facts "$@")"; code=$?
+  foreman_tickets_release
+  [ "$code" = 0 ] || return 1
+  out="$(node "$FOREMAN_TOOL_DIR/foreman-draw.cjs" run --tier "$RUN_TIER" --cols "$RUN_COLS" <<< "$facts" 2>/dev/null; printf 'x%s' "$?")"
+  code="${out##*x}"
+  [ "$code" = 0 ] || return 1
+  out="${out%x*}"
+  printf '%s' "$out"
+}
+
+# What the run has spent and what it may spend, for the foot (foreman-keys.sh).
+run_write_spent() {
+  printf '%s %s\n' "$RUN_COST" "$(fgt "$MAX_COST" 0 && printf '%s' "$MAX_COST" || printf 0)" > "$RUN_CTL_DIR/spent"
+}
+
+# `1/3  05-name` (the iteration of the budget, the ticket, and which attempt it is) after a blank
+# line, or the rule it always was.
+run_iteration_line() {    # run_iteration_line OF ATTEMPT
+  local name="${TICKET_FILE##*/}" count="$ITERATIONS_RUN" bold attempt
+  if [ "$RUN_SHOW" != 1 ]; then
+    say_rule "iteration $ITERATIONS_RUN$1  ·  $TICKET_FILE$2"
+    return 0
+  fi
+  name="${name%.md}"
+  [ "$1" = "" ] || count="$ITERATIONS_RUN/${1#' of '}"
+  ui_paint bold 1 warn "$count"
+  say ""
+  if [ -n "$2" ]; then
+    ui_paint attempt 1 muted "attempt ${2//[^0-9]/}"
+    say "$bold  $name  $attempt"
+  else
+    say "$bold  $name"
+  fi
+}
+
+# One line of what came of an iteration. The text it always was (say_event) off the show path; on it,
+#      ✓ landed  a1b2c3d  ·  4m12s  ·  $1.38
+# with the time and the spend of the iteration after the commit while one is running.
+run_event() {    # run_event ok|note|progress|salvaged|sentback|fail FACT [SHA]
+  local kind="$1" fact="$2" sha="${3:-}" fd=1 glyph style head tail="" spent secs
+  if [ "$RUN_SHOW" != 1 ]; then
+    case "$kind" in salvaged) kind=progress ;; note) kind=ok ;; esac
+    say_event "$kind" "$fact" ${sha:+"$sha"}
+    return 0
+  fi
+  case "$kind" in
+    ok|note)  glyph='✓'; style=ok ;;
+    progress) glyph='⋯'; style=muted ;;
+    salvaged) glyph='◐'; style=warn ;;
+    sentback) glyph='↩'; style=warn ;;
+    fail)     glyph='✗'; style=error; fd=2 ;;
+  esac
+  if [ "$ITER_OPEN" = 1 ] && [ "$kind" != sentback ] && [ "$kind" != note ]; then
+    secs=$((SECONDS - ITER_SECONDS))
+    printf -v tail '%dm%02ds' $((secs / 60)) $((secs % 60))
+    spent="$(fsub "$RUN_COST" "$ITER_COST_START")"
+    printf -v spent '$%.2f' "$spent"
+    ui_paint tail "$fd" muted "·  $tail  ·  $spent"
+  fi
+  ui_paint head "$fd" "$style" "$glyph $fact"
+  printf '     %s%s%s\n' "$head" "${sha:+  $sha}" "${tail:+  $tail}" >&"$fd"
+}
 
 # ---------------------------------------------------------------------------
 # Marking a finished ticket's file
@@ -299,7 +399,7 @@ mark_ticket_done_on_disk() {    # mark_ticket_done_on_disk TICKET
     warn_note "could not commit the rename of $ticket — left it as is"
     return 0
   fi
-  say_event ok "marked done" "$renamed"
+  run_event note "marked done" "$renamed"
 }
 
 # The same for the batch directory, once every ticket in it is done: .scratch/foo becomes
@@ -340,7 +440,7 @@ mark_batch_done_on_disk() {
     warn_note "could not commit the rename of $BATCH_DIR — left it as is"
     return 0
   fi
-  say_event ok "batch marked done" "$renamed"
+  run_event note "batch marked done" "$renamed"
 }
 
 # `foreman next`, asked in-process: the config is already loaded, and a child `bash foreman-next.sh`
@@ -828,6 +928,12 @@ RUN_CTL_DIR="$(mktemp -d)"
 printf '%s\n' "$MAX_ITERATIONS" > "$RUN_CTL_DIR/budget"
 printf '0\n' > "$RUN_CTL_DIR/iteration"
 printf '%s\n' "$FOREMAN_STREAM" > "$RUN_CTL_DIR/live"
+if ui_show 1 RUN_TIER && ui_cols RUN_COLS 1 && [ "$RUN_COLS" -ge "$_run_min_cols" ]; then
+  RUN_SHOW=1 RECORD_QUIET="--quiet"
+  printf -v RUN_STARTED_CLOCK '%(%H:%M)T' -1
+  printf '%(%s)T\n' -1 > "$RUN_CTL_DIR/foot"
+  run_write_spent
+fi
 KEYS_PID=""
 SAVED_STTY=""
 on_exit() {
@@ -889,6 +995,12 @@ fi
 # The ticker is drawn by a node process that cannot see foreman.conf, so the one colour decision
 # (foreman-ui.sh, for stderr, which is where it draws) is made here and handed over as a flag.
 [ "${#STREAM_ARGS[@]}" -gt 0 ] && ui_color_on 2 && STREAM_ARGS+=(--color)
+# On the show path the calls are lines in the picture's palette, and with a bar the filter must also
+# know whether the view is on, to write the ones that are over.
+if [ "$RUN_SHOW" = 1 ] && [ "${#STREAM_ARGS[@]}" -gt 0 ]; then
+  [ "$BAR_ROWS" -le 0 ] || STREAM_ARGS+=(--live-file "$RUN_CTL_DIR/live")
+  STREAM_ARGS+=(--show "$RUN_TIER")
+fi
 
 # Ctrl-C should end the run between iterations rather than half-way through one. The trap
 # only raises a flag; the agent is a foreground child, so an interrupt during an iteration
@@ -916,9 +1028,12 @@ log_append "# budgets: cost=$(budget_label "$MAX_COST" '$') time=$(budget_label 
 log_append "# head at start: $(git rev-parse HEAD)"
 log_append "#############################################################################"
 
-say "run $RUN_ID  ·  $BATCH_DIR  ·  $FOREMAN_EXEC  ·  model $FOREMAN_MODEL  ·  effort $FOREMAN_EFFORT"
-progress_line
-say ""
+if [ "$RUN_SHOW" = 1 ] && ! run_header; then RUN_SHOW=0 RECORD_QUIET=""; rm -f "$RUN_CTL_DIR/foot"; fi
+if [ "$RUN_SHOW" != 1 ]; then
+  say "run $RUN_ID  ·  $BATCH_DIR  ·  $FOREMAN_EXEC  ·  model $FOREMAN_MODEL  ·  effort $FOREMAN_EFFORT"
+  progress_line
+  say ""
+fi
 
 # Whatever this arrangement has to stand up before any money is spent — creating and
 # checking the sandbox, running the batch's readiness probe — happens here, once, behind
@@ -935,8 +1050,10 @@ exec_prepare || exit 1
 # first, so it scrolls with the rest of the header.
 if [ -t 0 ]; then
   SAVED_STTY="$(stty -g 2>/dev/null)"
-  say "keys: + one more iteration  ·  - one fewer  ·  L live view on/off"
-  say ""
+  if [ "$RUN_SHOW" != 1 ] || [ "$BAR_ROWS" -le 0 ]; then
+    say "keys: + one more iteration  ·  - one fewer  ·  L live view on/off"
+    say ""
+  fi
   if [ "$BAR_ROWS" -gt 0 ]; then
     _kept=1; [ "$FOREMAN_STREAM" != 1 ] || _kept=2
     printf '%s %s %s\n' "$BAR_ROWS" "$BAR_COLS" "$_kept" > "$RUN_CTL_DIR/screen"
@@ -1061,7 +1178,7 @@ run_checkpoint_turn() {    # run_checkpoint_turn [stall|review]
   printf '%s' "$checkpoint_result" | node "$FOREMAN_TOOL_DIR/foreman-record.cjs" \
     --jsonl "$RUN_JSONL" --log "$RUN_LOG" --verdict "$VERDICT_FILE" \
     --run-id "$RUN_ID" --iteration "$ITERATIONS_RUN" --ticket "$TICKET_FILE" \
-    --batch "$BATCH_DIR" --kind checkpoint \
+    --batch "$BATCH_DIR" --kind checkpoint $RECORD_QUIET \
     --base-ref "$BASE_REF" --head-ref "$HEAD_REF" --started-at "$checkpoint_started_at" \
     --exit-status "$checkpoint_agent_status" --tree-dirty "$EXEC_DIRTY" --status-flipped 0 \
     || warn_note "could not record the checkpoint turn (usage figures will read as zero)"
@@ -1122,6 +1239,7 @@ while true; do
   # The last iteration may have landed, renamed or reordered tickets: whatever list was held
   # before it is not to be trusted, and nothing below holds a new one.
   foreman_tickets_release
+  ITER_OPEN=0
 
   # Not `if ! TICKET_FILE=$(...)`: after a `!` negation bash reports the *inverted* status
   # in $?, so the "nothing left" case (exit 1) would read as 0 and be mistaken for a
@@ -1150,7 +1268,7 @@ while true; do
     # reported as progress (HEAD moved, the followup ticket is unflipped); say what it really was.
     if [ -n "$CURRENT_TICKET" ] && [ "$(foreman_checked_ticket "$CURRENT_TICKET")" = "$TICKET_FILE" ]; then
       _foreman_basename _sent_back_by "$CURRENT_TICKET"
-      say_event sentback "sent back to a human by $_sent_back_by"
+      run_event sentback "sent back to a human by $_sent_back_by"
     fi
     HUMAN_TICKET="$TICKET_FILE"
     FINAL_STATUS="$EXIT_WAITING_ON_HUMAN"
@@ -1224,7 +1342,7 @@ while true; do
         salvaged)
           # Exactly what the same rescue mid-run would have recorded: the ticket is now a
           # continuation of a stall, reviewed from the commit the stall began at.
-          say_event progress "reviewed and salvaged by a checkpoint turn" "$(git log -1 --format=%h "$HEAD_REF")"
+          run_event salvaged "reviewed and salvaged by a checkpoint turn" "$(git log -1 --format=%h "$HEAD_REF")"
           CONTINUATIONS_ON_CURRENT=$((CONTINUATIONS_ON_CURRENT + 1))
           STALLS_ON_CURRENT=$((STALLS_ON_CURRENT + 1))
           LAST_CONTINUATION_STALLED=1
@@ -1317,7 +1435,8 @@ while true; do
   printf '%s\n' "$ITERATIONS_RUN" > "$RUN_CTL_DIR/iteration"
   iter_of=""; [ "$MAX_ITERATIONS" -le 0 ] || iter_of=" of $MAX_ITERATIONS"
   iter_attempt=""; [ "$ATTEMPTS_ON_CURRENT" -le 1 ] || iter_attempt=" (attempt $ATTEMPTS_ON_CURRENT)"
-  say_rule "iteration $ITERATIONS_RUN$iter_of  ·  $TICKET_FILE$iter_attempt"
+  run_iteration_line "$iter_of" "$iter_attempt"
+  ITER_OPEN=1 ITER_SECONDS=$SECONDS ITER_COST_START="$RUN_COST"
 
   # Ask before touching anything: on the clone-based sandbox, syncing is a hard reset plus
   # a wipe of untracked files, and rerunning is the most natural response to any stop there
@@ -1410,7 +1529,7 @@ while true; do
   printf '%s' "$result" | node "$FOREMAN_TOOL_DIR/foreman-record.cjs" \
     --jsonl "$RUN_JSONL" --log "$RUN_LOG" --verdict "$VERDICT_FILE" \
     --run-id "$RUN_ID" --iteration "$ITERATIONS_RUN" --ticket "$TICKET_FILE" \
-    --batch "$BATCH_DIR" \
+    --batch "$BATCH_DIR" $RECORD_QUIET \
     --base-ref "$BASE_REF" --head-ref "$HEAD_REF" --started-at "$STARTED_AT" \
     --exit-status "$agent_status" --tree-dirty "$dirty" --status-flipped "$flipped" \
     || warn_note "could not record iteration $ITERATIONS_RUN (usage figures will read as zero)"
@@ -1546,7 +1665,7 @@ while true; do
           break
           ;;
         salvaged)
-          say_event progress "stalled, salvaged by a checkpoint turn" "$(git log -1 --format=%h "$HEAD_REF")"
+          run_event salvaged "stalled, salvaged by a checkpoint turn" "$(git log -1 --format=%h "$HEAD_REF")"
           CONTINUATIONS_ON_CURRENT=$((CONTINUATIONS_ON_CURRENT + 1))
           STALLS_ON_CURRENT=$((STALLS_ON_CURRENT + 1))
           LAST_CONTINUATION_STALLED=1
@@ -1602,12 +1721,14 @@ while true; do
     if [ "$HEAD_REF" = "$BASE_REF" ]; then
       warn_note "status flipped but HEAD did not move — check $TICKET_FILE was committed"
     fi
-    say_event ok "landed" "$(git log -1 --format=%h "$HEAD_REF")"
+    run_event ok "landed" "$(git log -1 --format=%h "$HEAD_REF")"
     # Resolved before the rename: it is read from this ticket's own file, which the rename moves.
     checked_ticket="$(foreman_checked_ticket "$TICKET_FILE")"
     mark_ticket_done_on_disk "$TICKET_FILE"
     # A followup ticket landing is the human ticket's verification: it is done for good now.
     [ -z "$checked_ticket" ] || mark_ticket_done_on_disk "$checked_ticket"
+    # The sun climbs: the header again, with the ticket that has just landed, before the next iteration.
+    if [ "$RUN_SHOW" = 1 ]; then run_header "$TICKET_FILE" || true; fi
     continue
   fi
 
@@ -1625,7 +1746,7 @@ while true; do
     CONTINUATIONS_ON_CURRENT=$((CONTINUATIONS_ON_CURRENT + 1))
     LAST_CONTINUATION_STALLED=0
     ATTEMPTS_ON_CURRENT=0
-    say_event progress "progressed" "$(git log -1 --format=%h "$HEAD_REF")"
+    run_event progress "progressed" "$(git log -1 --format=%h "$HEAD_REF")"
 
     if continuation_cap_reached; then
       FINAL_STATUS="$EXIT_NEEDS_HUMAN"
@@ -1652,7 +1773,7 @@ while true; do
      { [ "$transient" = "1" ] || [ "$context_exhausted" = "1" ] ||
        { [ "$agent_status" -ne 0 ] && [ "$parse_ok" = "1" ]; }; }; then
     fail_why=""; [ "$context_exhausted" != "1" ] || fail_why=", out of context"
-    say_event fail "did not land (exit $agent_status)$fail_why."
+    run_event fail "did not land (exit $agent_status)$fail_why."
     warn "     Retrying — attempt $((ATTEMPTS_ON_CURRENT + 1)) of $TICKET_ATTEMPTS."
     continue
   fi
