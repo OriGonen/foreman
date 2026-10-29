@@ -61,6 +61,8 @@
 #   ui_cols VAR FD     sets VAR to the width to draw for: COLUMNS if it is a positive number,
 #                      else what `stty size` says of FD, else 80. Ask it only after ui_show has
 #                      said yes — it may start a process, which a plain run must not.
+#   ui_rows VAR FD     the same for the height: LINES, else `stty size`, else 24. For a scene that
+#                      fits itself to the screen; a plain run never asks.
 # FOREMAN_SHOW overrides the first:
 #   auto      (default) the rule above
 #   always    the show on any stream — a pipe, a file, a test's capture — whatever CI or NO_COLOR
@@ -184,6 +186,22 @@ ui_cols() {
     printf -v "$1" '%s' "$((10#$_uc_size))"
   else
     printf -v "$1" 80
+  fi
+}
+
+# ui_rows VAR FD — sets VAR to the height of the terminal FD is, in lines, or 24 when nothing says.
+ui_rows() {
+  local _ur_size=""
+  if [[ ${LINES:-} =~ ^[0-9]+$ ]] && [ "$((10#$LINES))" -gt 0 ]; then
+    printf -v "$1" '%s' "$((10#$LINES))"
+    return 0
+  fi
+  { _ur_size="$(stty size 2>/dev/null)"; } <&"$2" 2>/dev/null
+  _ur_size="${_ur_size%% *}"
+  if [[ $_ur_size =~ ^[0-9]+$ ]] && [ "$((10#$_ur_size))" -gt 0 ]; then
+    printf -v "$1" '%s' "$((10#$_ur_size))"
+  else
+    printf -v "$1" 24
   fi
 }
 

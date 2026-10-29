@@ -3542,6 +3542,36 @@ if case_is "ui_cols: COLUMNS, else the terminal's own width, else 80"; then
   fi
 fi
 
+# What ui_rows says: the same, for the height.
+ROWS_PROBE="$WORK/rows-probe.sh"
+printf '%s\n' '. "$1/lib/foreman-ui.sh"' 'ui_rows h "$2"' 'printf "%s" "$h"' > "$ROWS_PROBE"
+rows_of() {
+  local kind="$1" cmd out; shift
+  printf -v cmd '%q ' env -u LINES "$@" bash "$ROWS_PROBE" "$FOREMAN_HOME" 1
+  if [ "$kind" = tty ]; then
+    out="$(script -qec "stty rows 30 cols 101; $cmd" /dev/null </dev/null 2>/dev/null)"
+    out="${out//$'\r'/}"
+    printf '%s' "${out##*$'\n'}"
+  else
+    eval "$cmd" 2>/dev/null
+  fi
+}
+
+if case_is "ui_rows: LINES, else the terminal's own height, else 24"; then
+  assert_eq "$(rows_of pipe LINES=50)" 50 "LINES"
+  assert_eq "$(rows_of pipe LINES=12)" 12 "a short one"
+  assert_eq "$(rows_of pipe)" 24 "nothing known is the classic 24"
+  assert_eq "$(rows_of pipe LINES=tall)" 24 "a LINES that is not a number is not an answer"
+  assert_eq "$(rows_of pipe LINES=0)" 24 "nor is 0"
+  assert_eq "$(rows_of pipe LINES=-5)" 24 "nor a negative"
+  if command -v script >/dev/null 2>&1 && [ "$(rows_of tty LINES=50)" = 50 ]; then
+    assert_eq "$(rows_of tty)" 30 "a terminal is asked"
+    assert_eq "$(rows_of tty LINES=40)" 40 "but LINES wins, and is not asked"
+  else
+    printf '  (skipped: no `script` to give a terminal)\n'
+  fi
+fi
+
 if case_is "foreman-draw reads the palette from foreman-ui.sh and keeps no copy"; then
   DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
   assert_eq "$(node -e '
@@ -4979,6 +5009,376 @@ if case_is "foreman status on a real terminal shows without being forced, and no
       script -qec "$FOREMAN status batch" /dev/null </dev/null 2>/dev/null)"
     OUT="${OUT//$'\r'/}"
     assert_contains "$(printf '%s\n' "$OUT" | sed "s/${ESC}\[[0-9;]*[mK]//g")" "Tickets done: 1 / 3" "CI is plain, terminal or not"
+    assert_missing "$OUT" "▀" "with no picture"
+  else
+    printf '  (skipped: no `script` to give a terminal)\n'
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# dry-run as the walk round at dawn (ticket 05)
+# ---------------------------------------------------------------------------
+
+# The design's prompt: 122 lines, the way the fixture's tickets read, so that the lines the design
+# shows are lines of it (1 and 3 and 5, the heading at 7, and the last).
+dry_design_prompt() {
+  local n
+  printf '%s\n\n%s\n\n%s\n' '@.scratch/human-tickets/issues/07a-followup-try-the-followup-skill.md' \
+    'Implement the attached ticket, and only that ticket, to a high standard.' \
+    'Work on tickets in the order of .scratch/human-tickets/order.md. Do not pick a'
+  printf '%s\n' 'different one, and do not start the next one.' '' '## 1. Agree the seams before writing code'
+  for ((n = 9; n < 122; n++)); do printf 'a line of the prompt, number %s\n' "$n"; done
+  printf '%s\n' '</progress-excerpt>'
+}
+
+# The facts without the prompt's lines (which are `prompt` facts; the ticket it is for stays).
+without_prompt() { awk -F'\t' '$1 != "prompt"'; }
+
+# The facts `foreman dry-run` sends the renderer for the design: seven of ten done, the next
+# a followup, the settings the design shows. $1 is the screen's height.
+dry_design_facts() {    # dry_design_facts [SCREEN]
+  printf 'batch\t.scratch/human-tickets\ndone\t7\ntotal\t10\n'
+  printf 'ticket\tnext\t07a-followup-try-the-followup-skill.md\t\t07-try-the-followup-skill-on-a-real-batch.md\n'
+  printf 'ticket\ttodo\t08-readme-human-tickets-section.md\t\t\n'
+  printf 'ticket\ttodo\t09-end-to-end-check-on-this-machine.md\t\t\n'
+  printf 'exec\tlocal\nperms\tacceptEdits\nmodel\tclaude-sonnet-5-5\neffort\thigh\nlive\toff\n'
+  printf 'cost\t$25\ntime\t90m\niterations\tunlimited\n'
+  printf 'logs\t.scratch/human-tickets/foreman-runs.jsonl\nlogs\t.scratch/human-tickets/foreman-runs.log\n'
+  printf 'screen\t%s\n' "${1:-60}"
+  printf 'promptfor\t.scratch/human-tickets/issues/07a-followup-try-the-followup-skill.md\n'
+  dry_design_prompt | sed 's/^/prompt\t/'
+}
+
+if case_is "foreman-draw dryrun is the 11a design: the low sun, WOULD RUN, SETTINGS, the numbered prompt and the closing rule"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  ANS="$FOREMAN_HOME/.scratch/terminal-design/designs/11a-dry-run.ans"
+  TXT="$FOREMAN_HOME/.scratch/terminal-design/designs/11a-dry-run.txt"
+  CELLS="$FOREMAN_HOME/test/ans-cells.cjs"
+  OUT24="$(dry_design_facts 22 | node "$DRAW" dryrun --tier 24 --cols 120)"; ST=$?
+  assert_eq "$ST" 0 "the dryrun scene runs"
+  TEXT24="$(printf '%s\n' "$OUT24" | strip)"
+  # The design's rows 1 to 17 (after the command line): the header, the low sun, the rule, WOULD RUN and SETTINGS.
+  assert_eq "$(printf '%s\n' "$OUT24" | node "$CELLS" --cells 20 --rows 4-6)" "$(node "$CELLS" --cells 20 --rows 5-7 < "$ANS")" "the low sun is the design's, every cell"
+  assert_eq "$(printf '%s\n' "$OUT24" | node "$CELLS" --cells 96 --rows 0-3)" "$(node "$CELLS" --cells 96 --rows 1-4 < "$ANS")" "so is the header, in its colours"
+  assert_eq "$(printf '%s\n' "$OUT24" | node "$CELLS" --cells 96 --rows 4-6 | cut -d' ' -f21-)" "$(node "$CELLS" --cells 96 --rows 5-7 < "$ANS" | cut -d' ' -f21-)" "and the count beside the sun"
+  assert_eq "$(printf '%s\n' "$OUT24" | node "$CELLS" --cells 96 --rows 7-12)" "$(node "$CELLS" --cells 96 --rows 8-13 < "$ANS")" "the rule and the three tickets that would run"
+  assert_eq "$(printf '%s\n' "$OUT24" | node "$CELLS" --cells 100 --rows 14-17)" "$(node "$CELLS" --cells 100 --rows 15-18 < "$ANS")" "SETTINGS in two columns, in the design's colours"
+  assert_eq "$(printf '%s\n' "$TEXT24" | sed -n '1,18p')" "$(sed -n '2,19p' "$TXT" | sed 's/ *$//')" "all of it reads as 11a-dry-run.txt does"
+  assert_eq "$(printf '%s\n' "$TEXT24" | sed -n '19p')" "PROMPT for 07a  ·  122 lines" "the prompt says which ticket it is for and how long it is"
+  assert_eq "$(printf '%s\n' "$TEXT24" | tail -1)" "$(tail -1 "$TXT" | sed 's/ *$//')" "and the closing rule is the design's"
+  assert_contains "$OUT24" "${ESC}[0;1;48;2;92;87;79m CHECK " "CHECK is bold on dim"
+  assert_contains "$OUT24" "${ESC}[0;38;2;224;168;74m▶" "the arrow is amber"
+  assert_contains "$OUT24" "${ESC}[0;1;38;2;246;213;142m07a" "and the next id bold sun"
+  assert_contains "$OUT24" "${ESC}[0;1;38;2;224;168;74mSETTINGS" "the headings are bold amber"
+  assert_contains "$OUT24" "${ESC}[0;38;2;92;87;79m  1 │ ${ESC}[0;38;2;224;168;74m@.scratch" "the first line of the prompt is amber after a dim gutter"
+  assert_contains "$(dry_design_facts 200 | node "$DRAW" dryrun --tier 24 --cols 120)" "${ESC}[0;1;38;2;246;213;142m## 1. Agree the seams before writing code" "a heading is picked out"
+  assert_contains "$OUT24" "${ESC}[0;38;2;168;162;153m</progress-excerpt>" "and the closing tag is muted"
+  assert_contains "$OUT24" "${ESC}[0;38;2;92;87;79m  ⋮ │${ESC}[0m" "the fold is dim"
+  assert_contains "$OUT24" "${ESC}[0;38;2;143;207;143mnothing was sent; no sandbox was started" "the closing rule is green"
+
+  OUT16="$(dry_design_facts 22 | node "$DRAW" dryrun --tier 16 --cols 120)"
+  assert_missing "$OUT16" "38;2;" "16 colours: no 24 bits"
+  assert_eq "$(printf '%s\n' "$OUT16" | strip | sed -n '8,$p')" "$(printf '%s\n' "$TEXT24" | sed -n '8,$p')" "below the sun it reads the same at 16"
+  assert_contains "$(dry_design_facts 22 | node "$DRAW" dryrun --tier 256 --cols 120)" "38;5;" "and 256 colours are used at 256"
+fi
+
+if case_is "foreman-draw dryrun: the prompt is exactly what was sent, numbered, and folded to the screen"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  # Every line, not folded: a screen as tall as the prompt. What is left of the gutter is the prompt.
+  TEXT="$(dry_design_facts 200 | node "$DRAW" dryrun --tier 24 --cols 120 | strip)"
+  assert_eq "$(printf '%s\n' "$TEXT" | sed -n '/^PROMPT /,$p' | sed '1d;$d' | sed -E 's/^ *[0-9]+ │ ?//')" "$(dry_design_prompt | sed 's/ *$//')" "the prompt is the prompt, line for line"
+  assert_eq "$(printf '%s\n' "$TEXT" | sed -n '/^PROMPT /,$p' | sed '1d;$d' | sed -n '1p;122p' | sed -E 's/ │.*//')" "$(printf '  1\n122')" "numbered from 1 to its length, to the width of the longest"
+  assert_missing "$TEXT" "⋮" "a prompt that fits is not folded"
+
+  # A short screen folds it: the first lines, a ⋮ row, the last lines, and the count of all.
+  TEXT="$(dry_design_facts 40 | node "$DRAW" dryrun --tier 24 --cols 120 | strip)"
+  assert_contains "$TEXT" "PROMPT for 07a  ·  122 lines" "a folded prompt still says how long it is"
+  assert_contains "$TEXT" "  ⋮ │" "the fold is a ⋮ in the gutter"
+  assert_contains "$TEXT" "  1 │ @.scratch/human-tickets/issues/07a-followup-try-the-followup-skill.md" "line 1 is kept"
+  assert_contains "$TEXT" "122 │ </progress-excerpt>" "and the last"
+  assert_contains "$TEXT" "121 │ a line of the prompt, number 121" "and the one before it"
+  assert_missing "$TEXT" "number 60" "the middle is not"
+  assert_eq "$(printf '%s\n' "$TEXT" | grep -c '[0-9⋮] │')" "$(printf '%s\n' "$TEXT" | sed -n '/^PROMPT /,$p' | grep -c '[0-9⋮] │')" "only the prompt has a gutter"
+  assert_eq "$(printf '%s\n' "$TEXT" | wc -l | tr -d ' ')" 39 "and the whole picture leaves the screen's last line to the shell's prompt"
+  heads="$(printf '%s\n' "$TEXT" | sed -n '/^PROMPT /,/⋮/p' | grep -c '[0-9] │')"
+  tails="$(printf '%s\n' "$TEXT" | sed -n '/⋮/,$p' | grep -c '[0-9] │')"
+  assert_eq "$tails" 2 "the fold keeps two lines at the end"
+  assert_eq "$heads" 16 "and the rest of the room at the start"
+  # A very short screen still shows enough to be a prompt: at least nine rows of it.
+  TEXT="$(dry_design_facts 10 | node "$DRAW" dryrun --tier 24 --cols 120 | strip)"
+  assert_eq "$(printf '%s\n' "$TEXT" | sed -n '/^PROMPT /,$p' | grep -c '[0-9⋮] │')" 9 "never fewer than nine rows"
+  # No height given: the classic 24.
+  assert_eq "$(dry_design_facts | grep -v '^screen' | node "$DRAW" dryrun --tier 24 --cols 120 | strip | sed -n '/^PROMPT /,$p' | grep -c '[0-9⋮] │')" 9 "and nothing known is a 24-line screen"
+  # A shorter prompt is whole and numbered to its own width.
+  TEXT="$(dry_design_facts 60 | without_prompt | node "$DRAW" dryrun --tier 24 --cols 120 | strip)"
+  assert_contains "$TEXT" "PROMPT for 07a  ·  0 lines" "no prompt lines is no lines"
+  TEXT="$(dry_design_facts 60 | without_prompt | { cat; printf 'prompt\tone\nprompt\t\nprompt\tthree\t(tab)\n'; } | node "$DRAW" dryrun --tier 24 --cols 120 | strip)"
+  assert_contains "$TEXT" "PROMPT for 07a  ·  3 lines" "three lines"
+  assert_eq "$(printf '%s\n' "$TEXT" | sed -n '/^PROMPT /,$p' | sed -n '2,4p')" "$(printf '1 │ one\n2 │\n3 │ three\t(tab)')" "numbered to one digit, a blank line has only its gutter, a tab survives"
+  # What the terminal would act on is not sent to it.
+  TEXT="$(dry_design_facts 60 | without_prompt | { cat; printf 'prompt\tbefore\033[2Jafter\033]0;title\007\n'; } | node "$DRAW" dryrun --tier 24 --cols 120)"
+  assert_missing "$TEXT" "${ESC}[2J" "an escape in the prompt is not passed on"
+  assert_contains "$(printf '%s\n' "$TEXT" | strip)" "before·[2Jafter·]0;title·" "it is shown as a dot"
+  # The fold also keeps a number's width: a 1000-line prompt has four digits.
+  TEXT="$({ dry_design_facts 40 | without_prompt; for ((i = 1; i <= 1000; i++)); do printf 'prompt\tline %s\n' "$i"; done; } | node "$DRAW" dryrun --tier 24 --cols 120 | strip)"
+  assert_contains "$TEXT" "   1 │ line 1" "four digits"
+  assert_contains "$TEXT" "1000 │ line 1000" "to the last"
+  assert_contains "$TEXT" "   ⋮ │" "and the fold lines up with them"
+fi
+
+if case_is "foreman-draw dryrun: settings, tags, warnings, the human ticket and the width"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  text_of() { node "$DRAW" dryrun --tier 24 --cols 120 | strip; }
+  facts() { dry_design_facts 200 | awk -F'\t' '$1 != "prompt" && $1 != "promptfor"'; }
+
+  # Each setting is the value it was sent, spelled the way the design spells it.
+  T="$(facts | text_of)"
+  assert_contains "$T" "SETTINGS   exec     local                 perms    acceptEdits" "exec and perms"
+  assert_contains "$T" "           model    claude-sonnet-5-5     effort   high" "model and effort"
+  assert_contains "$T" "           live     off — add --live to watch   budgets  \$25  ·  90m  ·  iterations unlimited" "live (which overruns its column, as the design's does) and the budgets"
+  assert_contains "$T" "           logs     .scratch/human-tickets/foreman-runs.jsonl  and  foreman-runs.log" "the logs, the second by its name"
+  T="$(facts | sed 's/^live\toff/live\ton/' | text_of)"
+  assert_contains "$T" "live     on — file writes and shell commands drawn to stderr   budgets" "live on says what it draws"
+  T="$(facts | sed 's/^cost\t.*/cost\tunlimited/; s/^time\t.*/time\tunlimited/; s/^iterations\t.*/iterations\t3/' | text_of)"
+  assert_contains "$T" "budgets  cost unlimited  ·  time unlimited  ·  iterations 3" "an unlimited budget says what it is unlimited in"
+  T="$(facts | sed 's/^exec\tlocal/exec\tsandbox (sandbox foreman-app-batch)/' | text_of)"
+  assert_contains "$T" "exec     sandbox (sandbox foreman-app-batch)   perms    acceptEdits" "a long exec keeps three spaces before the next column"
+  T="$(facts | sed 's|^logs\t.*foreman-runs.log$|logs\telsewhere/run.log|' | text_of)"
+  assert_contains "$T" "foreman-runs.jsonl  and  elsewhere/run.log" "a log in another directory is given whole"
+
+  # The header: the batch, its name, and the counts beside the sun.
+  assert_contains "$(facts | text_of)" "FOREMAN  dry run  .scratch/human-tickets" "the header"
+  assert_contains "$(facts | sed 's/^batch\t.*/&\nname\tfoo/' | text_of)" "FOREMAN  dry run  .scratch/human-tickets (foo)" "and a named batch"
+  assert_contains "$(facts | text_of)" "7 of 10 done  ·  3 would run" "7 of 10 done, 3 would run"
+  assert_contains "$(facts | awk -F'\t' '!($1 == "ticket" && $3 ~ /^0[89]-/)' | text_of)" "7 of 10 done  ·  1 would run" "a count follows the list"
+
+  # The list: ▶ on the first, tags where they belong, and a name no number has.
+  assert_contains "$T" "▶ 07a followup-try-the-followup-skill            CHECK" "the next ticket and its CHECK tag, ten past the longest name"
+  assert_contains "$T" "  08  readme-human-tickets-section" "the rest are indented under the arrow"
+  T="$(facts | sed 's/^\(ticket\tnext\t[^\t]*\)\t\t.*$/\1\thuman\t/' | text_of)"
+  assert_contains "$(facts | sed 's/^\(ticket\tnext\t[^\t]*\)\t\t.*$/\1\thuman\t/' | node "$DRAW" dryrun --tier 24 --cols 120)" "${ESC}[0;1;38;2;23;22;20;48;2;224;168;74m HUMAN " "HUMAN is dark on amber"
+  assert_contains "$T" "▶ 07a followup-try-the-followup-skill            HUMAN" "in the same column"
+  assert_contains "$(facts | sed 's/^ticket\ttodo\t08-readme/ticket\ttodo\tnotes.md\t\t\n&/' | text_of)" $'\n  notes\n' "a ticket with no number is its name"
+
+  # Warnings follow the list, as they follow it in plain.
+  T="$(facts | { cat; printf 'warning\tbatch/01.md has no Handoff: file\n'; } | text_of)"
+  assert_contains "$T" "  09  end-to-end-check-on-this-machine
+
+▲ batch/01.md has no Handoff: file
+
+SETTINGS" "warnings sit between the list and the settings"
+
+  # A human ticket next: no prompt, and a line that says so.
+  T="$(facts | sed 's/^\(ticket\tnext\t[^\t]*\)\t\t.*$/\1\thuman\t/' | { grep -v '^promptfor'; printf 'stop\t07a-followup-try-the-followup-skill.md\nhandoff\t.scratch/human-tickets/handoff/07a.md\n'; } | text_of)"
+  assert_contains "$T" "■ would stop before 07a  HUMAN   — no prompt would be sent; the handoff is .scratch/human-tickets/handoff/07a.md" "it says where it stops, and where the handoff is"
+  assert_missing "$T" "PROMPT" "with no prompt"
+  assert_eq "$(printf '%s\n' "$T" | tail -2 | head -1)" "" "a blank line before the closing rule"
+  assert_contains "$(printf '%s\n' "$T" | tail -1)" "nothing was sent; no sandbox was started" "which still closes it"
+  T="$(facts | sed 's/^\(ticket\tnext\t[^\t]*\)\t\t.*$/\1\thuman\t/' | { cat; printf 'stop\t07a-followup-try-the-followup-skill.md\n'; } | text_of)"
+  assert_contains "$T" "■ would stop before 07a  HUMAN   — no prompt would be sent" "with no handoff, it just says so"
+  assert_missing "$T" "handoff is" "and names none"
+
+  # The width: 92 columns hold the subtitle, which is the widest of the header.
+  T="$(facts | node "$DRAW" dryrun --tier 24 --cols 92 2>"$WORK/draw-err")"; ST=$?
+  assert_eq "$ST" 0 "92 columns is enough"
+  assert_eq "$(facts | node "$DRAW" dryrun --tier 24 --cols 91 2>"$WORK/draw-err")" "" "91 is not"
+  assert_contains "$(cat "$WORK/draw-err")" "too narrow" "and says so"
+  facts | node "$DRAW" dryrun --tier 24 --cols 91 >/dev/null 2>&1; ST=$?
+  assert_eq "$ST" 3 "with the status for a width that is too small"
+
+  # The scene's minimum is the one the shell checks before it starts node.
+  assert_eq "$(node -e 'console.log(require(process.argv[1]).SCENES.dryrun.min)' "$DRAW")" "$(sed -n 's/^_dryrun_min_cols=\([0-9]*\).*/\1/p' "$FOREMAN_HOME/lib/foreman-loop.sh")" "the shell and the renderer agree on the width"
+fi
+
+# `foreman dry-run`, the show forced on: 24 bits, 120 wide, and tall enough that the prompt is not folded.
+dry_show() { FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 LINES=500 run_foreman "$@"; }
+
+if case_is "foreman dry-run draws the walk round when the show is on: the list, each setting, the prompt and the closing rule"; then
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  repo="$(make_repo 3 dry-show-repo)"
+  run_foreman "$repo" dry-run batch
+  PLAIN="$OUT"
+  dry_show "$repo" dry-run batch
+  assert_eq "$ST" 0 "dry-run exits 0"
+  assert_contains "$OUT" "38;2;" "it is drawn in 24 bits"
+  TEXT="$(printf '%s\n' "$OUT" | strip)"
+  assert_contains "$TEXT" "FOREMAN  dry run  batch" "the header"
+  assert_contains "$TEXT" "0 of 3 done  ·  3 would run" "the count beside the sun"
+  assert_contains "$TEXT" $'WOULD RUN\n▶ 01  ticket\n  02  ticket\n  03  ticket\n' "the tickets that would run, the first with the arrow"
+  assert_contains "$TEXT" "exec     fake (no agent is run)" "exec"
+  assert_contains "$TEXT" "perms    acceptEdits" "perms"
+  assert_contains "$TEXT" "model    claude-sonnet-5-5" "model"
+  assert_contains "$TEXT" "effort   high" "effort"
+  assert_contains "$TEXT" "live     off — add --live to watch" "live"
+  assert_contains "$TEXT" "budgets  cost unlimited  ·  time unlimited  ·  iterations 1" "budgets, as the loop labels them"
+  assert_contains "$TEXT" "logs     batch/foreman-runs.jsonl  and  foreman-runs.log" "logs"
+  lines="$(printf '%s\n' "$PLAIN" | sed -n '/^=== prompt that would be sent/,/^=== end prompt/p' | sed '1d;$d' | wc -l | tr -d ' ')"
+  assert_contains "$TEXT" "PROMPT for 01  ·  $lines lines" "the prompt, whose ticket and length are said"
+  assert_contains "$TEXT" "  1 │ @batch/issues/01-ticket.md" "line 1 of it"
+  assert_missing "$TEXT" "⋮" "the screen is tall enough for all of it"
+  assert_eq "$(printf '%s\n' "$TEXT" | sed -n '/^PROMPT /,$p' | sed '1d;$d' | sed -E 's/^ *[0-9]+ │ ?//')" \
+    "$(printf '%s\n' "$PLAIN" | sed -n '/^=== prompt that would be sent/,/^=== end prompt/p' | sed '1d;$d' | sed 's/ *$//')" "the prompt is the one the plain run prints, every line of it"
+  assert_contains "$(printf '%s\n' "$TEXT" | tail -1)" "nothing was sent; no sandbox was started" "the closing rule"
+  assert_missing "$TEXT" "Would run, in this order" "none of the plain lines"
+  assert_missing "$TEXT" "=== prompt" "or its frame"
+  assert_eq "$(git -C "$repo" log --oneline | wc -l)" "1" "committed nothing"
+
+  # The settings are the loop's own values.
+  FOREMAN_MAX_COST_USD=25 FOREMAN_MAX_MINUTES=90 FOREMAN_MODEL=haiku FOREMAN_EFFORT=low FOREMAN_PERMISSION_MODE=manual dry_show "$repo" dry-run batch 5 --live
+  TEXT="$(printf '%s\n' "$OUT" | strip)"
+  assert_contains "$TEXT" "model    haiku" "a model from the environment"
+  assert_contains "$TEXT" "effort   low" "an effort"
+  assert_contains "$TEXT" "perms    manual" "a permission mode"
+  assert_contains "$TEXT" "live     on — file writes and shell commands drawn to stderr" "--live"
+  assert_contains "$TEXT" "budgets  \$25  ·  90m  ·  iterations 5" "the budgets, with a number of iterations"
+  dry_show "$repo" dry-run batch --unlimited
+  assert_contains "$(printf '%s\n' "$OUT" | strip)" "iterations unlimited" "and without"
+  printf 'FOREMAN_MODEL=conf-model\nFOREMAN_BATCH_NAME=my-batch\n' >> "$repo/batch/foreman.conf"
+  git -C "$repo" commit --quiet -am "conf"
+  dry_show "$repo" dry-run batch
+  TEXT="$(printf '%s\n' "$OUT" | strip)"
+  assert_contains "$TEXT" "model    conf-model" "a model from the batch's foreman.conf"
+  assert_contains "$TEXT" "FOREMAN  dry run  batch (my-batch)" "and its name"
+
+  # Tickets done are counted, and a human or followup ticket is tagged.
+  repo="$(make_repo 5 dry-show-tags-repo)"
+  sed -i 's/^\*\*Status:\*\* todo/**Status:** implemented/' "$repo/batch/issues/01-ticket.md"
+  git -C "$repo" commit --quiet -am "one done"
+  make_human_ticket "$repo" 3
+  make_followup_ticket "$repo" 4 3
+  dry_show "$repo" dry-run batch
+  TEXT="$(printf '%s\n' "$OUT" | strip)"
+  assert_contains "$TEXT" "1 of 5 done  ·  4 would run" "one done, four to run"
+  assert_contains "$TEXT" "▶ 02  ticket" "the next is the first that is not done"
+  assert_contains "$TEXT" "  03  ticket   " "a human ticket after it is listed"
+  assert_contains "$OUT" "${ESC}[0;1;38;2;23;22;20;48;2;224;168;74m HUMAN " "with the HUMAN tag"
+  assert_contains "$OUT" "${ESC}[0;1;48;2;92;87;79m CHECK " "and a followup the CHECK tag"
+  assert_contains "$TEXT" "PROMPT for 02  ·" "the prompt is the next ticket's, the human one not yet its turn"
+fi
+
+if case_is "foreman dry-run draws a human ticket next as a stop, with its warning, and no prompt"; then
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  repo="$(make_repo 2 dry-show-human-repo)"
+  make_human_ticket "$repo" 1
+  dry_show "$repo" dry-run batch
+  assert_eq "$ST" 0 "exits 0"
+  TEXT="$(printf '%s\n' "$OUT" | strip)"
+  assert_contains "$TEXT" "▶ 01  ticket" "the human ticket is listed first"
+  assert_contains "$TEXT" "■ would stop before 01  HUMAN   — no prompt would be sent; the handoff is batch/handoff/01-ticket.md" "and where it stops"
+  assert_contains "$TEXT" "▲ batch/issues/01-ticket.md is a human ticket with no ticket that Checks: it — run /foreman-human-followup-tickets" "its warning sits between the list and the settings"
+  assert_missing "$TEXT" "PROMPT" "there is no prompt"
+  assert_contains "$(printf '%s\n' "$TEXT" | tail -1)" "nothing was sent; no sandbox was started" "and the rule still closes it"
+  assert_eq "$(git -C "$repo" log --oneline | wc -l)" "2" "committed nothing"
+
+  # Done is done: a human ticket its person has finished is not a stop.
+  finish_human_ticket "$repo" 1
+  dry_show "$repo" dry-run batch
+  assert_missing "$OUT" "would stop" "done wins over the human marker"
+fi
+
+if case_is "foreman dry-run folds a prompt longer than the screen, keeping the first lines and the last"; then
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  repo="$(make_repo 2 dry-show-fold-repo)"
+  run_foreman "$repo" dry-run batch
+  total="$(printf '%s\n' "$OUT" | sed -n '/^=== prompt that would be sent/,/^=== end prompt/p' | sed '1d;$d' | wc -l | tr -d ' ')"
+  last="$(printf '%s\n' "$OUT" | sed -n '/^=== prompt that would be sent/,/^=== end prompt/p' | sed '1d;$d' | tail -1)"
+  FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 LINES=40 run_foreman "$repo" dry-run batch
+  TEXT="$(printf '%s\n' "$OUT" | strip)"
+  assert_eq "$ST" 0 "exits 0"
+  assert_contains "$TEXT" "PROMPT for 01  ·  $total lines" "how many there are in all"
+  assert_contains "$TEXT" "⋮ │" "the fold"
+  assert_contains "$TEXT" "  1 │ @batch/issues/01-ticket.md" "the first line"
+  assert_contains "$TEXT" "$total │ $last" "and the last, with its number"
+  assert_eq "$(printf '%s\n' "$TEXT" | wc -l | tr -d ' ')" 39 "all of it in the screen's height but the shell's own line"
+  # The height asked of the terminal is the one LINES says, and 24 when nothing says.
+  FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 run_foreman "$repo" dry-run batch
+  assert_contains "$OUT" "⋮" "with nothing said, it is folded too"
+fi
+
+if case_is "foreman dry-run piped is the text it always was, down to the byte"; then
+  ESC=$'\033'
+  repo="$(make_repo 2 dry-plain-repo)"
+  want_head="$(cat <<'EOF'
+Batch: batch
+Tickets done: 0 / 2
+
+Would run, in this order:
+  1  01-ticket.md
+  2  02-ticket.md
+
+Exec:    fake (no agent is run)
+Model:   claude-sonnet-5-5   Effort: high
+Perms:   acceptEdits
+Live:    off (json; add --live to watch the iteration)
+Budgets: cost=unlimited  time=unlimited  iterations=1
+Logs:    batch/foreman-runs.jsonl
+         batch/foreman-runs.log
+
+=== prompt that would be sent for batch/issues/01-ticket.md ===
+@batch/issues/01-ticket.md
+
+Implement the attached ticket, and only that ticket, to a high standard.
+EOF
+)"
+  run_foreman "$repo" dry-run batch
+  assert_eq "$ST" 0 "exits 0"
+  assert_eq "$(printf '%s\n' "$OUT" | head -20)" "$want_head" "the plan, the settings and the start of the prompt"
+  assert_eq "$(printf '%s\n' "$OUT" | tail -1)" "=== end prompt (nothing was sent; no sandbox was started) ===" "and the end of it"
+  assert_missing "$OUT" "▀" "with no picture"
+  PLAIN_BYTES="$(cd "$repo" && "$FOREMAN" dry-run batch 2>&1 | od -c | tr -s ' ')"
+  uncoloured() { sed "s/${ESC}\[[0-9;]*m//g"; }
+  FOREMAN_COLOR=truecolor COLUMNS=120 run_foreman "$repo" dry-run batch
+  assert_eq "$(cd "$repo" && FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" dry-run batch 2>&1 | uncoloured | od -c | tr -s ' ')" "$PLAIN_BYTES" "colour alone is not the show: this is a pipe"
+  assert_missing "$OUT" "▀" "and there is no picture"
+  assert_eq "$(cd "$repo" && FOREMAN_SHOW=never FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" dry-run batch 2>&1 | uncoloured | od -c | tr -s ' ')" "$PLAIN_BYTES" "FOREMAN_SHOW=never"
+  assert_eq "$(cd "$repo" && FOREMAN_SHOW=always FOREMAN_COLOR=never COLUMNS=120 "$FOREMAN" dry-run batch 2>&1 | od -c | tr -s ' ')" "$PLAIN_BYTES" "FOREMAN_COLOR=never"
+  assert_eq "$(cd "$repo" && FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=91 "$FOREMAN" dry-run batch 2>&1 | uncoloured | od -c | tr -s ' ')" "$PLAIN_BYTES" "a screen one column short of the picture"
+  assert_contains "$(cd "$repo" && FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=92 "$FOREMAN" dry-run batch 2>&1)" "▀" "and exactly enough is drawn"
+  assert_eq "$(cd "$repo" && FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=40 "$FOREMAN" dry-run batch 2>&1 | uncoloured | od -c | tr -s ' ')" "$PLAIN_BYTES" "a narrow screen"
+
+  # If the renderer cannot draw, the text is all there is, and no half of a picture is left before it.
+  fake_home="$WORK/dry-nonode-home"
+  mkdir -p "$fake_home"
+  cp -R "$FOREMAN_HOME/bin" "$FOREMAN_HOME/lib" "$fake_home/"
+  printf 'process.stdout.write("half a picture"); process.exit(1)\n' > "$fake_home/lib/foreman-draw.cjs"
+  OUT="$(cd "$repo" && FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 bash "$fake_home/bin/foreman" dry-run batch 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "a renderer that fails does not fail dry-run"
+  assert_eq "$(printf '%s\n' "$OUT" | uncoloured | od -c | tr -s ' ')" "$PLAIN_BYTES" "and the plain text is printed alone"
+  assert_missing "$OUT" "half a picture" "with none of what the renderer got out before it failed"
+
+  # A human ticket next, and nothing to do, are as they were.
+  make_human_ticket "$repo" 1
+  run_foreman "$repo" dry-run batch
+  assert_contains "$OUT" "Would stop before batch/issues/01-ticket.md: it is a human ticket. No prompt would be sent." "the human stop, in words"
+  repo="$(make_repo 2 dry-plain-done-repo)"
+  sed -i 's/^\*\*Status:\*\* todo/**Status:** implemented/' "$repo"/batch/issues/*.md
+  git -C "$repo" commit --quiet -am "all done"
+  dry_show "$repo" dry-run batch
+  assert_eq "$OUT" "Nothing to do — every ticket in batch is already done." "nothing left is said in words, show or not"
+fi
+
+if case_is "foreman dry-run on a real terminal shows without being forced, and not in CI"; then
+  if command -v script >/dev/null 2>&1 && [ "$(show_of tty 1 FOREMAN_SHOW=always)" = show:16 ]; then
+    ESC=$'\033'
+    repo="$(make_repo 2 dry-tty-repo)"
+    OUT="$(cd "$repo" && env -u CI -u NO_COLOR -u WT_SESSION -u FOREMAN_COLOR -u FOREMAN_SHOW TERM=xterm COLORTERM=truecolor COLUMNS=100 LINES=50 \
+      script -qec "$FOREMAN dry-run batch" /dev/null </dev/null 2>/dev/null)"
+    OUT="${OUT//$'\r'/}"
+    assert_contains "$OUT" "38;2;" "a terminal that says truecolor gets 24 bits"
+    assert_contains "$(printf '%s\n' "$OUT" | sed "s/${ESC}\[[0-9;]*[mK]//g")" "0 of 2 done  ·  2 would run" "and the show, unforced"
+    OUT="$(cd "$repo" && env -u NO_COLOR -u WT_SESSION -u FOREMAN_COLOR -u FOREMAN_SHOW CI=true TERM=xterm COLORTERM=truecolor COLUMNS=100 \
+      script -qec "$FOREMAN dry-run batch" /dev/null </dev/null 2>/dev/null)"
+    OUT="${OUT//$'\r'/}"
+    assert_contains "$(printf '%s\n' "$OUT" | sed "s/${ESC}\[[0-9;]*[mK]//g")" "Tickets done: 0 / 2" "CI is plain, terminal or not"
     assert_missing "$OUT" "▀" "with no picture"
   else
     printf '  (skipped: no `script` to give a terminal)\n'
