@@ -6861,6 +6861,350 @@ batch/issues/03-ticket.md" "and so is '--list'"
 fi
 
 # ---------------------------------------------------------------------------
+# report as the bill and the ledger (ticket 11)
+# ---------------------------------------------------------------------------
+
+# The facts `foreman report` sends the renderer, for the design's batch: three runs, fourteen
+# iterations, ten landed. Token counts are chosen so that they read as the design reads.
+report_design_facts() {
+  printf 'batch\t.scratch/human-tickets\nmode\tby-run\nruns\t3\niterations\t14\n'
+  printf 'landed\t10\nprogressed\t1\nstalled\t1\nunproductive\t2\n'
+  printf 'cost\t14.20\nminutes\t96.3\ninput\t41200\noutput\t388000\ncache-read\t12400000\ncache-write\t1100000\nturns\t812\n'
+  printf 'run\t20261021T091200Z-4411\t5\t4\t31.2\t4.12\n'
+  printf 'run\t20261022T140533Z-9020\t6\t4\t44.0\t6.38\n'
+  printf 'run\t20261023T081014Z-1207\t3\t2\t21.1\t3.70\n'
+}
+
+if case_is "foreman-draw report is the 10a design, cell for cell, in its colours and in its words"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  ANS="$FOREMAN_HOME/.scratch/terminal-design/designs/10a-report.ans"
+  TXT="$FOREMAN_HOME/.scratch/terminal-design/designs/10a-report.txt"
+  CELLS="$FOREMAN_HOME/test/ans-cells.cjs"
+  OUT24="$(report_design_facts | node "$DRAW" report --tier 24 --cols 100)"; ST=$?
+  assert_eq "$ST" 0 "the report scene runs"
+  # The design's first line is the prompt; its second is the blank line the picture starts with.
+  assert_eq "$(printf '%s\n' "$OUT24" | node "$CELLS" --cells 100 | head -n 20)" \
+    "$(sed -n '2,21p' "$ANS" | node "$CELLS" --cells 100)" "the picture is the design's, in its colours"
+  assert_eq "$(printf '%s\n' "$OUT24" | strip | head -n 20)" "$(sed -n '2,21p' "$TXT" | sed 's/ *$//')" "and it reads as 10a-report.txt does"
+  assert_eq "$(printf '%s\n' "$OUT24" | wc -l | tr -d ' ')" 21 "a blank line follows it"
+fi
+
+if case_is "foreman-draw report: the bars, the figures, the legend and the other views"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  # The facts for a batch of runs: report_facts RUN... where a RUN is id,iterations,landed,minutes,cost.
+  bill() {    # bill ITERATIONS LANDED PROGRESSED STALLED UNPRODUCTIVE COST
+    printf 'batch\tb\nruns\t1\niterations\t%s\nlanded\t%s\nprogressed\t%s\nstalled\t%s\nunproductive\t%s\ncost\t%s\nminutes\t1\n' "$1" "$2" "$3" "$4" "$5" "$6"
+  }
+
+  # The words beside the mark on one row of the picture (1 is the blank line above it), from its text column.
+  beside() { node -e 'const l = require("fs").readFileSync(0, "utf8").split("\n"); console.log(Array.from(l[process.argv[1] - 1]).slice(23).join(""))' "$1"; }
+  # The outcome bar is 28 cells, shared out in proportion: the design's 10 : 1 : 1 : 2 is 20, 2, 2, 4.
+  barof() { node "$DRAW" report --tier 24 --cols 100 | strip | beside 5; }
+  assert_eq "$(bill 14 10 1 1 2 14.2 | barof)" "████████████████████████████" "the design's bar is 28 cells"
+  show_runs() { node "$DRAW" report --tier 24 --cols 100 | node -e '
+    const row = require("fs").readFileSync(0, "utf8").split("\n")[4];
+    const bar = row.slice(row.indexOf("   ", row.lastIndexOf("m", 0)) );
+    const parts = [...row.matchAll(/\x1b\[0;38;2;(\d+;\d+;\d+)m(█+)/g)].filter((m) => m.index > row.indexOf("   \x1b[0;38;2;143")).map((m) => `${m[1]} ${m[2].length} `);
+    process.stdout.write(parts.join(""));'; }
+  assert_eq "$(bill 14 10 1 1 2 14.2 | show_runs)" "143;207;143 20 224;168;74 2 201;119;47 2 240;128;120 4 " "split 20, 2, 2, 4 in landed, progressed, stalled and unproductive colours"
+  assert_eq "$(bill 3 1 1 1 0 1 | show_runs)" "143;207;143 10 224;168;74 9 201;119;47 9 " "thirds share the 28 cells, the odd one to the first of the equal remainders"
+  assert_eq "$(bill 1001 1000 0 0 1 1 | show_runs)" "143;207;143 27 240;128;120 1 " "an outcome that happened is never rounded away to nothing"
+  assert_eq "$(bill 4 4 0 0 0 1 | show_runs)" "143;207;143 28 " "all one outcome is the whole bar"
+  assert_eq "$(bill 0 0 0 0 0 1 | node "$DRAW" report --tier 24 --cols 100 | strip | beside 5)" "" "no iterations draw no bar"
+  assert_eq "$(bill 0 0 0 0 0 1 | node "$DRAW" report --tier 24 --cols 100 | strip | beside 6)" "0 landed  0 unproductive" "and landed and unproductive are said all the same"
+
+  # The legend names the outcomes that happened, landed and unproductive always.
+  assert_eq "$(bill 2 2 0 0 0 1 | node "$DRAW" report --tier 24 --cols 100 | strip | beside 6)" "2 landed  0 unproductive" "nothing progressed or stalled, nothing said"
+  assert_eq "$(bill 4 1 1 1 1 1 | node "$DRAW" report --tier 24 --cols 100 | strip | beside 6)" "1 landed  1 progressed  1 stalled  1 unproductive" "all four, in order"
+
+  # One run reads as one run, one iteration as one iteration.
+  assert_contains "$(bill 1 1 0 0 0 0.5 | node "$DRAW" report --tier 24 --cols 100 | strip)" '$0.50  over 1 run  ·  1 iteration  ·  1.0 model-minutes' "singular"
+  assert_contains "$(bill 1 1 0 0 0 1234.5 | node "$DRAW" report --tier 24 --cols 100 | strip)" '$1,234.50  over 1 run' "thousands of dollars get a comma"
+
+  # Figures: three digits, or two and a decimal; the next unit when rounding reaches a thousand.
+  figs() { printf 'batch\tb\nruns\t1\niterations\t1\ninput\t%s\noutput\t0\ncache-read\t%s\ncache-write\t%s\nturns\t%s\n' "$@" | node "$DRAW" report --tier 24 --cols 100 | strip | sed -n '11,12p'; }
+  assert_eq "$(figs 999 1000 9949 1234)" "  tokens     in 999  out 0  cache-read 1k  cache-write 9.9k
+  billed     999 tokens  ·  1,234 turns" "999 stays, 1000 is 1k, 9949 is 9.9k"
+  assert_eq "$(figs 99950 99949 999499 0)" "  tokens     in 100k  out 0  cache-read 99.9k  cache-write 999k
+  billed     100k tokens  ·  0 turns" "a hundred is whole, and 99.95k is not 100.0k"
+  assert_eq "$(figs 999999 999999999 1500000000 0 | head -n 1)" "  tokens     in 1M  out 0  cache-read 1G  cache-write 1.5G" "a million, a billion"
+
+  # The total says what it also holds and what it left out.
+  OUT="$(bill 3 3 0 0 0 1 '' | { cat; printf 'checkpoints\t1\nlimit-hits\t2\nunreadable\t1\n'; } | node "$DRAW" report --tier 24 --cols 100 | strip)"
+  assert_contains "$OUT" "  also       1 checkpoint turn  ·  2 limit hits" "checkpoint turns and limit hits"
+  assert_contains "$OUT" "  skipped    1 unreadable line in the run log" "unreadable lines"
+  OUT="$(bill 3 3 0 0 0 1 | node "$DRAW" report --tier 24 --cols 100 | strip)"
+  assert_missing "$OUT" "also" "and nothing of either when there are none"
+  assert_missing "$OUT" "skipped" "nor the other"
+
+  # The ledger: bars scale to the dearest run, to the eighth of a cell, and a run with a cost has a bar.
+  runs() { printf 'batch\tb\nruns\t3\niterations\t3\nlanded\t3\ncost\t10\nminutes\t3\n'; local c; for c in "$@"; do printf 'run\tr-%s\t1\t1\t1.0\t%s\n' "$c" "$c"; done; }
+  barsof() { node "$DRAW" report --tier 24 --cols 100 | strip | grep -E '^  r-' | sed 's/^[^$]*\$[0-9,.]* *//'; }
+  assert_eq "$(runs 8 4 1 | barsof | tr '\n' ' ')" "████████████████ ████████ ██ " "the dearest run's bar is 16 cells and the rest follow"
+  assert_eq "$(runs 16 1 0.01 | barsof | tr '\n' ' ')" "████████████████ █ ▏ " "a sixteenth of the most is a cell; the least that has a cost is an eighth"
+  assert_eq "$(runs 8 7 1.5 | barsof | tr '\n' ' ')" "████████████████ ██████████████ ███ " "scaled to the largest, not to the total"
+  assert_eq "$(runs 3 2 1 | barsof | tr '\n' ' ')" "████████████████ ██████████▋ █████▎ " "and the remainder is the eighth below it: 10 and 5/8, 5 and 2/8"
+  assert_eq "$(runs 0 0 0 | barsof | tr '\n' ' ')" "   " "no cost, no bars"
+  assert_eq "$(runs 5 | barsof)" "████████████████" "one run is the whole width"
+  assert_eq "$(runs 8 4 1 | node "$DRAW" report --tier 24 --cols 100 | grep -c "38;2;201;119;47m█[^m]*${ESC}\[0m\$")" 3 "the bars are rust"
+
+  # The run column widens for a long id and the figures stay in line.
+  OUT="$({ runs 2 1; printf 'run\t%s\t1\t1\t1.0\t1\n' 20261021T091200Z-4411-and-then-some; } | node "$DRAW" report --tier 24 --cols 120 | strip | sed -n '/^BY RUN/,$p')"
+  assert_eq "$(printf '%s\n' "$OUT" | awk '/^  r-/ { print index($0, "$") }' | sort -u | wc -l | tr -d ' ')" 1 "every cost starts in one column"
+
+  widest() { node -e 'console.log(Math.max(...require("fs").readFileSync(0, "utf8").split("\n").map((l) => Array.from(l).length)))'; }
+
+  # The title keeps the end of a long batch path, and the commands to try are said whole.
+  OUT="$({ runs 8; printf 'batch\t%s\n' .scratch/a/very/long/path/to/the/batch/that/would/not/fit/on/the/line/human-tickets; } | node "$DRAW" report --tier 24 --cols 90 | strip)"
+  assert_eq "$(printf '%s\n' "$OUT" | beside 3)" "FOREMAN  what it cost  …hat/would/not/fit/on/the/line/human-tickets" "a long path is cut at the front, to the room there is"
+  assert_eq "$(printf '%s\n' "$OUT" | widest)" 90 "and the title is as wide as the screen and no wider"
+
+  # The footer names the other two views; when the batch was named, it names it. Too wide for the line, they each get one.
+  OUT="$(runs 8 | node "$DRAW" report --tier 24 --cols 100 | strip | tail -n 2 | head -n 1)"
+  assert_eq "$OUT" "by ticket: foreman report --by-ticket   ·   what went wrong: foreman report --failures" "by run, the other two"
+  OUT="$({ runs 8; printf 'command\tforeman report .scratch/human-tickets\n'; } | node "$DRAW" report --tier 24 --cols 100 | strip | tail -n 3 | head -n 2)"
+  assert_eq "$OUT" "by ticket: foreman report .scratch/human-tickets --by-ticket
+what went wrong: foreman report .scratch/human-tickets --failures" "a named batch is in them, and they take a line each when they would not fit"
+  OUT="$({ runs 8; printf 'mode\tby-ticket\n'; } | node "$DRAW" report --tier 24 --cols 100 | strip | tail -n 2 | head -n 1)"
+  assert_eq "$OUT" "by run: foreman report   ·   what went wrong: foreman report --failures" "by ticket, the other two"
+  OUT="$({ runs 8; printf 'mode\tfailures\n'; } | node "$DRAW" report --tier 24 --cols 100 | strip | tail -n 2 | head -n 1)"
+  assert_eq "$OUT" "by run: foreman report   ·   by ticket: foreman report --by-ticket" "failures, the other two"
+
+  # The tables of by-ticket and failures are words, with their headings painted.
+  OUT="$({ runs 8; printf 'mode\tby-ticket\ntable\ttext\t\ntable\thead\tBY TICKET  (in the order they were first attempted)\ntable\ttext\t\ntable\ttext\tbatch/issues/01-first.md\ntable\ttext\t  iterations 1  ·  landed 1\n'; } | node "$DRAW" report --tier 24 --cols 100)"
+  assert_contains "$OUT" "${ESC}[0;1;38;2;224;168;74mBY TICKET  (in the order they were first attempted)" "the heading is bold amber"
+  assert_contains "$(printf '%s\n' "$OUT" | strip)" "
+batch/issues/01-first.md
+  iterations 1  ·  landed 1
+" "and the rows are as they were given"
+  assert_missing "$(printf '%s\n' "$OUT" | strip)" "BY RUN" "there is no ledger of runs"
+  assert_contains "$(printf '%s\n' "$OUT" | strip)" "TOTAL" "but the total is there"
+
+  # A batch with no runs is the title and nothing under it.
+  OUT="$(printf 'batch\tb\n' | node "$DRAW" report --tier 24 --cols 100 | strip)"
+  rule96="$(printf '▔%.0s' $(seq 96))"
+  assert_eq "$OUT" "
+    ▄▄▀▀▀███▀▀▀▄▄
+  ▄▀██▀▀▀██▀▀▀▀██▀▄    FOREMAN  what it cost  b
+▄▀██▀█▀█▀██▀██▀█▀██▀
+▀█▀█▀██▀████▀███▀█▀█
+██████▀██▀▀███▀█████
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+${rule96}" "the title and the rule"
+
+  # The tiers.
+  OUT="$(report_design_facts | node "$DRAW" report --tier 256 --cols 100)"
+  assert_contains "$OUT" "38;5;" "256 colours"
+  assert_missing "$OUT" "38;2;" "and no 24-bit"
+  words() { strip | node -e 'console.log(require("fs").readFileSync(0, "utf8").split("\n").map((l, i) => (i > 0 && i < 7 ? Array.from(l).slice(23).join("") : l)).join("\n"))'; }
+  assert_eq "$(printf '%s\n' "$OUT" | words)" "$(report_design_facts | node "$DRAW" report --tier 24 --cols 100 | words)" "with the same words"
+  OUT="$(report_design_facts | node "$DRAW" report --tier 16 --cols 100)"
+  assert_missing "$OUT" "38;5;" "16 colours"
+  assert_missing "$OUT" "38;2;" "has neither"
+  assert_contains "$OUT" "[0;32m" "and the old greens for the landed"
+  assert_eq "$(printf '%s\n' "$OUT" | words)" "$(report_design_facts | node "$DRAW" report --tier 24 --cols 100 | words)" "with the same words"
+
+  # Width: the scene's minimum is exactly the width of the design's widest row, and the shell agrees.
+  OUT="$(report_design_facts | node "$DRAW" report --tier 24 --cols 83 2>/dev/null)"; ST=$?
+  assert_eq "$ST" 3 "83 columns is refused"
+  assert_eq "$OUT" "" "and nothing drawn"
+  OUT="$(report_design_facts | node "$DRAW" report --tier 24 --cols 84 | strip)"
+  assert_eq "$(printf '%s\n' "$OUT" | widest)" 84 "84 is wide enough for every row, and the widest is exactly that"
+  assert_eq "$(node -e 'console.log(require(process.argv[1]).SCENES.report.min)' "$DRAW")" \
+    "$(sed -n 's/^_report_min_cols=\([0-9]*\).*/\1/p' "$FOREMAN_HOME/bin/foreman")" "the renderer's minimum for report is the dispatcher's"
+fi
+
+# A batch directory holding the fixture run log: three runs, seven iterations and a checkpoint turn, one
+# line that is not JSON, and every outcome (see test/golden/). Prints its path.
+report_batch() {    # report_batch NAME
+  mkdir -p "$WORK/$1/b"
+  cp "$FOREMAN_HOME/test/golden/report-runs.jsonl" "$WORK/$1/b/foreman-runs.jsonl"
+  printf '%s' "$WORK/$1/b"
+}
+
+# What `foreman report` printed before it drew anything, for the batch at $1: the golden file for $2.
+report_golden() {    # report_golden BATCH by-run|by-ticket|failures
+  sed "s|@LOG@|$1/foreman-runs.jsonl|" "$FOREMAN_HOME/test/golden/report-$2.txt"
+}
+
+if case_is "foreman report is today's text, byte for byte, wherever the show is not drawn"; then
+  b="$(report_batch report-plain)"
+  for view in by-run by-ticket failures; do
+    flag=""; [ "$view" = by-run ] || flag="--$view"
+    report_golden "$b" $view > "$WORK/report-plain-want.txt"
+    "$FOREMAN" report "$b" $flag > "$WORK/report-plain-got.txt" 2>&1; ST=$?
+    assert_eq "$ST" 0 "$view: exits 0"
+    cmp -s "$WORK/report-plain-want.txt" "$WORK/report-plain-got.txt" && pass || fail "$view: in a pipe, the same bytes as before the show"
+    FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" report "$b" $flag > "$WORK/report-plain-got.txt" 2>&1
+    cmp -s "$WORK/report-plain-want.txt" "$WORK/report-plain-got.txt" && pass || fail "$view: colour alone is not the show: this is a pipe"
+    FOREMAN_SHOW=never FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" report "$b" $flag > "$WORK/report-plain-got.txt" 2>&1
+    cmp -s "$WORK/report-plain-want.txt" "$WORK/report-plain-got.txt" && pass || fail "$view: FOREMAN_SHOW=never"
+    FOREMAN_SHOW=always FOREMAN_COLOR=never COLUMNS=120 "$FOREMAN" report "$b" $flag > "$WORK/report-plain-got.txt" 2>&1
+    cmp -s "$WORK/report-plain-want.txt" "$WORK/report-plain-got.txt" && pass || fail "$view: FOREMAN_COLOR=never"
+    FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=83 "$FOREMAN" report "$b" $flag > "$WORK/report-plain-got.txt" 2>&1
+    cmp -s "$WORK/report-plain-want.txt" "$WORK/report-plain-got.txt" && pass || fail "$view: one column short of the picture"
+    FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=40 "$FOREMAN" report "$b" $flag > "$WORK/report-plain-got.txt" 2>&1
+    cmp -s "$WORK/report-plain-want.txt" "$WORK/report-plain-got.txt" && pass || fail "$view: a narrow screen"
+    # The report on its own, as a script that calls it directly would: no variables, no picture. And
+    # a drawing asked for by a stray variable in the environment is not drawn into a pipe.
+    node "$FOREMAN_HOME/lib/foreman-report.cjs" "$b" $flag > "$WORK/report-plain-got.txt" 2>&1
+    cmp -s "$WORK/report-plain-want.txt" "$WORK/report-plain-got.txt" && pass || fail "$view: foreman-report.cjs alone"
+    FOREMAN_DRAW_TIER=24 FOREMAN_DRAW_COLS=120 "$FOREMAN" report "$b" $flag > "$WORK/report-plain-got.txt" 2>&1
+    cmp -s "$WORK/report-plain-want.txt" "$WORK/report-plain-got.txt" && pass || fail "$view: the variables are the dispatcher's to set, not the environment's"
+  done
+  assert_eq "$(report_golden "$b" by-run | head -n 2)" "Run log: $b/foreman-runs.jsonl
+7 iteration(s), 1 checkpoint turn(s) recorded, 1 unreadable line(s)" "the golden is the fixture's own"
+fi
+
+if case_is "foreman report draws the bill and the ledger when the show is forced"; then
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  b="$(report_batch report-show)"
+  OUT="$(cd "$WORK/report-show" && FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" report b 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "the forced show exits 0"
+  assert_contains "$OUT" "38;2;224;168;74" "it is drawn in 24 bits, in amber"
+  rule96="$(printf '▔%.0s' $(seq 96))"
+  assert_eq "$(printf '%s\n' "$OUT" | strip)" "
+    ▄▄▀▀▀███▀▀▀▄▄
+  ▄▀██▀▀▀██▀▀▀▀██▀▄    FOREMAN  what it cost  b
+▄▀██▀█▀█▀██▀██▀█▀██▀   \$6.95  over 3 runs  ·  7 iterations  ·  48.2 model-minutes
+▀█▀█▀██▀████▀███▀█▀█   ████████████████████████████
+██████▀██▀▀███▀█████   3 landed  1 progressed  1 stalled  2 unproductive
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+$rule96
+
+TOTAL
+  tokens     in 21.2k  out 146k  cache-read 5.8M  cache-write 432k
+  billed     168k tokens  ·  220 turns
+  average    \$0.99 and 23.9k billed tokens per iteration
+  also       1 checkpoint turn  ·  1 limit hit
+  skipped    1 unreadable line in the run log
+
+BY RUN                         iters  landed   minutes      cost
+  20261021T091200Z-4411            2       2      18.0     \$2.00   ███████▌
+  20261022T140533Z-9020            3       1      28.5     \$4.25   ████████████████
+  20261023T081014Z-1207            2       0       1.7     \$0.70   ██▋
+
+by ticket: foreman report b --by-ticket   ·   what went wrong: foreman report b --failures" "the bill and the ledger, with the figures of the log, the batch as it was named and its views asked for by that name"
+
+  # The bar of outcomes is 3 : 1 : 1 : 2 of 28 cells: 12, 4, 4, 8.
+  assert_contains "$OUT" "${ESC}[0;38;2;143;207;143m$(printf '█%.0s' $(seq 12))${ESC}[0;38;2;224;168;74m$(printf '█%.0s' $(seq 4))${ESC}[0;38;2;201;119;47m$(printf '█%.0s' $(seq 4))${ESC}[0;38;2;240;128;120m$(printf '█%.0s' $(seq 8))" "in landed, progressed, stalled and unproductive colours"
+
+  # By ticket and failures keep their tables, as they were, under the same header and total.
+  for view in by-ticket failures; do
+    OUT="$(cd "$WORK/report-show" && FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" report b --$view 2>&1 | strip)"
+    plain="$(report_golden "$b" $view)"
+    heading="$([ $view = by-ticket ] && echo 'BY TICKET' || echo 'UNPRODUCTIVE')"
+    assert_eq "$(printf '%s\n' "$OUT" | sed -n "/^$heading/,\$p" | sed '$d')" "$(printf '%s\n' "$plain" | sed -n "/^$heading/,\$p")" "$view: the table is the plain table, word for word"
+    assert_contains "$OUT" "FOREMAN  what it cost  b" "$view: under the same header"
+    assert_contains "$OUT" "TOTAL" "$view: and the total"
+    assert_missing "$OUT" "BY RUN" "$view: but not the ledger"
+    assert_missing "$OUT" "Run log:" "$view: the log's name is the header's job"
+  done
+  OUT="$(cd "$WORK/report-show" && FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" report b --by-ticket 2>&1 | strip | tail -n 2 | head -n 1)"
+  assert_eq "$OUT" "by run: foreman report b   ·   what went wrong: foreman report b --failures" "by-ticket points at the other two"
+  OUT="$(cd "$WORK/report-show" && FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" report b --failures 2>&1 | strip | tail -n 2 | head -n 1)"
+  assert_eq "$OUT" "by run: foreman report b   ·   by ticket: foreman report b --by-ticket" "and failures at the other two"
+  OUT="$(cd "$WORK/report-show" && FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" report --by-ticket --jsonl b/foreman-runs.jsonl 2>&1 | strip)"
+  assert_contains "$OUT" "FOREMAN  what it cost  b" "with --jsonl, the title is the log's directory"
+  assert_contains "$OUT" "foreman report --jsonl b/foreman-runs.jsonl" "and the views name the log"
+
+  # Tier and width reach it from the variables the shell sets.
+  OUT="$(cd "$WORK/report-show" && FOREMAN_SHOW=always FOREMAN_COLOR=256 COLUMNS=120 "$FOREMAN" report b 2>&1)"
+  assert_contains "$OUT" "38;5;" "256 colours"
+  assert_missing "$OUT" "38;2;" "with no 24-bit"
+  OUT="$(cd "$WORK/report-show" && FOREMAN_SHOW=always FOREMAN_COLOR=16 COLUMNS=120 "$FOREMAN" report b 2>&1)"
+  assert_missing "$OUT" "38;5;" "16 colours has neither"
+  assert_contains "$OUT" "[0;32m" "and the old green"
+  OUT="$(cd "$WORK/report-show" && FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=84 "$FOREMAN" report b 2>&1)"
+  assert_contains "$OUT" "38;2;" "exactly the width the picture needs is enough"
+  assert_eq "$(printf '%s\n' "$OUT" | strip | node -e 'console.log(Math.max(...require("fs").readFileSync(0, "utf8").split("\n").map((l) => Array.from(l).length)))')" 84 "and the rule is as wide as the screen"
+  OUT="$(cd "$WORK/report-show" && FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=200 "$FOREMAN" report b 2>&1 | strip | node -e 'console.log(Math.max(...require("fs").readFileSync(0, "utf8").split("\n").map((l) => Array.from(l).length)))')"
+  assert_eq "$OUT" 96 "and no wider than 96 on a wide one"
+
+  # A batch given by path, or found because it is the only one, is named by where it is in the repo.
+  repo="$(make_repo 2 report-infer)"
+  cp "$FOREMAN_HOME/test/golden/report-runs.jsonl" "$repo/batch/foreman-runs.jsonl"
+  OUT="$(cd "$repo" && FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" report 2>&1 | strip)"
+  assert_contains "$OUT" "FOREMAN  what it cost  batch" "an inferred batch is named as the repo has it"
+  assert_contains "$OUT" "by ticket: foreman report --by-ticket   ·   what went wrong: foreman report --failures" "and the views do not name it: it is the only one"
+  mkdir -p "$repo/batch/issues/sub"
+  OUT="$(cd "$repo/batch/issues/sub" && FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" report 2>&1 | strip)"
+  assert_contains "$OUT" "FOREMAN  what it cost  batch" "from a directory below it, the same name"
+fi
+
+if case_is "foreman report with nothing to report says so under the header, and still fails as it did"; then
+  ESC=$'\033'
+  strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
+  mkdir -p "$WORK/report-none/b" "$WORK/report-empty/b"
+  printf 'not json\n\n' > "$WORK/report-empty/b/foreman-runs.jsonl"
+
+  for where in none empty; do
+    plain="$(cd "$WORK/report-$where" && "$FOREMAN" report b 2>&1)"; plain_st=$?
+    assert_eq "$plain_st" 1 "$where: no runs is exit 1, as ever"
+    assert_contains "$plain" "$([ $where = none ] && echo 'nothing has been run for this batch yet' || echo 'has no readable records')" "$where: the plain words"
+    assert_missing "$plain" "FOREMAN" "$where: plain has no title"
+    OUT="$(cd "$WORK/report-$where" && FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" report b 2>&1)"; ST=$?
+    assert_eq "$ST" 1 "$where: and so is the show"
+    stripped="$(printf '%s\n' "$OUT" | strip)"
+    assert_contains "$stripped" "FOREMAN  what it cost  b" "$where: the title is drawn"
+    assert_contains "$stripped" "▄▄▀▀▀███▀▀▀▄▄" "$where: with the mark"
+    assert_eq "$(printf '%s\n' "$stripped" | tail -n 1)" "$plain" "$where: and the plain message follows it, under the rule"
+    assert_missing "$stripped" "TOTAL" "$where: with no totals"
+    assert_eq "$(cd "$WORK/report-$where" && FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" report b 2>&1 >/dev/null)" "$plain" "$where: the message is on stderr, the title on stdout"
+  done
+fi
+
+if case_is "foreman report is the text when the picture cannot be made"; then
+  b="$(report_batch report-fallback)"
+  report_golden "$b" by-run > "$WORK/report-fallback-want.txt"
+
+  # A renderer that will not load: the report is not lost with it.
+  fake_home="$WORK/report-nodraw-home"
+  mkdir -p "$fake_home/lib" "$fake_home/bin"
+  cp "$FOREMAN" "$fake_home/bin/foreman"; cp "$FOREMAN_HOME/lib/foreman-ui.sh" "$FOREMAN_HOME/lib/foreman-report.cjs" "$fake_home/lib/"
+  printf 'throw new Error("no")\n' > "$fake_home/lib/foreman-draw.cjs"
+  FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 bash "$fake_home/bin/foreman" report "$b" > "$WORK/report-fallback-got.txt" 2>&1; ST=$?
+  assert_eq "$ST" 0 "a renderer that fails does not fail the report"
+  cmp -s "$WORK/report-fallback-want.txt" "$WORK/report-fallback-got.txt" && pass || fail "and the text is printed alone, no half a picture before it"
+  rm "$fake_home/lib/foreman-draw.cjs"
+  FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 bash "$fake_home/bin/foreman" report "$b" > "$WORK/report-fallback-got.txt" 2>&1
+  cmp -s "$WORK/report-fallback-want.txt" "$WORK/report-fallback-got.txt" && pass || fail "nor one that is not there"
+
+  # A picture wider than the screen is not drawn: a run with an id too long for the ledger.
+  mkdir -p "$WORK/report-wide/b"
+  sed 's/20261021T091200Z-4411/20261021T091200Z-4411-with-a-very-long-name-indeed-for-a-run/' "$FOREMAN_HOME/test/golden/report-runs.jsonl" > "$WORK/report-wide/b/foreman-runs.jsonl"
+  OUT="$(FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=90 "$FOREMAN" report "$WORK/report-wide/b" 2>&1)"
+  assert_contains "$OUT" "Run log: " "a ledger that would not fit is the text"
+  assert_missing "$OUT" "▀" "with no picture"
+  OUT="$(FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" report "$WORK/report-wide/b" 2>&1)"
+  assert_contains "$(printf '%s\n' "$OUT" | sed "s/$(printf '\033')\[[0-9;]*[mK]//g")" "FOREMAN  what it cost" "and the same log on a wider screen is the picture"
+fi
+
+if case_is "foreman report on a real terminal shows without being forced, and not in CI"; then
+  if command -v script >/dev/null 2>&1 && [ "$(show_of tty 1 FOREMAN_SHOW=always)" = show:16 ]; then
+    ESC=$'\033'
+    b="$(report_batch report-tty)"
+    tty_report() { env -u CI -u NO_COLOR -u WT_SESSION -u FOREMAN_COLOR -u FOREMAN_SHOW TERM=xterm COLORTERM=truecolor COLUMNS=100 "$@" \
+      script -qec "$FOREMAN report $b" /dev/null </dev/null 2>/dev/null; }
+    OUT="$(tty_report)"; OUT="${OUT//$'\r'/}"
+    assert_contains "$OUT" "38;2;" "a terminal that says truecolor gets 24 bits"
+    assert_contains "$(printf '%s\n' "$OUT" | sed "s/${ESC}\[[0-9;]*[mK]//g")" "over 3 runs  ·  7 iterations" "and the show, unforced"
+    OUT="$(tty_report CI=true)"; OUT="$(printf '%s' "${OUT//$'\r'/}")"
+    report_golden "$b" by-run > "$WORK/report-tty-want.txt"
+    assert_eq "$OUT" "$(cat "$WORK/report-tty-want.txt")" "CI is plain, terminal or not"
+    OUT="$(tty_report NO_COLOR=1)"; OUT="$(printf '%s' "${OUT//$'\r'/}")"
+    assert_eq "$OUT" "$(cat "$WORK/report-tty-want.txt")" "and NO_COLOR"
+  else
+    printf '  (skipped: no `script` to give a terminal)\n'
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 # A case process that ran the last case in the file ends here.
 [ "$CASE_OPEN" = 1 ] && case_finish
 exit 0

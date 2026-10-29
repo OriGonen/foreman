@@ -1,0 +1,36 @@
+Run log: @LOG@
+7 iteration(s), 1 checkpoint turn(s) recorded, 1 unreadable line(s)
+
+TOTAL, ALL RUNS
+  iterations 7  ·  landed 3  ·  progressed 1  ·  stalled 1  ·  unproductive 2  ·  checkpoint turns 1  ·  limit hits 1
+  tokens     in 21,200  out 146,300  cache-read 5,820,000  cache-write 432,000
+  billed     167,500 tokens  ·  $6.9500  ·  48.2 model-minutes  ·  220 turns
+  average    $0.9929 and 23,929 billed tokens per iteration
+
+BY TICKET  (in the order they were first attempted)
+
+batch/issues/01-first.md
+  iterations 1  ·  landed 1  ·  unproductive 0
+  tokens     in 4,000  out 30,000  cache-read 1,200,000  cache-write 90,000
+  billed     34,000 tokens  ·  $1.2500  ·  10.0 model-minutes  ·  40 turns
+
+batch/issues/02-second.md
+  iterations 1  ·  landed 1  ·  unproductive 0
+  tokens     in 3,000  out 20,000  cache-read 800,000  cache-write 60,000
+  billed     23,000 tokens  ·  $0.7500  ·  8.0 model-minutes  ·  30 turns
+
+batch/issues/03-third.md
+  iterations 2  ·  landed 1  ·  progressed 1  ·  unproductive 0
+  tokens     in 11,000  out 90,000  cache-read 3,500,000  cache-write 250,000
+  billed     101,000 tokens  ·  $3.5000  ·  27.0 model-minutes  ·  125 turns
+
+batch/issues/04-fourth.md
+  iterations 1  ·  landed 0  ·  unproductive 1  ·  checkpoint turns 1  ·  limit hits 1
+  tokens     in 1,500  out 3,000  cache-read 150,000  cache-write 15,000
+  billed     4,500 tokens  ·  $0.7500  ·  1.5 model-minutes  ·  12 turns
+
+batch/issues/05-fifth.md
+  iterations 2  ·  landed 0  ·  stalled 1  ·  unproductive 1
+  tokens     in 1,700  out 3,300  cache-read 170,000  cache-write 17,000
+  billed     5,000 tokens  ·  $0.7000  ·  1.7 model-minutes  ·  13 turns
+

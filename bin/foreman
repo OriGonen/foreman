@@ -99,6 +99,23 @@ version() {
   printf 'foreman %s\n%s\n' "$rev" "$FOREMAN_HOME"
 }
 
+# `foreman report` at a terminal is the bill and the ledger, drawn by foreman-report.cjs with the
+# renderer (the `report` scene, which needs `_report_min_cols`; a smoke case holds the two together).
+# The report is node's all the way through, so this only says whether the picture is wanted and how
+# to draw it, in the two variables it reads; anywhere else they are cleared, so a stray one in the
+# environment cannot draw into a pipe, and it prints the text it always has.
+_report_min_cols=84
+report() {
+  local tier cols
+  # shellcheck source=../lib/foreman-ui.sh
+  if source "$LIB/foreman-ui.sh" && ui_show 1 tier && ui_cols cols 1 && [ "$cols" -ge "$_report_min_cols" ]; then
+    export FOREMAN_DRAW_TIER="$tier" FOREMAN_DRAW_COLS="$cols"
+  else
+    unset FOREMAN_DRAW_TIER FOREMAN_DRAW_COLS
+  fi
+  exec node "$LIB/foreman-report.cjs" "$@"
+}
+
 # Splitting the batch argument out from the flags is what lets `foreman status --help` and
 # `foreman run .scratch/b 5` both work while the loop keeps its own single-argument shape.
 cmd="${1:-help}"
@@ -112,7 +129,7 @@ case "$cmd" in
   status)    exec bash "$LIB/foreman-loop.sh" "$@" --status ;;
   dry-run)   exec bash "$LIB/foreman-loop.sh" "$@" --dry-run ;;
   next)      exec bash "$LIB/foreman-next.sh" "$@" ;;
-  report)    exec node "$LIB/foreman-report.cjs" "$@" ;;
+  report)    report "$@" ;;
   doctor)    exec bash "$LIB/foreman-doctor.sh" "$@" ;;
   convert)   exec node "$LIB/foreman-convert.cjs" "$@" ;;
   help|--help|-h)        usage_show; usage; exit 0 ;;

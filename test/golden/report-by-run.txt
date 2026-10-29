@@ -1,0 +1,26 @@
+Run log: @LOG@
+7 iteration(s), 1 checkpoint turn(s) recorded, 1 unreadable line(s)
+
+TOTAL, ALL RUNS
+  iterations 7  ·  landed 3  ·  progressed 1  ·  stalled 1  ·  unproductive 2  ·  checkpoint turns 1  ·  limit hits 1
+  tokens     in 21,200  out 146,300  cache-read 5,820,000  cache-write 432,000
+  billed     167,500 tokens  ·  $6.9500  ·  48.2 model-minutes  ·  220 turns
+  average    $0.9929 and 23,929 billed tokens per iteration
+
+BY RUN
+
+20261021T091200Z-4411   (started 2026-10-21T09:12:00Z)
+  iterations 2  ·  landed 2  ·  unproductive 0
+  tokens     in 7,000  out 50,000  cache-read 2,000,000  cache-write 150,000
+  billed     57,000 tokens  ·  $2.0000  ·  18.0 model-minutes  ·  70 turns
+
+20261022T140533Z-9020   (started 2026-10-22T14:05:33Z)
+  iterations 3  ·  landed 1  ·  progressed 1  ·  unproductive 1  ·  checkpoint turns 1  ·  limit hits 1
+  tokens     in 12,500  out 93,000  cache-read 3,650,000  cache-write 265,000
+  billed     105,500 tokens  ·  $4.2500  ·  28.5 model-minutes  ·  137 turns
+
+20261023T081014Z-1207   (started 2026-10-23T08:10:14Z)
+  iterations 2  ·  landed 0  ·  stalled 1  ·  unproductive 1
+  tokens     in 1,700  out 3,300  cache-read 170,000  cache-write 17,000
+  billed     5,000 tokens  ·  $0.7000  ·  1.7 model-minutes  ·  13 turns
+

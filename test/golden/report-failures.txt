@@ -1,0 +1,19 @@
+Run log: @LOG@
+7 iteration(s), 1 checkpoint turn(s) recorded, 1 unreadable line(s)
+
+TOTAL, ALL RUNS
+  iterations 7  ·  landed 3  ·  progressed 1  ·  stalled 1  ·  unproductive 2  ·  checkpoint turns 1  ·  limit hits 1
+  tokens     in 21,200  out 146,300  cache-read 5,820,000  cache-write 432,000
+  billed     167,500 tokens  ·  $6.9500  ·  48.2 model-minutes  ·  220 turns
+  average    $0.9929 and 23,929 billed tokens per iteration
+
+UNPRODUCTIVE ITERATIONS (2)
+
+20261022T140533Z-9020 #3  batch/issues/04-fourth.md
+  error  ·  limit  ·  not-landed  ·  no-commit
+  $0.5000  ·  exit 1  ·  2026-10-22T15:00:00Z
+
+20261023T081014Z-1207 #2  batch/issues/05-fifth.md
+  not-landed  ·  no-commit
+  $0.3000  ·  exit 0  ·  2026-10-23T08:30:00Z
+
