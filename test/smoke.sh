@@ -7320,6 +7320,7 @@ if case_is "foreman-draw convert: the counts, the lists, what is kept and what i
           4 mentions of the Ralph loop" "both, as the design has it: the advice once, at the first file"
   assert_eq "$(printf 'mention\tdocs/guide.md:3\tSee docs/ralph-notes.md.\n' | kept)" "KEPT      mentions to look over:
           docs/guide.md:3  See docs/ralph-notes.md." "a mention that is not credit is shown where it is"
+  assert_eq "$(printf 'mention\tx.md:1\tone\ttwo\n' | kept | tail -n 1)" "          x.md:1  one two" "a tab in a mention is a space, and the rest of the line is still there"
   assert_eq "$(printf 'own\ta/ralph.md\ncredit\t2\nmention\tx.md:1\ty\n' | kept)" "KEPT      credit to the technique, and your own files named ralph:
           a/ralph.md  ·  rename with git mv if you want to
           2 mentions of the Ralph loop

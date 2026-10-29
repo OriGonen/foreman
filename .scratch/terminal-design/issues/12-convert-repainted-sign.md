@@ -9,10 +9,12 @@ throughout and leaves the sign unpainted. `foreman-convert.cjs` draws it by requ
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** implemented
 
-- [ ] The strike-through uses SGR 9, and the sign still reads correctly where a terminal ignores it
-- [ ] A project with nothing to convert gets a short "nothing to repaint" form
-- [ ] Plain convert output is byte for byte today's
-- [ ] Smoke: forced-show convert and `--dry-run` of the existing ralph fixture
-- [ ] Full smoke suite passes; the closing note records `Full smoke suite: N passed in Mm Ss`
+- [x] The strike-through uses SGR 9, and the sign still reads correctly where a terminal ignores it
+- [x] A project with nothing to convert gets a short "nothing to repaint" form
+- [x] Plain convert output is byte for byte today's
+- [x] Smoke: forced-show convert and `--dry-run` of the existing ralph fixture
+- [x] Full smoke suite passes; the closing note records `Full smoke suite: N passed in Mm Ss`
+
+Full smoke suite: 2544 passed in 2m 4s, 1 failed (the same pre-existing CRLF `convert` case).

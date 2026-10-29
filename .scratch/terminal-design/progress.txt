@@ -144,3 +144,14 @@
 - Full smoke suite: 2414 passed in 2m 2s, 1 failed (the same pre-existing CRLF `convert` case).
 - Remaining for a human: `foreman report` in a real window (not checkable here).
 
+
+
+## 12 convert repainted sign — implemented
+- Scene `convert` (min 86) in `lib/foreman-draw.cjs`: the sign (RALPH struck with SGR 9, `strike` added to the encoder after bold; FOREMAN painted on), counts, then RENAMED / REWROTE / DELETED / LEFT (blocked renames), KEPT, THIS MACHINE (✓ / ▲), closing line. `dry` = WOULD RENAME/REWRITE/DELETE/KEEP, "to rename" counts, an unpainted sign (RALPH, no strike), "nothing was changed". Nothing to repaint = the sign saying FOREMAN, "nothing to repaint", then KEPT / THIS MACHINE only if they have rows.
+- `foreman-convert.cjs` collects facts as it goes and holds its text (`say`) while showing; it draws once at the end and prints the held text if the picture cannot be made or the work throws (`exit` handler). `bin/foreman convert()` sets `FOREMAN_DRAW_TIER/COLS` (`_convert_min_cols=86`), cleared otherwise. Plain goldens `test/golden/convert-{run,dry-run,nothing}.txt` (`@PROJECT@`, `@NAME@`) were taken from the unmodified code first.
+- Test-driven (smoke): scene vs 12a .ans cell for cell + .txt; strike only on RALPH, tiers 256/16, readable without SGR 9; counts, rewrite row fitting, KEPT/machine/LEFT variants, dry, nothing; plain bytes in 7 environments x 3 views; forced show (whole output), dry, nothing, clean project; failing/missing renderer, too-wide row, `git mv` failing half way (index.lock); pty (unforced, CI, NO_COLOR).
+- Review: found a tab in a mention truncated its text (split at first tab only now); capped a mention fact at 300 chars. Skipped: none.
+- Deliberate deviations: the design's last machine row ("the old sandbox … is still there — docker sandbox rm") reads "the old sandbox ralph-X may be left — sbx rm ralph-X" (we cannot know it is there; sbx is the tool); the first three REWROTE files are the busiest (the caller sorts; the design's sample cannot be sorted that way) and drop to fit the width; the title path is cut at the front when long; "for you" = the ▲ rows and blocked renames, not the ✓; the design's counts row sits at column 21 against 25 above it, kept as drawn.
+- Known limit: a rename/delete row longer than the screen (a very deep path) makes the whole result plain.
+- Full smoke suite: 2544 passed in 2m 4s, 1 failed (the same pre-existing CRLF `convert` case).
+- Remaining for a human: `foreman convert` / `--dry-run` in a real window (pty-tested here, not by hand).
