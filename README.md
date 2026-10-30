@@ -627,7 +627,7 @@ The show is wanted when **all** of these hold, and plain otherwise:
 
 1. the stream the command writes to is a terminal (`foreman help > file` is plain even in a
    terminal);
-2. colour is on for it: `NO_COLOR` is unset, `TERM` is not `dumb`, and `FOREMAN_COLOR` is not
+2. colour is on for it: `NO_COLOR` is unset or empty, `TERM` is not `dumb`, and `FOREMAN_COLOR` is not
    `never` (see Colour, below);
 3. `CI` is unset or empty — a build log is plain, even one that has a terminal;
 4. the terminal is at least as wide as the picture, as `COLUMNS` says, else `stty size`, else 80:
@@ -658,7 +658,7 @@ else.
 | `FOREMAN_COLOR` | how much colour: `auto` (the default), `always`, `never`, `16`, `256`, `truecolor`. See Colour |
 | `FOREMAN_SHOW` | whether to draw the show: `auto` (the default), `always`, `never`. See The show |
 | `FOREMAN_INTRO` | `0` turns off the film that plays before `foreman help`. See The intro |
-| `NO_COLOR` | any value: no colour and so no show, as [no-color.org](https://no-color.org) asks. `FOREMAN_COLOR=always` or `FOREMAN_SHOW=always` overrides it, since naming Foreman is a decision about Foreman |
+| `NO_COLOR` | any non-empty value: no colour and so no show, as [no-color.org](https://no-color.org) asks. `FOREMAN_COLOR=always` or `FOREMAN_SHOW=always` overrides it, since naming Foreman is a decision about Foreman |
 | `CI` | any non-empty value: no show, and no intro even under `FOREMAN_SHOW=always` |
 | `TERM`, `COLORTERM`, `WT_SESSION` | what the terminal can do: `TERM=dumb` is no colour; the other two (and `TERM=…256color`) raise the colour tier |
 | `COLUMNS`, `LINES` | the size to draw for, when the terminal's own is not what you want |

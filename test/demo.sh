@@ -67,7 +67,8 @@ if [ -n "${SHOWS:-}" ]; then
 
   cd "$demo_dir/repo" || exit 1
   # One ticket done, so the sun is already part-way up; the order file lists them all.
-  sed -i 's/^\*\*Status:\*\* todo/**Status:** implemented/' batch/issues/01-ticket.md
+  sed 's/^\*\*Status:\*\* todo/**Status:** implemented/' batch/issues/01-ticket.md > batch/issues/01-ticket.tmp &&
+    mv batch/issues/01-ticket.tmp batch/issues/01-ticket.md
   { echo '<!-- ORDER:BEGIN -->'; for f in batch/issues/*.md; do echo "$f"; done; echo '<!-- ORDER:END -->'; } > batch/order.md
   git add -A && git commit --quiet -m "demo: one ticket done, an order"
   # A batch for `init` to scaffold: tickets and nothing else.

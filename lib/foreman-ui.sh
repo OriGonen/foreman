@@ -77,8 +77,8 @@
 # compares COLS with its scene's minimum, and only then pipes its facts to the renderer — so plain
 # output (a pipe, a file, `$(…)`, CI, NO_COLOR, TERM=dumb, a narrow terminal) is today's text,
 # byte for byte, and starts no node. FOREMAN_INTRO (the film before `foreman help`) is not read
-# here: it is bin/foreman's, because only the intro plays and needs a key to skip. To add a scene
-# see HOW TO ADD A SCENE at the top of foreman-draw.cjs; for the reader's side, README.md,
+# here: bin/foreman reads it, since only the intro needs a key to skip it. To add a scene see
+# HOW TO ADD A SCENE at the top of foreman-draw.cjs; for the reader's side, README.md,
 # "Terminal output".
 #
 # Nothing here starts a process but `stty` in ui_cols and ui_rows: `[ -t ]`, `printf -v` and `case` are

@@ -155,3 +155,14 @@
 - Known limit: a rename/delete row longer than the screen (a very deep path) makes the whole result plain.
 - Full smoke suite: 2544 passed in 2m 4s, 1 failed (the same pre-existing CRLF `convert` case).
 - Remaining for a human: `foreman convert` / `--dry-run` in a real window (pty-tested here, not by hand).
+
+
+## 14 document the show — implemented
+- README: new `## Terminal output` section (the two renderings, "scripts get plain", the four-part rule, a per-command table of minimum columns, a variables table for FOREMAN_COLOR/SHOW/INTRO, NO_COLOR, CI, TERM/COLORTERM/WT_SESSION, COLUMNS/LINES, which of them foreman.conf can set); the Colour / show / init / intro subsections moved under it (out of "Where the agent runs"), and a "Looking at it" note.
+- `foreman-draw.cjs` header: THE SPLIT, HOW TO ADD A SCENE (5 steps), THE SCENES (one entry per SCENES key: command, `facts:`, `design:`, `source:`); `foreman-ui.sh` header gained THE SPLIT. `CONTEXT.md`: The show, Plain output, Scene, Tier.
+- `bash test/demo.sh shows [cmd...]`: all 11 commands under `── foreman … ──` captions on a throwaway repo (fake adapter, stub `claude`, ralph project with its own HOME); forces the show at 120 cols when piped; unknown command exits 2.
+- Test-driven (smoke): header names every SCENES key with facts + existing design files (and nothing that is not a scene); README section has every variable/value and its width table equals each `_*_min_cols` in the shell; CONTEXT terms; demo (11 captions, `▀`, subset, refusal).
+- Review: README said NO_COLOR "any value" (the code needs non-empty) — fixed; demo used `sed -i` — made portable. Skipped: none.
+- Noted, not touched: `foreman-draw next wraps…` failed once in a full run (0 rows) and passed alone, on the old commit and in two later full runs — a flake under load; not seen again.
+- Full smoke suite: 2741 passed in 2m 34s, 1 failed (the same pre-existing CRLF `convert` case).
+- Remaining for a human: `bash test/demo.sh shows` in a real window, for a look by eye (the intro and the doctor's inspector only move on a terminal).
