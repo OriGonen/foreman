@@ -1,12 +1,32 @@
+<div align="center">
+
+<img src="docs/images/help.svg" alt="foreman help: a pixel-art foreman silhouetted against a rising sun" width="520">
+
 # Foreman
 
-A loop that implements one ticket per iteration, until a batch of tickets is done or a
-budget stops it. Installed once per machine; point it at any directory of tickets, in any
-repository.
+**A loop that implements one ticket per iteration, until a batch of tickets is done or a
+budget stops it.**<br>
+Installed once per machine; point it at any directory of tickets, in any repository.
+
+<img alt="bash 4+" src="https://img.shields.io/badge/bash-4%2B-e0a84a?style=flat-square&labelColor=30231a">
+<img alt="needs git, node, awk" src="https://img.shields.io/badge/needs-git%20%C2%B7%20node%20%C2%B7%20awk-c9772f?style=flat-square&labelColor=30231a">
+<img alt="agent: Claude Code" src="https://img.shields.io/badge/agent-Claude%20Code-f6d58e?style=flat-square&labelColor=30231a">
+<img alt="runs in a Docker sandbox or locally" src="https://img.shields.io/badge/runs%20in-sbx%20sandbox%20%C2%B7%20local-8a5a24?style=flat-square&labelColor=30231a">
+
+[Install](#install) ·
+[Set up a batch](#setting-up-a-batch) ·
+[Where the agent runs](#where-the-agent-runs--foreman_exec) ·
+[Pausing and resuming](#pausing-and-resuming) ·
+[Terminal output](#terminal-output) ·
+[Files](#files)
+
+</div>
 
 *Inspired by the Ralph loop technique (one agent turn per task, in a loop), extended with
 ordered ticket batches, budgets, human handoffs and stall recovery — see
 [Inspiration](#inspiration).*
+
+## At a glance
 
 ```bash
 cd <any git repo>
@@ -21,6 +41,39 @@ foreman run .scratch/my-batch --unlimited # until done or a budget stops it
 
 Everything marked *(free)* makes no model call and starts no sandbox.
 
+## What it looks like
+
+<table>
+<tr>
+<td width="50%" valign="top"><img src="docs/images/status.svg" alt="foreman status: the dome, with the sun as high as the share of tickets done, then the list" width="100%"><br><sub><b><code>foreman status</code></b> — what is left, what is next, where a human is needed</sub></td>
+<td width="50%" valign="top"><img src="docs/images/run.svg" alt="foreman run: the figure and the dome at the top, then each iteration as it lands" width="100%"><br><sub><b><code>foreman run</code></b> — one ticket per iteration, the sun a step higher as each lands</sub></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="docs/images/doctor.svg" alt="foreman doctor: an inspector at work while the checks run, then a verdict sign" width="100%"><br><sub><b><code>foreman doctor</code></b> — is this repo ready? (free)</sub></td>
+<td width="50%" valign="top"><img src="docs/images/report.svg" alt="foreman report: the bill, with total cost, how the iterations came out and a ledger of runs" width="100%"><br><sub><b><code>foreman report</code></b> — the bill: what the runs cost and how they came out</sub></td>
+</tr>
+</table>
+
+<details>
+<summary><b>More of the show</b> — <code>init</code>, <code>order</code>, <code>next</code>, <code>version</code></summary>
+<br>
+
+<table>
+<tr>
+<td width="50%" valign="top"><img src="docs/images/init.svg" alt="foreman init: the mark, FOREMAN breaks ground, and the files written" width="100%"><br><sub><b><code>foreman init</code></b> — breaking ground on a new batch</sub></td>
+<td width="50%" valign="top"><img src="docs/images/order.svg" alt="foreman order: the new order on a stake line" width="100%"><br><sub><b><code>foreman order</code></b> — the agent's run order, on a stake line</sub></td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="docs/images/next.svg" alt="foreman next: the ticket that runs next" width="100%"><br><sub><b><code>foreman next</code></b> — the ticket that runs next</sub></td>
+<td width="50%" valign="top"><img src="docs/images/version.svg" alt="foreman version: the mark beside the build and where it is installed" width="100%"><br><sub><b><code>foreman version</code></b> — the build, and where it is installed</sub></td>
+</tr>
+</table>
+
+</details>
+
+Every picture is drawn from block characters by the terminal itself; pipes, CI and
+`FOREMAN_SHOW=never` get plain text instead — see [Terminal output](#terminal-output).
+
 ## Install
 
 ```bash
@@ -29,14 +82,15 @@ bash ~/tools/foreman/install.sh
 foreman version
 ```
 
-From PowerShell, don't use a plain `bash`: there it is often the WSL launcher
-(`...\WindowsApps\bash.exe`), which runs `install.sh` inside WSL and installs into the WSL
-home, where Windows Claude Code and PowerShell can't see it. Use Git Bash's own, from the
-checkout (or run the `bash` line above from Git Bash):
-
-```powershell
-& "C:\Program Files\Git\bin\bash.exe" install.sh
-```
+> [!WARNING]
+> From PowerShell, don't use a plain `bash`: there it is often the WSL launcher
+> (`...\WindowsApps\bash.exe`), which runs `install.sh` inside WSL and installs into the WSL
+> home, where Windows Claude Code and PowerShell can't see it. Use Git Bash's own, from the
+> checkout (or run the `bash` line above from Git Bash):
+>
+> ```powershell
+> & "C:\Program Files\Git\bin\bash.exe" install.sh
+> ```
 
 `install.sh` prints a warning if it finds itself running under WSL, but still installs.
 
@@ -393,9 +447,10 @@ The loop then treats that as what it is:
 - `FOREMAN_MAX_CONTINUATIONS` (default 5) stops the run if one ticket keeps chunking without
   landing. That is a mis-sized ticket, not a retry problem, and splitting it is your call.
 
-**The loop still never auto-commits.** The *author* commits its own work; the machinery only
-stops calling that a failure. WIP commits stay in history — `wip: profile script —
-remaining: run at N=96` is better history than a squash that hides the three passes.
+> [!IMPORTANT]
+> **The loop still never auto-commits.** The *author* commits its own work; the machinery only
+> stops calling that a failure. WIP commits stay in history — `wip: profile script —
+> remaining: run at N=96` is better history than a squash that hides the three passes.
 
 `FOREMAN_CONTEXT_BUDGET_TOKENS` (default 200000) is the number the prompt asks the agent to
 judge itself against. Nothing enforces it; the CLI has no such flag, and `--autocompact` is
@@ -440,7 +495,8 @@ rather than after three tickets.
 
 ## Pausing and resuming
 
-**Rerun the same command. That is the whole procedure.**
+> [!TIP]
+> **Rerun the same command. That is the whole procedure.**
 
 There is no state file and nothing to restore. Each iteration commits its ticket's flipped
 status line together with the code that ticket produced, so the last commit and the resume
@@ -618,10 +674,11 @@ Every command has two renderings, and chooses between them once per call:
   extra process. (`foreman doctor` is the one command whose plain output is the box of checks and
   not what it printed before the show.)
 
-**Scripts get plain.** The show is drawn only when the stream is a terminal, so
-`foreman status | grep …`, `$(foreman next)`, `foreman report > report.txt`, a cron job and a CI
-log are all plain, and nothing that reads a command's output needs to know the show exists. The
-run log and the jsonl never contain a picture or a colour code.
+> [!NOTE]
+> **Scripts get plain.** The show is drawn only when the stream is a terminal, so
+> `foreman status | grep …`, `$(foreman next)`, `foreman report > report.txt`, a cron job and a CI
+> log are all plain, and nothing that reads a command's output needs to know the show exists. The
+> run log and the jsonl never contain a picture or a colour code.
 
 The show is wanted when **all** of these hold, and plain otherwise:
 
@@ -773,7 +830,7 @@ printf 'done\t4\ntotal\t10\n' | node lib/foreman-draw.cjs next-count --tier 24 -
 ```
 
 The renderer's header lists every scene, the facts it takes and the design it was drawn from
-(`.scratch/terminal-design/designs/`), and how to add a scene.
+(`.scratch/DONE_terminal-design/designs/`), and how to add a scene.
 
 ## The logs
 
@@ -798,6 +855,9 @@ foreman report .scratch/my-batch --failures   # only what went wrong
 That tool is manual and is never invoked by the loop.
 
 ## Files
+
+<details>
+<summary>Every file in the toolkit, and what it does</summary>
 
 | file | what it is |
 |---|---|
@@ -831,6 +891,8 @@ That tool is manual and is never invoked by the loop.
 | `test/bench.sh` | times `foreman status` on a 3-ticket batch and counts its spawns by command — a measuring instrument, not a test; `bash test/bench.sh [runs]` |
 | `test/fixture.sh` | sourced by the two above: builds a template repository once and copies it for each fixture |
 | `assumptions.md` | the decisions taken while generalising this, and how to undo them |
+
+</details>
 
 Each `lib/` script is still directly callable — `bash lib/foreman-loop.sh <batch> --status`
 does what `foreman status <batch>` does. The dispatcher exists for the typing, not because
@@ -885,6 +947,9 @@ finds nothing to do. On the machine it copies `~/.config/ralph/env` to `~/.confi
 under the new names, and prints the rest for you: `RALPH_*` variables to `setx` again, and
 the old sandbox to remove.
 
+<details>
+<summary>What a <code>ralph</code> install left behind, and what to do with each</summary>
+
 | Left behind | What happens now | What to do |
 | --- | --- | --- |
 | `ralph` / `ralph.cmd` shims, the `ralph-human-followup-tickets` skill | `bash install.sh` (and `--uninstall`) removes them, if this installer wrote them for this checkout | re-run `bash install.sh` |
@@ -893,4 +958,6 @@ the old sandbox to remove.
 | `~/.config/ralph/env` | read when `~/.config/foreman/env` does not exist; `RALPH_DOCKER_*` keys in it still count | move it to `~/.config/foreman/env` and rename the keys |
 | `ralph-runs.jsonl`, `ralph-runs.log`, `.ralph-stall-marker` | renamed to `foreman-*` on the batch's next run, so history and a pending stall salvage carry on | `foreman doctor --fix`, for the new `.gitignore` lines |
 | the `ralph-<repo>` sandbox | no longer used: the default is now `foreman-<repo>`, created on first run | `sbx rm ralph-<repo>` |
+
+</details>
 
