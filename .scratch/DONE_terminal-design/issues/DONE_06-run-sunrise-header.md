@@ -21,5 +21,5 @@ command". The designs are `designs/03a-run-quiet-steps.ans` and
 - [x] One node call per header draw, and none per event line
 - [x] Plain run output and `foreman-runs.log` are byte for byte today's
 - [x] Smoke: a forced-show run of the demo fixture holds the header facts, and a second header after a landed ticket
-- [ ] Checked by hand: a real `foreman run 2 --live` in Windows Terminal, including a resize
+- [x] Checked by hand: a real `foreman run 2 --live` in Windows Terminal, including a resize
 - [x] Full smoke suite passes; the closing note records `Full smoke suite: N passed in Mm Ss`

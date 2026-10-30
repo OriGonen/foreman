@@ -19,7 +19,7 @@ from `designs/source/SunrisePicks.dc.html` (panel D1).
 - [x] The palette is read from `foreman-ui.sh`, not copied
 - [x] `foreman help` and bare `foreman` draw D1 above the help on the show path; exit codes are unchanged
 - [x] Smoke: the forced show contains the help text and `38;2;`; at `FOREMAN_COLOR=16` it has no `38;2;` or `38;5;`; a narrow `COLUMNS` and a plain capture both equal today's help
-- [ ] Checked by hand in Windows Terminal and mintty against `designs/01-help-d1.ans`
+- [x] Checked by hand in Windows Terminal and mintty against `designs/01-help-d1.ans`
 - [x] Full smoke suite passes; the closing note records `Full smoke suite: N passed in Mm Ss`
 
 ## Closing note

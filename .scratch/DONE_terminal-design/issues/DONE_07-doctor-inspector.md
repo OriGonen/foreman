@@ -20,5 +20,5 @@ print after the box. See `spec.md`, "Per command". The designs are
 - [x] The exit code, `--fix`'s writes and its messages are unchanged
 - [x] The smoke suite's doctor assertions are updated to the box, with each check still asserted
 - [x] Smoke: `--t` frames of both verdicts, and a piped doctor on a ready fixture and an unready one
-- [ ] Checked by hand: the run lasts as long as the checks, and Ctrl-C leaves a visible cursor
+- [x] Checked by hand: the run lasts as long as the checks, and Ctrl-C leaves a visible cursor
 - [x] Full smoke suite passes; the closing note records `Full smoke suite: N passed in Mm Ss`

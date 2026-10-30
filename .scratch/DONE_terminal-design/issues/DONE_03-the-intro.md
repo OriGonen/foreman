@@ -17,7 +17,7 @@ The design is `designs/02-intro3-frames.ans`, from `designs/source/Intro3.dc.htm
 - [x] With `FOREMAN_INTRO=0`, in `CI`, with stdout piped, or with stdin not a terminal, there is no intro and help is as in 02
 - [x] `--frame N` draws one frame and exits
 - [x] Smoke: `--frame 0` and `--frame 35` hold the design's key rows; a forced show with stdin from `/dev/null` does not wait
-- [ ] Checked by hand: the skip key works, and Ctrl-C mid-intro leaves a visible cursor and a sane terminal
+- [x] Checked by hand: the skip key works, and Ctrl-C mid-intro leaves a visible cursor and a sane terminal
 - [x] README documents `FOREMAN_INTRO`
 - [x] Full smoke suite passes; the closing note records `Full smoke suite: N passed in Mm Ss`
 
