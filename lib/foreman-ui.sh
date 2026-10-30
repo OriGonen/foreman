@@ -72,6 +72,15 @@
 # The scene draws in the width it is given and has a minimum below which the caller prints its
 # plain text instead; the caller checks that against ui_cols before it starts the renderer.
 #
+# THE SPLIT, then: this file decides (colour tier, show or plain, width) and stays fork-free;
+# foreman-draw.cjs draws, and does not decide. A command asks `ui_show 1 TIER && ui_cols COLS 1`,
+# compares COLS with its scene's minimum, and only then pipes its facts to the renderer — so plain
+# output (a pipe, a file, `$(…)`, CI, NO_COLOR, TERM=dumb, a narrow terminal) is today's text,
+# byte for byte, and starts no node. FOREMAN_INTRO (the film before `foreman help`) is not read
+# here: it is bin/foreman's, because only the intro plays and needs a key to skip. To add a scene
+# see HOW TO ADD A SCENE at the top of foreman-draw.cjs; for the reader's side, README.md,
+# "Terminal output".
+#
 # Nothing here starts a process but `stty` in ui_cols and ui_rows: `[ -t ]`, `printf -v` and `case` are
 # builtins, which is the point under MSYS, where a fork is the expensive thing and these run once
 # per event line.

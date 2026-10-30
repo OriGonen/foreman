@@ -7907,6 +7907,104 @@ if case_is "foreman convert on a real terminal shows without being forced, and n
 fi
 
 # ---------------------------------------------------------------------------
+# Documenting the show
+# ---------------------------------------------------------------------------
+
+if case_is "the renderer's header names every scene, the facts it takes and the design it came from"; then
+  DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
+  # The header is the comment at the top of the file: lines of `//`, up to the first line that is not.
+  header="$(awk '!/^\/\// { exit } { print }' "$DRAW")"
+  scenes="$(node -e 'console.log(Object.keys(require(process.argv[1]).SCENES).join(" "))' "$DRAW")"
+  [ -n "$scenes" ] && pass || fail "the renderer lists its scenes"
+  assert_contains "$header" "HOW TO ADD A SCENE" "the header says how to add a scene"
+  for scene in $scenes; do
+    # An entry is a line that starts with the scene's name, after the comment mark and three spaces.
+    entry="$(printf '%s\n' "$header" | awk -v s="$scene" '
+      $0 ~ "^//   " s "( |$)" { on = 1; print; next }
+      on && /^\/\/      / { print; next }
+      { on = 0 }')"
+    if [ -z "$entry" ]; then fail "scene '$scene' has an entry in the header"; continue; fi
+    pass
+    assert_contains "$entry" "facts:" "the entry for '$scene' says which facts it takes"
+    designs="$(printf '%s\n' "$entry" | sed -n 's/.*design: \([0-9a-z, -]*\).*/\1/p' | tr ',' ' ')"
+    [ -n "$designs" ] && pass || fail "the entry for '$scene' says where its design lives"
+    for d in $designs; do
+      [ -s "$FOREMAN_HOME/.scratch/terminal-design/designs/$d.ans" ] && [ -s "$FOREMAN_HOME/.scratch/terminal-design/designs/$d.txt" ] \
+        && pass || fail "the design '$d' that '$scene' cites is in .scratch/terminal-design/designs"
+    done
+  done
+  # And nothing is named that is not a scene.
+  named="$(printf '%s\n' "$header" | sed -n 's|^//   \([a-z][a-z-]*\)  .*|\1|p' | sort -u | tr '\n' ' ')"
+  for n in $named; do
+    case " $scenes " in *" $n "*) pass ;; *) fail "the header names '$n', which is not a scene" ;; esac
+  done
+fi
+
+if case_is "the README has a Terminal output section that covers the show, plain, the tiers and every variable"; then
+  readme="$(cat "$FOREMAN_HOME/README.md")"
+  section="$(awk '/^## Terminal output/ { on = 1; next } on && /^## / { exit } on { print }' "$FOREMAN_HOME/README.md")"
+  [ -n "$section" ] && pass || fail "README.md has a '## Terminal output' section"
+  for word in 'the show' 'plain' 'FOREMAN_COLOR' 'FOREMAN_SHOW' 'FOREMAN_INTRO' 'NO_COLOR' 'CI' 'COLUMNS' 'TERM=dumb' \
+              '24-bit' '256' '16 colours' 'WT_SESSION' 'COLORTERM' 'scripts' 'byte for byte' 'foreman-draw.cjs'; do
+    assert_contains "$section" "$word" "the section mentions '$word'"
+  done
+  # The values of each variable are all there.
+  for word in 'FOREMAN_COLOR=always' 'FOREMAN_COLOR=never' 'FOREMAN_SHOW=always' 'FOREMAN_SHOW=never' 'FOREMAN_INTRO=0'; do
+    assert_contains "$section" "$word" "and the value '$word'"
+  done
+  # The README is where Colour, the show and the intro are explained, once: no second copy elsewhere.
+  assert_eq "$(printf '%s\n' "$readme" | grep -c '^### The intro')" 1 "the intro is described once"
+  assert_eq "$(printf '%s\n' "$readme" | grep -c '^### The show')" 1 "and the show once"
+  # Every command that draws is in the table, with the width it needs, which is the shell's number.
+  while read -r cmd file var; do
+    want="$(sed -n "s/^$var=\([0-9]*\).*/\1/p" "$FOREMAN_HOME/$file")"
+    row="$(printf '%s\n' "$section" | grep -F "| \`foreman $cmd" | head -1)"
+    if [ -z "$row" ]; then fail "the table has a row for 'foreman $cmd'"; continue; fi
+    got="$(printf '%s\n' "$row" | awk -F'|' '{ gsub(/[ `]/, "", $(NF-1)); print $(NF-1) }')"
+    assert_eq "$got" "$want" "the width the README gives 'foreman $cmd' is $var in $file"
+  done <<'ROWS'
+help bin/foreman _help_min_cols
+version bin/foreman _version_min_cols
+init lib/foreman-init.sh _init_min_cols
+status lib/foreman-loop.sh _status_min_cols
+dry-run lib/foreman-loop.sh _dryrun_min_cols
+run lib/foreman-loop.sh _run_min_cols
+order lib/foreman-order.sh _order_min_cols
+next lib/foreman-next.sh _next_min_cols
+report bin/foreman _report_min_cols
+convert bin/foreman _convert_min_cols
+doctor lib/foreman-doctor.sh _doctor_min_cols
+ROWS
+  # What the section says of the intro's own size is the dispatcher's.
+  assert_contains "$section" "$(sed -n 's/^_intro_min_cols=\([0-9]*\).*/\1/p' "$FOREMAN_HOME/bin/foreman") columns" "the intro's width is the dispatcher's"
+fi
+
+if case_is "CONTEXT.md defines the show and plain output as terms"; then
+  ctx="$(cat "$FOREMAN_HOME/CONTEXT.md")"
+  assert_contains "$ctx" '**The show**:' "CONTEXT.md defines the show"
+  assert_contains "$ctx" '**Plain output**:' "and plain output"
+  assert_contains "$ctx" '**Scene**:' "and a scene"
+fi
+
+if case_is "test/demo.sh shows draws each command's show once, under a caption"; then
+  OUT="$(cd "$WORK" && env -u CI -u NO_COLOR bash "$FOREMAN_HOME/test/demo.sh" shows 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "the demo of the shows succeeds"
+  for cmd in help version init status dry-run run order next report convert doctor; do
+    assert_contains "$OUT" "── foreman $cmd " "it announces foreman $cmd"
+  done
+  assert_contains "$OUT" "▀" "and the pictures are drawn, though this is not a terminal"
+  assert_contains "$OUT" "FOREMAN" "with the name in them"
+  assert_eq "$(printf '%s\n' "$OUT" | grep -c '^── foreman ')" 11 "each command once"
+  # A command can be asked for alone, and an unknown one is refused.
+  OUT="$(cd "$WORK" && bash "$FOREMAN_HOME/test/demo.sh" shows version next 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "two commands asked for"
+  assert_eq "$(printf '%s\n' "$OUT" | grep -c '^── foreman ')" 2 "are the only two shown"
+  OUT="$(cd "$WORK" && bash "$FOREMAN_HOME/test/demo.sh" shows nonsense 2>&1)"; ST=$?
+  [ "$ST" -ne 0 ] && pass || fail "an unknown command is refused"
+  assert_contains "$OUT" "nonsense" "and named"
+fi
+
+# ---------------------------------------------------------------------------
 # A case process that ran the last case in the file ends here.
 [ "$CASE_OPEN" = 1 ] && case_finish
 exit 0

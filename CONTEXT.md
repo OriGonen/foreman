@@ -180,3 +180,35 @@ The deferred idea of reattaching to the agent's *own* prior conversation via the
 and always named in full — an unqualified "resume" means the batch, not the session.
 See `docs/adr/0001-checkpoint-turn-over-session-resume.md`.
 _Avoid_: Resume (unqualified), reattach
+
+### What the terminal shows
+
+**The show**:
+The picture a command draws, in block characters in foreman's palette, above or instead of
+some of its text: the sunrise of `foreman help`, the dome of `foreman status`, the inspector
+of `foreman doctor`. Wanted on a stream that is a terminal, wide enough for the picture, with
+colour on and `CI` unset; `FOREMAN_SHOW` overrides that. Chosen once per call, by
+`lib/foreman-ui.sh`.
+_Avoid_: Animation (only the intro and the doctor's inspector move), banner, splash, TUI
+(nothing reads keys but the intro, and the loop's own status bar)
+
+**Plain output**:
+What a command prints wherever the show is not drawn — a pipe, a file, `$(…)`, CI,
+`NO_COLOR`, `TERM=dumb`, a narrow terminal. Today's text, byte for byte, with no escape codes
+and no process started for it, so a script that reads a command's output is unaffected. The
+one command whose plain output changed is `foreman doctor`, which is the box without the
+inspector or colour.
+_Avoid_: Quiet (that is `RECORD_QUIET`, the run's own), raw, text mode, no-colour (colour and
+the show are decided separately: a terminal with `FOREMAN_SHOW=never` still has colour)
+
+**Scene**:
+One picture, drawn by `lib/foreman-draw.cjs` from facts the shell already has. Each has a
+minimum width below which its command prints plain output instead. A command may have more
+than one (`foreman init` draws its header, then its result).
+_Avoid_: Screen, view, frame (a frame is one picture of an animated scene)
+
+**Tier**:
+How much colour a stream gets: none, 16, 256 or 24 (bits). The best the terminal says it has,
+or the one `FOREMAN_COLOR` pins; at 16 the terminal's own theme picks the shades. See
+`docs/adr/0003-a-palette-over-the-terminal-theme.md`.
+_Avoid_: Mode, depth, profile

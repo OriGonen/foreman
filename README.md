@@ -369,101 +369,6 @@ code path rather than two. `--live` also switches the agent to `--output-format 
 (which the CLI requires `--verbose` alongside); the recorder still receives exactly the one
 result object it always did. `foreman dry-run` reports which state a run would use.
 
-### Colour — `NO_COLOR` and `FOREMAN_COLOR`
-
-On a terminal, Foreman colours the **glyph or prefix** of a line and nothing else: `✓` green,
-`✗` red, `⋯` dim, `↩` and the `note:` and `preflight:` prefixes amber (yellow at 16 colours),
-`⌨`, the status labels and the `──` and `==` rules a light gold (cyan at 16 colours), and the
-`--live` clock dim. The words are never coloured and the glyph still carries the meaning, so a
-run read without colour loses nothing.
-
-Foreman uses the best colour the terminal has: its own palette in 24-bit colour (Windows
-Terminal, mintty, iTerm2 and most Linux terminals), the nearest shades of it in 256 colours, and
-at 16 colours the terminal's basic colours, so your own theme picks the shades, as it always
-did. It looks at `COLORTERM` (`truecolor` or `24bit`), `WT_SESSION` (Windows Terminal, which
-does not set `COLORTERM`) and `TERM` (`…256color`). See
-[ADR 0003](docs/adr/0003-a-palette-over-the-terminal-theme.md).
-
-Colour is decided per stream: it is on only when the stream a line is written to is a
-terminal, so `foreman run … > run.txt`, a pipe, or CI output stays plain, byte for byte. The run
-log and the jsonl never contain colour codes. It is off when `NO_COLOR` is set or `TERM` is
-`dumb`. `FOREMAN_COLOR` overrides all of that, in the environment or in `foreman.conf`:
-
-| `FOREMAN_COLOR` | |
-|---|---|
-| `auto` | the default: a terminal, unless `NO_COLOR` is set, at the best colour it has |
-| `always` | colour even when piped or redirected — and even with `NO_COLOR` set, since naming it is a decision about Foreman. At the terminal's best colour, or 16 colours when nothing says better |
-| `never` | no colour |
-| `16` | 16 colours (your theme's), on every stream, whatever the terminal could do |
-| `256` | 256 colours, on every stream |
-| `truecolor` | 24-bit colour, on every stream |
-
-```bash
-FOREMAN_COLOR=always foreman run .scratch/my-batch | less -R
-```
-
-### The show — `FOREMAN_SHOW`
-
-Some commands draw a picture, made of block characters in the same palette, above their usual
-text: `foreman help` prints a sunrise, `foreman init` a hard hat against it. That is the **show**.
-It is drawn only on a terminal with colour on, at least as wide as the picture (64 columns for the
-sunrise and for `init`), and not when `CI` is set;
-in a pipe, a file, a narrow terminal, with `NO_COLOR`, or under `FOREMAN_COLOR=never` you get the
-plain text, byte for byte, so scripts that read a command's output are unaffected.
-
-| `FOREMAN_SHOW` | |
-|---|---|
-| `auto` | the default: the rule above |
-| `always` | draw it on any stream, whatever `CI`, `NO_COLOR` or `TERM` say — at the terminal's best colour, or the tier `FOREMAN_COLOR` pins. `FOREMAN_COLOR=never` still means plain. The width is `COLUMNS`, else the terminal's, else 80 |
-| `never` | the plain text, always |
-
-```bash
-FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 foreman help | less -R
-```
-
-### `foreman init` as breaking ground
-
-At a terminal, `foreman init <batch>` shows the mark and "FOREMAN breaks ground", the batch and
-what was found in it (`10 tickets in 3 issue directories`), and a `+` for each file it wrote. When
-the agent has ordered the tickets it adds a line for that — how many tickets moved, which are
-yours and which check them, how long it took and what it cost — and then NEXT, the four steps to
-take. The header and the files are drawn as soon as they are written, before the agent starts, so
-the wait is not a blank screen.
-
-- `--force` over a batch that is there marks each file it replaced; without it, a file that is
-  there is shown with an `=` and left alone, and a batch with nothing to write says so.
-- `--no-order` leaves the ordering line out; an ordering that failed (or could not start, with no
-  `claude` on the `PATH`) says so in its place, with what the agent said and how to try again.
-- Anywhere the show is not drawn, `foreman init` prints the text it always has, byte for byte.
-- `FOREMAN_SHOW` is read from the environment here, not from the batch's `foreman.conf`: `init`
-  runs before the batch has one worth reading.
-
-### The intro — `FOREMAN_INTRO`
-
-Bare `foreman` and `foreman help` on a terminal first play a short film, 36 frames over two and a
-half seconds: the sun comes up, the foreman walks in, drives a stake into the ground and turns to
-the light. It ends on the same sunrise `foreman help` draws, left on the screen, and the help text
-follows below it. **Any key skips to the end.** The cursor is hidden while it plays and shown
-again however it ends — at the end, on a key, on Ctrl-C (which ends the command, exit 130), or on
-an error — and the terminal is only in raw mode while it plays.
-
-| | |
-|---|---|
-| `FOREMAN_INTRO=0` | no intro: you get the still sunrise, as with a pipe |
-| anything else, or unset | play it when it can be shown |
-
-It plays only where there is someone to watch and a key to skip with, so it is never in the way
-of a script: not when stdout or stdin is not a terminal, and not when `CI` is set (even with
-`FOREMAN_SHOW=always`). On a terminal under 66 columns wide or 20 rows high you get the still
-sunrise instead, and wherever the show is not drawn at all (`NO_COLOR`, `FOREMAN_SHOW=never`, a
-terminal under 64 columns) `foreman help` prints today's text.
-
-`FOREMAN_INTRO` is read from the environment, not from a batch's `foreman.conf`: `foreman help`
-runs before any batch is looked at. To turn it off for good, export it in your shell profile.
-
-Frames can be looked at one at a time with the renderer itself, which is how the smoke suite checks
-them: `node lib/foreman-draw.cjs intro --tier 24 --cols 120 --frame 25` draws frame 25 (0 to 35).
-
 ### Tickets bigger than one turn
 
 `claude --print --output-format json` is **one turn**. It prints a single JSON object and
@@ -700,6 +605,175 @@ the same either way.
 
 To try all of this without an agent or any cost, `bash test/demo.sh` runs a fake agent on
 a throwaway batch (see the script's header for its options).
+
+## Terminal output
+
+Every command has two renderings, and chooses between them once per call:
+
+- **The show** — a picture made of block characters in Foreman's own palette, at the best colour
+  the terminal has: a sunrise for `foreman help`, a dome whose sun climbs as tickets land for
+  `foreman status` and `foreman run`, an inspector on a track for `foreman doctor`. It is drawn
+  by `lib/foreman-draw.cjs`, which is started only when there is a picture to draw.
+- **Plain** — the text Foreman has always printed, byte for byte, with no escape codes and no
+  extra process. (`foreman doctor` is the one command whose plain output is the box of checks and
+  not what it printed before the show.)
+
+**Scripts get plain.** The show is drawn only when the stream is a terminal, so
+`foreman status | grep …`, `$(foreman next)`, `foreman report > report.txt`, a cron job and a CI
+log are all plain, and nothing that reads a command's output needs to know the show exists. The
+run log and the jsonl never contain a picture or a colour code.
+
+The show is wanted when **all** of these hold, and plain otherwise:
+
+1. the stream the command writes to is a terminal (`foreman help > file` is plain even in a
+   terminal);
+2. colour is on for it: `NO_COLOR` is unset, `TERM` is not `dumb`, and `FOREMAN_COLOR` is not
+   `never` (see Colour, below);
+3. `CI` is unset or empty — a build log is plain, even one that has a terminal;
+4. the terminal is at least as wide as the picture, as `COLUMNS` says, else `stty size`, else 80:
+
+| Command | The show | Columns |
+|---|---|---|
+| `foreman help`, bare `foreman` | the sunrise, after the intro film (see The intro) | 64 |
+| `foreman version` | the mark beside the build and where it is installed | 72 |
+| `foreman init` | the mark, "breaks ground", the files written, then the ordering and NEXT | 64 |
+| `foreman status` | the dome, with the sun as high as the share of tickets done, then the list | 72 |
+| `foreman dry-run` | the low sun, the tickets that would run, the settings and the prompt | 92 |
+| `foreman run` | the figure and the dome at the top, a step higher as each ticket lands | 86 |
+| `foreman order` | the header, a spinner while the agent reads, then the new order on a stake line | 80 |
+| `foreman next` | with `--all` a stake for each ticket, with `--count` the same sum on one line | 40 |
+| `foreman report` | the bill: total cost, how the iterations came out, a ledger of runs | 84 |
+| `foreman convert` | the sign repainted from RALPH to FOREMAN, then what changed | 86 |
+| `foreman doctor` | an inspector at work while the checks run, then a verdict sign | 80 |
+
+A terminal narrower than a command's picture gets that command's plain text; nothing is
+squeezed. If a picture cannot be drawn for any reason (no `node`, a row too wide for the screen),
+the command prints its plain text instead, so a failing renderer costs the picture and nothing
+else.
+
+### The variables
+
+| | |
+|---|---|
+| `FOREMAN_COLOR` | how much colour: `auto` (the default), `always`, `never`, `16`, `256`, `truecolor`. See Colour |
+| `FOREMAN_SHOW` | whether to draw the show: `auto` (the default), `always`, `never`. See The show |
+| `FOREMAN_INTRO` | `0` turns off the film that plays before `foreman help`. See The intro |
+| `NO_COLOR` | any value: no colour and so no show, as [no-color.org](https://no-color.org) asks. `FOREMAN_COLOR=always` or `FOREMAN_SHOW=always` overrides it, since naming Foreman is a decision about Foreman |
+| `CI` | any non-empty value: no show, and no intro even under `FOREMAN_SHOW=always` |
+| `TERM`, `COLORTERM`, `WT_SESSION` | what the terminal can do: `TERM=dumb` is no colour; the other two (and `TERM=…256color`) raise the colour tier |
+| `COLUMNS`, `LINES` | the size to draw for, when the terminal's own is not what you want |
+
+`FOREMAN_COLOR` and `FOREMAN_SHOW` can go in a batch's `foreman.conf` for the commands that read
+the batch (`status`, `dry-run`, `run`, `order`, `next`); `help`, `init`, `version`, `report`,
+`convert` and `doctor` run before or without one and read the environment only, as do
+`FOREMAN_INTRO`, `NO_COLOR` and `CI`.
+
+### Colour — `NO_COLOR` and `FOREMAN_COLOR`
+
+On a terminal, Foreman colours the **glyph or prefix** of a line and nothing else: `✓` green,
+`✗` red, `⋯` dim, `↩` and the `note:` and `preflight:` prefixes amber (yellow at 16 colours),
+`⌨`, the status labels and the `──` and `==` rules a light gold (cyan at 16 colours), and the
+`--live` clock dim. The words are never coloured and the glyph still carries the meaning, so a
+run read without colour loses nothing.
+
+Foreman uses the best colour the terminal has: its own palette in 24-bit colour (Windows
+Terminal, mintty, iTerm2 and most Linux terminals), the nearest shades of it in 256 colours, and
+at 16 colours the terminal's basic colours, so your own theme picks the shades, as it always
+did. It looks at `COLORTERM` (`truecolor` or `24bit`), `WT_SESSION` (Windows Terminal, which
+does not set `COLORTERM`) and `TERM` (`…256color`). See
+[ADR 0003](docs/adr/0003-a-palette-over-the-terminal-theme.md).
+
+Colour is decided per stream: it is on only when the stream a line is written to is a
+terminal, so `foreman run … > run.txt`, a pipe, or CI output stays plain, byte for byte. The run
+log and the jsonl never contain colour codes. It is off when `NO_COLOR` is set or `TERM` is
+`dumb`. `FOREMAN_COLOR` overrides all of that, in the environment or in `foreman.conf`:
+
+| `FOREMAN_COLOR` | |
+|---|---|
+| `auto` | the default: a terminal, unless `NO_COLOR` is set, at the best colour it has |
+| `always` | colour even when piped or redirected — and even with `NO_COLOR` set, since naming it is a decision about Foreman. At the terminal's best colour, or 16 colours when nothing says better |
+| `never` | no colour |
+| `16` | 16 colours (your theme's), on every stream, whatever the terminal could do |
+| `256` | 256 colours, on every stream |
+| `truecolor` | 24-bit colour, on every stream |
+
+```bash
+FOREMAN_COLOR=always foreman run .scratch/my-batch | less -R
+```
+
+### The show — `FOREMAN_SHOW`
+
+The show is drawn only on a terminal with colour on, at least as wide as the picture (the table
+above gives each command's width), and not when `CI` is set. In a pipe, a file, a narrow terminal,
+with `NO_COLOR`, or under `FOREMAN_COLOR=never` you get the plain text, byte for byte, so scripts
+that read a command's output are unaffected. `FOREMAN_SHOW` overrides the rule:
+
+| `FOREMAN_SHOW` | |
+|---|---|
+| `auto` | the default: the rule above |
+| `always` | draw it on any stream, whatever `CI`, `NO_COLOR` or `TERM` say — at the terminal's best colour, or the tier `FOREMAN_COLOR` pins. `FOREMAN_COLOR=never` still means plain. The width is `COLUMNS`, else the terminal's, else 80 |
+| `never` | the plain text, always |
+
+```bash
+FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 foreman help | less -R
+```
+
+### `foreman init` as breaking ground
+
+At a terminal, `foreman init <batch>` shows the mark and "FOREMAN breaks ground", the batch and
+what was found in it (`10 tickets in 3 issue directories`), and a `+` for each file it wrote. When
+the agent has ordered the tickets it adds a line for that — how many tickets moved, which are
+yours and which check them, how long it took and what it cost — and then NEXT, the four steps to
+take. The header and the files are drawn as soon as they are written, before the agent starts, so
+the wait is not a blank screen.
+
+- `--force` over a batch that is there marks each file it replaced; without it, a file that is
+  there is shown with an `=` and left alone, and a batch with nothing to write says so.
+- `--no-order` leaves the ordering line out; an ordering that failed (or could not start, with no
+  `claude` on the `PATH`) says so in its place, with what the agent said and how to try again.
+- Anywhere the show is not drawn, `foreman init` prints the text it always has, byte for byte.
+- `FOREMAN_SHOW` is read from the environment here, not from the batch's `foreman.conf`: `init`
+  runs before the batch has one worth reading.
+
+### The intro — `FOREMAN_INTRO`
+
+Bare `foreman` and `foreman help` on a terminal first play a short film, 36 frames over two and a
+half seconds: the sun comes up, the foreman walks in, drives a stake into the ground and turns to
+the light. It ends on the same sunrise `foreman help` draws, left on the screen, and the help text
+follows below it. **Any key skips to the end.** The cursor is hidden while it plays and shown
+again however it ends — at the end, on a key, on Ctrl-C (which ends the command, exit 130), or on
+an error — and the terminal is only in raw mode while it plays.
+
+| | |
+|---|---|
+| `FOREMAN_INTRO=0` | no intro: you get the still sunrise, as with a pipe |
+| anything else, or unset | play it when it can be shown |
+
+It plays only where there is someone to watch and a key to skip with, so it is never in the way
+of a script: not when stdout or stdin is not a terminal, and not when `CI` is set (even with
+`FOREMAN_SHOW=always`). On a terminal under 66 columns wide or 20 rows high you get the still
+sunrise instead, and wherever the show is not drawn at all (`NO_COLOR`, `FOREMAN_SHOW=never`, a
+terminal under 64 columns) `foreman help` prints today's text.
+
+`FOREMAN_INTRO` is read from the environment, not from a batch's `foreman.conf`: `foreman help`
+runs before any batch is looked at. To turn it off for good, export it in your shell profile.
+
+Frames can be looked at one at a time with the renderer itself, which is how the smoke suite checks
+them: `node lib/foreman-draw.cjs intro --tier 24 --cols 120 --frame 25` draws frame 25 (0 to 35).
+
+### Looking at it
+
+`bash test/demo.sh shows` draws every command's show once, each under a caption, on a throwaway
+repository with a fake agent (no model, no sandbox, no cost); `bash test/demo.sh shows status next`
+draws only those. On a terminal it is what you would see; piped (`… | less -R`) it forces the show
+at 120 columns. A single scene, or one frame of an animation, comes straight from the renderer:
+
+```bash
+printf 'done\t4\ntotal\t10\n' | node lib/foreman-draw.cjs next-count --tier 24 --cols 100
+```
+
+The renderer's header lists every scene, the facts it takes and the design it was drawn from
+(`.scratch/terminal-design/designs/`), and how to add a scene.
 
 ## The logs
 
