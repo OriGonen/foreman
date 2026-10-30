@@ -4313,7 +4313,7 @@ init_done_facts() {
 if case_is "foreman-draw's mark is the design's, cell for cell, and shrinks to 256 and 16 colours"; then
   DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
   ESC=$'\033'
-  ANS="$FOREMAN_HOME/.scratch/terminal-design/designs/07a-init.ans"
+  ANS="$FOREMAN_HOME/.scratch/DONE_terminal-design/designs/07a-init.ans"
   CELLS="$FOREMAN_HOME/test/ans-cells.cjs"
   OUT24="$(init_head_facts | node "$DRAW" init --tier 24 --cols 120)"; ST=$?
   assert_eq "$ST" 0 "the init scene runs"
@@ -4351,7 +4351,7 @@ if case_is "foreman-draw init writes the design's header and files, and its othe
   DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
   ESC=$'\033'
   strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
-  TXT="$FOREMAN_HOME/.scratch/terminal-design/designs/07a-init.txt"
+  TXT="$FOREMAN_HOME/.scratch/DONE_terminal-design/designs/07a-init.txt"
   OUT="$(init_head_facts | node "$DRAW" init --tier 24 --cols 120 | strip)"
   assert_eq "$OUT" "$(sed -n '2,13p' "$TXT" | sed 's/ *$//')" "the header, rule and the three files read as 07a-init.txt does"
   assert_eq "$(init_head_facts | node "$DRAW" init --tier 24 --cols 120 | wc -l | tr -d ' ')" 13 "and a blank line after"
@@ -4393,7 +4393,7 @@ if case_is "foreman-draw init-done writes the ordering result and NEXT as design
   DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
   ESC=$'\033'
   strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
-  TXT="$FOREMAN_HOME/.scratch/terminal-design/designs/07a-init.txt"
+  TXT="$FOREMAN_HOME/.scratch/DONE_terminal-design/designs/07a-init.txt"
   OUT="$(init_done_facts | node "$DRAW" init-done --tier 24 --cols 120 | strip)"
   assert_eq "$(printf '%s\n' "$OUT" | sed -n 1,2p)" "$(sed -n '15,16p' "$TXT" | sed 's/ *$//')" "the ordering result and its caution, as designed"
   assert_eq "$(printf '%s\n' "$OUT" | sed -n 3p)" "" "then a blank line"
@@ -4736,8 +4736,8 @@ if case_is "foreman-draw version is the design's mark beside the build, and tild
   DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
   ESC=$'\033'
   strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
-  ANS="$FOREMAN_HOME/.scratch/terminal-design/designs/13a-version.ans"
-  TXT="$FOREMAN_HOME/.scratch/terminal-design/designs/13a-version.txt"
+  ANS="$FOREMAN_HOME/.scratch/DONE_terminal-design/designs/13a-version.ans"
+  TXT="$FOREMAN_HOME/.scratch/DONE_terminal-design/designs/13a-version.txt"
   CELLS="$FOREMAN_HOME/test/ans-cells.cjs"
   version_facts() { printf 'rev\t59c405c\npath\t/home/you/.foreman\nhome\t/home/you\n'; }
   OUT24="$(version_facts | node "$DRAW" version --tier 24 --cols 120)"; ST=$?
@@ -4890,8 +4890,8 @@ if case_is "foreman-draw status is the 4a design at 6 of 10: the dome, the words
   DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
   ESC=$'\033'
   strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
-  ANS="$FOREMAN_HOME/.scratch/terminal-design/designs/04a-status.ans"
-  TXT="$FOREMAN_HOME/.scratch/terminal-design/designs/04a-status.txt"
+  ANS="$FOREMAN_HOME/.scratch/DONE_terminal-design/designs/04a-status.ans"
+  TXT="$FOREMAN_HOME/.scratch/DONE_terminal-design/designs/04a-status.txt"
   CELLS="$FOREMAN_HOME/test/ans-cells.cjs"
   OUT24="$(status_design_facts 14.2 | node "$DRAW" status --tier 24 --cols 120)"; ST=$?
   assert_eq "$ST" 0 "the status scene runs"
@@ -5257,8 +5257,8 @@ if case_is "foreman-draw dryrun is the 11a design: the low sun, WOULD RUN, SETTI
   DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
   ESC=$'\033'
   strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
-  ANS="$FOREMAN_HOME/.scratch/terminal-design/designs/11a-dry-run.ans"
-  TXT="$FOREMAN_HOME/.scratch/terminal-design/designs/11a-dry-run.txt"
+  ANS="$FOREMAN_HOME/.scratch/DONE_terminal-design/designs/11a-dry-run.ans"
+  TXT="$FOREMAN_HOME/.scratch/DONE_terminal-design/designs/11a-dry-run.txt"
   CELLS="$FOREMAN_HOME/test/ans-cells.cjs"
   OUT24="$(dry_design_facts 22 | node "$DRAW" dryrun --tier 24 --cols 120)"; ST=$?
   assert_eq "$ST" 0 "the dryrun scene runs"
@@ -5607,8 +5607,8 @@ if case_is "foreman-draw run is the 3a design: the figure, the dome, the facts b
   DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
   ESC=$'\033'
   strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
-  QUIET="$FOREMAN_HOME/.scratch/terminal-design/designs/03a-run-quiet-steps.ans"
-  QUIET_TXT="$FOREMAN_HOME/.scratch/terminal-design/designs/03a-run-quiet-steps.txt"
+  QUIET="$FOREMAN_HOME/.scratch/DONE_terminal-design/designs/03a-run-quiet-steps.ans"
+  QUIET_TXT="$FOREMAN_HOME/.scratch/DONE_terminal-design/designs/03a-run-quiet-steps.txt"
   CELLS="$FOREMAN_HOME/test/ans-cells.cjs"
   OUT24="$(run_design_facts 4 | node "$DRAW" run --tier 24 --cols 120)"; ST=$?
   assert_eq "$ST" 0 "the run scene runs"
@@ -6015,8 +6015,8 @@ if case_is "foreman-draw order-head and order are the 8b design: the header, the
   DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
   ESC=$'\033'
   strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
-  ANS="$FOREMAN_HOME/.scratch/terminal-design/designs/08b-order.ans"
-  TXT="$FOREMAN_HOME/.scratch/terminal-design/designs/08b-order.txt"
+  ANS="$FOREMAN_HOME/.scratch/DONE_terminal-design/designs/08b-order.ans"
+  TXT="$FOREMAN_HOME/.scratch/DONE_terminal-design/designs/08b-order.txt"
   CELLS="$FOREMAN_HOME/test/ans-cells.cjs"
   HEAD="$(order_design_facts | node "$DRAW" order-head --tier 24 --cols 120)"; ST=$?
   assert_eq "$ST" 0 "the order-head scene runs"
@@ -6293,8 +6293,8 @@ if case_is "foreman-draw next is the 9b design: the stake row with the next one 
   DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
   ESC=$'\033'
   strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
-  ANS="$FOREMAN_HOME/.scratch/terminal-design/designs/09b-next.ans"
-  TXT="$FOREMAN_HOME/.scratch/terminal-design/designs/09b-next.txt"
+  ANS="$FOREMAN_HOME/.scratch/DONE_terminal-design/designs/09b-next.ans"
+  TXT="$FOREMAN_HOME/.scratch/DONE_terminal-design/designs/09b-next.txt"
   CELLS="$FOREMAN_HOME/test/ans-cells.cjs"
   OUT24="$(next_design_facts | node "$DRAW" next --tier 24 --cols 120)"; ST=$?
   assert_eq "$ST" 0 "the next scene runs"
@@ -6399,7 +6399,7 @@ if case_is "foreman-draw next-count is the one line of the 9b design"; then
   DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
   ESC=$'\033'
   strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
-  ANS="$FOREMAN_HOME/.scratch/terminal-design/designs/09b-next.ans"
+  ANS="$FOREMAN_HOME/.scratch/DONE_terminal-design/designs/09b-next.ans"
   CELLS="$FOREMAN_HOME/test/ans-cells.cjs"
   OUT24="$(printf 'done\t6\ntotal\t10\n' | node "$DRAW" next-count --tier 24 --cols 80)"; ST=$?
   assert_eq "$ST" 0 "the next-count scene runs"
@@ -6495,7 +6495,7 @@ doctor_facts() {    # doctor_facts issues|good
 if case_is "foreman-draw doctor is the 5b box, cell for cell, in both verdicts"; then
   DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
   CELLS="$FOREMAN_HOME/test/ans-cells.cjs"
-  DESIGNS="$FOREMAN_HOME/.scratch/terminal-design/designs"
+  DESIGNS="$FOREMAN_HOME/.scratch/DONE_terminal-design/designs"
   for verdict in issues good; do
     ANS="$DESIGNS/05b-doctor-$verdict-frames.ans"
     OUT24="$(doctor_facts $verdict | node "$DRAW" doctor --tier 24 --cols 80)"; ST=$?
@@ -6509,7 +6509,7 @@ fi
 if case_is "foreman-draw doctor --t draws the inspector's track as the design does, tick by tick, in both verdicts"; then
   DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
   CELLS="$FOREMAN_HOME/test/ans-cells.cjs"
-  DESIGNS="$FOREMAN_HOME/.scratch/terminal-design/designs"
+  DESIGNS="$FOREMAN_HOME/.scratch/DONE_terminal-design/designs"
   # The pad he carries and the sparkles' centres are text white in the board (#ece8e1), which the .ans
   # export left as the terminal's own colour; they are painted here, so that colour is set aside.
   # The design's frames are every second tick, 36 lines each: a caption, the track's twelve rows,
@@ -7077,8 +7077,8 @@ if case_is "foreman-draw report is the 10a design, cell for cell, in its colours
   DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
   ESC=$'\033'
   strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
-  ANS="$FOREMAN_HOME/.scratch/terminal-design/designs/10a-report.ans"
-  TXT="$FOREMAN_HOME/.scratch/terminal-design/designs/10a-report.txt"
+  ANS="$FOREMAN_HOME/.scratch/DONE_terminal-design/designs/10a-report.ans"
+  TXT="$FOREMAN_HOME/.scratch/DONE_terminal-design/designs/10a-report.txt"
   CELLS="$FOREMAN_HOME/test/ans-cells.cjs"
   OUT24="$(report_design_facts | node "$DRAW" report --tier 24 --cols 100)"; ST=$?
   assert_eq "$ST" 0 "the report scene runs"
@@ -7433,8 +7433,8 @@ if case_is "foreman-draw convert is the 12a design, cell for cell, in its colour
   DRAW="$FOREMAN_HOME/lib/foreman-draw.cjs"
   ESC=$'\033'
   strip() { sed "s/${ESC}\[[0-9;]*[mK]//g; s/ *\$//"; }
-  ANS="$FOREMAN_HOME/.scratch/terminal-design/designs/12a-convert.ans"
-  TXT="$FOREMAN_HOME/.scratch/terminal-design/designs/12a-convert.txt"
+  ANS="$FOREMAN_HOME/.scratch/DONE_terminal-design/designs/12a-convert.ans"
+  TXT="$FOREMAN_HOME/.scratch/DONE_terminal-design/designs/12a-convert.txt"
   CELLS="$FOREMAN_HOME/test/ans-cells.cjs"
   OUT24="$(convert_design_facts | node "$DRAW" convert --tier 24 --cols 100)"; ST=$?
   assert_eq "$ST" 0 "the convert scene runs"
@@ -7929,8 +7929,8 @@ if case_is "the renderer's header names every scene, the facts it takes and the 
     designs="$(printf '%s\n' "$entry" | sed -n 's/.*design: \([0-9a-z, -]*\).*/\1/p' | tr ',' ' ')"
     [ -n "$designs" ] && pass || fail "the entry for '$scene' says where its design lives"
     for d in $designs; do
-      [ -s "$FOREMAN_HOME/.scratch/terminal-design/designs/$d.ans" ] && [ -s "$FOREMAN_HOME/.scratch/terminal-design/designs/$d.txt" ] \
-        && pass || fail "the design '$d' that '$scene' cites is in .scratch/terminal-design/designs"
+      [ -s "$FOREMAN_HOME/.scratch/DONE_terminal-design/designs/$d.ans" ] && [ -s "$FOREMAN_HOME/.scratch/DONE_terminal-design/designs/$d.txt" ] \
+        && pass || fail "the design '$d' that '$scene' cites is in .scratch/DONE_terminal-design/designs"
     done
   done
   # And nothing is named that is not a scene.
