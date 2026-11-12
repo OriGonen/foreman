@@ -55,15 +55,21 @@ picked. Each pick has its own page, with the picked take only. The canvas in
 | Screen | Pick | Design | Canvas | Why this one |
 |---|---|---|---|---|
 | Batch overview | a · Dome and order | `designs/01-overview.html` | `source/OverviewTakes.dc.html` | `foreman status` as a window: the dome sized by tickets landed, the next ticket, the human ticket waiting, then the order with each ticket's spend. Everything is on one screen and it reads top to bottom. |
-| Ticket detail | b · Ticket page (and b1, an agent ticket) | `designs/02-ticket.html` | `source/TicketTakes.dc.html` | It has room for the ticket and its handoff file side by side, which is the one edit the app makes. The drawer (a) is too narrow to fill in a handoff. |
-| Start a run | a · The bill up front | `designs/03-run-confirm.html` | `source/ConfirmTakes.dc.html` | It costs money, so it is shaped like a bill. It shows what can run, every cap with where it comes from, a cap that isn't set (shown in rust), the exact command, and a button that says the most it can spend. |
-| Live run | a · The site | `designs/04-live-run.html` | `source/LiveRunTakes.dc.html` | The terminal run screen in a window. Iterations are listed in order with each one's outcome, the feed is under the running iteration, and the bar along the bottom holds the same controls as the keys. |
-| Run end | a · Banner on the run | `designs/05-run-end.html` | `source/EndTakes.dc.html` | The run screen stays where it was, with a banner on top for exit 0, 10, 20 or 30. Each banner has its one next step, with free and paid actions marked. Nothing jumps to another screen. |
+| Ticket detail | b · Ticket page (b1, an agent ticket; b2, Markdown view; b3, a finished ticket) | `designs/02-ticket.html` | `source/TicketTakes.dc.html` | It has room for the ticket and its handoff file side by side, which is the one edit the app makes. The drawer (a) is too narrow to fill in a handoff. Signed off with a **Preview \| Markdown** switch over the ticket text (Preview by default) and, for a finished ticket, **Run stats** (model, runtime, cost, iterations, turns, tokens). |
+| Start a run | c · The bill with the tiles (c1, Advanced options open; c2, the `?` texts) | `designs/03-run-confirm.html` | `source/ConfirmTakes.dc.html` | A merge of a and b, asked for at sign-off. It is a's bill, so it shows what can run, where each cap comes from, a cap that isn't set (shown in rust), the exact command and a button that says the most it can spend, with b's three tiles (iterations, spend cap, time cap) added. By default only the iteration count is editable. **Advanced options** opens the spend cap, the time cap and the live view for this run. Every field has a `?` that says what it does. |
+| Live run | a · The site, with c · Compact as a second view | `designs/04-live-run.html` | `source/LiveRunTakes.dc.html` | The terminal run screen in a window. Iterations are listed in order with each one's outcome, the feed is under the running iteration, and the bar along the bottom holds the same controls as the keys. A **Full view \| Compact view** switch at the top right changes to c, a small window for a corner of the screen. |
+| Run end | b · A scene for each | `designs/05-run-end.html` | `source/EndTakes.dc.html` | Changed at sign-off from a (banner on the run) to b. Each ending is a scene: exit 0 a full sun, confetti and the foreman giving a thumbs-up; exit 10 the dome with the sun held halfway; exit 20 the foreman beside a hand-written, leaning "problem!" sign; exit 30 the foreman beside a different sign on the other side, "need human inspection!", with the sun still coming up. Each has its next step with free and paid actions marked, and a **Show iterations** button for the evidence. |
 | Dry run | a · Settings beside the prompt | `designs/06-dry-run.html` | `source/DryRunTakes.dc.html` | What would run and the settings are on the left, and the exact prompt with line numbers is on the right. Both are visible at once. |
 | Report | a · The bill and the ledger | `designs/07-report.html` | `source/ReportTakes.dc.html` | The terminal's report (10a) in a window. Charts (b) would repeat the ledger's numbers for a handful of runs. |
-| Doctor | a · The inspection sheet | `designs/08-doctor.html` | `source/DoctorTakes.dc.html` | The terminal's sections in the terminal's order, with the verdict as a stamp. Each fixable row says how to fix it, and **Fix what it can** is the one button. |
+| Doctor | a · The inspection sheet | `designs/08-doctor.html` | `source/DoctorTakes.dc.html` | The terminal's sections in the terminal's order, with the verdict as a stamp. Each fixable row says how to fix it, and **Fix what it can** is the one button. Signed off with the terminal's running-and-sweating animation: while the inspection runs, the inspector runs across a track and back, sweating, then stands and sweats until the sheet is filled in. |
 | Empty and error states | a · A scene and one step | `designs/09-empty-and-error.html` | `source/StatesTakes.dc.html` | Each of these states blocks everything below it, so it gets the whole pane: a picture, one sentence, the CLI's own message, and one button. |
-| Install wizard (terminal) | a · Numbered choice (and a2, the rerun) | `designs/10-install-wizard.html` | `source/WizardTakes.dc.html` | `1` or `2` works with a plain `read` in every terminal, Git Bash's mintty included. An arrow-key menu (b) needs raw key reading for one question. |
+| Install wizard (terminal) | a · Numbered choice (and a2, the rerun) | `designs/10-install-wizard.html` | `source/WizardTakes.dc.html` | `1` or `2` works with a plain `read` in every terminal, Git Bash's mintty included. An arrow-key menu (b) needs raw key reading for one question. Signed off with a redrawn sun: a round disc with eight rays over the horizon line, where the first one read as a hat. |
+
+**Signed off** at ticket 01 (`handoff/01-sign-off-the-picked-designs.md`, applied by 01a). Screens
+01, 06, 07 and 09 were agreed as picked. 02, 03, 04, 05, 08 and 10 were agreed with the changes
+in the table. Where the handoff says "the three buttons from (b)" for 03, this spec reads them as
+b's three tiles (iterations, spend cap, time cap): if something else was meant, say so. The
+"Answers recorded" table below was confirmed row by row with no correction.
 
 Both themes: the app follows Windows' light/dark setting (`prefers-color-scheme`). Dark is
 ADR 0003's palette. Light is the app's own (below). The install wizard is terminal output,
@@ -89,7 +95,7 @@ so it is dark only.
 16. As a person watching a run, I want "Stop after this iteration" and "Stop now", so that I can end a run cleanly or at once.
 17. As a person who closed the app mid-run, I want to reopen it and see the same run, so that closing the window never loses or stops anything.
 18. As a person who started a run in a terminal, I want the app to show it too, so that the app is a view of the run and not its owner.
-19. As a person whose run ended, I want a banner that says how it ended (done, paused, needs a human, waiting on a human) and the one next step, so that I know what to do.
+19. As a person whose run ended, I want a scene that says how it ended (done, paused, needs a human, waiting on a human) and its next step, so that I know what to do.
 20. As a person whose run needs a human, I want the reason the run gave, so that I'm not guessing.
 21. As a person checking before a run, I want a dry run that shows what would run, the settings and the exact prompt, marked as free, so that I can check without spending.
 22. As a person reviewing spend, I want the report as a bill and a ledger, by run and by ticket, marked as free, so that I can see what each run cost and produced.
@@ -105,6 +111,13 @@ so it is dark only.
 32. As a person who keeps secrets on this machine, I want the app never to show or store a token, so that the Docker PAT and `~/.config/foreman/env` stay where they are.
 33. As a person with the app closed, I want it to cost nothing: no daemon, nothing at login, no extra process when I run a command.
 34. As a person running the smoke suite, I want it to pass untouched, so that the app can't have broken the CLI.
+35. As a person reading a ticket, I want to switch between a readable preview and the ticket's raw Markdown, with the preview first, so that I can read it easily and still see exactly what is in the file.
+36. As a person opening a finished ticket, I want to see its model, runtime, cost, iterations, turns and tokens, so that I can see what it took without running a report.
+37. As a person about to start a run, I want a `?` beside each setting that says what it does, so that I know, for example, that the time cap is for the whole run and not each iteration.
+38. As a person about to start a run, I want only the iteration count to be editable at first, with the caps and the live view behind Advanced options, so that the common case is one number and a button.
+39. As a person who wants to keep an eye on a run from the corner of the screen, I want a compact view of the live run, so that it takes little room.
+40. As a person whose run ended, I want a scene that shows at a glance whether it finished, paused, hit a problem or needs me, with the evidence one click away.
+41. As a person running doctor, I want the inspector to run and sweat while it inspects, as in the terminal, so that the app has the same character.
 
 ## Implementation Decisions
 
@@ -138,7 +151,7 @@ gui/
   index.html          strict CSP: default-src 'self'; no remote content, no eval
   app.css             the tokens and components from designs/source/gui.css
   app.js              the screens; renders text with textContent, never innerHTML
-  art.js              dome / sunrise / inspector / figure SVG, from designs/source/canvas.js
+  art.js              dome / sunrise / inspector / foreman / sign / scene SVG, from designs/source/canvas.js
   icon.ico            the dome mark
 ```
 
@@ -149,8 +162,14 @@ gui/
   `sandbox: true`. Navigation and `window.open` are refused.
 - **Agent and ticket text is text.** Ticket markdown, `progress.txt`, the feed, the prompt
   and CLI stderr are shown as text (`textContent`, a `<pre>`). They are never parsed into
-  HTML, so nothing in a ticket can run in the window. The ticket page shows markdown as
-  plain text in the mono font, as the designs do.
+  HTML, so nothing in a ticket can run in the window. The ticket page has a **Preview |
+  Markdown** switch (Preview by default). Markdown shows the file's own text in the mono font.
+  Preview draws a small fixed set of things from the text: a heading, bold, inline code, bullets,
+  check boxes (`- [ ]` / `- [x]`) and paragraphs. A pure function turns the text into a list of
+  plain nodes of those kinds, and the page builds them with `createElement` and `textContent`.
+  There is no HTML passthrough, no links and no images: a `<script>`, a raw tag or a
+  `[x](javascript:…)` in a ticket appears as the characters it is. The handoff editor is always
+  the file's raw text.
 - **No state.** The app writes nothing outside what the person asks for: the handoff file,
   and a run's output file (below). It has no settings file, no cache, and doesn't remember
   the last repo or window size. Electron's own `userData` directory gets only what Chromium
@@ -202,7 +221,10 @@ section (ticket 14).
    number, title, status word, done, human, `Blocked by`, `Checks`, `Handoff`), next,
    human tickets remaining, the run-until note, the warnings `status` prints, spend per
    ticket (from the jsonl), `last_run` (id, end, reason, exit), and `run` (in flight or not,
-   its id, started at, iteration, budget, live, control directory). It is built from the
+   its id, started at, iteration, budget, live, control directory). For a ticket that has run,
+   each ticket also carries `stats`: iterations, cost, runtime (summed `duration_ms`), turns,
+   tokens, the model, and each iteration's run id, outcome, cost and duration. The model is new
+   to the record: ticket 16 adds a `model` field to each `foreman-runs.jsonl` line. It is built from the
    values `--status` already works out, emitted by `lib/foreman-draw.cjs`'s neighbour
    `lib/foreman-json.cjs` instead of being printed. `--all` lists every batch in the repo
    with its counts only.
@@ -252,13 +274,28 @@ section (ticket 14).
 
 ### Starting, watching and stopping a run
 
-- **Start.** **Start run…** opens the confirmation (03). Its facts come from
+- **Start.** **Start run…** opens the confirmation (03, take c). Its facts come from
   `dry-run --json` and `foreman.conf`: where it starts, how far it can reach, the iteration
   budget (which the person can change, as the CLI argument), `FOREMAN_MAX_COST_USD` and
   `FOREMAN_MAX_MINUTES` with where each is set ("none set" in rust when 0), the model and
-  exec mode, and the exact command. The button reads "Start run · up to $X" when a spend cap
-  is set, and "Start run · no spend cap" otherwise. The app doesn't override a cap. Caps
-  change in `foreman.conf`, in the person's editor.
+  exec mode, and the exact command. By default only the iteration count is editable; the
+  batch, where it starts and where it can reach are shown. **Advanced options** opens the
+  spend cap, the time cap and the live view for editing, and shows the model and mode (not
+  editable). The button reads "Start run · up to $X" when a spend cap is set, and "Start run ·
+  no spend cap" otherwise, using the value as edited.
+- **Caps are per run.** A cap edited under Advanced options is passed to that one run as an
+  environment variable (`FOREMAN_MAX_COST_USD`, `FOREMAN_MAX_MINUTES`), which the CLI already
+  ranks above `foreman.conf`. The app never writes `foreman.conf`, and remembers nothing, so
+  the next confirmation starts again from the file. A value that differs from the file says so
+  and offers a way back; a cap raised above the file's (or 0, "none", where the file has one)
+  is marked in rust. The edited values appear in the exact command, as a prefix. Values are
+  whole numbers (minutes) or dollars with up to two decimals; anything else is refused on the
+  field, as text.
+- **Every field has a `?`.** It opens a short plain-text popover saying what the field does:
+  `starts at`, `can reach`, `iterations`, `spend cap`, `time cap`, `live tool calls`, `model`
+  and `runs`. The words are in `designs/03-run-confirm.html` (c2). In particular, the time cap
+  is for the whole run, not each iteration; the spend cap is for the whole run and is checked
+  before an iteration starts, so a run can finish a little over it.
 - **Only with the control directory in the batch.** If `**/.foreman-run/` isn't ignored,
   Start run is disabled and reads "Starting from the app needs `doctor --fix`". The app
   writes `out` there, so an unignored file there would dirty the tree, and a run the app
@@ -274,6 +311,12 @@ section (ticket 14).
   carries on. A read that fails mid-rename is retried once after the debounce.
 - **Steer.** `+` / `-` / `L` in the run bar call `foreman keys`. Nothing in the app writes
   the control files directly.
+- **Compact view.** A **Full view | Compact view** switch at the top right of the live run
+  (04, takes a and c). Compact is a small window: the dome, the running ticket and its
+  activity line, the spend and time meters, − / + and Stop after this one. Switching resizes
+  the window (`BrowserWindow.setSize`) and Full view puts the old size back. Neither is
+  remembered after the app closes. When the run ends the app returns to Full view by itself,
+  so the end scene (05) has room.
 - **Stop.** "Stop after this iteration" calls `foreman stop`. "Stop now…" asks first ("The
   ticket's uncommitted work is kept, and the next run reviews it"), then calls
   `foreman stop --now`.
@@ -282,8 +325,9 @@ section (ticket 14).
   directory. A run started in a terminal is shown the same way, and can be steered if its
   control directory is in the batch.
 - **End.** When the run's pid is gone, the app reads `status --json` again. `last_run.end`
-  and `last_run.reason` pick the banner (05): exit 0 done, 10 paused, 20 needs a human
-  (with the reason; "login expired" gets its own state, 09), 30 waiting on a human. `out`
+  and `last_run.reason` pick the scene (05, take b): exit 0 done, 10 paused, 20 needs a human
+  (with the reason; "login expired" gets its own state, 09), 30 waiting on a human. The scene
+  replaces the run's list; **Show iterations** brings it back. `out`
   is kept until the next run the app starts, so a preflight failure (exit 1) is shown as
   the CLI's own text.
 
@@ -343,6 +387,10 @@ own, and the terminal is not affected:
 | ok | `#8fcf8f` | `#2e7d3c` |
 | err | `#f08078` | `#b43a2f` |
 | sky | `#1c1a17` → `#3a2a18` | `#fff8ea` → `#fbe2b0` |
+| outline (the foreman's pen line) | `#8a5a24` | `#3a2a18` |
+| ink (hand-written text on a sign) | `#3b1d12` | `#3b1d12` |
+| paper (a sign's board, a pale cap) | `#f6e7c1` | `#f6e7c1` |
+| sweat | `#7fc8f0` | `#3f9fd8` |
 
 The full token set is `designs/source/gui.css` (`.theme-dark`, `.theme-light`). The app
 copies it into `gui/app.css`.
@@ -366,7 +414,8 @@ copies it into `gui/app.css`.
 - **`test/bench.sh`**: no added process on any plain path, so `status`, `next` and
   `dry-run` start nothing new unless `--json` is passed.
 - **The app's own logic** (`bash.cjs` lookup order, `foreman.cjs` parsing and errors,
-  `watch.cjs` debounce and rename handling) is plain Node, tested with `node --test` in
+  `watch.cjs` debounce and rename handling, the ticket-text preview function, and the check
+  on a cap edited under Advanced options) is plain Node, tested with `node --test` in
   `gui/test/`, without Electron. These tests run in `test/smoke-json.sh` when `node` is
   there.
 - **The screens** are checked by a person against their design, on Windows, in light and
@@ -381,9 +430,11 @@ copies it into `gui/app.css`.
 - `foreman init`, `foreman order` (writing an order), `foreman convert`, `foreman commands`
   in the app.
 - Reordering tickets, editing `foreman.conf` or a ticket, and flipping a status line from
-  the app. "Open in editor" covers all of them.
+  the app. "Open in editor" covers all of them. (A cap set under Advanced options applies to
+  one run and changes no file.)
 - More than one repository in a window, and remembering the last one opened.
-- A tray icon, a mini mode, notifications, starting at login.
+- A tray icon, an always-on-top window, notifications, starting at login. (The compact view of
+  a live run is in scope: it is the same window, smaller.)
 - Showing or storing any credential, and the credential setup work in
   `.scratch/(maybe later) credentials-setup/`.
 - Changing `foreman help`, or any command's plain output.
@@ -392,7 +443,9 @@ copies it into `gui/app.css`.
 
 - The canvases share `designs/source/gui.css` and `designs/source/canvas.js`. The pick
   pages inline both, so each opens on its own. The SVG art in `canvas.js` (dome, sunrise,
-  inspector, figure) is the starting point for `gui/art.js`.
+  inspector, figure, and the sign-off additions: the foreman in three poses, the two signs, the run-end scenes and
+  the doctor's runner) is the starting point for `gui/art.js`. The signs are lettered in
+  Segoe Print (with `cursive` as the fallback) and each letter is nudged, so they look written by hand.
 - Sample data in the designs is illustrative. The report's totals are the real ones of
   `DONE_terminal-design`, and its expanded iterations are made up.
 - Doctor doesn't check the `claude` login (it can't without spending). Login expiry is

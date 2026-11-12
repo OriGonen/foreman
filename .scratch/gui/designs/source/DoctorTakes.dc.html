@@ -6,18 +6,23 @@
   <h1>08 · Doctor</h1>
   <p><code>foreman doctor</code>: the site inspection — MACHINE, REPOSITORY, SKILL, BATCHES — and a verdict. Free. Data: the new <code>foreman doctor --json</code>; credentials appear only as set / not set, never as a masked value. <b>Fix what it can…</b> lists exactly what <code>foreman doctor --fix</code> will append (it only ever appends, never touches a ticket) and runs it on confirm; the diff is the person's to review and commit.</p>
   <p>Sample: two things to fix — the repo's <code>.gitignore</code> lacks the new <code>**/.foreman-run/</code> line (so the app can't steer a run) and the installed skill copy is out of date; plus a GUI line, shown only because the app is installed.</p>
-  <div class="pick" data-pick="a"><b>Pick: a · the inspection sheet.</b> It is the terminal's box as a sheet on a clipboard, held by the inspector, with the verdict as a stamp: one glance gives the verdict, and the sections are the terminal's, in the terminal's order. b's checklist is easier to act on row by row, but a gets the same by putting each fix on its row and the one <b>Fix what it can</b> under the stamp.</div>
+  <div class="pick" data-pick="a"><b>Pick: a · the inspection sheet</b>, with one addition at sign-off: the terminal's running-and-sweating animation. While the inspection runs, the inspector runs across a track and back with sweat trailing him, then stands and sweats while the sheet fills in, and the verdict stamp lands last — the same story as <code>foreman doctor</code> in the terminal. It is plain CSS (no library), plays once per inspection, and is still under <code>prefers-reduced-motion</code>. This page loops it so you can watch it. It is the terminal's box as a sheet on a clipboard, with the verdict as a stamp, each fix on its row and the one <b>Fix what it can</b> under the stamp. b's checklist is easier to act on row by row, but a gets the same.</div>
 </header>
 
-<template data-take="a" data-title="The inspection sheet" data-note="The inspector on the left; the sheet with the four sections in two columns; each ! row says what to do, with a button when the app can do it; the stamp bottom-right. Run again re-inspects.">
+<template data-take="a" data-title="The inspection sheet" data-note="The track on top: the inspector runs across and back, sweating, then stands and sweats (a loop here; the app plays it once per inspection and then fills the sheet in). Below it the sheet with the four sections; each ! row says what to do, with a button when the app can do it; the stamp bottom-right. Run again re-inspects, and the animation plays again.">
   <div class="app">
     <div data-part="titlebar" data-title="Foreman — doctor"></div>
     <div data-part="rail" data-on="doctor"></div>
     <div class="main">
       <div class="row"><div class="h2 grow">Site inspection <span class="free">free</span> <span class="mono small muted">~/projects/app · foreman d0d6874</span></div><span class="btn">Run again</span></div>
+      <div class="track" aria-label="inspecting">
+        <div class="say">inspecting…</div>
+        <i class="tick" style="left:15%;height:10px"></i><i class="tick" style="left:30%;height:6px"></i><i class="tick" style="left:45%;height:10px"></i><i class="tick" style="left:60%;height:6px"></i><i class="tick" style="left:75%;height:10px"></i>
+        <div class="ground"></div>
+        <span data-art="runner"></span>
+      </div>
       <div class="row top" style="gap:16px;flex:1;min-height:0">
-        <div class="col center" style="width:110px;padding-top:30px"><span data-art="inspector" data-w="96"></span></div>
-        <div class="card grow col" style="gap:12px;border-top:6px solid var(--post)">
+        <div class="card grow col" style="gap:12px;border-top:6px solid var(--post);align-self:stretch">
           <div class="row top" style="gap:24px">
             <div class="col grow" style="gap:4px"><div class="label">Machine</div>
               <div class="small"><span class="ok">■</span> git · node · awk</div><div class="small"><span class="ok">■</span> bash 5.2.26 <span class="muted">(4+ required)</span></div>

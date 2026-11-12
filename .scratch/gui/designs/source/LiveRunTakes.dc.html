@@ -6,10 +6,10 @@
   <h1>04 · The live run</h1>
   <p>Watching the same <code>foreman run</code> the terminal runs. The app started it (or found it already running: the batch's control directory has a <code>pid</code> that is alive), and reads only files: the control directory (<code>iteration</code>, <code>budget</code>, <code>spent</code>, <code>live</code>, <code>activity</code>, <code>feed</code>), the stall marker for the ticket in flight, and <code>foreman-runs.jsonl</code> for each finished iteration's outcome. <b>+</b>, <b>−</b> and <b>L</b> do what the keys do on the terminal, through <code>foreman keys</code>. <b>Stop after this iteration</b> sets the budget to the iteration running; <b>Stop now…</b> asks, then interrupts as Ctrl-C does.</p>
   <p>Sample: run 20261021-2 on human-tickets. It opened with a review turn (an earlier run left work behind), 05 landed, 06 progressed, then stalled and took a checkpoint turn, and 06 is running again as iteration 4 of 5.</p>
-  <div class="pick" data-pick="a"><b>Pick: a · the site.</b> It is the terminal's run screen in a window: header with the figure and the dome, the iterations with the feed under the one running, the bar along the bottom with the same keys. Someone who has watched a run in the terminal knows where everything is. b spreads the eye over three columns; c drops the feed, which is the part people watch — keep it in mind for a later always-on-top mode.</div>
+  <div class="pick" data-pick="a c"><b>Pick: a · the site, by default, with c · compact as a second view.</b> a is the terminal's run screen in a window: header with the figure and the dome, the iterations with the feed under the one running, the bar along the bottom with the same keys. Someone who has watched a run in the terminal knows where everything is. At sign-off a <b>Full view | Compact view</b> switch was added at the top right of a, and c is what it switches to: a small window with the dome, the ticket and its activity line, the meters, − / + and Stop after this one, and the same switch to go back. b (three columns) was not picked.</div>
 </header>
 
-<template data-take="a" data-title="The site" data-note="Header band: the foreman beside the dome, run facts on the right. Then one row per iteration with its outcome — the running one expanded into its tool-call feed (shown only while live is on, as in the terminal). The bar at the bottom: iterations with − / +, spend and time against their caps, live, and the two stops.">
+<template data-take="a" data-title="The site (full view)" data-note="Header band: the foreman beside the dome, run facts on the right. Then one row per iteration with its outcome — the running one expanded into its tool-call feed (shown only while live is on, as in the terminal). The bar at the bottom: iterations with − / +, spend and time against their caps, live, and the two stops. At the top right, the Full view | Compact view switch.">
   <div class="app">
     <div data-part="titlebar" data-title="Foreman — running human-tickets"></div>
     <div data-part="rail" data-running="1"></div>
@@ -21,6 +21,7 @@
           <span>Batch</span><span>.scratch/human-tickets</span><span>Exec</span><span>local</span>
           <span>Done</span><span>5 of 10 · 07 is a human ticket</span><span>Elapsed</span><span>31m 40s</span>
         </div>
+        <span class="seg" style="align-self:flex-start" title="Switch to the compact view"><span class="on">Full view</span><span>Compact view</span></span>
       </div>
       <div class="card flush" style="flex:1;overflow:hidden">
         <div class="tlist">
@@ -84,16 +85,17 @@
   </div>
 </template>
 
-<template data-take="c" data-title="Compact" data-note="A small window to keep in a corner: dome, the ticket and its activity line, the meters, − / +. No feed, no history. Good for glancing at; not enough for watching.">
+<template data-take="c" data-title="Compact view" data-note="What the switch shows: a small window to keep in a corner. The dome, the running ticket and its activity line, the meters, − / +, and Stop after this one. No feed and no history; Full view brings the rest back. The app resizes its window to this size and puts the old size back on Full view; it remembers neither after it closes. When the run ends the app returns to Full view by itself so the banner (05) has room."
+         data-frame="compact">
   <div class="app solo" style="background:var(--panel-2)">
     <div data-part="titlebar" data-title="Foreman — running"></div>
     <div style="display:flex;justify-content:center;align-items:center;height:100%">
       <div class="card col" style="width:360px;gap:12px">
-        <div class="row"><span data-art="dome" data-w="90" data-stakes="ddddd>hf.."></span><div class="grow"><div class="mono">human-tickets</div><div class="small muted">5 of 10 · iteration 4 of 5</div></div></div>
+        <div class="row" style="align-items:flex-start"><span data-art="dome" data-w="90" data-stakes="ddddd>hf.."></span><div class="grow"><div class="mono">human-tickets</div><div class="small muted">5 of 10 · iteration 4 of 5</div></div><span class="seg" title="Switch to the full view"><span>Full view</span><span class="on">Compact view</span></span></div>
         <div class="mono small"><span class="acc">⠹</span> 06 doctor-human-warnings<div class="muted" style="padding-left:16px">02:10 bash test/smoke.sh doctor</div></div>
         <div class="row small"><span class="label" style="width:60px">Spent</span><span class="meter grow"><i style="width:19%"></i></span><span class="mono">$4.64/$25</span></div>
         <div class="row small"><span class="label" style="width:60px">Time</span><span class="meter grow"><i style="width:35%"></i></span><span class="mono">32m/90m</span></div>
-        <div class="row"><span class="btn sq">−</span><span class="btn sq">+</span><span class="grow"></span><span class="btn">Stop after this</span></div>
+        <div class="row"><span class="btn sq">−</span><span class="btn sq">+</span><span class="grow"></span><span class="btn">Stop after this one</span></div>
       </div>
     </div>
   </div>

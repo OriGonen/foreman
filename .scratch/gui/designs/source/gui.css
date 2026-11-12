@@ -11,7 +11,7 @@
   --accent: #e0a84a;            /* accent used as text */
   --on-accent: #171614;         /* text on an amber fill */
   --sky-top: #1c1a17; --sky-bot: #3a2a18; --sunfill: #f6d58e; --halo: #e0a84a;
-  --ground: #30231a; --scrim: rgba(0,0,0,.55);
+  --ground: #30231a; --scrim: rgba(0,0,0,.55); --outline: #8a5a24; --ink: #3b1d12; --paper: #f6e7c1; --sweat: #7fc8f0;
   color-scheme: dark;
 }
 .theme-light {
@@ -22,7 +22,7 @@
   --accent: #9a5a17;            /* amber darkened to 5:1 on --panel, for text */
   --on-accent: #2a2117;
   --sky-top: #fff8ea; --sky-bot: #fbe2b0; --sunfill: #eaa43a; --halo: #f6d58e;
-  --ground: #e9dcc4; --scrim: rgba(42,33,23,.35);
+  --ground: #e9dcc4; --scrim: rgba(42,33,23,.35); --outline: #3a2a18; --ink: #3b1d12; --paper: #f6e7c1; --sweat: #3f9fd8;
   color-scheme: light;
 }
 
@@ -45,6 +45,7 @@ body.canvas { margin: 0; background: #2b2926; color: #ece8e1; font: 14px/1.5 var
 .canvas .frame-wrap > .cap { font: 12px var(--mono); color: #a8a299; margin-bottom: 6px; }
 .frame { width: 1040px; height: 660px; border-radius: 10px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,.45); position: relative; }
 .frame.tall { height: 760px; }
+.frame.compact { width: 440px; height: 300px; }
 .frame.termframe { width: 860px; height: 470px; background: #0d0c0b; }
 
 /* ---------- the app ---------- */
@@ -184,3 +185,73 @@ body.canvas { margin: 0; background: #2b2926; color: #ece8e1; font: 14px/1.5 var
 .term { background: #0d0c0b; color: #ece8e1; font: 13px/1.5 var(--mono); padding: 16px 18px; white-space: pre; }
 .term .s { color: #f6d58e; } .term .a { color: #e0a84a; } .term .r { color: #c9772f; } .term .m { color: #a8a299; } .term .d { color: #5c574f; } .term .g { color: #8fcf8f; } .term .e { color: #f08078; } .term .b { font-weight: 700; }
 .term .inv { background: #e0a84a; color: #171614; }
+
+/* ---------- additions after sign-off (ticket 01a) ---------- */
+
+/* a segmented toggle: Preview | Markdown, Full view | Compact view */
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--panel); }
+.seg span { padding: 3px 10px; font: 600 11.5px var(--ui); color: var(--muted); border-right: 1px solid var(--line); }
+.seg span:last-child { border-right: 0; }
+.seg span.on { background: var(--shade); color: var(--text); box-shadow: inset 0 -2px 0 var(--amber); }
+
+/* the ticket's markdown, drawn as a preview: a small safe subset built from DOM nodes, never innerHTML */
+.md { font: 13px/1.6 var(--ui); color: var(--text); overflow: hidden; }
+.md h1 { font: 600 17px var(--ui); margin: 0 0 8px; }
+.md p { margin: 0 0 8px; }
+.md code { font: 12px var(--mono); background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+.md ul { list-style: none; margin: 0 0 8px; padding: 0; }
+.md li { display: flex; gap: 8px; margin: 3px 0; }
+.md li .bx { flex: none; width: 14px; height: 14px; margin-top: 3px; border: 1.5px solid var(--muted); border-radius: 3px; text-align: center; font: 700 10px/12px var(--mono); }
+.md li .bx.on { background: var(--ok); border-color: var(--ok); color: var(--panel); }
+.md .meta { display: grid; grid-template-columns: max-content 1fr; gap: 2px 10px; margin: 0 0 10px; font-size: 12px; }
+.md .meta b { color: var(--muted); font: 600 10.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; padding-top: 2px; }
+.md .meta span { font-family: var(--mono); }
+pre.src { font: 12px/1.6 var(--mono); margin: 0; white-space: pre-wrap; color: var(--text); }
+
+/* (?) help buttons and the popover they open */
+.help { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 15px; height: 15px; border-radius: 50%; border: 1px solid var(--muted);
+        color: var(--muted); font: 700 10px/1 var(--ui); background: transparent; vertical-align: 1px; position: relative; }
+.help.open { background: var(--amber); border-color: var(--amber); color: var(--on-accent); }
+.pop { position: absolute; z-index: 3; width: 270px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--amber); background: var(--panel); color: var(--text);
+       font: 12px/1.5 var(--ui); box-shadow: 0 10px 30px rgba(0,0,0,.35); text-align: left; white-space: normal; }
+.pop b { display: block; margin-bottom: 2px; }
+.pop .dim { display: block; margin-top: 4px; font: 11px var(--mono); }
+
+/* the three tiles (iterations, spend cap, time cap) on the start-run receipt */
+.tiles { display: flex; gap: 8px; font-family: var(--ui); }
+.tiles .tile { flex: 1; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px 9px; text-align: center; background: var(--panel-2); }
+.tiles .tile.edit { border-color: var(--amber); background: color-mix(in srgb, var(--amber) 8%, var(--panel)); }
+.tiles .tile .v { font: 600 24px var(--ui); letter-spacing: -.01em; line-height: 1.2; }
+.tiles .tile .lab { font: 600 10.5px var(--mono); letter-spacing: .1em; color: var(--muted); text-transform: uppercase; display: flex; gap: 5px; justify-content: center; align-items: center; }
+.tiles .tile .src { font: 10.5px var(--mono); color: var(--dim); }
+.field { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--amber); border-radius: 6px; padding: 1px 8px; background: var(--panel-2); color: var(--text); font: 600 20px var(--ui); }
+.field small { font: 12px var(--mono); color: var(--muted); }
+
+/* a stat tile on the ticket page of a finished ticket */
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.stats .s { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--panel-2); }
+.stats .s .v { font: 600 17px var(--ui); } .stats .s .k { font: 600 10px var(--mono); letter-spacing: .1em; color: var(--muted); text-transform: uppercase; }
+
+/* the doctor's track: the inspector runs across and back, sweating, then stands and sweats while the sheet fills in.
+   Same story as the terminal's doctor animation (six ticks of legs, drops trailing him). One cycle = 6s here so the
+   pick page keeps looping it; the app plays it once per inspection. */
+.track { position: relative; height: 74px; border-radius: 10px; border: 1px solid var(--line); background: linear-gradient(var(--sky-top), var(--sky-bot)); overflow: hidden; }
+.track .ground { position: absolute; left: 0; right: 0; bottom: 0; height: 10px; background: var(--ground); border-top: 2px solid var(--post); }
+.track .tick { position: absolute; bottom: 10px; width: 3px; background: var(--post); opacity: .6; border-radius: 1px; }
+.track .say { position: absolute; right: 14px; top: 10px; font: 600 11px var(--mono); letter-spacing: .1em; color: var(--muted); text-transform: uppercase; }
+.runner { position: absolute; bottom: 9px; left: 8px; width: 40px; height: 60px; animation: run-across 6s linear infinite; }
+.runner .flip { display: block; width: 100%; height: 100%; animation: run-turn 6s steps(1, end) infinite; }
+.runner svg { display: block; overflow: visible; }
+.runner .lg-a { animation: stride .28s steps(1, end) infinite; }
+.runner .lg-b { animation: stride-b .28s steps(1, end) infinite; }
+.runner .drop { fill: var(--sweat); animation: drip .56s linear infinite; }
+.runner .drop.d2 { animation-delay: -.28s; }
+@keyframes run-across { 0% { left: 8px; } 25% { left: calc(100% - 52px); } 50% { left: 8px; } 100% { left: 8px; } }
+@keyframes run-turn { 0% { transform: scaleX(1); } 25% { transform: scaleX(-1); } 50% { transform: scaleX(1); } 100% { transform: scaleX(1); } }
+@keyframes stride { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 1; } }
+@keyframes stride-b { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes drip { 0% { transform: translate(0, 0); opacity: 1; } 100% { transform: translate(-5px, 9px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .runner, .runner .flip, .runner .lg-a, .runner .lg-b, .runner .drop { animation: none; } .runner .lg-b { opacity: 0; } }
+
+/* run-end scenes */
+.scene { display: block; margin: 0 auto; max-width: 100%; height: auto; }

@@ -4,6 +4,8 @@
 //   <span data-art="inspector" data-w="90">                          the inspector (doctor)
 //   <span data-art="figure" data-w="70">                             the foreman (run)
 //   <span data-art="sunrise" data-p="0.4">                           a sunrise band (p = how high the sun is)
+//   <span data-art="scene" data-kind="done|problem|human" data-w="250">   the run-end scenes: thumbs-up under a full sun, the "problem!" sign, the "need human inspection!" sign
+//   <span data-art="runner">                                         the doctor's inspector, running across and back, sweating (CSS animation)
 // Stakes: d landed · > next · h human ticket · f followup · . to go · x missing.
 // Local file, no network, no dependencies.
 (function () {
@@ -66,6 +68,122 @@
       <rect x="0" y="116" width="80" height="3" rx="1.5" style="fill:var(--earth)"/>`);
   }
 
+
+  // ---- the foreman, a little more human than the figure: ear, neck, a tilted hat, outlines like a quick pen drawing ----
+  const OUT = 'stroke:var(--outline);stroke-width:1.3;stroke-linejoin:round;stroke-linecap:round';
+  const HAND = "'Segoe Print','Bradley Hand','Chalkboard SE','Comic Sans MS',cursive";
+  const arm = (d) => `<path d="${d}" fill="none" style="stroke:var(--outline);stroke-width:8.4;stroke-linecap:round"/><path d="${d}" fill="none" style="stroke:var(--amber);stroke-width:6.2;stroke-linecap:round"/>`;
+  const hand = (x, y, r = 4.2) => `<circle cx="${x}" cy="${y}" r="${r}" style="fill:var(--sun);${OUT}"/>`;
+
+  // pose: thumbs (grinning, fist and thumb up, other hand on the hip) · worry (scratching under the hat, pointing right) · shrug (both palms up)
+  function worker(pose) {
+    const face = {
+      thumbs: `<path d="M33.5 36 q2.5 -2.4 5 0 M41.5 36 q2.5 -2.4 5 0" fill="none" style="stroke:var(--ink);stroke-width:1.2;stroke-linecap:round"/>
+               <path d="M34.5 45 Q40 52.5 45.5 45 Z" style="fill:var(--ink)"/><path d="M36.5 47.4 q3.5 2.2 7 0" fill="none" style="stroke:var(--paper);stroke-width:1.1"/>`,
+      worry:  `<path d="M33.5 38 l5.5 -2 M46.5 38 l-5.5 -2" fill="none" style="stroke:var(--ink);stroke-width:1.2;stroke-linecap:round"/>
+               <path d="M35.5 48.5 q4.5 -3.6 9 0" fill="none" style="stroke:var(--ink);stroke-width:1.5;stroke-linecap:round"/>
+               <path d="M53 37 q2.6 3.4 0 5.6 q-2.6 -2.2 0 -5.6z" style="fill:var(--sweat)"/>`,
+      shrug:  `<path d="M33.5 36.4 q2.5 -2 5 0 M41.5 38 q2.5 -2.4 5 -.4" fill="none" style="stroke:var(--ink);stroke-width:1.2;stroke-linecap:round"/>
+               <path d="M36.5 47.6 h7" fill="none" style="stroke:var(--ink);stroke-width:1.5;stroke-linecap:round"/>`
+    }[pose];
+    const arms = {
+      thumbs: arm('M28 57 Q17 66 27 79') + hand(27, 80) +
+              arm('M52 57 Q66 60 65 50') + hand(65, 47, 4.8) +
+              `<path d="M62.6 44 q-.6 -7.4 2.8 -7.8 q3.2 .4 2.2 4.4 l-.9 3.8z" style="fill:var(--sun);${OUT}"/>
+               <path d="M73 38 l5 -3.5 M74.5 46 h5.5 M70 30.5 l2 -5" fill="none" style="stroke:var(--sunfill);stroke-width:2;stroke-linecap:round"/>`,
+      worry:  arm('M28 57 Q15 53 24 42') + hand(25, 40) +
+              arm('M52 57 L66 61') + hand(68, 61, 3.8) + `<path d="M71 60.5 h7" style="stroke:var(--outline);stroke-width:2.4;stroke-linecap:round"/><path d="M71 60.5 h7" style="stroke:var(--sun);stroke-width:1.2;stroke-linecap:round"/>`,
+      shrug:  arm('M28 57 Q14 63 12 51') + hand(12, 47.5) + `<path d="M8.6 42.5 l-1.4 -3.2 M12 41.4 v-3.6 M15.4 42.5 l1.4 -3.2" fill="none" style="stroke:var(--outline);stroke-width:1.6;stroke-linecap:round"/>` +
+              arm('M52 57 Q66 63 68 51') + hand(68, 47.5) + `<path d="M64.6 42.5 l-1.4 -3.2 M68 41.4 v-3.6 M71.4 42.5 l1.4 -3.2" fill="none" style="stroke:var(--outline);stroke-width:1.6;stroke-linecap:round"/>`
+    }[pose];
+    return `
+      <path d="M30 84 L28 116 L37 116 L40 93 L43 116 L52 116 L50 84 Z" style="fill:var(--earth);${OUT}"/>
+      <rect x="25" y="116" width="14" height="7" rx="3" style="fill:var(--post);${OUT}"/><rect x="41" y="116" width="14" height="7" rx="3" style="fill:var(--post);${OUT}"/>
+      <path d="M27 54 Q40 48.5 53 54 L55.5 86 L24.5 86 Z" style="fill:var(--rust);${OUT}"/>
+      <path d="M26.2 70 h27.6 M25.6 78 h28.8" style="stroke:var(--sun);stroke-width:2.8"/>
+      <path d="M34.5 51.5 L40 60 L45.5 51.5z" style="fill:var(--amber);${OUT}"/>
+      <rect x="24.5" y="83.5" width="31" height="4.5" rx="1.2" style="fill:var(--post);${OUT}"/><rect x="37.5" y="84.2" width="5" height="3.2" rx=".6" style="fill:var(--sunfill)"/>
+      <rect x="36" y="45" width="8" height="9" style="fill:var(--sun);${OUT}"/>
+      ${arms}
+      <circle cx="29.6" cy="39.5" r="2.7" style="fill:var(--sun);${OUT}"/>
+      <circle cx="40" cy="38.5" r="10.2" style="fill:var(--sun);${OUT}"/>
+      <circle cx="36" cy="40.2" r="1.3" style="fill:var(--ink)"/><circle cx="44" cy="40.2" r="1.3" style="fill:var(--ink)"/>
+      <path d="M40 41.6 l-1.7 3.6 h3" fill="none" style="stroke:var(--outline);stroke-width:1;stroke-linecap:round;stroke-linejoin:round"/>
+      ${face}
+      <g transform="rotate(-4 40 36)"><path d="M29 35 Q28.6 19.5 40 19.5 Q51.4 19.5 51 35 Z" style="fill:var(--amber);${OUT}"/><path d="M40 20 V34" style="stroke:var(--rust);stroke-width:2.2"/>
+        <rect x="25.5" y="33" width="29" height="4.6" rx="2.3" style="fill:var(--amber);${OUT}"/></g>`;
+  }
+
+  // ---- hand-written signs: a leaning post, an uneven board, wobbly letters ----
+  // `tilt` leans the whole sign about the foot of its post, so it never stands square to the floor.
+  function sign(kind, x, y, tilt) {
+    const wob = (n) => [...Array(n)].map((_, i) => [-2, 1.5, -1, 2.5, 0, -2.5, 1, -1.5, 2, 0][i % 10]).join(' ');
+    const dy = (n) => [...Array(n)].map((_, i) => [0, -1, 1, 0, -1.2, 1, 0, -.8, .8, 0][i % 10]).join(' ');
+    const text = (t, tx, ty, fs, len, fill) => `<text x="${tx}" y="${ty}" text-anchor="middle" font-size="${fs}" font-weight="700" textLength="${len}" lengthAdjust="spacingAndGlyphs"
+        rotate="${wob(t.length)}" dy="${dy(t.length)}" style="font-family:${HAND};fill:${fill}">${t}</text>`;
+    const body = kind === 'problem'
+      ? `<path d="M-2.4 0 L-3 -64 L3 -64 L2.2 0z" style="fill:var(--post);${OUT}"/>
+         <path d="M-31 -94 L30 -97.5 L32 -58 L-29 -55.5 Z" style="fill:var(--paper);stroke:var(--outline);stroke-width:1.8;stroke-linejoin:round"/>
+         <path d="M-26.5 -89.5 L26 -92.5 L27.5 -62.5 L-25 -60.5 Z" fill="none" style="stroke:var(--err);stroke-width:1.5;stroke-linejoin:round" stroke-dasharray="40 3 22 2"/>
+         ${text('problem!', 0, -70.5, 14.5, 49, 'var(--ink)')}
+         <path d="M-19 -64.5 q9 -2.4 18 -.4 t18 -1" fill="none" style="stroke:var(--err);stroke-width:1.4;stroke-linecap:round"/>
+         <circle cx="-26" cy="-89" r="1.4" style="fill:var(--outline)"/><circle cx="27" cy="-92" r="1.4" style="fill:var(--outline)"/>`
+      : `<path d="M-2.6 0 L-2.2 -58 L3 -58 L2.6 0z" style="fill:var(--post);${OUT}"/>
+         <path d="M-38 -60 L-36.5 -101 Q0 -112 38.5 -102 L37 -58 Z" style="fill:var(--rust);stroke:var(--outline);stroke-width:1.8;stroke-linejoin:round"/>
+         <path d="M-33 -64 L-32 -97 Q0 -105 33 -98" fill="none" style="stroke:var(--paper);stroke-width:1.2;stroke-linecap:round" stroke-dasharray="3 2.4"/>
+         ${text('need human', 0, -83, 13.5, 56, 'var(--paper)')}${text('inspection!', 0, -67.5, 13.5, 58, 'var(--paper)')}
+         <circle cx="-31.5" cy="-97" r="1.5" style="fill:var(--paper)"/><circle cx="33" cy="-98" r="1.5" style="fill:var(--paper)"/>`;
+    return `<g transform="translate(${x} ${y}) rotate(${tilt})">${body}</g>`;
+  }
+
+  // ---- run-end scenes, 260 x 150, feet on the ground at y = 138 ----
+  function scene(el) {
+    const kind = el.dataset.kind || 'done', w = +el.dataset.w || 250, h = Math.round(w * 150 / 260), id = 's' + (++uid);
+    const ground = `<rect x="0" y="138" width="260" height="4" rx="2" style="fill:var(--earth)"/>`;
+    const sunAt = (cx, cy, full) => {
+      const rays = [...Array(full ? 16 : 11)].map((_, i) => {
+        const n = full ? 16 : 11, a = full ? (2 * Math.PI * i) / n : Math.PI * (i + .5) / n + Math.PI, long = i % 2 === 0;
+        const r1 = 33, r2 = long ? 47 : 42;
+        return `<line x1="${(cx + Math.cos(a) * r1).toFixed(1)}" y1="${(cy + Math.sin(a) * r1).toFixed(1)}" x2="${(cx + Math.cos(a) * r2).toFixed(1)}" y2="${(cy + Math.sin(a) * r2).toFixed(1)}" style="stroke:var(--sunfill)" stroke-width="3.2" stroke-linecap="round"/>`; }).join('');
+      return `<circle cx="${cx}" cy="${cy}" r="52" style="fill:var(--halo)" opacity=".2"/>${rays}<circle cx="${cx}" cy="${cy}" r="27" style="fill:var(--sunfill)"/>`;
+    };
+    let body;
+    if (kind === 'done') {
+      const confetti = [[18,18,'var(--amber)',20],[40,40,'var(--rust)',-30],[150,14,'var(--ok)',40],[168,46,'var(--sunfill)',-15],[132,34,'var(--rust)',60],[60,12,'var(--ok)',-50],
+        [208,12,'var(--amber)',10],[236,34,'var(--ok)',-25],[250,64,'var(--rust)',35],[196,38,'var(--sunfill)',70],[12,64,'var(--sunfill)',15],[154,70,'var(--amber)',-65],[226,8,'var(--rust)',45],[104,6,'var(--sunfill)',-10]];
+      const stakes = [...Array(10)].map((_, i) => { const x = 14 + i * 14.4;
+        return `<rect x="${(x - 1.6).toFixed(1)}" y="126" width="3.2" height="12" rx="1" style="fill:var(--amber)"/><path d="M${(x + 1.6).toFixed(1)} 126 l9 3 l-9 3z" style="fill:${['var(--rust)','var(--sunfill)','var(--ok)'][i % 3]}"/>`; }).join('');
+      body = `<defs><linearGradient id="${id}g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--sky-top)"/><stop offset="1" style="stop-color:var(--sky-bot)"/></linearGradient></defs>
+        <rect x="0" y="0" width="260" height="140" rx="12" fill="url(#${id}g)"/>
+        ${sunAt(88, 72, true)}${confetti.map(([x, y, c, r]) => `<rect x="${x}" y="${y}" width="6" height="3" rx=".8" transform="rotate(${r} ${x + 3} ${y + 1.5})" style="fill:${c}"/>`).join('')}
+        ${stakes}${ground}<g transform="translate(168 21) scale(.95)">${worker('thumbs')}</g>`;
+    } else if (kind === 'problem') {
+      body = `${ground}<g transform="translate(38 21) scale(.95)">${worker('worry')}</g>${sign('problem', 190, 138, 9)}
+        <path d="M150 138 l7 -7 l6 7z M222 138 l5 -5 l5 5z" style="fill:var(--dim)"/>`;
+    } else {
+      body = `<defs><clipPath id="${id}c"><rect x="0" y="0" width="260" height="138"/></clipPath></defs>
+        <g clip-path="url(#${id}c)">${sunAt(214, 124, false)}</g>${ground}
+        <g transform="translate(100 21) scale(.95)">${worker('shrug')}</g>${sign('human', 60, 138, -7)}`;
+    }
+    el.innerHTML = svg(w, h, '0 0 260 150', body);
+    el.firstChild.setAttribute('class', 'scene');
+  }
+
+  // ---- the doctor's inspector at a run: two stances swapped by CSS, sweat drops trailing him ----
+  function runner(el) {
+    el.classList.add('runner');
+    el.innerHTML = `<span class="flip">${svg(40, 60, '0 0 40 60', `
+      <path class="lg-a" d="M13 40 L8 57 h7 L20 45 L26 57 h7 L27 40z" style="fill:var(--earth);${OUT}"/>
+      <path class="lg-b" d="M15 40 L16 57 h6 L20 47 L20 57 h6 L25 40z" style="fill:var(--earth);${OUT}"/>
+      <path d="M12 21 Q20 17 28 21 L30 41 L10 41 Z" style="fill:var(--rust);${OUT}"/><path d="M12 30 h16" style="stroke:var(--sun);stroke-width:2.2"/>
+      <path d="M14 23 l-6 9" fill="none" style="stroke:var(--amber);stroke-width:4.4;stroke-linecap:round"/>
+      <rect x="27" y="26" width="9" height="12" rx="1.4" style="fill:var(--panel);stroke:var(--post);stroke-width:1.5"/><rect x="29.5" y="24.5" width="4" height="3" rx=".8" style="fill:var(--post)"/>
+      <path d="M29.5 31 h4 M29.5 34 h4" style="stroke:var(--muted);stroke-width:1"/>
+      <circle cx="20" cy="13" r="6.2" style="fill:var(--sun);${OUT}"/><circle cx="23" cy="13.4" r=".9" style="fill:var(--ink)"/>
+      <path d="M12.6 11.5 Q13 4.2 20 4.2 Q27 4.2 27.4 11.5 Z" style="fill:var(--amber);${OUT}"/><rect x="11" y="10.8" width="19" height="3" rx="1.5" style="fill:var(--amber);${OUT}"/>
+      <path class="drop" d="M8 8 q1.8 2.4 0 4 q-1.8 -1.6 0 -4z"/><path class="drop d2" d="M5.5 16 q1.8 2.4 0 4 q-1.8 -1.6 0 -4z"/>`)}</span>`;
+  }
+
   const RAIL = (on, running) => `
     <div class="mark"><span data-art="dome" data-w="34" data-stakes="dddd>.hf.."></span><div><b>FOREMAN</b><small>~/projects/app</small></div></div>
     <div class="label" style="padding:0 8px 4px">Batches</div>
@@ -88,14 +206,16 @@
     root.querySelectorAll('[data-art=sunrise]').forEach(sunrise);
     root.querySelectorAll('[data-art=inspector]').forEach(el => person(el, 'inspector'));
     root.querySelectorAll('[data-art=figure]').forEach(el => person(el, 'figure'));
+    root.querySelectorAll('[data-art=scene]').forEach(scene);
+    root.querySelectorAll('[data-art=runner]').forEach(runner);
   }
 
   function build() {
-    const pick = (document.querySelector('[data-pick]') || {}).dataset?.pick;
+    const picks = ((document.querySelector('[data-pick]') || {}).dataset?.pick || '').split(/\s+/).filter(Boolean);   // data-pick="a c" marks every picked take
     document.querySelectorAll('template[data-take]').forEach(t => {
       const sec = document.createElement('section'); sec.className = 'take';
       const take = t.dataset.take;
-      sec.innerHTML = `<h2>${take} · ${t.dataset.title}${pick && (take.match(/^[a-z]+/) || [])[0] === pick ? '<span class="badge">PICK</span>' : ''}</h2><p></p><div class="frames"></div>`;
+      sec.innerHTML = `<h2>${take} · ${t.dataset.title}${picks.includes((take.match(/^[a-z]+/) || [])[0]) ? '<span class="badge">PICK</span>' : ''}</h2><p></p><div class="frames"></div>`;
       sec.querySelector('p').textContent = t.dataset.note || '';
       const themes = (t.dataset.themes || 'dark light').split(' ');
       themes.forEach(th => {

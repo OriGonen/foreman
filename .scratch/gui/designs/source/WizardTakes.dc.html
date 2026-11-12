@@ -6,12 +6,15 @@
   <h1>10 · The install wizard (terminal)</h1>
   <p><code>bash install.sh</code> asks one question when — and only when — stdin and stdout are both terminals: CLI only, or CLI + desktop app. Everywhere else (the smoke suite captures its output; CI; a pipe) it behaves exactly as today. <code>--gui</code> / <code>--no-gui</code> answer it up front for scripted installs. On a rerun it asks only about the missing piece; with everything installed it asks nothing. Installed-or-not is read from disk: <code>gui/node_modules</code> and the Start-menu shortcut.</p>
   <p>This is terminal output, so it is drawn in the dark palette only (ADR 0003); a terminal too narrow or without colour gets the same words as plain lines.</p>
-  <div class="pick" data-pick="a"><b>Pick: a · numbered choice.</b> Typing 1 or 2 works with a plain <code>read</code> in any terminal, Git Bash's mintty included; b's arrow-key menu needs raw key reading in bash, which foreman avoids everywhere but the run's own status bar — and it looks no better for one question.</div>
+  <div class="pick" data-pick="a"><b>Pick: a · numbered choice</b>, with a redrawn sun at sign-off: the half-dome that read as a hat is now a round sun with eight rays (│ ╱ ╲ ─) over the horizon line, in the terminal's sun and amber colours. Typing 1 or 2 works with a plain <code>read</code> in any terminal, Git Bash's mintty included; b's arrow-key menu needs raw key reading in bash, which foreman avoids everywhere but the run's own status bar — and it looks no better for one question.</div>
 </header>
 
 <template data-take="a" data-title="Numbered choice" data-themes="dark" data-frame="termframe" data-note="The small sunrise, the question, two numbered answers with what each one does (and its size), Enter for the default.">
-<div class="term"><span class="s">     ▄▄▄▀▀▀▄▄▄</span>        <span class="b">FOREMAN</span>  <span class="m">install</span>
-<span class="a">  ▄▀▀▀▀▀▀▀▀▀▀▀▀▄</span>      <span class="m">from /c/Projects/foreman · d0d6874</span>
+<div class="term"><span class="a">      ╲     │     ╱</span>
+<span class="a">         </span><span class="s">▄▄███▄▄</span>             <span class="b">FOREMAN</span>  <span class="m">install</span>
+<span class="a">    ──  </span><span class="s">█████████</span><span class="a">  ──</span>        <span class="m">from /c/Projects/foreman · d0d6874</span>
+<span class="a">         </span><span class="s">▀▀███▀▀</span>
+<span class="a">      ╱     │     ╲</span>
 <span class="d">▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔</span>
 
   What should this install?
@@ -29,8 +32,11 @@
 </template>
 
 <template data-take="a2" data-title="Numbered choice — rerun with the CLI already installed" data-themes="dark" data-frame="termframe" data-note="On a rerun only the missing piece is offered. With everything installed, the installer asks nothing and prints its usual result.">
-<div class="term"><span class="s">     ▄▄▄▀▀▀▄▄▄</span>        <span class="b">FOREMAN</span>  <span class="m">install</span>
-<span class="a">  ▄▀▀▀▀▀▀▀▀▀▀▀▀▄</span>      <span class="m">from /c/Projects/foreman · d0d6874</span>
+<div class="term"><span class="a">      ╲     │     ╱</span>
+<span class="a">         </span><span class="s">▄▄███▄▄</span>             <span class="b">FOREMAN</span>  <span class="m">install</span>
+<span class="a">    ──  </span><span class="s">█████████</span><span class="a">  ──</span>        <span class="m">from /c/Projects/foreman · d0d6874</span>
+<span class="a">         </span><span class="s">▀▀███▀▀</span>
+<span class="a">      ╱     │     ╲</span>
 <span class="d">▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔</span>
 
   <span class="g">■</span> CLI installed           <span class="m">~/.local/bin/foreman → this checkout</span>
@@ -43,8 +49,12 @@
 </template>
 
 <template data-take="b" data-title="Arrow-key menu" data-themes="dark" data-frame="termframe" data-note="A highlighted row moved with ↑ / ↓. Familiar from other installers; needs raw-mode key reading and a redraw loop for a single question.">
-<div class="term"><span class="s">     ▄▄▄▀▀▀▄▄▄</span>        <span class="b">FOREMAN</span>  <span class="m">install</span>
-<span class="a">  ▄▀▀▀▀▀▀▀▀▀▀▀▀▄</span>
+<div class="term"><span class="a">      ╲     │     ╱</span>
+<span class="a">         </span><span class="s">▄▄███▄▄</span>             <span class="b">FOREMAN</span>  <span class="m">install</span>
+<span class="a">    ──  </span><span class="s">█████████</span><span class="a">  ──</span>        <span class="m">from /c/Projects/foreman · d0d6874</span>
+<span class="a">         </span><span class="s">▀▀███▀▀</span>
+<span class="a">      ╱     │     ╲</span>
+<span class="d">▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔</span>
 <span class="d">▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔</span>
 
   What should this install?   <span class="d">↑/↓ to move, Enter to choose</span>

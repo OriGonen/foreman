@@ -7,8 +7,9 @@
   (`git pull && bash install.sh`) and how to remove it
 - `foreman gui`
 - every additive CLI change: the `--json` flags with their shape and `foreman_json`,
-  `foreman keys`, `foreman stop [--now]`, the control directory and its ignore line, and
-  `# reason:`
+  `foreman keys`, `foreman stop [--now]`, the control directory and its ignore line,
+  `# reason:`, and the `model` field in `foreman-runs.jsonl` with `status --json`'s per-ticket
+  `stats`
 - which actions are free and which cost money, in the README's existing style
 
 Add one screenshot per main screen, taken from the real app in dark, as the README's existing
@@ -18,7 +19,7 @@ reference, the README stays as it is.
 See `spec.md`, "The additive CLI changes". The screenshots should match the picks: designs
 `01-overview`, `02-ticket`, `03-run-confirm`, `04-live-run` and `07-report` in `designs/`.
 
-**Blocked by:** 03, 05, 07, 11, 13
+**Blocked by:** 03, 05, 07, 11, 13, 16
 
 **Status:** ready-for-agent
 

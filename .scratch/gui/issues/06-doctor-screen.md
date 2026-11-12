@@ -7,6 +7,9 @@ screen. The screen is an inspection sheet. It shows:
 - each row's result (ok, warn or fail) and its fix
 - the verdict, as a stamp
 - the next command
+- the inspector, who runs across a track and back, sweating, while the inspection runs, then
+  stands and sweats until the sheet is filled in. This is the terminal's own animation, as it was
+  asked for at sign-off.
 
 **Fix what it can** shows what `--fix` will append, then runs it. Both actions are marked free.
 
@@ -29,11 +32,16 @@ See `spec.md`, additive change 4 and "Secrets". The design is `designs/08-doctor
 - [ ] Plain `foreman doctor`, `foreman doctor --fix` and `foreman help` print byte for byte what
       they printed before, compared against a capture taken before the change
 - [ ] `test/smoke-json.sh` covers `doctor --json` and `--fix --json` on a fixture batch
+- [ ] While the inspection runs, the inspector runs across the track and back (two stances
+      swapped, sweat drops trailing him), then stands and sweats. It plays once per inspection,
+      including Run again, and stops when the sheet is filled in. It is CSS only: no library, no
+      timer in `app.js`. Under `prefers-reduced-motion` he stands still
 - [ ] The rail opens the Doctor screen. Fix what it can shows what it will append before it
       runs, and the screen re-reads the sheet afterwards
 - [ ] By hand on Windows:
   1. Make a batch with a fixable problem, such as a missing ignore line
-  2. Compare its Doctor screen with `designs/08-doctor.html`, in light and dark
+  2. Compare its Doctor screen with `designs/08-doctor.html`, in light and dark, including the
+     running animation and the reduced-motion setting
   3. Press Fix what it can
 - [ ] `test/smoke.sh` is unchanged and the full suite passes. The closing note records
       `Full smoke suite: N passed in Mm Ss`

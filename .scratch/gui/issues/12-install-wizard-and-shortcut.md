@@ -23,7 +23,9 @@ and a2 for the rerun).
 - [ ] Everywhere else, including under `test/smoke.sh`, in a pipe and in CI, its output is byte
       for byte what it is today. Check this against a capture.
 - [ ] The question is a numbered choice read with a plain `read`. Enter picks 1, CLI only.
-- [ ] The wording follows `designs/10-install-wizard.html`, with its sunrise header.
+- [ ] The wording follows `designs/10-install-wizard.html`, with its header: a round sun with
+      eight rays (`╲ │ ╱`, `──`, `▄▄███▄▄`, `█████████`, `▀▀███▀▀`) over the horizon line, in the
+      terminal's sun and amber colours. The half-dome of the first drawing is not used
 - [ ] `--gui` installs the app without asking. `--no-gui` removes the app and its shortcut if
       they are there, and never asks.
 
