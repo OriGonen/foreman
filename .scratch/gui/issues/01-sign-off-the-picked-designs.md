@@ -1,6 +1,6 @@
 # 01: Sign off the picked designs
 
-**Status:** ready-for-human
+**Status:** done
 **Handoff:** .scratch/gui/handoff/01-sign-off-the-picked-designs.md
 
 **Blocked by:** None — can start immediately
@@ -24,6 +24,6 @@ use the app who should decide.
 
 **Acceptance criteria:**
 
-- [ ] Each of the ten screens has a verdict: agree, another take, or a change
-- [ ] Each change you ask for names the screen and says what should be different
-- [ ] "Answers recorded" in `spec.md` is either confirmed or has each correction written down
+- [x] Each of the ten screens has a verdict: agree, another take, or a change
+- [x] Each change you ask for names the screen and says what should be different
+- [x] "Answers recorded" in `spec.md` is either confirmed or has each correction written down
