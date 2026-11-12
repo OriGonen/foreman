@@ -238,7 +238,7 @@ pre.src { font: 12px/1.6 var(--mono); margin: 0; white-space: pre-wrap; color: v
 /* the doctor's track: the inspector runs across and back, sweating, then stands and sweats while the sheet fills in.
    Same story as the terminal's doctor animation (six ticks of legs, drops trailing him). One cycle = 6s here so the
    pick page keeps looping it; the app plays it once per inspection. */
-.track { position: relative; height: 74px; border-radius: 10px; border: 1px solid var(--line); background: linear-gradient(var(--sky-top), var(--sky-bot)); overflow: hidden; }
+.track { position: relative; flex: none; height: 74px; border-radius: 10px; border: 1px solid var(--line); background: linear-gradient(var(--sky-top), var(--sky-bot)); overflow: hidden; }
 .track .ground { position: absolute; left: 0; right: 0; bottom: 0; height: 10px; background: var(--ground); border-top: 2px solid var(--post); }
 .track .tick { position: absolute; bottom: 10px; width: 3px; background: var(--post); opacity: .6; border-radius: 1px; }
 .track .say { position: absolute; right: 14px; top: 10px; font: 600 11px var(--mono); letter-spacing: .1em; color: var(--muted); text-transform: uppercase; }

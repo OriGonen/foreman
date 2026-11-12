@@ -1,6 +1,6 @@
 # 01a: Follow up on 01 — Sign off the picked designs
 
-**Status:** ready-for-agent
+**Status:** done
 
 **Blocked by:** 01
 
@@ -35,11 +35,11 @@ commit.
 
 **Acceptance criteria:**
 
-- [ ] Every section of the handoff is answered. No section is left as its placeholder, empty,
+- [x] Every section of the handoff is answered. No section is left as its placeholder, empty,
       or "TBD"
-- [ ] For every screen where the handoff asks for another take or a change, the pick page, the
+- [x] For every screen where the handoff asks for another take or a change, the pick page, the
       `spec.md` picks table and the design pointer in that screen's ticket all match the new
       choice
-- [ ] Every correction to "Answers recorded" is made in `spec.md` and in the tickets it affects
-- [ ] The handoff contains no secret value
-- [ ] Nothing under `bin/`, `lib/` or `test/` changed (`git status`)
+- [x] Every correction to "Answers recorded" is made in `spec.md` and in the tickets it affects
+- [x] The handoff contains no secret value
+- [x] Nothing under `bin/`, `lib/` or `test/` changed (`git status`)

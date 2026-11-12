@@ -2,3 +2,13 @@
 # One short entry per iteration, appended by the agent. The tail of this file is
 # attached to every later prompt, so length here is a recurring cost.
 
+
+## 01a — followup: sign off the picked designs (done)
+- Handoff passed (all 10 screens answered, no secret). Applied its changes to the canvases + `gui.css` + `canvas.js`, regenerated pick pages 02, 03, 04, 05, 08, 10 (01, 06, 07, 09 agreed, untouched).
+- 02: Preview|Markdown switch (b2) + run stats on a done ticket (b3). 03: new take c (a's bill + b's three tiles, Advanced options c1, `?` texts c2). 04: a + compact c with a Full|Compact switch. 05: b with a thumbs-up sun scene and two hand-lettered signs. 08: running/sweating inspector (CSS). 10: round sun.
+- spec.md (picks table, sign-off note, stories 35-41, preview, per-run caps, compact view, out of scope) and tickets 03, 06, 10, 11, 12, 14 updated. New ticket 16 (record `model` in the jsonl + `status --json` per-ticket `stats`); 03 and 14 are now blocked by 16; order.md has 03 after 16.
+- Not test-driven: design markup only. No code under bin/, lib/, test/, gui/ changed.
+- Assumed "the three buttons from (b)" = b's three tiles; recorded in spec for the user to correct. Cap edits are per-run env vars, never written to foreman.conf (spec says so).
+- Could not render any page (no browser in the sandbox): SVG/HTML checked for well-formedness and `node --check` only. A human should open the six pick pages once (ticket 15 covers the app, not these pages).
+- `bash test/smoke.sh`: 2741 passed, 1 failed ("convert ... CRLF kept", test/smoke.sh:3609) in 2m31s. Code is byte-identical to fb57c01, so the failure is pre-existing; left alone.
+- Left the ticket file un-renamed (no DONE_ prefix), as 01 was.
