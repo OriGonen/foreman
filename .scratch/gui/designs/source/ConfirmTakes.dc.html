@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Start-run confirmation takes — Foreman GUI</title>
+<link rel="stylesheet" href="gui.css"><script src="canvas.js"></script></head>
+<body class="canvas">
+<header class="top">
+  <h1>03 · Starting a run: the confirmation</h1>
+  <p>Starting a run costs money, so <b>Start run…</b> always opens this first, and nothing is spawned until the person confirms. It shows the three budgets: iterations (set here, as <code>&lt;n&gt;</code> or <code>--unlimited</code>), <code>FOREMAN_MAX_COST_USD</code> and <code>FOREMAN_MAX_MINUTES</code> (read from <code>foreman dry-run --json</code>, i.e. foreman.conf and the environment; change them there). It also shows the exact command that will run. Esc or Cancel spends nothing.</p>
+  <div class="pick" data-pick="a"><b>Pick: a · the bill up front.</b> Itemised like <code>foreman report</code>'s bill, and it shows where the budget actually reaches — 05, 06, then 07 stops the run — so "10 iterations" never reads as "10 tickets". An unset cap is called out in rust rather than hidden. b is tidier but its three equal tiles weigh an unset spend cap the same as a set one.</div>
+</header>
+
+<template data-take="a" data-title="The bill up front" data-note="A receipt: what it will run on, how far it can get, each budget on its own line with where it comes from, then the command. The confirm button repeats the spend cap.">
+  <div class="app">
+    <div data-part="titlebar"></div>
+    <div data-part="rail"></div>
+    <div class="main" style="opacity:.5"><div class="h1 mono" style="font-size:18px">.scratch/human-tickets</div><div class="card" style="height:160px"></div><div class="card" style="flex:1"></div></div>
+    <div class="scrim"></div>
+    <div class="modal">
+      <div class="bill" style="padding-bottom:16px">
+        <div class="row" style="margin-bottom:8px"><span class="label grow" style="color:var(--text)">Start a run</span><span class="paid" style="color:var(--rust);background:color-mix(in srgb,var(--rust) 14%,transparent)">costs money</span></div>
+        <div class="line"><span class="muted">batch</span><span>.scratch/human-tickets</span></div>
+        <div class="line"><span class="muted">starts at</span><span>05 document-human-tickets</span></div>
+        <div class="line"><span class="muted">can reach</span><span>05 → 06, then stops at <span class="rust">07 (human)</span></span></div>
+        <div class="rule"></div>
+        <div class="line" style="align-items:center"><span class="muted">iterations</span><span class="row" style="gap:6px"><span class="btn sq">−</span><b style="width:24px;text-align:center">3</b><span class="btn sq">+</span><span class="btn quiet" style="padding:4px 6px">unlimited</span></span></div>
+        <div class="line"><span class="muted">spend cap</span><span>$25.00 <span class="dim">FOREMAN_MAX_COST_USD · foreman.conf</span></span></div>
+        <div class="line"><span class="muted">time cap</span><span class="rust">none set <span class="dim">FOREMAN_MAX_MINUTES=0</span></span></div>
+        <div class="line"><span class="muted">model</span><span>claude-sonnet-5-5 · exec local · acceptEdits</span></div>
+        <div class="rule"></div>
+        <div class="line"><span class="muted">runs</span><span>foreman run .scratch/human-tickets 3 --live</span></div>
+        <div class="small muted" style="font-family:var(--ui);margin-top:8px">The run stops at whichever budget comes first. You can add or take away iterations while it runs. Closing this window doesn't stop it.</div>
+        <div class="row" style="margin-top:14px;justify-content:flex-end"><span class="btn">Cancel</span><span class="btn primary">Start run · up to $25.00</span></div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template data-take="b" data-title="Three tiles" data-note="A plain dialog: the three budgets as equal tiles, a checkbox for the live tool-call view, the command underneath. Clear, but a cap of 0 (none) sits in a tile the same size as a real one.">
+  <div class="app">
+    <div data-part="titlebar"></div>
+    <div data-part="rail"></div>
+    <div class="main" style="opacity:.5"><div class="h1 mono" style="font-size:18px">.scratch/human-tickets</div><div class="card" style="height:160px"></div><div class="card" style="flex:1"></div></div>
+    <div class="scrim"></div>
+    <div class="modal card col" style="gap:12px;padding:20px">
+      <div class="h2">Start a run on human-tickets?</div>
+      <div class="small muted">It costs money. It starts at 05 document-human-tickets.</div>
+      <div class="row" style="gap:10px">
+        <div class="card grow col center" style="gap:2px"><div class="label">Iterations</div><div class="big" style="font-size:26px">3</div><div class="row" style="gap:4px"><span class="btn sq">−</span><span class="btn sq">+</span></div></div>
+        <div class="card grow col center" style="gap:2px"><div class="label">Spend cap</div><div class="big" style="font-size:26px">$25</div><div class="small dim mono">MAX_COST_USD</div></div>
+        <div class="card grow col center" style="gap:2px"><div class="label">Time cap</div><div class="big" style="font-size:26px">—</div><div class="small dim mono">MAX_MINUTES</div></div>
+      </div>
+      <div class="row small"><span class="btn sq" style="width:18px;height:18px;padding:0">✓</span>Watch tool calls (live)</div>
+      <div class="mono small muted">foreman run .scratch/human-tickets 3 --live</div>
+      <div class="row" style="justify-content:flex-end"><span class="btn">Cancel</span><span class="btn primary">Start run</span></div>
+    </div>
+  </div>
+</template>
+</body></html>

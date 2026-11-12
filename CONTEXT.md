@@ -212,3 +212,31 @@ How much colour a stream gets: none, 16, 256 or 24 (bits). The best the terminal
 or the one `FOREMAN_COLOR` pins; at 16 the terminal's own theme picks the shades. See
 `docs/adr/0003-a-palette-over-the-terminal-theme.md`.
 _Avoid_: Mode, depth, profile
+
+### The app
+
+**The app**:
+The optional desktop window on Windows, in `gui/`, opened from the Start menu or with
+`foreman gui`. Another way to look at the same files and the same loop: it keeps nothing of
+its own, works out nothing the CLI decides, and starts the same `foreman run`. See
+`docs/adr/0004-electron-desktop-app.md`.
+_Avoid_: GUI client, dashboard, frontend, the UI (the terminal has one too)
+
+**Screen**:
+One page of the app: the overview, a ticket, the run, the report, doctor. Distinct from a
+scene, which is a picture the terminal draws.
+_Avoid_: Scene (that is the terminal's), view, page, tab
+
+**Control directory**:
+The directory where a run keeps its live budget, live switch, iteration and feed, which the
+run's own keys write and the loop reads before each iteration. Inside the batch, as
+`.foreman-run/`, when the repository ignores that name. Otherwise it is a temporary
+directory only the run's own terminal can reach. Removed when the run ends. Disposable, like
+the stall marker: it is never a record of anything.
+_Avoid_: State directory, lock, IPC, socket
+
+**Free action**:
+A command that spends nothing and starts no agent: `status`, `next`, `dry-run`, `doctor`
+(with or without `--fix`), and `report`. Marked "free" wherever it is offered. Starting or
+resuming a run is the one paid action, and the app always shows the bill before one.
+_Avoid_: Safe action, read-only (doctor `--fix` writes), offline

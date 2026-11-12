@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Empty and error state takes — Foreman GUI</title>
+<link rel="stylesheet" href="gui.css"><script src="canvas.js"></script></head>
+<body class="canvas">
+<header class="top">
+  <h1>09 · Empty and error states</h1>
+  <p>Six states the app must say plainly, each with one next step: the folder isn't a git repo; the repo has no batch; Git Bash isn't found (the app runs every command through it); <code>claude</code> or <code>sbx</code> is missing for the batch's exec mode; the agent's login has expired (a run stopped with exit 20 and <code>auth_failed</code> in the run log); and a batch the CLI can't read (here: order.md lists a ticket that doesn't exist — what <code>foreman status</code> really says about a renamed DONE_ batch today).</p>
+  <p>Every message is the CLI's own words where the CLI has them (its stderr, shown as text), so the app never invents a diagnosis.</p>
+  <div class="pick" data-pick="a"><b>Pick: a · a scene and one step.</b> Each of these blocks everything below it, so it gets the whole pane: a small picture (the dome at night, the inspector with a sign, the stake line with a missing stake), what is wrong in one sentence, the CLI's message, one button. b's banner over greyed content suggests the content behind it is still current, which here it isn't.</div>
+</header>
+
+<template data-take="a" data-title="A scene and one step" data-frame="tall" data-note="Six panes, each a whole-pane state: picture, one sentence, the CLI's text, one button (free actions say so).">
+  <div class="app solo">
+    <div data-part="titlebar" data-title="Foreman"></div>
+    <div class="panes three">
+      <div class="pane center"><div class="cap">not a git repo</div><span data-art="dome" data-w="130" data-p="0" data-stakes="....."></span>
+        <div class="h2">This folder isn't a git repository</div><div class="small muted">Foreman works on a repo's batches. Pick the folder that holds your repo.</div>
+        <div class="mono small dim">C:\Users\me\Downloads</div><span class="btn primary">Choose a folder…</span></div>
+      <div class="pane center"><div class="cap">no batch</div><span data-art="dome" data-w="130" data-p="0.05" data-stakes="."></span>
+        <div class="h2">No batch in this repo yet</div><div class="small muted">A batch is a folder with a foreman.conf. Make one in a terminal:</div>
+        <div class="mono small">foreman init .scratch/&lt;name&gt;</div><span class="btn">Copy command</span></div>
+      <div class="pane center"><div class="cap">Git Bash missing</div><span data-art="inspector" data-w="64" data-sign="stop"></span>
+        <div class="h2">Git Bash wasn't found</div><div class="small muted">The app runs foreman through Git Bash, as the CLI does. Install Git for Windows, then reopen.</div>
+        <div class="mono small dim">looked in: C:\Program Files\Git\bin\bash.exe</div><span class="btn">Look again</span></div>
+      <div class="pane center"><div class="cap">claude / sbx missing</div><span data-art="inspector" data-w="64" data-sign="stop"></span>
+        <div class="h2">sbx isn't installed</div><div class="small muted">This batch runs with <span class="mono">FOREMAN_EXEC=sandbox</span>. Runs are off until it's there; status, dry run and report still work.</div>
+        <span class="btn">Doctor <span class="free">free</span></span></div>
+      <div class="pane center"><div class="cap">login expired</div><span data-art="inspector" data-w="64" data-sign="stop"></span>
+        <div class="h2">The agent's login has expired</div><div class="small muted">Run 20261021-2 stopped before 06: the agent could not authenticate. Sign in again in a terminal with <span class="mono">claude</span> (then /login), and resume.</div>
+        <span class="btn">Resume… <span class="paid">costs money</span></span></div>
+      <div class="pane center"><div class="cap">batch unreadable</div><span data-art="dome" data-w="130" data-p="0.5" data-stakes="ddx.."></span>
+        <div class="h2">foreman can't read this batch's order</div>
+        <div class="code small" style="text-align:left;padding:8px 10px;white-space:normal">order.md lists 03-render-the-dome, which doesn't exist in .scratch/DONE_terminal-design/issues</div>
+        <span class="btn">Open order.md in editor</span></div>
+    </div>
+  </div>
+</template>
+
+<template data-take="b" data-title="Banner over the shell" data-frame="tall" data-note="The usual screen stays, greyed; a banner across the top says what's wrong. Less of a jolt, and the rail stays usable — but greyed content looks current when it isn't.">
+  <div class="app solo">
+    <div data-part="titlebar" data-title="Foreman"></div>
+    <div class="panes three">
+      <div class="pane"><div class="cap">not a git repo</div><div class="card bad small">This folder isn't a git repository. <span class="btn">Choose…</span></div><div class="card" style="flex:1;opacity:.35"></div></div>
+      <div class="pane"><div class="cap">no batch</div><div class="card warm small">No batch yet — <span class="mono">foreman init .scratch/&lt;name&gt;</span></div><div class="card" style="flex:1;opacity:.35"></div></div>
+      <div class="pane"><div class="cap">Git Bash missing</div><div class="card bad small">Git Bash wasn't found. Install Git for Windows.</div><div class="card" style="flex:1;opacity:.35"></div></div>
+      <div class="pane"><div class="cap">claude / sbx missing</div><div class="card bad small">sbx isn't installed; runs are off.</div><div class="card" style="flex:1;opacity:.35"></div></div>
+      <div class="pane"><div class="cap">login expired</div><div class="card bad small">The agent's login has expired. Sign in with claude, then resume.</div><div class="card" style="flex:1;opacity:.35"></div></div>
+      <div class="pane"><div class="cap">batch unreadable</div><div class="card bad small mono">order.md lists 03-render-the-dome, which doesn't exist</div><div class="card" style="flex:1;opacity:.35"></div></div>
+    </div>
+  </div>
+</template>
+</body></html>

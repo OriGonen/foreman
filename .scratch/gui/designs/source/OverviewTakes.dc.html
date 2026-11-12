@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Overview takes — Foreman GUI</title>
+<link rel="stylesheet" href="gui.css"><script src="canvas.js"></script></head>
+<body class="canvas">
+<header class="top">
+  <h1>01 · Batch overview</h1>
+  <p>What <code>foreman status</code> and <code>foreman next --all</code> say, as the app's home screen: how far the batch has got, the next ticket, and the human ticket ahead. Every batch in the repo is in the rail. Data: <code>foreman status --json &lt;batch&gt;</code>, re-read when a file in the batch changes.</p>
+  <p>Sample: <code>.scratch/human-tickets</code>, 4 of 10 landed, 05 next, 07 a human ticket with 07a its followup.</p>
+  <div class="pick" data-pick="a"><b>Pick: a · dome and order.</b> It reads top to bottom the way <code>foreman status</code> does — dome, next, list — so the two never disagree in shape. The order stays one list, because the loop works one ticket at a time; b's columns suggest lanes the loop never runs. c's stake line is lovely at 10 tickets and unreadable at 30; a keeps the stake line in miniature under the dome.</div>
+</header>
+
+<template data-take="a" data-title="Dome and order" data-note="The dome (sun height = landed / total, stakes beneath) beside the next ticket and the two buttons; a warm card names the human ticket ahead and how far a run gets before it; then the order as a list with spend per landed ticket. Dry run is free; Start run costs money and always opens the confirmation.">
+  <div class="app">
+    <div data-part="titlebar"></div>
+    <div data-part="rail"></div>
+    <div class="main">
+      <div class="row">
+        <div class="grow"><div class="label">Batch</div><div class="h1 mono" style="font-size:18px">.scratch/human-tickets</div></div>
+        <span class="btn quiet">Open folder</span>
+        <span class="btn">Dry run <span class="free">free</span></span>
+        <span class="btn primary">Start run… <span class="paid">costs money</span></span>
+      </div>
+      <div class="row top">
+        <div class="card" style="display:flex;gap:16px;align-items:center;width:420px">
+          <span data-art="dome" data-w="190" data-stakes="dddd>.hf.."></span>
+          <div class="col" style="gap:4px"><div class="big">4 <span class="muted" style="font-size:20px">of 10</span></div><div class="muted">landed · 6 to go</div><div class="small dim mono">$9.84 spent in 2 runs</div></div>
+        </div>
+        <div class="card grow col" style="gap:8px">
+          <div class="label">Next</div>
+          <div class="row" style="gap:10px"><span class="chip next">next</span><span class="mono" style="font-size:14px">05 document-human-tickets</span></div>
+          <div class="kv"><span>Blocked by</span><span>04 <span class="ok">✓ landed</span></span><span>Last run</span><span>20261021-2 · paused: iteration budget reached</span></div>
+          <div class="row" style="gap:8px"><span class="btn">Open ticket</span><span class="btn quiet">progress.txt notes (3)</span></div>
+        </div>
+      </div>
+      <div class="card warm row" style="gap:12px;padding:10px 14px">
+        <span class="chip human">human</span>
+        <div class="grow"><b class="mono">07 try-it-on-a-real-repo</b> is a human ticket. A run does 05 and 06, then stops there — waiting on a human — until you mark it done.</div>
+        <span class="btn">Fill in handoff</span>
+      </div>
+      <div class="card flush tlist" style="flex:1;overflow:hidden">
+        <div class="t done"><span class="g ok">✓</span><span class="num">01</span><span class="slug">human-ticket-status</span><span></span><span class="meta">$1.12</span></div>
+        <div class="t done"><span class="g ok">✓</span><span class="num">02</span><span class="slug">handoff-file-path</span><span></span><span class="meta">$2.40</span></div>
+        <div class="t done"><span class="g ok">✓</span><span class="num">03</span><span class="slug">stop-on-waiting-human</span><span></span><span class="meta">$3.08</span></div>
+        <div class="t done"><span class="g ok">✓</span><span class="num">04</span><span class="slug">sent-back-detection</span><span></span><span class="meta">$3.24</span></div>
+        <div class="t next"><span class="g acc">▶</span><span class="num">05</span><span class="slug">document-human-tickets</span><span class="chip next">next</span><span class="meta"></span></div>
+        <div class="t"><span class="g dim">·</span><span class="num">06</span><span class="slug">doctor-human-warnings</span><span></span><span class="meta"></span></div>
+        <div class="t"><span class="g rust">✋</span><span class="num">07</span><span class="slug">try-it-on-a-real-repo</span><span class="chip human">human</span><span class="meta">handoff/07-…md</span></div>
+        <div class="t"><span class="g dim">·</span><span class="num">07a</span><span class="slug">followup-try-the-followup-skill</span><span class="chip followup">followup · checks 07</span><span class="meta"></span></div>
+        <div class="t"><span class="g dim">·</span><span class="num">08</span><span class="slug">readme-human-tickets-section</span><span></span><span class="meta"></span></div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template data-take="b" data-title="Board" data-note="Columns by state: landed, next, to go, waiting on a human. Familiar from issue trackers, and it puts the human ticket in its own lane. But it breaks the order into lanes: 08 sits beside 06 as if either could run, and the loop never does that.">
+  <div class="app">
+    <div data-part="titlebar"></div>
+    <div data-part="rail"></div>
+    <div class="main">
+      <div class="row">
+        <span data-art="dome" data-w="70" data-stakes="dddd>.hf.."></span>
+        <div class="grow"><div class="h1 mono" style="font-size:17px">.scratch/human-tickets</div><div class="muted">4 of 10 landed · 6 to go</div></div>
+        <span class="btn">Dry run <span class="free">free</span></span>
+        <span class="btn primary">Start run… <span class="paid">costs money</span></span>
+      </div>
+      <div class="row top" style="flex:1;gap:12px;align-items:stretch">
+        <div class="card col grow" style="padding:12px"><div class="label">Landed · 4</div>
+          <div class="card" style="padding:8px 10px"><span class="mono small dim">01</span> human-ticket-status</div>
+          <div class="card" style="padding:8px 10px"><span class="mono small dim">02</span> handoff-file-path</div>
+          <div class="card" style="padding:8px 10px"><span class="mono small dim">03</span> stop-on-waiting-human</div>
+          <div class="card" style="padding:8px 10px"><span class="mono small dim">04</span> sent-back-detection</div></div>
+        <div class="card col grow warm" style="padding:12px"><div class="label">Next</div>
+          <div class="card" style="padding:10px"><span class="chip next">next</span><div class="mono" style="margin-top:6px">05 document-human-tickets</div><div class="small muted">Blocked by 04 ✓</div></div></div>
+        <div class="card col grow" style="padding:12px"><div class="label">To go · 4</div>
+          <div class="card" style="padding:8px 10px"><span class="mono small dim">06</span> doctor-human-warnings</div>
+          <div class="card" style="padding:8px 10px"><span class="mono small dim">07a</span> followup-try-the… <span class="chip followup">followup</span></div>
+          <div class="card" style="padding:8px 10px"><span class="mono small dim">08</span> readme-human-tickets…</div>
+          <div class="card" style="padding:8px 10px"><span class="mono small dim">09</span> end-to-end-check…</div></div>
+        <div class="card col grow bad" style="padding:12px"><div class="label">Waiting on a human · 1</div>
+          <div class="card" style="padding:10px"><span class="chip human">human</span><div class="mono" style="margin-top:6px">07 try-it-on-a-real-repo</div><div class="small muted">handoff not filled in</div><span class="btn" style="margin-top:8px">Fill in handoff</span></div></div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template data-take="c" data-title="Stake line" data-note="The order drawn as the stake line across the top, the sun rising at the start of it, each stake a ticket; the selected stake opens below. The most pictorial take and the closest to `foreman order`'s scene, but the labels collide past ~15 tickets and the list a person scans for a name is gone.">
+  <div class="app">
+    <div data-part="titlebar"></div>
+    <div data-part="rail"></div>
+    <div class="main">
+      <div class="row"><div class="grow"><div class="h1 mono" style="font-size:17px">.scratch/human-tickets</div></div>
+        <span class="btn">Dry run <span class="free">free</span></span><span class="btn primary">Start run… <span class="paid">costs money</span></span></div>
+      <div class="sunrise" style="height:150px"><span data-art="sunrise" data-p="0.4"></span>
+        <div style="position:absolute;left:300px;right:20px;top:20px;display:grid;grid-template-columns:repeat(10,1fr);font:11px var(--mono);text-align:center;color:var(--muted)">
+          <span class="ok">✓<br>01</span><span class="ok">✓<br>02</span><span class="ok">✓<br>03</span><span class="ok">✓<br>04</span><span class="acc" style="font-weight:700">▶<br>05</span><span>·<br>06</span><span class="rust">✋<br>07</span><span>·<br>07a</span><span>·<br>08</span><span>·<br>09</span></div>
+      </div>
+      <div class="card col" style="gap:8px">
+        <div class="row"><span class="chip next">next</span><span class="mono" style="font-size:15px">05 document-human-tickets</span><span class="grow"></span><span class="muted">4 of 10 landed</span></div>
+        <div class="kv"><span>Status</span><span>ready-for-agent</span><span>Blocked by</span><span>04 ✓</span><span>Notes</span><span>3 in progress.txt</span></div>
+        <div class="row"><span class="btn">Open ticket</span></div>
+      </div>
+      <div class="card warm row" style="padding:10px 14px"><span class="chip human">human</span><span class="grow">The run stops at <b class="mono">07</b> until you mark it done.</span><span class="btn">Fill in handoff</span></div>
+    </div>
+  </div>
+</template>
+</body></html>

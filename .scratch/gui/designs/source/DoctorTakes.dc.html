@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Doctor takes — Foreman GUI</title>
+<link rel="stylesheet" href="gui.css"><script src="canvas.js"></script></head>
+<body class="canvas">
+<header class="top">
+  <h1>08 · Doctor</h1>
+  <p><code>foreman doctor</code>: the site inspection — MACHINE, REPOSITORY, SKILL, BATCHES — and a verdict. Free. Data: the new <code>foreman doctor --json</code>; credentials appear only as set / not set, never as a masked value. <b>Fix what it can…</b> lists exactly what <code>foreman doctor --fix</code> will append (it only ever appends, never touches a ticket) and runs it on confirm; the diff is the person's to review and commit.</p>
+  <p>Sample: two things to fix — the repo's <code>.gitignore</code> lacks the new <code>**/.foreman-run/</code> line (so the app can't steer a run) and the installed skill copy is out of date; plus a GUI line, shown only because the app is installed.</p>
+  <div class="pick" data-pick="a"><b>Pick: a · the inspection sheet.</b> It is the terminal's box as a sheet on a clipboard, held by the inspector, with the verdict as a stamp: one glance gives the verdict, and the sections are the terminal's, in the terminal's order. b's checklist is easier to act on row by row, but a gets the same by putting each fix on its row and the one <b>Fix what it can</b> under the stamp.</div>
+</header>
+
+<template data-take="a" data-title="The inspection sheet" data-note="The inspector on the left; the sheet with the four sections in two columns; each ! row says what to do, with a button when the app can do it; the stamp bottom-right. Run again re-inspects.">
+  <div class="app">
+    <div data-part="titlebar" data-title="Foreman — doctor"></div>
+    <div data-part="rail" data-on="doctor"></div>
+    <div class="main">
+      <div class="row"><div class="h2 grow">Site inspection <span class="free">free</span> <span class="mono small muted">~/projects/app · foreman d0d6874</span></div><span class="btn">Run again</span></div>
+      <div class="row top" style="gap:16px;flex:1;min-height:0">
+        <div class="col center" style="width:110px;padding-top:30px"><span data-art="inspector" data-w="96"></span></div>
+        <div class="card grow col" style="gap:12px;border-top:6px solid var(--post)">
+          <div class="row top" style="gap:24px">
+            <div class="col grow" style="gap:4px"><div class="label">Machine</div>
+              <div class="small"><span class="ok">■</span> git · node · awk</div><div class="small"><span class="ok">■</span> bash 5.2.26 <span class="muted">(4+ required)</span></div>
+              <div class="small"><span class="ok">■</span> sbx <span class="muted">(FOREMAN_EXEC=sandbox)</span></div>
+              <div class="small"><span class="ok">■</span> desktop app installed · in sync</div></div>
+            <div class="col grow" style="gap:4px"><div class="label">Repository</div>
+              <div class="small"><span class="ok">■</span> run state ignored <span class="muted">(bundle, marker, logs)</span></div>
+              <div class="small"><span class="acc">!</span> <span class="mono">**/.foreman-run/</span> not ignored <div class="muted" style="padding-left:16px">the app can watch a run but not steer it</div></div>
+              <div class="small"><span class="ok">■</span> .gitattributes keeps foreman.conf LF</div></div>
+          </div>
+          <div class="col" style="gap:4px"><div class="label">Skill</div>
+            <div class="small"><span class="acc">!</span> foreman-conf-commands — installed copy differs <span class="btn quiet" style="padding:0 6px">how to update</span></div>
+            <div class="small"><span class="ok">■</span> foreman-human-followup-tickets copy is current</div></div>
+          <div class="col" style="gap:4px"><div class="label">Batches</div>
+            <div class="small"><span class="ok">■</span> human-tickets · 07 has a handoff template</div>
+            <div class="small"><span class="ok">■</span> gui · order readable</div></div>
+          <div class="row" style="margin-top:auto;align-items:flex-end">
+            <div class="col grow" style="gap:6px"><div class="small muted"><span class="ok">■</span> passed &nbsp; <span class="acc">!</span> to fix</div><div class="mono small">next: foreman run .scratch/human-tickets</div>
+              <span class="btn" style="align-self:flex-start">Fix what it can… <span class="free">free</span></span></div>
+            <div style="border:3px double var(--accent);color:var(--accent);padding:6px 16px;transform:rotate(-4deg);text-align:center;font:700 16px var(--mono);letter-spacing:.12em">PASSED<div style="font:600 11px var(--mono);letter-spacing:.04em">2 to fix · ready to run</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template data-take="b" data-title="Checklist" data-note="A plain grouped checklist: passing rows collapsed to a count, failing rows expanded with what's wrong, why it matters and a button. A sticky footer with the verdict. Practical; it reads like any settings page.">
+  <div class="app">
+    <div data-part="titlebar" data-title="Foreman — doctor"></div>
+    <div data-part="rail" data-on="doctor"></div>
+    <div class="main">
+      <div class="row"><div class="h2 grow">Doctor <span class="free">free</span></div><span class="btn">Run again</span></div>
+      <div class="card col" style="gap:4px"><div class="row"><span class="ok">■</span><b class="grow">Machine</b><span class="muted small">7 passed</span></div></div>
+      <div class="card col bad" style="gap:6px;background:var(--panel)"><div class="row"><span class="acc">!</span><b class="grow">Repository</b><span class="muted small">2 passed · 1 to fix</span></div>
+        <div class="small"><span class="mono">**/.foreman-run/</span> is not in .gitignore. Without it the app can watch a run but not steer it.</div><span class="btn" style="align-self:flex-start">Append it (doctor --fix) <span class="free">free</span></span></div>
+      <div class="card col bad" style="gap:6px;background:var(--panel)"><div class="row"><span class="acc">!</span><b class="grow">Skill</b><span class="muted small">1 passed · 1 out of date</span></div>
+        <div class="small">foreman-conf-commands differs from the checkout. Rerun the installer.</div></div>
+      <div class="card col"><div class="row"><span class="ok">■</span><b class="grow">Batches</b><span class="muted small">2 passed</span></div></div>
+      <div class="runbar"><span class="acc mono">PASSED · 2 to fix</span><span class="grow"></span><span class="mono small muted">next: foreman run .scratch/human-tickets</span></div>
+    </div>
+  </div>
+</template>
+</body></html>

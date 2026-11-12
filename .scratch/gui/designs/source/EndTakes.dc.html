@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Run end takes — Foreman GUI</title>
+<link rel="stylesheet" href="gui.css"><script src="canvas.js"></script></head>
+<body class="canvas">
+<header class="top">
+  <h1>05 · How a run ends: exit 0, 10, 20, 30</h1>
+  <p>Each take shows all four endings. What the app knows comes from the run's footer in <code>foreman-runs.log</code> (<code># complete</code>, <code># paused: …</code> + <code># next up: …</code>, <code># stopped: needs a human</code> + the new <code># reason: …</code>, <code># stopped: waiting on a human — …</code>), and from the exit code when the app started the run itself. Reopened later, it shows the same thing, because it is all in the log.</p>
+  <p>Resuming is rerunning the same command, so <b>Resume…</b> opens the same confirmation as Start run. The free next steps (report, dry run, doctor) say so.</p>
+  <div class="pick" data-pick="a"><b>Pick: a · banner on the run.</b> After a stop the first question is "what happened", and a keeps the run's iterations underneath the banner to answer it; the four endings differ only in the banner's colour, words and buttons, so the next step is always in the same place. b's scenes are handsome and the right idea for the overview's empty state, but they replace the evidence with a picture.</div>
+</header>
+
+<template data-take="a" data-title="Banner on the run" data-frame="tall" data-note="The run screen stays; the bottom bar is replaced by a banner at the top saying how it ended, why, and the next step as buttons. The iterations stay listed underneath (abridged here).">
+  <div class="app solo">
+    <div data-part="titlebar" data-title="Foreman — run 20261021-2 ended"></div>
+    <div class="panes">
+      <div class="pane"><div class="cap">exit 0 · batch done</div>
+        <div class="card good col" style="gap:8px"><div class="row"><span data-art="dome" data-w="74" data-stakes="dddddddddd"></span><div class="grow"><div class="h2">All 10 tickets landed</div><div class="small muted">The batch is now <span class="mono">.scratch/DONE_human-tickets</span>. 6 iterations · $11.20 · 1h 12m.</div></div></div>
+          <div class="row"><span class="btn">Report <span class="free">free</span></span><span class="btn quiet">Dismiss</span></div></div>
+        <div class="tlist card flush small"><div class="t"><span class="g ok">✓</span><span class="num">5/6</span><span class="slug">08 readme-human-tickets-section</span><span class="chip landed">landed</span><span class="meta">$1.02</span></div><div class="t"><span class="g ok">✓</span><span class="num">6/6</span><span class="slug">09 end-to-end-check-on-this-machine</span><span class="chip landed">landed</span><span class="meta">$2.10</span></div></div>
+      </div>
+      <div class="pane"><div class="cap">exit 10 · paused</div>
+        <div class="card warm col" style="gap:8px"><div class="h2">Paused — the iteration budget is used up</div>
+          <div class="small muted">Next up: <span class="mono">06 doctor-human-warnings</span>. Nothing is lost; resuming picks up there. Other pauses read the same way: spend cap reached · time cap reached · usage limit, resets 17:00.</div>
+          <div class="row"><span class="btn primary">Resume… <span class="paid">costs money</span></span><span class="btn">Dry run <span class="free">free</span></span><span class="btn quiet">Dismiss</span></div></div>
+        <div class="tlist card flush small"><div class="t"><span class="g ok">✓</span><span class="num">1/3</span><span class="slug">05 document-human-tickets</span><span class="chip landed">landed</span><span class="meta">$1.31</span></div><div class="t"><span class="g acc">↗</span><span class="num">3/3</span><span class="slug">06 doctor-human-warnings</span><span class="chip followup">progressed</span><span class="meta">$1.64</span></div></div>
+      </div>
+      <div class="pane"><div class="cap">exit 20 · needs a human</div>
+        <div class="card bad col" style="gap:8px"><div class="h2">Stopped — it needs you to look</div>
+          <div class="small">The review turn found changes outside the ticket's scope in <span class="mono">lib/exec/</span> and committed nothing.</div>
+          <div class="small muted">Look at the uncommitted work; keep or discard it, then resume. (Other reasons here: login expired · the same ticket failed 3 times · the bundle didn't apply.)</div>
+          <div class="row"><span class="btn">Open the repo folder</span><span class="btn">Doctor <span class="free">free</span></span><span class="btn quiet">Resume…</span></div></div>
+        <div class="tlist card flush small"><div class="t"><span class="g err">✕</span><span class="num">start</span><span class="slug">review turn · red flag: out-of-scope changes</span><span class="chip err">stopped</span><span class="meta">$0.19</span></div></div>
+      </div>
+      <div class="pane"><div class="cap">exit 30 · waiting on a human</div>
+        <div class="card warm col" style="gap:8px;border-color:color-mix(in srgb,var(--rust) 60%,var(--line))"><div class="row"><span class="chip human">human</span><div class="h2 grow">Waiting on you: <span class="mono">07 try-it-on-a-real-repo</span></div></div>
+          <div class="small muted">Do the ticket, fill in its handoff file, then set its status line to <span class="mono">implemented</span>. Resuming before that stops here again, at no cost.</div>
+          <div class="row"><span class="btn primary">Fill in handoff</span><span class="btn">Open ticket in editor</span><span class="btn quiet">Resume…</span></div></div>
+        <div class="tlist card flush small"><div class="t"><span class="g ok">✓</span><span class="num">2/2</span><span class="slug">06 doctor-human-warnings</span><span class="chip landed">landed</span><span class="meta">$1.70</span></div><div class="t"><span class="g rust">✋</span><span class="num">—</span><span class="slug">07 try-it-on-a-real-repo</span><span class="chip human">waiting</span><span class="meta"></span></div></div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template data-take="b" data-title="A scene for each" data-frame="tall" data-note="Each ending gets a picture: the sun over the dome, a sun held halfway, the inspector with a sign, the stake line with 07's flag. Big, unmistakable — and the iterations that explain the ending are one click away instead of on screen.">
+  <div class="app solo">
+    <div data-part="titlebar" data-title="Foreman — run 20261021-2 ended"></div>
+    <div class="panes">
+      <div class="pane center"><div class="cap">exit 0</div><span data-art="dome" data-w="200" data-stakes="dddddddddd"></span><div class="h2">The batch is done</div><div class="small muted">10 of 10 landed · DONE_human-tickets</div><span class="btn">Report <span class="free">free</span></span></div>
+      <div class="pane center"><div class="cap">exit 10</div><span data-art="dome" data-w="200" data-stakes="ddddd>hf.."></span><div class="h2">Paused — iteration budget used up</div><div class="small muted">next up: 06 doctor-human-warnings</div><span class="btn primary">Resume… <span class="paid">costs money</span></span></div>
+      <div class="pane center"><div class="cap">exit 20</div><span data-art="inspector" data-w="80" data-sign="stop"></span><div class="h2">It needs you to look</div><div class="small muted">review turn: out-of-scope changes in lib/exec/</div><span class="btn">Show iterations</span></div>
+      <div class="pane center"><div class="cap">exit 30</div><span data-art="dome" data-w="200" data-stakes="ddddddhf.."></span><div class="h2">Waiting on you: 07</div><div class="small muted">fill in the handoff, mark it done, resume</div><span class="btn primary">Fill in handoff</span></div>
+    </div>
+  </div>
+</template>
+</body></html>

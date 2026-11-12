@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Report takes — Foreman GUI</title>
+<link rel="stylesheet" href="gui.css"><script src="canvas.js"></script></head>
+<body class="canvas">
+<header class="top">
+  <h1>07 · Report</h1>
+  <p><code>foreman report &lt;batch&gt;</code>: what the batch has cost and what came of it, from <code>foreman-runs.jsonl</code>. Free: it reads a file. The figures and their names are the report's own — iterations, landed, unproductive, checkpoint turns, limit hits, billed tokens, model-minutes, turns — via the new <code>foreman report --json</code>, so the app never does its own sums. Sample: the real totals of the finished terminal-design batch; the expanded iterations are illustrative.</p>
+  <div class="pick" data-pick="a"><b>Pick: a · the bill and the ledger.</b> It is the terminal's report (10a) in a window: the bill with the big total and the outcome counts, then one ledger row per run with a cost bar. Batches have 1–20 runs; for that, b's charts are decoration that repeat the ledger's own numbers, and the bill is the picture the person already knows.</div>
+</header>
+
+<template data-take="a" data-title="The bill and the ledger" data-note="Left: the bill — total, the outcome counts, tokens and minutes. Right: the ledger, one row per run, newest first, a bar for cost; a run expands into its iterations (ticket, outcome, cost), the --by-ticket view is a toggle.">
+  <div class="app">
+    <div data-part="titlebar" data-title="Foreman — report · DONE_terminal-design"></div>
+    <div data-part="rail" data-on="report"></div>
+    <div class="main">
+      <div class="row"><div class="h2 grow">Report · <span class="mono">DONE_terminal-design</span> <span class="free">free</span></div><span class="btn quiet">By run</span><span class="btn quiet">By ticket</span><span class="btn quiet">Failures</span></div>
+      <div class="row top" style="gap:16px;flex:1;min-height:0">
+        <div style="width:260px"><div class="bill">
+          <div class="label" style="color:var(--text)">Total, all runs</div>
+          <div class="big" style="margin:6px 0 2px">$29.90</div><div class="small muted">4 runs · 15 iterations · 225.9 model-minutes</div>
+          <div class="rule"></div>
+          <div class="line"><span>landed</span><span class="ok">14</span></div>
+          <div class="line"><span>unproductive</span><span>1</span></div>
+          <div class="line"><span>checkpoint turns</span><span>1</span></div>
+          <div class="line"><span>limit hits</span><span class="rust">1</span></div>
+          <div class="rule"></div>
+          <div class="line"><span>billed tokens</span><span>1,030,027</span></div>
+          <div class="line"><span>cache read</span><span>93,670,601</span></div>
+          <div class="line"><span>turns</span><span>739</span></div>
+          <div class="rule"></div>
+          <div class="line"><span>per iteration</span><span>$1.99</span></div>
+        </div></div>
+        <div class="card flush grow" style="overflow:hidden">
+          <div class="tlist">
+            <div class="t" style="grid-template-columns:150px 1fr 70px 52px"><span class="label">Run</span><span class="label">Iterations · landed</span><span class="label">Cost</span><span></span></div>
+            <div class="t" style="grid-template-columns:150px 1fr 70px 52px"><span class="mono small">20261030T121410Z</span><span class="small">1 · <span class="ok">1 landed</span></span><span class="meter"><i style="width:8%"></i></span><span class="mono small">$1.44</span></div>
+            <div class="t" style="grid-template-columns:150px 1fr 70px 52px"><span class="mono small">20261029T195411Z</span><span class="small">8 · <span class="ok">8 landed</span></span><span class="meter"><i style="width:100%"></i></span><span class="mono small">$18.57</span></div>
+            <div class="t" style="grid-template-columns:150px 1fr 70px 52px"><span class="mono small">20261029T194400Z</span><span class="small">0 · checkpoint turn</span><span class="meter"><i style="width:2%"></i></span><span class="mono small">$0.23</span></div>
+            <div class="t" style="grid-template-columns:150px 1fr 70px 52px;background:color-mix(in srgb,var(--amber) 7%,transparent)"><span class="mono small">▾ 20261028T200114Z</span><span class="small">6 · <span class="ok">5 landed</span> · 1 unproductive · <span class="rust">limit hit</span></span><span class="meter"><i style="width:52%"></i></span><span class="mono small">$9.65</span></div>
+            <div class="t" style="grid-template-columns:150px 1fr 70px 52px"><span class="mono small muted" style="grid-column:1/4;padding-left:28px">1 · 01 colour-tiers-and-the-palette · landed</span><span class="mono small muted">$1.84</span></div>
+            <div class="t" style="grid-template-columns:150px 1fr 70px 52px"><span class="mono small muted" style="grid-column:1/4;padding-left:28px">2 · 02 the-renderer-and-help · landed</span><span class="mono small muted">$2.31</span></div>
+            <div class="t" style="grid-template-columns:150px 1fr 70px 52px"><span class="mono small muted" style="grid-column:1/4;padding-left:28px">6 · 06 run-sunrise-header · usage limit</span><span class="mono small muted">$0.48</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template data-take="b" data-title="Charts" data-note="Tiles for the totals, a bar per run, the outcomes as one stacked bar, then the ledger table. More to look at; nothing more to learn — every chart restates a ledger column.">
+  <div class="app">
+    <div data-part="titlebar" data-title="Foreman — report · DONE_terminal-design"></div>
+    <div data-part="rail" data-on="report"></div>
+    <div class="main">
+      <div class="row"><div class="h2 grow">Report <span class="free">free</span></div></div>
+      <div class="row" style="gap:12px">
+        <div class="card grow"><div class="label">Spent</div><div class="big">$29.90</div></div>
+        <div class="card grow"><div class="label">Iterations</div><div class="big">15</div></div>
+        <div class="card grow"><div class="label">Landed</div><div class="big ok">14</div></div>
+        <div class="card grow"><div class="label">Model-minutes</div><div class="big">226</div></div>
+      </div>
+      <div class="row top" style="gap:12px">
+        <div class="card grow"><div class="label">Cost per run</div>
+          <div class="row" style="align-items:flex-end;gap:18px;height:110px;margin-top:10px">
+            <div style="width:40px;height:52%;background:var(--amber);border-radius:3px"></div><div style="width:40px;height:3%;background:var(--amber);border-radius:3px"></div><div style="width:40px;height:100%;background:var(--amber);border-radius:3px"></div><div style="width:40px;height:8%;background:var(--amber);border-radius:3px"></div></div></div>
+        <div class="card grow"><div class="label">Outcomes</div>
+          <div class="row" style="height:16px;border-radius:4px;overflow:hidden;gap:0;margin:14px 0 8px"><div style="flex:14;height:100%;background:var(--ok)"></div><div style="flex:1;height:100%;background:var(--dim)"></div><div style="flex:1;height:100%;background:var(--rust)"></div></div>
+          <div class="small muted">landed 14 · unproductive 1 · checkpoint 1</div></div>
+      </div>
+      <div class="card small mono muted">20261030T121410Z · 1 · $1.44 &nbsp;&nbsp; 20261029T195411Z · 8 · $18.57 &nbsp;&nbsp; …</div>
+    </div>
+  </div>
+</template>
+</body></html>

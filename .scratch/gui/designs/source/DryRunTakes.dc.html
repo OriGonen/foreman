@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Dry-run takes — Foreman GUI</title>
+<link rel="stylesheet" href="gui.css"><script src="canvas.js"></script></head>
+<body class="canvas">
+<header class="top">
+  <h1>06 · Dry run</h1>
+  <p><code>foreman dry-run</code>: a walk round before work starts. No prompt is sent and no sandbox starts, so it is free. It shows what would run, the settings (exec, model, effort, permissions, live, the three budgets, where the logs go) and the exact prompt for the first ticket. Data: the new <code>foreman dry-run --json</code>, which carries the prompt as a string; the app shows it as text with line numbers.</p>
+  <div class="pick" data-pick="a"><b>Pick: a · settings beside the prompt.</b> The prompt is the long part and the reason to open a dry run; side by side, it can be read at full height while the settings stay in view. A window is wide where a terminal is tall, so the terminal's stacked order (b) wastes the width and pushes the prompt below the fold.</div>
+</header>
+
+<template data-take="a" data-title="Settings beside the prompt" data-note="Left: the low sun, WOULD RUN, SETTINGS. Right: the prompt for the first ticket, full height, line-numbered, with Copy. A last line repeats that nothing was sent.">
+  <div class="app">
+    <div data-part="titlebar" data-title="Foreman — dry run · human-tickets"></div>
+    <div data-part="rail"></div>
+    <div class="main">
+      <div class="row"><span class="btn quiet">← human-tickets</span><div class="h2 grow">Dry run <span class="free">free</span></div><span class="small muted">no prompt is sent · no sandbox starts</span><span class="btn">Run again</span><span class="btn primary">Start run… <span class="paid">costs money</span></span></div>
+      <div class="row top" style="flex:1;gap:14px;min-height:0;align-items:stretch">
+        <div class="col" style="width:330px;gap:12px">
+          <div class="card col" style="gap:6px">
+            <div class="row"><span data-art="dome" data-w="80" data-p="0.12" data-stakes="dddddd>f.."></span><div><b>7 of 10</b> done<div class="small muted">3 would run</div></div></div>
+            <div class="label" style="margin-top:6px">Would run</div>
+            <div class="mono small"><span class="acc">▶</span> 07a followup-try-the-followup-skill <span class="chip followup">followup</span></div>
+            <div class="mono small muted">&nbsp; 08 readme-human-tickets-section</div>
+            <div class="mono small muted">&nbsp; 09 end-to-end-check-on-this-machine</div>
+          </div>
+          <div class="card col" style="gap:8px"><div class="label">Settings</div>
+            <div class="kv"><span>exec</span><span>local</span><span>perms</span><span>acceptEdits</span><span>model</span><span>claude-sonnet-5-5</span><span>effort</span><span>high</span><span>live</span><span>off</span><span>budgets</span><span>$25 · 90m · iterations unlimited</span><span>logs</span><span>foreman-runs.jsonl, foreman-runs.log</span></div></div>
+        </div>
+        <div class="card col grow" style="gap:8px;min-height:0">
+          <div class="row"><div class="label grow">Prompt for 07a · 122 lines</div><span class="btn">Copy</span></div>
+          <div class="code" style="flex:1">
+            <div class="l"><span class="n">1</span><span>@.scratch/human-tickets/issues/07a-followup-try-the-followup-skill.md</span></div>
+            <div class="l"><span class="n">2</span><span></span></div>
+            <div class="l"><span class="n">3</span><span>Implement the attached ticket, and only that ticket, to a high standard.</span></div>
+            <div class="l"><span class="n">4</span><span></span></div>
+            <div class="l"><span class="n">5</span><span>Work on tickets in the order of .scratch/human-tickets/order.md. Do not pick a</span></div>
+            <div class="l"><span class="n">6</span><span>different ticket, even if this one looks blocked.</span></div>
+            <div class="l"><span class="n">7</span><span></span></div>
+            <div class="l"><span class="n">8</span><span>## 1. Agree the seams before writing code</span></div>
+            <div class="l"><span class="n">9</span><span>…</span></div>
+            <div class="l"><span class="n">121</span><span>progress.txt (last 4000 bytes):</span></div>
+            <div class="l"><span class="n">122</span><span>&lt;/progress-excerpt&gt;</span></div>
+          </div>
+          <div class="small dim mono">─── nothing was sent; no sandbox was started</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template data-take="b" data-title="Stacked, as in the terminal" data-note="The terminal's dry-run laid out as a page: WOULD RUN, SETTINGS in a row, the prompt below with its first lines and an expander. Familiar, but the prompt — the part people open this for — starts halfway down.">
+  <div class="app">
+    <div data-part="titlebar" data-title="Foreman — dry run · human-tickets"></div>
+    <div data-part="rail"></div>
+    <div class="main">
+      <div class="sunrise" style="height:70px"><span data-art="sunrise" data-p="0.15"></span><div style="position:absolute;left:200px;top:14px"><b>Dry run</b> <span class="free">free</span><div class="small muted">a walk round before work starts: no prompt is sent, no sandbox starts</div></div></div>
+      <div class="row top" style="gap:14px">
+        <div class="card col grow" style="gap:4px"><div class="label">Would run</div><div class="mono small"><span class="acc">▶</span> 07a followup-try-the-followup-skill</div><div class="mono small muted">&nbsp; 08 readme-human-tickets-section</div><div class="mono small muted">&nbsp; 09 end-to-end-check-on-this-machine</div></div>
+        <div class="card grow"><div class="label">Settings</div><div class="kv" style="grid-template-columns:max-content 1fr max-content 1fr;margin-top:6px"><span>exec</span><span>local</span><span>perms</span><span>acceptEdits</span><span>model</span><span>sonnet-5-5</span><span>effort</span><span>high</span><span>live</span><span>off</span><span>budgets</span><span>$25 · 90m · ∞</span></div></div>
+      </div>
+      <div class="card col" style="flex:1;gap:6px"><div class="row"><div class="label grow">Prompt for 07a · 122 lines</div><span class="btn">Show all</span><span class="btn">Copy</span></div>
+        <div class="code"><div class="l"><span class="n">1</span><span>@.scratch/human-tickets/issues/07a-followup-try-the-followup-skill.md</span></div><div class="l"><span class="n">2</span><span></span></div><div class="l"><span class="n">3</span><span>Implement the attached ticket, and only that ticket, to a high standard.</span></div><div class="l"><span class="n">⋮</span><span>118 more lines</span></div></div></div>
+    </div>
+  </div>
+</template>
+</body></html>

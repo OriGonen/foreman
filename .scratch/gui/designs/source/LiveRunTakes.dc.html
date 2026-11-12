@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Live run takes — Foreman GUI</title>
+<link rel="stylesheet" href="gui.css"><script src="canvas.js"></script></head>
+<body class="canvas">
+<header class="top">
+  <h1>04 · The live run</h1>
+  <p>Watching the same <code>foreman run</code> the terminal runs. The app started it (or found it already running: the batch's control directory has a <code>pid</code> that is alive), and reads only files: the control directory (<code>iteration</code>, <code>budget</code>, <code>spent</code>, <code>live</code>, <code>activity</code>, <code>feed</code>), the stall marker for the ticket in flight, and <code>foreman-runs.jsonl</code> for each finished iteration's outcome. <b>+</b>, <b>−</b> and <b>L</b> do what the keys do on the terminal, through <code>foreman keys</code>. <b>Stop after this iteration</b> sets the budget to the iteration running; <b>Stop now…</b> asks, then interrupts as Ctrl-C does.</p>
+  <p>Sample: run 20261021-2 on human-tickets. It opened with a review turn (an earlier run left work behind), 05 landed, 06 progressed, then stalled and took a checkpoint turn, and 06 is running again as iteration 4 of 5.</p>
+  <div class="pick" data-pick="a"><b>Pick: a · the site.</b> It is the terminal's run screen in a window: header with the figure and the dome, the iterations with the feed under the one running, the bar along the bottom with the same keys. Someone who has watched a run in the terminal knows where everything is. b spreads the eye over three columns; c drops the feed, which is the part people watch — keep it in mind for a later always-on-top mode.</div>
+</header>
+
+<template data-take="a" data-title="The site" data-note="Header band: the foreman beside the dome, run facts on the right. Then one row per iteration with its outcome — the running one expanded into its tool-call feed (shown only while live is on, as in the terminal). The bar at the bottom: iterations with − / +, spend and time against their caps, live, and the two stops.">
+  <div class="app">
+    <div data-part="titlebar" data-title="Foreman — running human-tickets"></div>
+    <div data-part="rail" data-running="1"></div>
+    <div class="main" style="gap:12px">
+      <div class="card row" style="gap:18px;padding:10px 16px">
+        <span data-art="figure" data-w="44"></span><span data-art="dome" data-w="150" data-stakes="ddddd>hf.."></span>
+        <div class="grow kv" style="grid-template-columns:max-content 1fr max-content 1fr">
+          <span>Run</span><span>20261021-2 · started 14:02</span><span>Model</span><span>claude-sonnet-5-5</span>
+          <span>Batch</span><span>.scratch/human-tickets</span><span>Exec</span><span>local</span>
+          <span>Done</span><span>5 of 10 · 07 is a human ticket</span><span>Elapsed</span><span>31m 40s</span>
+        </div>
+      </div>
+      <div class="card flush" style="flex:1;overflow:hidden">
+        <div class="tlist">
+          <div class="t"><span class="g muted">⟲</span><span class="num">start</span><span class="slug">review turn · committed wip: left by run 20261020-4</span><span class="chip followup">review turn</span><span class="meta">0m48s · $0.21</span></div>
+          <div class="t"><span class="g ok">✓</span><span class="num">1/5</span><span class="slug">05 document-human-tickets</span><span class="chip landed">landed</span><span class="meta">9m02s · $1.31</span></div>
+          <div class="t"><span class="g acc">↗</span><span class="num">2/5</span><span class="slug">06 doctor-human-warnings · Remaining: 2 items</span><span class="chip followup">progressed</span><span class="meta">11m15s · $1.64</span></div>
+          <div class="t"><span class="g rust">⏸</span><span class="num">3/5</span><span class="slug">06 doctor-human-warnings · stalled → checkpoint turn committed wip:</span><span class="chip human">stalled</span><span class="meta">8m10s · $1.48</span></div>
+          <div class="t next" style="align-items:start"><span class="g acc">⠹</span><span class="num">4/5</span>
+            <div style="min-width:0"><div class="slug">06 doctor-human-warnings · continuation 3</div>
+              <div class="feed" style="margin-top:4px">
+                <div class="ln"><span class="tm">00:12</span><span class="tool">read</span><span>.scratch/human-tickets/progress.txt</span></div>
+                <div class="ln"><span class="tm">00:41</span><span class="tool">read</span><span>lib/foreman-doctor.sh</span></div>
+                <div class="ln"><span class="tm">01:30</span><span class="tool">edit</span><span>lib/foreman-doctor.sh  +12 −3</span></div>
+                <div class="ln"><span class="tm">02:10</span><span class="tool">bash</span><span>bash test/smoke.sh doctor</span></div>
+              </div></div>
+            <span class="chip next">running</span><span class="meta">02:24</span></div>
+        </div>
+      </div>
+      <div class="runbar">
+        <div class="grp"><span class="label">Iteration</span><b class="mono">4 of 5</b><span class="btn sq">−</span><span class="btn sq">+</span></div>
+        <div class="grp stack"><div><span class="label">Spent</span> <span class="mono">$4.64 / $25</span></div><span class="meter"><i style="width:19%"></i></span></div>
+        <div class="grp stack"><div><span class="label">Time</span> <span class="mono">32m / 90m</span></div><span class="meter"><i style="width:35%"></i></span></div>
+        <div class="grp"><span class="btn"><span class="k">L</span> Live on</span></div>
+        <div class="grp" style="margin-left:auto"><span class="btn" title="Stop after this iteration">Stop after this one</span><span class="btn danger">Stop now…</span></div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template data-take="b" data-title="Cockpit" data-note="Three columns: the iterations as a timeline, the feed large in the middle, the budgets as big meters with the controls. Everything at once, nothing expands — but the eye has three places to go, and the feed for a finished iteration is gone the moment the next starts.">
+  <div class="app">
+    <div data-part="titlebar" data-title="Foreman — running human-tickets"></div>
+    <div data-part="rail" data-running="1"></div>
+    <div class="main">
+      <div class="row"><span data-art="dome" data-w="64" data-stakes="ddddd>hf.."></span><div class="grow"><div class="h2 mono">run 20261021-2</div><div class="small muted">human-tickets · 5 of 10 landed · 31m 40s</div></div></div>
+      <div class="row top" style="flex:1;gap:12px;align-items:stretch;min-height:0">
+        <div class="card col" style="width:200px;gap:12px">
+          <div class="label">Iterations</div>
+          <div class="small"><span class="muted">start</span> review turn</div>
+          <div class="small"><span class="ok">✓ 1</span> 05 landed</div>
+          <div class="small"><span class="acc">↗ 2</span> 06 progressed</div>
+          <div class="small"><span class="rust">⏸ 3</span> 06 stalled + checkpoint</div>
+          <div class="small"><span class="acc">⠹ 4</span> 06 running</div>
+          <div class="small dim">· 5 budgeted</div>
+        </div>
+        <div class="card col grow" style="gap:6px"><div class="label">06 doctor-human-warnings · tool calls</div>
+          <div class="feed">
+            <div class="ln"><span class="tm">00:12</span><span class="tool">read</span><span>.scratch/human-tickets/progress.txt</span></div>
+            <div class="ln"><span class="tm">00:41</span><span class="tool">read</span><span>lib/foreman-doctor.sh</span></div>
+            <div class="ln"><span class="tm">01:30</span><span class="tool">edit</span><span>lib/foreman-doctor.sh  +12 −3</span></div>
+            <div class="ln"><span class="tm">02:10</span><span class="tool">bash</span><span>bash test/smoke.sh doctor</span></div>
+          </div></div>
+        <div class="card col" style="width:220px;gap:14px">
+          <div class="label">Iterations</div><div class="row"><span class="big" style="font-size:26px">4<span class="muted" style="font-size:16px"> / 5</span></span><span class="grow"></span><span class="btn sq">−</span><span class="btn sq">+</span></div>
+          <div class="label">Spent</div><div class="mono">$4.64 of $25</div><div class="meter"><i style="width:19%"></i></div>
+          <div class="label">Time</div><div class="mono">32m of 90m</div><div class="meter"><i style="width:35%"></i></div>
+          <span class="btn">L · Live on</span><span class="btn" title="Stop after this iteration">Stop after this one</span><span class="btn danger">Stop now…</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template data-take="c" data-title="Compact" data-note="A small window to keep in a corner: dome, the ticket and its activity line, the meters, − / +. No feed, no history. Good for glancing at; not enough for watching.">
+  <div class="app solo" style="background:var(--panel-2)">
+    <div data-part="titlebar" data-title="Foreman — running"></div>
+    <div style="display:flex;justify-content:center;align-items:center;height:100%">
+      <div class="card col" style="width:360px;gap:12px">
+        <div class="row"><span data-art="dome" data-w="90" data-stakes="ddddd>hf.."></span><div class="grow"><div class="mono">human-tickets</div><div class="small muted">5 of 10 · iteration 4 of 5</div></div></div>
+        <div class="mono small"><span class="acc">⠹</span> 06 doctor-human-warnings<div class="muted" style="padding-left:16px">02:10 bash test/smoke.sh doctor</div></div>
+        <div class="row small"><span class="label" style="width:60px">Spent</span><span class="meter grow"><i style="width:19%"></i></span><span class="mono">$4.64/$25</span></div>
+        <div class="row small"><span class="label" style="width:60px">Time</span><span class="meter grow"><i style="width:35%"></i></span><span class="mono">32m/90m</span></div>
+        <div class="row"><span class="btn sq">−</span><span class="btn sq">+</span><span class="grow"></span><span class="btn">Stop after this</span></div>
+      </div>
+    </div>
+  </div>
+</template>
+</body></html>

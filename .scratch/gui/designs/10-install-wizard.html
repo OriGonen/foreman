@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Install wizard — pick — Foreman GUI</title>
+<style>
+/* Foreman GUI — design tokens and components for the design canvases.
+   The implementation ports these tokens to gui/renderer/foreman.css (ticket 02).
+   Dark is ADR 0003's palette as-is; light is the new variant ADR 0004 adds for the app only.
+   Fonts are system fonts only: the app loads nothing from the network. */
+
+.theme-dark {
+  --bg: #0d0c0b;  --panel: #171614;  --panel-2: #1c1a17;  --line: #3a3732;  --shade: #30231a;
+  --text: #ece8e1; --muted: #a8a299;  --dim: #5c574f;
+  --sun: #f6d58e;  --amber: #e0a84a;  --rust: #c9772f;   --post: #8a5a24;  --earth: #3a2a18;
+  --ok: #8fcf8f;   --err: #f08078;
+  --accent: #e0a84a;            /* accent used as text */
+  --on-accent: #171614;         /* text on an amber fill */
+  --sky-top: #1c1a17; --sky-bot: #3a2a18; --sunfill: #f6d58e; --halo: #e0a84a;
+  --ground: #30231a; --scrim: rgba(0,0,0,.55);
+  color-scheme: dark;
+}
+.theme-light {
+  --bg: #f4efe6;  --panel: #fffcf6;  --panel-2: #f9f3e8;  --line: #e2d8c6;  --shade: #f3e6cf;
+  --text: #2a2117; --muted: #6b6154;  --dim: #a2978a;
+  --sun: #f6d58e;  --amber: #e0a84a;  --rust: #a3561b;   --post: #8a5a24;  --earth: #3a2a18;
+  --ok: #2e7d3c;   --err: #b43a2f;
+  --accent: #9a5a17;            /* amber darkened to 5:1 on --panel, for text */
+  --on-accent: #2a2117;
+  --sky-top: #fff8ea; --sky-bot: #fbe2b0; --sunfill: #eaa43a; --halo: #f6d58e;
+  --ground: #e9dcc4; --scrim: rgba(42,33,23,.35);
+  color-scheme: light;
+}
+
+:root { --ui: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+        --mono: "Cascadia Mono", "Cascadia Code", Consolas, monospace; }
+
+/* ---------- canvas chrome (not part of the app) ---------- */
+body.canvas a { color: #e0a84a; }
+body.canvas { margin: 0; background: #2b2926; color: #ece8e1; font: 14px/1.5 var(--ui); }
+.canvas header.top { padding: 28px 32px 8px; max-width: 1200px; }
+.canvas header.top h1 { font: 600 22px var(--ui); margin: 0 0 6px; }
+.canvas header.top p { margin: 4px 0; color: #c9c3b9; }
+.canvas .pick { margin: 14px 0 0; padding: 12px 16px; border-left: 4px solid #e0a84a; background: #1c1a17; border-radius: 6px; }
+.canvas .pick b { color: #f6d58e; }
+.canvas section.take { padding: 18px 32px 26px; border-top: 1px solid #3a3732; }
+.canvas section.take h2 { font: 600 16px var(--ui); margin: 0 0 4px; }
+.canvas section.take h2 .badge { font: 700 11px var(--mono); letter-spacing: .08em; background: #e0a84a; color: #171614; padding: 2px 7px; border-radius: 4px; margin-left: 8px; vertical-align: 2px; }
+.canvas section.take > p { margin: 0 0 12px; color: #c9c3b9; max-width: 1100px; }
+.canvas .frames { display: flex; flex-wrap: wrap; gap: 22px; }
+.canvas .frame-wrap > .cap { font: 12px var(--mono); color: #a8a299; margin-bottom: 6px; }
+.frame { width: 1040px; height: 660px; border-radius: 10px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,.45); position: relative; }
+.frame.tall { height: 760px; }
+.frame.termframe { width: 860px; height: 470px; background: #0d0c0b; }
+
+/* ---------- the app ---------- */
+.app { display: grid; grid-template-columns: 212px 1fr; grid-template-rows: 32px 1fr; height: 100%;
+       background: var(--bg); color: var(--text); font: 13px/1.45 var(--ui); position: relative; }
+.app.solo { grid-template-columns: 1fr; }
+.titlebar { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; padding: 0 0 0 12px;
+            background: var(--panel-2); border-bottom: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.titlebar .wc { margin-left: auto; display: flex; }
+.titlebar .wc span { width: 44px; text-align: center; line-height: 32px; color: var(--muted); }
+.rail { background: var(--panel-2); border-right: 1px solid var(--line); padding: 14px 10px; display: flex; flex-direction: column; gap: 3px; min-height: 0; }
+.rail .mark { display: flex; align-items: center; gap: 8px; padding: 0 6px 12px; }
+.rail .mark b { font: 700 13px var(--mono); letter-spacing: .14em; }
+.rail .mark small { display: block; color: var(--muted); font: 11px var(--mono); letter-spacing: 0; }
+.rail .item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; color: var(--text); }
+.rail .item.on { background: var(--shade); }
+.rail .item .n { margin-left: auto; font: 11px var(--mono); color: var(--muted); }
+.rail .item.done { color: var(--dim); }
+.rail .mini { height: 3px; background: var(--line); border-radius: 2px; margin: -2px 8px 6px; overflow: hidden; }
+.rail .mini i { display: block; height: 100%; background: var(--amber); }
+.rail .spacer { flex: 1; }
+.rail .foot { font: 11px var(--mono); color: var(--dim); padding: 8px 8px 0; border-top: 1px solid var(--line); margin-top: 6px; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--amber); display: inline-block; box-shadow: 0 0 0 3px color-mix(in srgb, var(--amber) 25%, transparent); }
+
+.main { padding: 18px 24px; display: flex; flex-direction: column; gap: 14px; min-height: 0; overflow: hidden; }
+.row { display: flex; gap: 14px; align-items: center; }
+.row.top { align-items: flex-start; }
+.grow { flex: 1; min-width: 0; }
+.col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+
+.label { font: 600 11px var(--mono); letter-spacing: .12em; color: var(--muted); text-transform: uppercase; }
+.h1 { font: 600 20px var(--ui); margin: 0; }
+.h2 { font: 600 15px var(--ui); margin: 0; }
+.mono { font-family: var(--mono); font-size: 12px; }
+.muted { color: var(--muted); } .dim { color: var(--dim); } .acc { color: var(--accent); }
+.ok { color: var(--ok); } .err { color: var(--err); } .rust { color: var(--rust); }
+.big { font: 600 34px var(--ui); letter-spacing: -.01em; }
+.small { font-size: 12px; }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.card.flush { padding: 0; }
+.card.warm { border-color: color-mix(in srgb, var(--amber) 55%, var(--line)); background: color-mix(in srgb, var(--amber) 8%, var(--panel)); }
+.card.bad { border-color: color-mix(in srgb, var(--err) 60%, var(--line)); background: color-mix(in srgb, var(--err) 7%, var(--panel)); }
+.card.good { border-color: color-mix(in srgb, var(--ok) 55%, var(--line)); background: color-mix(in srgb, var(--ok) 7%, var(--panel)); }
+
+.btn { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line);
+       background: var(--panel); color: var(--text); font: 600 12.5px var(--ui); white-space: nowrap; }
+.btn.primary { background: var(--amber); border-color: var(--amber); color: var(--on-accent); }
+.btn.danger { border-color: color-mix(in srgb, var(--err) 60%, var(--line)); color: var(--err); }
+.btn.quiet { background: transparent; border-color: transparent; color: var(--muted); }
+.btn.sq { width: 28px; padding: 6px 0; justify-content: center; font-family: var(--mono); }
+.btn .k { font: 11px var(--mono); color: var(--dim); }
+.btn.primary .k { color: color-mix(in srgb, var(--on-accent) 60%, transparent); }
+
+/* free vs costs-money: every action carries one */
+.free, .paid { font: 700 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; }
+.free { color: var(--ok); border: 1px solid color-mix(in srgb, var(--ok) 50%, transparent); }
+.paid { color: var(--on-accent); background: color-mix(in srgb, var(--on-accent) 14%, transparent); }
+.btn:not(.primary) .paid { color: var(--rust); background: color-mix(in srgb, var(--rust) 14%, transparent); }
+
+.chip { font: 600 10.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; white-space: nowrap; }
+.chip.landed { color: var(--ok); background: color-mix(in srgb, var(--ok) 13%, transparent); }
+.chip.next { color: var(--on-accent); background: var(--amber); }
+.chip.human { color: var(--rust); background: color-mix(in srgb, var(--rust) 15%, transparent); border: 1px solid color-mix(in srgb, var(--rust) 45%, transparent); }
+.chip.followup { color: var(--muted); border: 1px solid var(--line); }
+.chip.todo { color: var(--dim); border: 1px solid var(--line); }
+.chip.err { color: var(--err); background: color-mix(in srgb, var(--err) 13%, transparent); }
+
+/* ordered ticket list */
+.tlist { display: flex; flex-direction: column; }
+.tlist .t { display: grid; grid-template-columns: 22px 34px 1fr auto auto; gap: 10px; align-items: center; padding: 7px 12px; border-bottom: 1px solid var(--line); }
+.tlist .t:last-child { border-bottom: 0; }
+.tlist .t .g { font: 13px var(--mono); text-align: center; }
+.tlist .t .num { font: 12px var(--mono); color: var(--muted); }
+.tlist .t .slug { font: 12.5px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tlist .t.done .slug, .tlist .t.done .num { color: var(--dim); }
+.tlist .t.next { background: color-mix(in srgb, var(--amber) 9%, transparent); }
+.tlist .t .meta { font: 11.5px var(--mono); color: var(--muted); }
+
+/* key/value grid */
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 5px 14px; font-size: 12.5px; }
+.kv > :nth-child(odd) { font: 600 10.5px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding-top: 2px; }
+.kv > :nth-child(even) { font-family: var(--mono); font-size: 12px; }
+
+/* meters */
+.meter { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--amber); border-radius: 3px; }
+.meter.hot i { background: var(--rust); }
+
+/* feeds, prompts, editors: always text, never HTML */
+.feed { font: 12px/1.6 var(--mono); color: var(--muted); }
+.feed .ln { display: grid; grid-template-columns: 46px 52px 1fr; gap: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.feed .ln .tm { color: var(--dim); } .feed .ln .tool { color: var(--accent); }
+.code { font: 12px/1.6 var(--mono); background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 0; overflow: hidden; }
+.code .l { display: grid; grid-template-columns: 44px 1fr; white-space: pre; }
+.code .l .n { color: var(--dim); text-align: right; padding-right: 12px; border-right: 1px solid var(--line); margin-right: 12px; }
+.editor { font: 12px/1.65 var(--mono); background: var(--panel-2); border: 1px solid var(--amber); border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; color: var(--text); }
+.editor .caret { display: inline-block; width: 1px; height: 14px; background: var(--accent); vertical-align: -2px; }
+
+/* the bill: a receipt edge */
+.bill { background: var(--panel); border: 1px solid var(--line); border-bottom: 0; border-radius: 8px 8px 0 0; padding: 16px 18px 22px; position: relative; font-family: var(--mono); }
+.bill::after { content: ""; position: absolute; left: -1px; right: -1px; bottom: -8px; height: 9px;
+  background: linear-gradient(-45deg, transparent 6px, var(--panel) 0) 0 0 / 12px 9px repeat-x,
+              linear-gradient(45deg, transparent 6px, var(--panel) 0) 0 0 / 12px 9px repeat-x; }
+.bill .line { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; padding: 2px 0; }
+.bill .rule { border-top: 1px dashed var(--line); margin: 8px 0; }
+
+/* overlays */
+.scrim { position: absolute; inset: 32px 0 0 0; background: var(--scrim); }
+.modal { position: absolute; left: 50%; top: 52%; transform: translate(-50%, -50%); width: 460px; box-shadow: 0 18px 50px rgba(0,0,0,.4); }
+.drawer { position: absolute; top: 32px; right: 0; bottom: 0; width: 470px; background: var(--panel); border-left: 1px solid var(--line); box-shadow: -14px 0 40px rgba(0,0,0,.3); padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); }
+.tabs span { padding: 6px 12px; font-weight: 600; color: var(--muted); border-bottom: 2px solid transparent; }
+.tabs span.on { color: var(--text); border-color: var(--amber); }
+.note { font-size: 12px; color: var(--muted); }
+.note.lock::before { content: "\1F512\FE0E  "; }
+
+/* status bar along the bottom of the run screen */
+.runbar { display: flex; align-items: center; gap: 12px; padding: 10px 14px; white-space: nowrap; background: var(--panel); border-top: 1px solid var(--line); margin: auto -24px -18px; }
+.runbar .grp { display: flex; align-items: center; gap: 8px; }
+.runbar .meter { width: 56px; }
+.runbar .grp.stack { flex-direction: column; align-items: stretch; gap: 4px; }
+.runbar .grp.stack .meter { width: auto; }
+
+/* sunrise band */
+.sunrise { position: relative; height: 92px; border-radius: 10px; overflow: hidden; background: linear-gradient(var(--sky-top), var(--sky-bot)); border: 1px solid var(--line); }
+.sunrise svg { position: absolute; inset: 0; }
+
+/* grids of small panes (end states, empty states) */
+.panes { display: grid; grid-template-columns: 1fr 1fr; gap: 0; height: 100%; }
+.panes.three { grid-template-columns: 1fr 1fr 1fr; }
+.pane { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; min-width: 0; overflow: hidden; background: var(--bg); }
+.pane .cap { font: 600 10.5px var(--mono); letter-spacing: .1em; color: var(--dim); text-transform: uppercase; }
+.center { align-items: center; text-align: center; justify-content: center; }
+
+/* terminal frames for the install wizard (dark only, per ADR 0003) */
+.term { background: #0d0c0b; color: #ece8e1; font: 13px/1.5 var(--mono); padding: 16px 18px; white-space: pre; }
+.term .s { color: #f6d58e; } .term .a { color: #e0a84a; } .term .r { color: #c9772f; } .term .m { color: #a8a299; } .term .d { color: #5c574f; } .term .g { color: #8fcf8f; } .term .e { color: #f08078; } .term .b { font-weight: 700; }
+.term .inv { background: #e0a84a; color: #171614; }
+</style><script>
+// Foreman GUI design canvases. Clones each <template data-take> into a dark and a light frame,
+// fills the shared parts (title bar, rail) and draws the art from data attributes:
+//   <span data-art="dome" data-stakes="dddd>..hf.." data-w="260">   the sunrise dome over the stake line
+//   <span data-art="inspector" data-w="90">                          the inspector (doctor)
+//   <span data-art="figure" data-w="70">                             the foreman (run)
+//   <span data-art="sunrise" data-p="0.4">                           a sunrise band (p = how high the sun is)
+// Stakes: d landed · > next · h human ticket · f followup · . to go · x missing.
+// Local file, no network, no dependencies.
+(function () {
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = (w, h, vb, body) => `<svg xmlns="${NS}" width="${w}" height="${h}" viewBox="${vb}" aria-hidden="true">${body}</svg>`;
+  let uid = 0;
+
+  function dome(el) {
+    const stakes = (el.dataset.stakes || 'dddd>.h f..').replace(/ /g, '');
+    const n = stakes.length, done = (stakes.match(/d/g) || []).length;
+    const p = el.dataset.p !== undefined ? +el.dataset.p : done / n;
+    const w = +el.dataset.w || 240, h = Math.round(w * 0.62), id = 'd' + (++uid);
+    const cy = 112 - p * 74;                       // sun climbs from the horizon to the top of the dome
+    const rays = p >= 1 ? [...Array(9)].map((_, i) => {
+      const a = Math.PI * (i + 1) / 10, x1 = 100 - Math.cos(a) * 34, y1 = cy - Math.sin(a) * 34, x2 = 100 - Math.cos(a) * 46, y2 = cy - Math.sin(a) * 46;
+      return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" style="stroke:var(--sunfill)" stroke-width="3" stroke-linecap="round"/>`; }).join('') : '';
+    let st = '';
+    const x0 = 22, x1 = 178, step = n > 1 ? (x1 - x0) / (n - 1) : 0;
+    [...stakes].forEach((c, i) => {
+      const x = x0 + i * step;
+      const col = c === 'd' ? 'var(--amber)' : c === '>' ? 'var(--sunfill)' : c === 'h' ? 'var(--rust)' : c === 'x' ? 'var(--err)' : 'var(--dim)';
+      const tall = c === '>' ? 15 : 10;
+      st += `<rect x="${x - 1.6}" y="${108}" width="3.2" height="${tall}" rx="1" style="fill:${col}"/>`;
+      if (c === 'h') st += `<path d="M${x + 1.6} 108 l8 3 l-8 3z" style="fill:var(--rust)"/>`;
+      if (c === '>') st += `<circle cx="${x}" cy="${106}" r="2.6" style="fill:var(--sunfill)"/>`;
+      if (c === 'f') st += `<circle cx="${x}" cy="${120}" r="1.6" style="fill:var(--muted)"/>`;
+    });
+    el.innerHTML = svg(w, h, '0 0 200 124', `
+      <defs><linearGradient id="${id}g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--sky-top)"/><stop offset="1" style="stop-color:var(--sky-bot)"/></linearGradient>
+      <clipPath id="${id}c"><path d="M14 104 A86 86 0 0 1 186 104 Z"/></clipPath></defs>
+      <path d="M14 104 A86 86 0 0 1 186 104 Z" fill="url(#${id}g)"/>
+      <g clip-path="url(#${id}c)"><circle cx="100" cy="${cy}" r="40" style="fill:var(--halo)" opacity=".22"/><circle cx="100" cy="${cy}" r="27" style="fill:var(--sunfill)"/>${rays}</g>
+      <path d="M14 104 A86 86 0 0 1 186 104" fill="none" style="stroke:var(--post)" stroke-width="2.4"/>
+      <path d="M40 104 A60 60 0 0 1 160 104" fill="none" style="stroke:var(--post)" stroke-width="1" opacity=".35" stroke-dasharray="3 5"/>
+      <rect x="4" y="104" width="192" height="3" rx="1.5" style="fill:var(--earth)"/>${st}`);
+  }
+
+  function sunrise(el) {
+    const p = +(el.dataset.p || 0.35), cy = 110 - p * 80;
+    el.innerHTML = svg('100%', '100%', '0 0 1000 92" preserveAspectRatio="xMinYMax slice', `
+      <circle cx="120" cy="${cy}" r="60" style="fill:var(--halo)" opacity=".25"/><circle cx="120" cy="${cy}" r="40" style="fill:var(--sunfill)"/>
+      <rect x="0" y="80" width="1000" height="12" style="fill:var(--ground)"/>
+      ${[...Array(24)].map((_, i) => `<rect x="${300 + i * 28}" y="${i % 6 === 0 ? 66 : 72}" width="3" height="${i % 6 === 0 ? 14 : 8}" style="fill:var(--post)" opacity=".7"/>`).join('')}`);
+  }
+
+  function person(el, kind) {
+    const w = +el.dataset.w || 80, h = Math.round(w * 1.5);
+    const board = kind === 'inspector'
+      ? `<rect x="46" y="54" width="22" height="30" rx="2" style="fill:var(--panel);stroke:var(--post)" stroke-width="2"/><rect x="51" y="51" width="12" height="5" rx="1" style="fill:var(--post)"/>
+         <path d="M51 63 h12 M51 69 h12 M51 75 h8" style="stroke:var(--muted)" stroke-width="1.6"/>`
+      : `<rect x="58" y="40" width="4" height="74" rx="1.5" style="fill:var(--post)"/><path d="M62 42 l14 6 l-14 6z" style="fill:var(--rust)"/>`;
+    const sign = el.dataset.sign === 'stop' ? `<rect x="2" y="2" width="30" height="20" rx="3" style="fill:var(--err)"/><text x="17" y="16" text-anchor="middle" font-size="9" font-family="Consolas,monospace" font-weight="700" style="fill:var(--panel)">FIX</text>`
+             : el.dataset.sign === 'ok' ? `<circle cx="16" cy="13" r="11" style="fill:var(--ok)"/><path d="M10 13 l4 4 l8 -8" fill="none" style="stroke:var(--panel)" stroke-width="2.6"/>` : '';
+    el.innerHTML = svg(w, h, '0 0 80 120', `${sign}
+      <path d="M22 30 a14 14 0 0 1 28 0z" style="fill:var(--amber)"/><rect x="18" y="29" width="36" height="4" rx="2" style="fill:var(--amber)"/>
+      <circle cx="36" cy="40" r="9" style="fill:var(--sun)"/>
+      <path d="M22 54 q14 -6 28 0 l4 34 h-36z" style="fill:var(--rust)"/><path d="M30 52 h12 v36 h-12z" style="fill:var(--amber)" opacity=".85"/>
+      <path d="M24 88 l-2 28 h8 l4 -24 l4 24 h8 l-2 -28z" style="fill:var(--earth)"/>
+      <path d="M50 58 l10 8" style="stroke:var(--rust)" stroke-width="6" stroke-linecap="round"/>${board}
+      <rect x="0" y="116" width="80" height="3" rx="1.5" style="fill:var(--earth)"/>`);
+  }
+
+  const RAIL = (on, running) => `
+    <div class="mark"><span data-art="dome" data-w="34" data-stakes="dddd>.hf.."></span><div><b>FOREMAN</b><small>~/projects/app</small></div></div>
+    <div class="label" style="padding:0 8px 4px">Batches</div>
+    <div class="item ${on === 'human' ? 'on' : ''}">${running ? '<span class="dot"></span>' : ''}<span class="mono">human-tickets</span><span class="n">4/10</span></div><div class="mini"><i style="width:40%"></i></div>
+    <div class="item ${on === 'gui' ? 'on' : ''}"><span class="mono">gui</span><span class="n">0/14</span></div><div class="mini"><i style="width:0"></i></div>
+    <div class="item done"><span class="mono">DONE_terminal-design</span><span class="n">✓</span></div>
+    <div class="spacer"></div>
+    <div class="label" style="padding:0 8px 4px">Tools</div>
+    <div class="item ${on === 'doctor' ? 'on' : ''}">Doctor <span class="free" style="margin-left:auto">free</span></div>
+    <div class="item ${on === 'report' ? 'on' : ''}">Report <span class="free" style="margin-left:auto">free</span></div>
+    <div class="foot">${running ? 'run 20261021-2 in flight' : 'no run in flight'}<br>read from disk · 14:07</div>`;
+
+  function fill(root) {
+    root.querySelectorAll('[data-part=titlebar]').forEach(el => {
+      el.classList.add('titlebar');
+      el.innerHTML = `<span data-art="dome" data-w="18" data-stakes="dd>."></span><span>${el.dataset.title || 'Foreman — .scratch/human-tickets'}</span><span class="wc"><span>—</span><span>☐</span><span>✕</span></span>`;
+    });
+    root.querySelectorAll('[data-part=rail]').forEach(el => { el.classList.add('rail'); el.innerHTML = RAIL(el.dataset.on || 'human', el.dataset.running === '1'); });
+    root.querySelectorAll('[data-art=dome]').forEach(dome);
+    root.querySelectorAll('[data-art=sunrise]').forEach(sunrise);
+    root.querySelectorAll('[data-art=inspector]').forEach(el => person(el, 'inspector'));
+    root.querySelectorAll('[data-art=figure]').forEach(el => person(el, 'figure'));
+  }
+
+  function build() {
+    const pick = (document.querySelector('[data-pick]') || {}).dataset?.pick;
+    document.querySelectorAll('template[data-take]').forEach(t => {
+      const sec = document.createElement('section'); sec.className = 'take';
+      const take = t.dataset.take;
+      sec.innerHTML = `<h2>${take} · ${t.dataset.title}${pick && (take.match(/^[a-z]+/) || [])[0] === pick ? '<span class="badge">PICK</span>' : ''}</h2><p></p><div class="frames"></div>`;
+      sec.querySelector('p').textContent = t.dataset.note || '';
+      const themes = (t.dataset.themes || 'dark light').split(' ');
+      themes.forEach(th => {
+        const wrap = document.createElement('div'); wrap.className = 'frame-wrap';
+        wrap.innerHTML = `<div class="cap">${take} · ${th}</div>`;
+        const f = document.createElement('div'); f.className = `frame ${t.dataset.frame || ''} theme-${th}`;
+        f.appendChild(t.content.cloneNode(true)); fill(f);
+        wrap.appendChild(f); sec.querySelector('.frames').appendChild(wrap);
+      });
+      t.after(sec);
+    });
+    document.querySelectorAll('header.top [data-art]').forEach(() => fill(document.querySelector('header.top')));
+  }
+  document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', build) : build();
+})();
+</script></head>
+<body class="canvas">
+<header class="top">
+  <p class="small"><a href="source/WizardTakes.dc.html">All takes: source/WizardTakes.dc.html</a></p>
+  <h1>10 · The install wizard (terminal)</h1>
+  <p><code>bash install.sh</code> asks one question when — and only when — stdin and stdout are both terminals: CLI only, or CLI + desktop app. Everywhere else (the smoke suite captures its output; CI; a pipe) it behaves exactly as today. <code>--gui</code> / <code>--no-gui</code> answer it up front for scripted installs. On a rerun it asks only about the missing piece; with everything installed it asks nothing. Installed-or-not is read from disk: <code>gui/node_modules</code> and the Start-menu shortcut.</p>
+  <p>This is terminal output, so it is drawn in the dark palette only (ADR 0003); a terminal too narrow or without colour gets the same words as plain lines.</p>
+  <div class="pick" data-pick="a"><b>Pick: a · numbered choice.</b> Typing 1 or 2 works with a plain <code>read</code> in any terminal, Git Bash's mintty included; b's arrow-key menu needs raw key reading in bash, which foreman avoids everywhere but the run's own status bar — and it looks no better for one question.</div>
+</header>
+
+<template data-take="a" data-title="Numbered choice" data-themes="dark" data-frame="termframe" data-note="The small sunrise, the question, two numbered answers with what each one does (and its size), Enter for the default.">
+<div class="term"><span class="s">     ▄▄▄▀▀▀▄▄▄</span>        <span class="b">FOREMAN</span>  <span class="m">install</span>
+<span class="a">  ▄▀▀▀▀▀▀▀▀▀▀▀▀▄</span>      <span class="m">from /c/Projects/foreman · d0d6874</span>
+<span class="d">▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔</span>
+
+  What should this install?
+
+  <span class="a b">1</span>  CLI only                    <span class="m">foreman on your PATH, the skills, the</span>
+                                 <span class="m">PowerShell shim. As today.</span>
+
+  <span class="a b">2</span>  CLI + desktop app           <span class="m">also npm ci in gui/ (~250 MB, Electron) and</span>
+                                 <span class="m">a Start-menu shortcut "Foreman".</span>
+
+  <span class="d">Add the app later with: bash install.sh --gui   ·   remove it: --no-gui</span>
+
+  Choice [<span class="b">1</span>/2]: <span class="inv"> </span>
+</div>
+</template>
+
+<template data-take="a2" data-title="Numbered choice — rerun with the CLI already installed" data-themes="dark" data-frame="termframe" data-note="On a rerun only the missing piece is offered. With everything installed, the installer asks nothing and prints its usual result.">
+<div class="term"><span class="s">     ▄▄▄▀▀▀▄▄▄</span>        <span class="b">FOREMAN</span>  <span class="m">install</span>
+<span class="a">  ▄▀▀▀▀▀▀▀▀▀▀▀▀▄</span>      <span class="m">from /c/Projects/foreman · d0d6874</span>
+<span class="d">▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔</span>
+
+  <span class="g">■</span> CLI installed           <span class="m">~/.local/bin/foreman → this checkout</span>
+  <span class="d">·</span> desktop app             <span class="m">not installed</span>
+
+  Add the desktop app too? <span class="m">npm ci in gui/ (~250 MB) and a Start-menu shortcut</span>
+
+  [y/<span class="b">N</span>]: <span class="inv"> </span>
+</div>
+</template>
+
+</body></html>

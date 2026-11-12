@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Ticket takes — Foreman GUI</title>
+<link rel="stylesheet" href="gui.css"><script src="canvas.js"></script></head>
+<body class="canvas">
+<header class="top">
+  <h1>02 · Ticket detail, and the handoff editor</h1>
+  <p>One ticket: its status line, <code>Blocked by:</code>, <code>Checks:</code> (or which followup checks it), <code>Handoff:</code>, the ticket text, and the progress.txt notes that mention it. For a human ticket, the one thing the app writes: the handoff file named on its <code>Handoff:</code> line, inside the repo, nowhere else.</p>
+  <p>The ticket itself is never edited here. Marking a human ticket done is flipping its status line in the person's editor (<b>Open ticket in editor</b>). All ticket, notes and handoff text is shown as text, never as HTML.</p>
+  <div class="pick" data-pick="b"><b>Pick: b · ticket page.</b> The handoff file answers the ticket's criteria, so the two need to sit side by side at full height; the drawer in a squeezes both into 470px and hides the order behind a scrim for no gain. b1 shows the same page for an agent ticket, so one layout covers both.</div>
+</header>
+
+<template data-take="a" data-title="Drawer over the overview" data-note="The ticket slides in from the right over the order; tabs switch between the ticket text, the handoff editor and the notes. Quick to open and close, but the handoff and the criteria it answers are never visible at once.">
+  <div class="app">
+    <div data-part="titlebar"></div>
+    <div data-part="rail"></div>
+    <div class="main" style="opacity:.55">
+      <div class="h1 mono" style="font-size:18px">.scratch/human-tickets</div>
+      <div class="card" style="height:150px"></div>
+      <div class="card flush tlist">
+        <div class="t done"><span class="g ok">✓</span><span class="num">04</span><span class="slug">sent-back-detection</span><span></span><span></span></div>
+        <div class="t next"><span class="g acc">▶</span><span class="num">05</span><span class="slug">document-human-tickets</span><span></span><span></span></div>
+        <div class="t"><span class="g dim">·</span><span class="num">06</span><span class="slug">doctor-human-warnings</span><span></span><span></span></div>
+        <div class="t"><span class="g rust">✋</span><span class="num">07</span><span class="slug">try-it-on-a-real-repo</span><span></span><span></span></div>
+      </div>
+    </div>
+    <div class="drawer">
+      <div class="row"><span class="chip human">human</span><span class="mono grow" style="font-size:14px">07 try-it-on-a-real-repo</span><span class="btn quiet">✕</span></div>
+      <div class="kv"><span>Status</span><span>ready-for-human</span><span>Blocked by</span><span>06 <span class="muted">· not landed yet</span></span><span>Checked by</span><span>07a followup-try-the-followup-skill</span></div>
+      <div class="tabs"><span>Ticket</span><span class="on">Handoff ●</span><span>Notes (2)</span></div>
+      <div class="note lock">Write where a secret is stored, never its value.</div>
+      <div class="editor" style="flex:1">## What I did
+Ran foreman on ~/projects/shop with the 3-ticket batch.
+
+## Where it is
+.scratch/try-human/ in that repo, commit 4f2c1e0.
+
+## What I decided
+The followup skill reads well; one wording fix noted below.<span class="caret"></span></div>
+      <div class="row"><span class="mono small muted grow">handoff/07-try-it-on-a-real-repo.md · unsaved</span><span class="btn">Open in editor</span><span class="btn primary">Save</span></div>
+    </div>
+  </div>
+</template>
+
+<template data-take="b" data-title="Ticket page" data-note="A page of its own (back arrow to the overview). A facts strip on top; the ticket text on the left; on the right the handoff editor for a human ticket. Done-ness is still the status line: the footer says how to mark it, with a button that opens the ticket in the person's editor.">
+  <div class="app">
+    <div data-part="titlebar" data-title="Foreman — 07 try-it-on-a-real-repo"></div>
+    <div data-part="rail"></div>
+    <div class="main">
+      <div class="row"><span class="btn quiet">← human-tickets</span><span class="chip human">human</span><span class="mono grow" style="font-size:16px">07 try-it-on-a-real-repo</span><span class="btn">Open ticket in editor</span></div>
+      <div class="card row" style="gap:28px;padding:10px 16px">
+        <div><div class="label">Status</div><div class="mono">ready-for-human</div></div>
+        <div><div class="label">Blocked by</div><div class="mono">06 <span class="muted">not landed yet</span></div></div>
+        <div><div class="label">Checked by</div><div class="mono">07a followup-try-the-followup-skill</div></div>
+        <div class="grow"><div class="label">Handoff</div><div class="mono">handoff/07-try-it-on-a-real-repo.md</div></div>
+      </div>
+      <div class="row top" style="flex:1;gap:14px;min-height:0;align-items:stretch">
+        <div class="card col" style="width:46%;overflow:hidden;gap:6px">
+          <div class="label">Ticket</div>
+          <div class="mono small" style="white-space:pre-wrap;line-height:1.6"># 07: try it on a real repo
+
+**Status:** ready-for-human
+**Handoff:** handoff/07-try-it-on-a-real-repo.md
+
+Run a 3-ticket batch with one human ticket on a
+repo that isn't foreman itself.
+
+- [ ] The run stops at the human ticket (exit 30)
+- [ ] A rerun before it is done stops again, free
+- [ ] The handoff file says what you did, where
+      it is, and what you decided</div>
+          <div class="label" style="margin-top:8px">Notes in progress.txt</div>
+          <div class="feed"><div>2026-10-21 · 06 lands the doctor warning this needs</div><div>2026-10-21 · 07 waits on a person; run stopped (exit 30)</div></div>
+        </div>
+        <div class="card col grow" style="gap:8px">
+          <div class="row"><div class="label grow">Handoff file</div><span class="mono small muted">unsaved</span></div>
+          <div class="note lock">Record where a secret is stored (a password manager entry, an env file name) — never its value.</div>
+          <div class="editor" style="flex:1">## What I did
+Ran foreman on ~/projects/shop with the 3-ticket batch.
+The run stopped at 02 (exit 30); a rerun stopped
+there again at no cost.
+
+## Where it is
+.scratch/try-human/ in that repo, commit 4f2c1e0.
+
+## What I decided
+The followup skill reads well. One wording fix:
+"send back" → "send the ticket back".<span class="caret"></span></div>
+          <div class="row"><span class="small muted grow">When it's done, set the ticket's status line to <span class="mono">implemented</span> in your editor; the overview updates by itself.</span><span class="btn primary">Save handoff</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<template data-take="b1" data-title="Ticket page, agent ticket" data-note="The same page for an ordinary ticket: no editor; the right column holds what the loop knows about it — iterations spent on it from foreman-runs.jsonl, and the stall marker if it's the one in flight.">
+  <div class="app">
+    <div data-part="titlebar" data-title="Foreman — 07a followup-try-the-followup-skill"></div>
+    <div data-part="rail"></div>
+    <div class="main">
+      <div class="row"><span class="btn quiet">← human-tickets</span><span class="chip followup">followup</span><span class="mono grow" style="font-size:16px">07a followup-try-the-followup-skill</span><span class="btn">Open ticket in editor</span></div>
+      <div class="card row" style="gap:28px;padding:10px 16px">
+        <div><div class="label">Status</div><div class="mono">ready-for-agent</div></div>
+        <div><div class="label">Blocked by</div><div class="mono">07 <span class="rust">human, not done</span></div></div>
+        <div class="grow"><div class="label">Checks</div><div class="mono">07 try-it-on-a-real-repo · reads its handoff file</div></div>
+      </div>
+      <div class="row top" style="flex:1;gap:14px;min-height:0;align-items:stretch">
+        <div class="card col" style="width:46%;gap:6px">
+          <div class="label">Ticket</div>
+          <div class="mono small" style="white-space:pre-wrap;line-height:1.6"># 07a: followup — try the followup skill
+
+**Status:** ready-for-agent
+**Blocked by:** 07
+**Checks:** 07
+
+Read handoff/07-try-it-on-a-real-repo.md against
+07's criteria. If it falls short, send 07 back.
+
+- [ ] Each of 07's criteria has an answer
+- [ ] …</div>
+        </div>
+        <div class="card col grow" style="gap:10px">
+          <div class="label">What the loop knows</div>
+          <div class="kv"><span>Iterations</span><span>none yet</span><span>In flight</span><span>no</span><span>Sent back</span><span>never</span></div>
+          <div class="label" style="margin-top:6px">Notes in progress.txt</div>
+          <div class="feed dim">nothing mentions 07a yet</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+</body></html>
