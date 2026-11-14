@@ -20,3 +20,6 @@ Thumbs.db
 # Inspect with `foreman report <batch>`.
 **/foreman-runs.jsonl
 **/foreman-runs.log
+
+# The desktop app's one dependency (electron), installed by `npm install` in gui/.
+gui/node_modules/

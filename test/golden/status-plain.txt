@@ -1,0 +1,14 @@
+Batch: batch
+Tickets done: 1 / 5  ·  human tickets remaining: 1
+
+Next: 02-ticket.md
+
+Remaining, in order:
+  1  02-ticket.md
+  2  03-ticket.md   [HUMAN]
+  3  04-ticket.md   [CHECKS 03-ticket.md]
+  4  05-ticket.md   [CHECKS ghost.md]
+
+The loop will run 1 ticket(s), then stop at 03-ticket.md for a human.
+
+warning: batch/issues/05-ticket.md Checks: ghost.md, which is not a ticket in this batch
