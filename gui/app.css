@@ -1,0 +1,143 @@
+/* Foreman GUI — the tokens and components of designs/source/gui.css, for the window itself.
+   Dark is ADR 0003's palette as it is; light is the app's own (spec: "The light palette"). The
+   window follows Windows: the dark tokens are the default, and the light ones replace them when
+   the system asks for light. System fonts only, and nothing is loaded from anywhere. */
+
+:root {
+  --bg: #0d0c0b;  --panel: #171614;  --panel-2: #1c1a17;  --line: #3a3732;  --shade: #30231a;
+  --text: #ece8e1; --muted: #a8a299;  --dim: #5c574f;
+  --sun: #f6d58e;  --amber: #e0a84a;  --rust: #c9772f;   --post: #8a5a24;  --earth: #3a2a18;
+  --ok: #8fcf8f;   --err: #f08078;
+  --accent: #e0a84a;            /* accent used as text */
+  --on-accent: #171614;         /* text on an amber fill */
+  --sky-top: #1c1a17; --sky-bot: #3a2a18; --sunfill: #f6d58e; --halo: #e0a84a;
+  --ground: #30231a; --scrim: rgba(0,0,0,.55); --outline: #8a5a24; --ink: #3b1d12; --paper: #f6e7c1; --sweat: #7fc8f0;
+  /* the run-end silhouettes (05): the terminal's sun bands and its silhouette */
+  --sil: #0a0908; --sun-core: #f6d58e; --sun-mid: #e0a84a; --sun-rim: #c9772f; --sun-ring1: #3a2a18; --sun-ring2: #241a12;
+  --night: #1c1a17; --glint: #8a5a24; --letter: #f6d58e; --glow: .17;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f4efe6;  --panel: #fffcf6;  --panel-2: #f9f3e8;  --line: #e2d8c6;  --shade: #f3e6cf;
+    --text: #2a2117; --muted: #6b6154;  --dim: #a2978a;
+    --sun: #f6d58e;  --amber: #e0a84a;  --rust: #a3561b;   --post: #8a5a24;  --earth: #3a2a18;
+    --ok: #2e7d3c;   --err: #b43a2f;
+    --accent: #9a5a17;            /* amber darkened to 5:1 on --panel, for text */
+    --on-accent: #2a2117;
+    --sky-top: #fff8ea; --sky-bot: #fbe2b0; --sunfill: #eaa43a; --halo: #f6d58e;
+    --ground: #e9dcc4; --scrim: rgba(42,33,23,.35); --outline: #3a2a18; --ink: #3b1d12; --paper: #f6e7c1; --sweat: #3f9fd8;
+    --sil: #241910; --sun-core: #f8dc98; --sun-mid: #eaa43a; --sun-rim: #c9772f; --sun-ring1: #f0c88a; --sun-ring2: #f6dfba;
+    --night: #dccaa9; --glint: #d08a3a; --letter: #f6d58e; --glow: .32;
+    color-scheme: light;
+  }
+}
+
+:root { --ui: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+        --mono: "Cascadia Mono", "Cascadia Code", Consolas, monospace; }
+
+html, body { margin: 0; height: 100%; background: var(--bg); }
+button { font: inherit; color: inherit; }
+
+/* ---------- the window ---------- */
+.app { display: grid; grid-template-columns: 212px 1fr; height: 100%;
+       background: var(--bg); color: var(--text); font: 13px/1.45 var(--ui); }
+.app.solo { grid-template-columns: 1fr; }
+.rail { background: var(--panel-2); border-right: 1px solid var(--line); padding: 14px 10px; display: flex; flex-direction: column; gap: 3px; min-height: 0; overflow: auto; }
+.rail .mark { display: flex; align-items: center; gap: 8px; padding: 0 6px 12px; }
+.rail .mark b { font: 700 13px var(--mono); letter-spacing: .14em; }
+.rail .mark small { display: block; color: var(--muted); font: 11px var(--mono); letter-spacing: 0; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rail .item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; color: var(--text); width: 100%; box-sizing: border-box;
+              border: 0; background: transparent; text-align: left; cursor: pointer; }
+.rail .item:hover { background: color-mix(in srgb, var(--shade) 55%, transparent); }
+.rail .item.on { background: var(--shade); }
+.rail .item .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 12px var(--mono); }
+.rail .item .n { margin-left: auto; font: 11px var(--mono); color: var(--muted); }
+.rail .item.done { color: var(--dim); }
+.rail .item.bad .n { color: var(--err); }
+.rail .mini { height: 3px; background: var(--line); border-radius: 2px; margin: -2px 8px 6px; overflow: hidden; }
+.rail .mini i { display: block; height: 100%; background: var(--amber); }
+.rail .spacer { flex: 1; }
+.rail .foot { font: 11px var(--mono); color: var(--dim); padding: 8px 8px 0; border-top: 1px solid var(--line); margin-top: 6px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.main { padding: 18px 24px; display: flex; flex-direction: column; gap: 14px; min-height: 0; min-width: 0; overflow: auto; }
+.row { display: flex; gap: 14px; align-items: center; }
+.row.top { align-items: flex-start; }
+.row.wrap { flex-wrap: wrap; }
+.grow { flex: 1; min-width: 0; }
+.col { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+
+.label { font: 600 11px var(--mono); letter-spacing: .12em; color: var(--muted); text-transform: uppercase; }
+.h1 { font: 600 20px var(--ui); margin: 0; }
+.mono { font-family: var(--mono); font-size: 12px; }
+.muted { color: var(--muted); } .dim { color: var(--dim); } .acc { color: var(--accent); }
+.ok { color: var(--ok); } .err { color: var(--err); } .rust { color: var(--rust); }
+.big { font: 600 34px var(--ui); letter-spacing: -.01em; }
+.small { font-size: 12px; }
+.wordy { overflow-wrap: anywhere; }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.card.flush { padding: 0; }
+.card.warm { border-color: color-mix(in srgb, var(--amber) 55%, var(--line)); background: color-mix(in srgb, var(--amber) 8%, var(--panel)); }
+.card.bad { border-color: color-mix(in srgb, var(--err) 60%, var(--line)); background: color-mix(in srgb, var(--err) 7%, var(--panel)); }
+
+.btn { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line);
+       background: var(--panel); color: var(--text); font: 600 12.5px var(--ui); white-space: nowrap; cursor: pointer; }
+.btn:hover:not(:disabled) { border-color: var(--muted); }
+.btn.primary { background: var(--amber); border-color: var(--amber); color: var(--on-accent); }
+.btn.quiet { background: transparent; border-color: transparent; color: var(--muted); }
+.btn:disabled { opacity: .55; cursor: default; }
+
+/* free vs costs-money: every action carries one */
+.free, .paid { font: 700 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; }
+.free { color: var(--ok); border: 1px solid color-mix(in srgb, var(--ok) 50%, transparent); }
+.paid { color: var(--on-accent); background: color-mix(in srgb, var(--on-accent) 14%, transparent); }
+.btn:not(.primary) .paid { color: var(--rust); background: color-mix(in srgb, var(--rust) 14%, transparent); }
+
+.chip { font: 600 10.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; white-space: nowrap; }
+.chip.next { color: var(--on-accent); background: var(--amber); }
+.chip.human { color: var(--rust); background: color-mix(in srgb, var(--rust) 15%, transparent); border: 1px solid color-mix(in srgb, var(--rust) 45%, transparent); }
+.chip.followup { color: var(--muted); border: 1px solid var(--line); }
+
+/* the order: one ticket a row */
+.tlist { display: flex; flex-direction: column; }
+.tlist .t { display: grid; grid-template-columns: 22px 34px 1fr auto auto; gap: 10px; align-items: center; padding: 7px 12px; border-bottom: 1px solid var(--line); }
+.tlist .t:last-child { border-bottom: 0; }
+.tlist .t .g { font: 13px var(--mono); text-align: center; }
+.tlist .t .num { font: 12px var(--mono); color: var(--muted); }
+.tlist .t .slug { font: 12.5px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tlist .t.done .slug, .tlist .t.done .num { color: var(--dim); }
+.tlist .t.next { background: color-mix(in srgb, var(--amber) 9%, transparent); }
+.tlist .t .meta { font: 11.5px var(--mono); color: var(--muted); }
+
+/* key/value grid */
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 5px 14px; font-size: 12.5px; }
+.kv > :nth-child(odd) { font: 600 10.5px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding-top: 2px; }
+.kv > :nth-child(even) { font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+
+/* the overview's own spacing */
+.rail > .label { padding: 0 8px 4px; }
+.title { font-size: 18px; }
+.domecard { display: flex; gap: 16px; align-items: center; width: 420px; flex: none; }
+.domecard .col { gap: 4px; }
+.domecard .big .of { font-size: 20px; }
+.nextcard { gap: 8px; }
+.nextcard .row { gap: 10px; }
+.nextcard .name { font-size: 14px; }
+.humanbar { gap: 12px; padding: 10px 14px; }
+.warnings { gap: 6px; }
+
+/* what the CLI said, as text */
+pre.said { font: 12px/1.5 var(--mono); margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text); }
+
+/* a state that blocks the pane: a sentence, the CLI's words, one button */
+.pane { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; padding: 24px; min-width: 0; }
+.pane pre.said { text-align: left; max-width: 640px; }
+
+/* the art: svg shapes take their colours from the tokens, through classes (the CSP allows no inline style) */
+svg .f-halo { fill: var(--halo); } svg .f-sunfill { fill: var(--sunfill); } svg .f-earth { fill: var(--earth); }
+svg .f-amber { fill: var(--amber); } svg .f-rust { fill: var(--rust); } svg .f-dim { fill: var(--dim); }
+svg .f-err { fill: var(--err); } svg .f-muted { fill: var(--muted); }
+svg .k-sunfill { stroke: var(--sunfill); } svg .k-post { stroke: var(--post); }
+svg .s-top { stop-color: var(--sky-top); } svg .s-bot { stop-color: var(--sky-bot); }

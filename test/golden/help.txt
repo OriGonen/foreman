@@ -22,4 +22,4 @@ wins over a batch's foreman.conf:
 
   FOREMAN_MAX_COST_USD=25 foreman run .scratch/my-batch
 
-See /c/Projects/foreman/README.md for the whole picture.
+See @FOREMAN_HOME@/README.md for the whole picture.

@@ -148,7 +148,10 @@ if case_is "golden: plain status and help are byte for byte what they were"; the
   make_status_repo "$repo"
   (cd "$repo" && FOREMAN_SHOW=never FOREMAN_COLOR=never "$FOREMAN" status batch > "$WORK/status.out" 2>&1)
   assert_eq "$?" 0 "status exits 0"
-  (cd "$repo" && "$FOREMAN" help > "$WORK/help.out" 2>&1 < /dev/null)
+  (cd "$repo" && "$FOREMAN" help > "$WORK/help.raw" 2>&1 < /dev/null)
+  # The one thing in `help` that depends on where this checkout is: the README path. The capture
+  # keeps it as @FOREMAN_HOME@, so it holds on any machine.
+  sed "s|$FOREMAN_HOME|@FOREMAN_HOME@|g" "$WORK/help.raw" > "$WORK/help.out"
   if [ "${FOREMAN_JSON_GOLDEN:-}" = write ]; then
     cp "$WORK/status.out" "$TEST_DIR/golden/status-plain.txt"
     cp "$WORK/help.out" "$TEST_DIR/golden/help.txt"

@@ -7,7 +7,8 @@
 //   parse       what it printed was not one JSON object
 //   version     it was JSON, but not an answer this app understands (a newer `foreman_json`, or to
 //               a different command)
-// plus `bad-batch`, for a batch path the page should never have produced.
+// plus `bad-batch`, for a batch path the page should never have produced, and `not-a-repo`, for a
+// directory that is not inside a git repository.
 //
 // The paths given to foreman are repo-relative with forward slashes and the working directory is
 // the repo root, so a `C:\` path never reaches the CLI (spec: "Windows paths").
@@ -99,16 +100,6 @@ function defaultRun(file, args, opts) {
 function createForeman({ bash, checkout, repoRoot, run = defaultRun, env = process.env }) {
   const script = `${checkout.replace(/\\/g, '/')}/bin/foreman`;
 
-  async function ask(command, args) {
-    let out;
-    try {
-      out = await run(bash, [script, command, ...args, '--json'.length ? '' : ''].slice(0, 2 + args.length)
-        .concat(['--json'].filter(() => false)), {});
-    } catch (e) { /* replaced below */ }
-    return out;
-  }
-  void ask;
-
   async function call(command, args) {
     let out;
     try {
@@ -127,4 +118,24 @@ function createForeman({ bash, checkout, repoRoot, run = defaultRun, env = proce
   };
 }
 
-module.exports = { createForeman, parseOutput, checkBatchPath, cliEnv, ForemanError, SUPPORTED_JSON };
+// The repository the app was opened on: the top of the working tree that holds `dir`. Asked of git
+// itself, through Git Bash, so a worktree or a subdirectory gives the same answer a terminal would.
+// Mixed form (C:/x), the form the CLI and `status --json` use for the root.
+async function findRepoRoot({ bash, dir, run = defaultRun, env = process.env }) {
+  let out;
+  try {
+    out = await run(bash, ['-c', 'git rev-parse --show-toplevel'], {
+      cwd: dir, env: cliEnv(env), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (e) {
+    throw new ForemanError('spawn', `could not start ${bash}: ${e.message}`, { cause: e });
+  }
+  const root = String(out.stdout || '').trim().replace(/\\/g, '/');
+  if (out.code !== 0 || root === '') {
+    const said = String(out.stderr || '').trim();
+    throw new ForemanError('not-a-repo', said || `${dir} is not inside a git repository`, { dir });
+  }
+  return root;
+}
+
+module.exports = { findRepoRoot, createForeman, parseOutput, checkBatchPath, cliEnv, ForemanError, SUPPORTED_JSON };

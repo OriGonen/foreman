@@ -104,3 +104,40 @@ test('parseOutput is the whole of the parsing', () => {
   assert.deepEqual(parseOutput('status', { code: 0, stdout: JSON.stringify(good), stderr: '' }), good);
   assert.throws(() => parseOutput('status', { code: 2, stdout: '', stderr: 'x' }), ForemanError);
 });
+
+// ---- findRepoRoot: the directory the app was opened on -> the repository's root ----
+
+const { findRepoRoot } = require('../foreman.cjs');
+
+test('findRepoRoot asks git, through Git Bash, from the directory it was given', async () => {
+  const calls = [];
+  const run = async (file, args, opts) => { calls.push({ file, args, opts }); return { code: 0, stdout: 'C:/Projects/app\n', stderr: '' }; };
+  const root = await findRepoRoot({ bash: 'C:\\Git\\bin\\bash.exe', dir: 'C:\\Projects\\app\\sub', run, env: { PATH: 'C:\\Windows', TOKEN: 'x' } });
+  assert.equal(root, 'C:/Projects/app');
+  assert.equal(calls[0].file, 'C:\\Git\\bin\\bash.exe');
+  assert.deepEqual(calls[0].args, ['-c', 'git rev-parse --show-toplevel']);
+  assert.equal(calls[0].opts.cwd, 'C:\\Projects\\app\\sub');
+  assert.equal(calls[0].opts.env.GIT_OPTIONAL_LOCKS, '0');
+  assert.equal(calls[0].opts.env.TOKEN, undefined);
+});
+
+test('findRepoRoot: a backslash path is given back with forward slashes, and a trailing newline is dropped', async () => {
+  const run = async () => ({ code: 0, stdout: 'C:\\Projects\\app\r\n', stderr: '' });
+  assert.equal(await findRepoRoot({ bash: 'b', dir: 'd', run }), 'C:/Projects/app');
+});
+
+test('findRepoRoot: not a repository is its own error, with git\'s words', async () => {
+  const run = async () => ({ code: 128, stdout: '', stderr: 'fatal: not a git repository (or any of the parent directories): .git\n' });
+  await assert.rejects(findRepoRoot({ bash: 'b', dir: 'd', run }), (e) => {
+    assert.equal(e.kind, 'not-a-repo');
+    assert.match(e.message, /not a git repository/);
+    return true;
+  });
+});
+
+test('findRepoRoot: Git Bash that cannot start is a spawn error; an empty answer is not a root', async () => {
+  const boom = async () => { throw new Error('ENOENT'); };
+  await assert.rejects(findRepoRoot({ bash: 'b', dir: 'd', run: boom }), (e) => e.kind === 'spawn');
+  const empty = async () => ({ code: 0, stdout: '\n', stderr: '' });
+  await assert.rejects(findRepoRoot({ bash: 'b', dir: 'd', run: empty }), (e) => e.kind === 'not-a-repo');
+});
