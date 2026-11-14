@@ -218,3 +218,27 @@ test('report with no options, or null, asks for the default view', async () => {
   await f.report('b', undefined);
   assert.deepEqual(calls.map((c) => c.args.slice(1)), [['report', 'b', '--json'], ['report', 'b', '--json']]);
 });
+
+// ---- doctor ----
+
+const doc = { foreman_json: 1, command: 'doctor', sections: [], verdict: { passed: true } };
+
+test('doctor runs bin/foreman doctor --json from the repo root, and doctorFix adds --fix before it; neither names a batch', async () => {
+  const { f, calls } = setup({ code: 0, stdout: JSON.stringify(doc) + '\n', stderr: '' });
+  assert.deepEqual(await f.doctor(), doc);
+  assert.deepEqual(calls[0].args, ['C:/tools/foreman/bin/foreman', 'doctor', '--json']);
+  assert.equal(calls[0].opts.cwd, 'C:/Projects/app');
+  assert.deepEqual(await f.doctorFix(), doc);
+  assert.deepEqual(calls[1].args, ['C:/tools/foreman/bin/foreman', 'doctor', '--fix', '--json']);
+});
+
+test('doctor: the environment is the one every question gets (no display, no stray secret), and the CLI\'s words when it fails', async () => {
+  const { f, calls } = setup({ code: 0, stdout: JSON.stringify(doc), stderr: '' });
+  await f.doctor();
+  assert.equal(calls[0].opts.env.FOREMAN_SHOW, 'never');
+  assert.equal(calls[0].opts.env.SECRET_TOKEN, undefined);
+  const outside = setup({ code: 1, stdout: '', stderr: 'foreman doctor: not inside a git repository.\n' });
+  await assert.rejects(() => outside.f.doctor(), (e) => e.kind === 'exit' && /not inside a git repository/.test(e.message));
+  const wrong = setup({ code: 0, stdout: JSON.stringify(good), stderr: '' });
+  await assert.rejects(() => wrong.f.doctorFix(), (e) => e.kind === 'version' && /asked for doctor/.test(e.message));
+});

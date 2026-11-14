@@ -90,4 +90,45 @@ function statsSample() {
   };
 }
 
-module.exports = { statsSample, sample, dryRunSample, reportSample, reportByTicketSample, reportRunSample, T };
+// What `foreman doctor --json` prints for a repo with one thing `--fix` can write, a stale skill copy,
+// and a batch that is fine. `doctorSample('ready')` is the same repo with nothing wrong; 'blocked' has
+// a blocker `--fix` cannot write.
+const GITIGNORE_TEXT = '# Foreman: per-batch run state.\n**/.foreman-iter.bundle\n**/.foreman-stall-marker\n**/foreman-runs.jsonl\n**/foreman-runs.log\n';
+function doctorSample(kind = 'fixable') {
+  const ok = (label, detail = '') => ({ result: 'ok', label, detail, fix: null, auto: false, notes: [] });
+  const fixable = kind === 'fixable';
+  const blocked = kind === 'blocked';
+  const doc = {
+    foreman_json: 1, command: 'doctor', repo: 'C:/Projects/app', rev: 'd0d6874', date: '2026-10-21',
+    sections: [
+      { id: 'machine', title: 'Machine', info: [], rows: [ok('git'), ok('node'), ok('awk'), ok('bash 5.2.26 (4+ required)'), ok('sbx (required by FOREMAN_EXEC=sandbox)')] },
+      { id: 'repository', title: 'Repository', info: [], rows: [
+        ok('.foreman-iter.bundle ignored'),
+        fixable
+          ? { result: 'fail', label: 'foreman-runs.log not ignored', detail: '', fix: 'foreman doctor --fix appends it to .gitignore', auto: true, notes: ['run state would show up as changes'] }
+          : ok('foreman-runs.log ignored'),
+        ok('.gitattributes keeps foreman.conf LF'),
+      ] },
+      { id: 'skill', title: 'Skill', info: [], rows: [
+        { result: 'warn', label: 'foreman-conf-commands — installed copy differs from skills/foreman-conf-commands/SKILL.md', detail: '', fix: 'run: bash C:/tools/foreman/install.sh', auto: false, notes: [] },
+        ok('foreman-human-followup-tickets copy is current'),
+      ] },
+      { id: 'batches', title: 'Batches', info: [], rows: [
+        ok('gui', '3 of 14 done'),
+        ...(blocked ? [{ result: 'fail', label: 'other/foreman.conf — FOREMAN_EXEC=local with no way for the agent to commit', detail: '', fix: 'Add to other/foreman.conf: FOREMAN_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)")', auto: false, notes: ['acceptEdits does not cover Bash'] }] : []),
+      ] },
+    ],
+    counts: { ok: 10, warn: 1, fail: fixable ? 1 : blocked ? 1 : 0 },
+    verdict: fixable
+      ? { passed: false, label: 'NOT PASSED', detail: '1 to fix', fixable: 1, blockers: 0 }
+      : blocked
+        ? { passed: false, label: 'NOT PASSED', detail: '1 blocker', fixable: 0, blockers: 1 }
+        : { passed: true, label: 'PASSED', detail: 'ready to run', fixable: 0, blockers: 0 },
+    next: fixable ? { label: 'fix', command: 'foreman doctor --fix' } : blocked ? null : { label: 'next', command: 'foreman run .scratch/gui' },
+    plan: fixable ? [{ file: '.gitignore', text: GITIGNORE_TEXT, why: 'the repo does not ignore foreman\'s run state (1 of 4 lines missing), so a run\'s files would show up as changes' }] : [],
+    credentials: [{ name: 'FOREMAN_DOCKER_USERNAME', state: 'unset' }, { name: 'FOREMAN_DOCKER_PAT', state: 'unset' }],
+  };
+  return doc;
+}
+
+module.exports = { statsSample, sample, dryRunSample, reportSample, reportByTicketSample, reportRunSample, doctorSample, T };

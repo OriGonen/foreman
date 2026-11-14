@@ -102,6 +102,29 @@ ipcMain.handle('report:load', async (event, batch, opts) => {
   }
 });
 
+// The Doctor screen: `foreman doctor --json`, and `--fix --json` for Fix what it can. Both are free
+// (nothing is sent, no sandbox starts); the fix appends only the lines the sheet's plan listed, to
+// .gitignore and .gitattributes, and the CLI is what decides them — nothing is passed to it.
+ipcMain.handle('doctor:load', async (event) => {
+  if (!trusted(event)) return { ok: false, error: describe(new Error('refused')) };
+  try {
+    if (!ctx) await setup();
+    return { ok: true, doc: await ctx.foreman.doctor() };
+  } catch (e) {
+    return { ok: false, error: describe(e) };
+  }
+});
+
+ipcMain.handle('doctor:fix', async (event) => {
+  if (!trusted(event)) return { ok: false, error: describe(new Error('refused')) };
+  try {
+    if (!ctx) await setup();
+    return { ok: true, doc: await ctx.foreman.doctorFix() };
+  } catch (e) {
+    return { ok: false, error: describe(e) };
+  }
+});
+
 // A ticket's page: its text, the batch's progress.txt and, for a human ticket, its handoff file. The
 // page names a batch and a ticket; the file and the handoff path are found by main (ticket.cjs).
 ipcMain.handle('ticket:load', async (event, batch, name) => {

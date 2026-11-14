@@ -532,3 +532,96 @@ test('ticketPage: a ticket that is not in the batch (the loop renamed it, or it 
   assert.equal(M.ticketPage(sample(), 'nope', null), null);
   assert.equal(M.ticketPage({ ...sample(), tickets: undefined }, '03-x', null), null);
 });
+
+// ---- the doctor ----
+
+const { doctorSample } = require('./sample.cjs');
+
+test('doctor: the sections come in the CLI\'s order, each row with the mark and tone the terminal gives its result', () => {
+  const d = M.doctor(doctorSample('blocked'));
+  assert.deepEqual(d.sections.map((s) => s.id), ['machine', 'repository', 'skill', 'batches']);
+  assert.deepEqual(d.sections.map((s) => s.title), ['Machine', 'Repository', 'Skill', 'Batches']);
+  assert.deepEqual(d.sections[1].rows.map((r) => [r.mark, r.tone]), [['■', 'ok'], ['■', 'ok'], ['■', 'ok']]);
+  assert.deepEqual(d.sections[2].rows.map((r) => [r.mark, r.tone]), [['!', 'acc'], ['■', 'ok']], 'a warning is a !');
+  assert.deepEqual(d.sections[3].rows.map((r) => [r.mark, r.tone]), [['■', 'ok'], ['✗', 'err']], 'a failure --fix cannot write needs you: ✗');
+  assert.deepEqual(M.doctor(doctorSample()).sections[1].rows.map((r) => [r.mark, r.tone]), [['■', 'ok'], ['!', 'acc'], ['■', 'ok']], 'one --fix can write is a !');
+});
+
+test('doctor: a failure that --fix writes is marked auto, with its fix and the terminal\'s notes; a row that passed has neither', () => {
+  const d = M.doctor(doctorSample());
+  const bad = d.sections[1].rows[1];
+  assert.equal(bad.label, 'foreman-runs.log not ignored');
+  assert.equal(bad.auto, true);
+  assert.equal(bad.fix, 'foreman doctor --fix appends it to .gitignore');
+  assert.deepEqual(bad.notes, ['run state would show up as changes']);
+  const fine = d.sections[1].rows[0];
+  assert.equal(fine.fix, null);
+  assert.equal(fine.auto, false);
+});
+
+test('doctor: a batch row keeps the detail after its name', () => {
+  assert.equal(M.doctor(doctorSample()).sections[3].rows[0].detail, '3 of 14 done');
+});
+
+test('doctor: the stamp says what the CLI\'s verdict says, in the tone of passing or not', () => {
+  assert.deepEqual(M.doctor(doctorSample()).stamp, { label: 'NOT PASSED', detail: '1 to fix', tone: 'err' });
+  assert.deepEqual(M.doctor(doctorSample('blocked')).stamp, { label: 'NOT PASSED', detail: '1 blocker', tone: 'err' });
+  assert.deepEqual(M.doctor(doctorSample('ready')).stamp, { label: 'PASSED', detail: 'ready to run', tone: 'ok' });
+});
+
+test('doctor: the next command is the CLI\'s, with its label; none when there is nothing foreman can do', () => {
+  assert.deepEqual(M.doctor(doctorSample()).next, { label: 'fix', command: 'foreman doctor --fix' });
+  assert.deepEqual(M.doctor(doctorSample('ready')).next, { label: 'next', command: 'foreman run .scratch/gui' });
+  assert.equal(M.doctor(doctorSample('blocked')).next, null);
+});
+
+test('doctor: the legend names the marks that are on the sheet, and only those', () => {
+  assert.deepEqual(M.doctor(doctorSample()).legend, [
+    { mark: '■', tone: 'ok', text: 'passed' }, { mark: '!', tone: 'acc', text: '--fix can do it' }, { mark: '!', tone: 'acc', text: 'worth a look' },
+  ]);
+  assert.deepEqual(M.doctor(doctorSample('blocked')).legend.map((l) => l.text), ['passed', 'needs you', 'worth a look']);
+  const clean = doctorSample('ready');
+  clean.sections = clean.sections.filter((s) => s.id !== 'skill');
+  assert.deepEqual(M.doctor(clean).legend.map((l) => l.text), ['passed']);
+});
+
+test('doctor: Fix what it can lists each file with the lines it will append and why, and is there only when there is something to append', () => {
+  const d = M.doctor(doctorSample());
+  assert.equal(d.fix.files.length, 1);
+  assert.equal(d.fix.files[0].file, '.gitignore');
+  assert.deepEqual(d.fix.files[0].lines, ['# Foreman: per-batch run state.', '**/.foreman-iter.bundle', '**/.foreman-stall-marker', '**/foreman-runs.jsonl', '**/foreman-runs.log']);
+  assert.match(d.fix.files[0].why, /does not ignore foreman/);
+  assert.equal(d.fix.summary, 'Appends 5 lines to .gitignore. Nothing else is written.');
+  assert.equal(M.doctor(doctorSample('ready')).fix, null);
+  assert.equal(M.doctor(doctorSample('blocked')).fix, null, 'a blocker --fix cannot write does not make the button appear');
+});
+
+test('doctor: the summary counts lines and files, in the singular too', () => {
+  const doc = doctorSample();
+  doc.plan = [
+    { file: '.gitignore', text: 'a\nb\n', why: 'x' },
+    { file: '.gitattributes', text: 'only\n', why: 'y' },
+  ];
+  assert.equal(M.doctor(doc).fix.summary, 'Appends 2 lines to .gitignore and 1 line to .gitattributes. Nothing else is written.');
+});
+
+test('doctor: after --fix, what was appended and where, and how many are left', () => {
+  const doc = { ...doctorSample(), fix: { appended: [{ file: '.gitignore', text: 'a\nb\nc\n' }, { file: '.gitattributes', text: 'x\n' }], remaining: 0 } };
+  const d = M.doctor(doc);
+  assert.equal(d.applied.text, 'Appended 3 lines to .gitignore and 1 line to .gitattributes.');
+  assert.equal(d.applied.then, 'Review the diff and commit it: a run refuses to start on a dirty tree.');
+  assert.equal(M.doctor(doctorSample()).applied, null, 'nothing was appended unless --fix ran');
+  assert.equal(M.doctor({ ...doctorSample(), fix: { appended: [], remaining: 0 } }).applied, null, 'and --fix that appended nothing says nothing');
+});
+
+test('doctor: the title says which repository, which build and when, as the terminal\'s does', () => {
+  assert.equal(M.doctor(doctorSample()).meta, 'C:/Projects/app · foreman d0d6874 · 2026-10-21');
+  assert.equal(M.doctor({ ...doctorSample(), rev: '', date: '' }).meta, 'C:/Projects/app');
+});
+
+test('doctor: info lines (a batch section with no batch) are kept, as plain lines', () => {
+  const doc = doctorSample();
+  doc.sections[3] = { id: 'batches', title: 'Batches', rows: [], info: ['none — no directory here has a foreman.conf.', 'Create one:  foreman init <batch-dir>'] };
+  assert.deepEqual(M.doctor(doc).sections[3].info, ['none — no directory here has a foreman.conf.', 'Create one:  foreman init <batch-dir>']);
+  assert.deepEqual(M.doctor(doc).sections[3].rows, []);
+});

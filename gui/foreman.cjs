@@ -13,7 +13,7 @@
 // The paths given to foreman are repo-relative with forward slashes and the working directory is
 // the repo root, so a `C:\` path never reaches the CLI (spec: "Windows paths").
 //
-// Starting and stopping runs is a later ticket; this is the read side (status, dry-run, report).
+// Starting and stopping runs is a later ticket; this is the read side (status, dry-run, report, doctor), and the one write (`doctorFix`).
 const { execFile } = require('child_process');
 
 const SUPPORTED_JSON = 1;
@@ -137,6 +137,11 @@ function createForeman({ bash, checkout, repoRoot, run = defaultRun, env = proce
       if (run !== null && run !== undefined) args.push('--run', checkRunId(run));
       return call('report', args);
     },
+    // The inspection sheet of the machine and the repository (no batch): `foreman doctor --json`. Free,
+    // and it writes nothing. `doctorFix` is `doctor --fix --json`: it appends the lines the sheet's plan
+    // lists to .gitignore and .gitattributes, and answers with what it appended.
+    doctor: () => call('doctor', ['--json']),
+    doctorFix: () => call('doctor', ['--fix', '--json']),
   };
 }
 

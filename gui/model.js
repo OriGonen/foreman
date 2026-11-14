@@ -446,6 +446,58 @@
     };
   }
 
+  // ---- the doctor (`foreman doctor --json`) ----
+
+  const joinAnd = (parts) => (parts.length > 1 ? parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1] : parts[0] || '');
+  // "5 lines to .gitignore and 1 line to .gitattributes": what a plan or a report of it comes to.
+  const linesIn = (text) => String(text).split('\n').map((l) => l.replace(/\r$/, '')).filter((l, i, all) => !(i === all.length - 1 && l === ''));
+  const linesTo = (list) => joinAnd(list.map((p) => `${plural(linesIn(p.text).length, 'line', 'lines')} to ${p.file}`));
+
+  // The marks are the terminal's: ■ passed, ! a warning or something --fix writes, ✗ something only
+  // the person can do.
+  function doctorRow(r) {
+    const fail = r.result === 'fail';
+    const needsYou = fail && !r.auto;
+    return {
+      mark: needsYou ? '✗' : r.result === 'ok' ? '■' : '!',
+      tone: needsYou ? 'err' : r.result === 'ok' ? 'ok' : 'acc',
+      label: r.label, detail: r.detail || '', fix: r.fix || null, auto: !!r.auto, notes: r.notes || [],
+      result: r.result,
+    };
+  }
+
+  // Everything the Doctor screen draws. The CLI did the inspecting and gave the verdict, the next
+  // command and the plan for --fix; this words them.
+  function doctor(doc) {
+    const sections = (doc.sections || []).map((s) => ({
+      id: s.id, title: s.title, info: s.info || [], rows: (s.rows || []).map(doctorRow),
+    }));
+    const rows = sections.flatMap((s) => s.rows);
+    const legend = [];
+    if (rows.some((r) => r.result === 'ok')) legend.push({ mark: '■', tone: 'ok', text: 'passed' });
+    if (rows.some((r) => r.result === 'fail' && r.auto)) legend.push({ mark: '!', tone: 'acc', text: '--fix can do it' });
+    if (rows.some((r) => r.result === 'fail' && !r.auto)) legend.push({ mark: '✗', tone: 'err', text: 'needs you' });
+    if (rows.some((r) => r.result === 'warn')) legend.push({ mark: '!', tone: 'acc', text: 'worth a look' });
+
+    const v = doc.verdict || {};
+    const plan = (doc.plan || []).filter((p) => p && typeof p.file === 'string');
+    const done = doc.fix && Array.isArray(doc.fix.appended) ? doc.fix.appended.filter((p) => p && typeof p.file === 'string') : [];
+    return {
+      meta: [doc.repo, doc.rev ? 'foreman ' + doc.rev : '', doc.date].filter(Boolean).join(' · '),
+      sections, legend,
+      stamp: { label: v.label || '', detail: v.detail || '', tone: v.passed ? 'ok' : 'err' },
+      next: doc.next ? { label: doc.next.label, command: doc.next.command } : null,
+      fix: plan.length ? {
+        files: plan.map((p) => ({ file: p.file, lines: linesIn(p.text), why: p.why || '' })),
+        summary: `Appends ${linesTo(plan)}. Nothing else is written.`,
+      } : null,
+      applied: done.length ? {
+        text: `Appended ${linesTo(done)}.`,
+        then: 'Review the diff and commit it: a run refuses to start on a dirty tree.',
+      } : null,
+    };
+  }
+
   // The rail: every batch in the repo, the finished (DONE_) ones last and dimmed.
   function rail(all, selected) {
     const entries = (all.batches || []).map((b) => {
@@ -481,5 +533,5 @@
     return list.length ? list[0].path : null;
   }
 
-  return { usd, ticketRef, checksChip, stakes, blockers, lastRun, overview, dryRun, report, reportIterations, ticketName, ticketNotes, ticketPage, duration, compact, rail, pickBatch };
+  return { usd, ticketRef, checksChip, stakes, blockers, lastRun, overview, dryRun, report, reportIterations, ticketName, ticketNotes, ticketPage, duration, compact, doctor, rail, pickBatch };
 }));

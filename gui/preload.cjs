@@ -19,6 +19,13 @@ contextBridge.exposeInMainWorld('foreman', {
   // run's iterations); with neither, the totals and a row for each run. Free: it reads a file.
   // Answers { ok: true, doc } or { ok: false, error }.
   report: (batch, opts) => ipcRenderer.invoke('report:load', batch, opts === undefined ? {} : opts),
+  // The Doctor sheet: `foreman doctor --json`. Free: nothing is sent and nothing is written.
+  // Answers { ok: true, doc } or { ok: false, error }.
+  doctor: () => ipcRenderer.invoke('doctor:load'),
+  // Fix what it can: `foreman doctor --fix --json`. Appends the lines the sheet's plan listed to
+  // .gitignore and .gitattributes (free; no sandbox, nothing sent) and answers with the sheet as
+  // it was found plus `doc.fix`, what was appended. The page reads the sheet again afterwards.
+  doctorFix: () => ipcRenderer.invoke('doctor:fix'),
   // A ticket's page: its text, the batch's progress.txt and, for a human ticket, its handoff file. The
   // ticket is named by its name (`03-ticket-page`, which a DONE_ rename does not change), never by a
   // path. Free: it reads files. Answers { ok: true, doc } or { ok: false, error }.
