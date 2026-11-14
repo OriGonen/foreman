@@ -60,6 +60,10 @@
 #              through foreman-keys.sh --apply, so everything but the terminal read is real.
 #   FOREMAN_FAKE_SLEEP       seconds each call takes before acting. Default 0. For trying the
 #              + / - keys by hand, which need an iteration long enough to press them in.
+#   FOREMAN_FAKE_STREAM_PAUSE  seconds the `stream` behaviour waits after its tool calls and before
+#              its result, so a test can look at a run mid-iteration, with the feed written. Default 0.
+#   FOREMAN_FAKE_PREPARE     `fail` makes exec_prepare fail, as a sandbox that cannot start does:
+#              the run ends with exit 1 after its control directory exists. Default: ok.
 #   FOREMAN_FAKE_PROMPT_LOG  file to append each prompt to, with a separator. Optional. The
 #              line after the separator is `args:` and the FOREMAN_CLAUDE_ARGS the call was
 #              given — what a real adapter would pass to claude, e.g. a checkpoint's --max-turns.
@@ -91,7 +95,10 @@ exec_required_tool() { printf ''; }
 exec_default_permission_mode() { printf 'acceptEdits'; }
 
 exec_preflight() { return 0; }
-exec_prepare()   { return 0; }
+exec_prepare() {
+  [ "${FOREMAN_FAKE_PREPARE:-ok}" != fail ] || { warn "the fake exec was told not to prepare (FOREMAN_FAKE_PREPARE=fail)"; return 1; }
+  return 0
+}
 
 exec_describe() { printf 'fake (no agent is run)'; }
 
@@ -323,6 +330,7 @@ exec_run() {
         "$(printf 'x%.0s' $(seq 1 400))"
       printf '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"npm test -- %s TAIL-SENTINEL"}}]}}\n' \
         "$(printf 'y%.0s' $(seq 1 120))"
+      [ "${FOREMAN_FAKE_STREAM_PAUSE:-0}" = 0 ] || sleep "$FOREMAN_FAKE_STREAM_PAUSE"
       _fake_land "$ticket"
       _fake_payload success false "streamed some events and landed it"
       ;;

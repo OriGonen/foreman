@@ -5,6 +5,7 @@
 #
 #   foreman-keys.sh <ctl-dir> <loop-pid>      read keys until the loop is gone
 #   foreman-keys.sh --apply <keys> <ctl-dir>  apply each key in <keys> once, as if pressed
+#   foreman-keys.sh --stop <ctl-dir>          set the budget to the iteration in flight (`foreman stop`)
 #   foreman-keys.sh --text <ctl-dir> [cols]   print the bar's line, then the live view's line
 #
 #   +  =    one more iteration
@@ -27,8 +28,20 @@
 #              · live off`, and the live view's row has its spinner. No file, the bar it always was.
 #   spent      "COST BUDGET" for the foot: what the run has spent so far and the cost budget (0 for
 #              none). Written by the loop after every iteration.
+#   pid        "MSYS_PID WINDOWS_PID": the loop's pid, and the one Windows knows it by (`/proc/$$/winpid`;
+#              the same number off Windows). Written by the loop last, once the files above are in
+#              place, so a pid is a run that is ready. Read by `foreman status --json`, `foreman keys`
+#              and `foreman stop`, to know a run is in flight.
+#   run        "RUN_ID STARTED_AT": the run's id and its start time (UTC, ISO 8601). Written once.
+#   feed       the calls `--live` shows, one per line, `00:41 · Write README.md`: the clock since the
+#              iteration's agent started, and the label. Written by foreman-stream.cjs only while the
+#              live view is on, emptied by the loop at each iteration. No file until there is a call.
 # The loop reads `budget` before each iteration's budget check; a key never touches the
 # iteration already running.
+#
+# The directory is `<batch>/.foreman-run/` when the repository ignores that name, and a temporary one
+# otherwise (foreman-loop.sh); only the first can be reached by `foreman keys` and `foreman stop`,
+# from another terminal or the app. The loop removes it when the run ends, except `out`.
 #
 # THE STATUS BAR (foreman-ui.sh draws it; the loop opens and closes it). This reader is the
 # only thing that draws there — the live view included, from `activity`, on the row above the
@@ -124,6 +137,21 @@ keys_apply() {    # keys_apply KEY CTL_DIR
   else
     _KEYS_SAID="iterations: $floor of $budget"
   fi
+}
+
+# `foreman stop`: the budget becomes the iteration in flight, so the run finishes it and pauses with
+# "budget reached" — what pressing - until it can go no lower does, in one go. A budget already that
+# low is left as it is. Sets _KEYS_SAID.
+keys_stop() {    # keys_stop CTL_DIR
+  local dir="$1" floor budget
+  _keys_read_state "$dir"
+  floor="$_KEYS_ITERATION"; [ "$floor" -ge 1 ] || floor=1
+  budget="$_KEYS_BUDGET"
+  if [ "$budget" -eq 0 ] || [ "$budget" -gt "$floor" ]; then
+    budget="$floor"
+    _keys_write "$dir" budget "$budget"
+  fi
+  _KEYS_SAID="stops after this iteration ($floor of $budget)"
 }
 
 # The design's foot (3a), for keys_bar_text: sets _KEYS_BAR to
@@ -266,6 +294,14 @@ if [ "${1:-}" = "--apply" ]; then
   exit 0
 fi
 
+if [ "${1:-}" = "--stop" ]; then
+  dir="${2:-}"
+  [ -d "$dir" ] || { printf 'foreman-keys: no control directory at %s\n' "$dir" >&2; exit 1; }
+  keys_stop "$dir"
+  ui_key_echo "$_KEYS_SAID"
+  exit 0
+fi
+
 if [ "${1:-}" = "--text" ]; then
   dir="${2:-}" cols="${3:-80}"
   [ -d "$dir" ] || { printf 'foreman-keys: no control directory at %s\n' "$dir" >&2; exit 1; }
@@ -277,7 +313,7 @@ fi
 
 CTL_DIR="${1:-}" LOOP_PID="${2:-}"
 if [ ! -d "$CTL_DIR" ] || ! [[ "$LOOP_PID" =~ ^[0-9]+$ ]]; then
-  printf 'usage: foreman-keys.sh <ctl-dir> <loop-pid>  |  --apply <keys> <ctl-dir>  |  --text <ctl-dir> [cols]\n' >&2
+  printf 'usage: foreman-keys.sh <ctl-dir> <loop-pid>  |  --apply <keys> <ctl-dir>  |  --stop <ctl-dir>  |  --text <ctl-dir> [cols]\n' >&2
   exit 1
 fi
 

@@ -238,6 +238,18 @@ if write_if_absent "$BATCH_DIR/progress.txt"; then
   wrote_any=1
 fi
 
+# --- .gitignore: the desktop app's line ---------------------------------------
+# Only where the app is installed: a run's control directory goes inside its batch when the repo
+# ignores it, which is what lets the app steer the run. Without the app nothing is read or written.
+if foreman_app_installed && ! grep -qxF "$FOREMAN_RUN_IGNORE" .gitignore 2>/dev/null; then
+  # A file that does not end in a newline would have its last line glued to the comment.
+  if [ -s .gitignore ] && [ -n "$(tail -c 1 .gitignore)" ]; then printf '\n' >> .gitignore; fi
+  printf '\n%s\n' "$FOREMAN_RUN_IGNORE_BLOCK" >> .gitignore
+  say "   updated  .gitignore (+ $FOREMAN_RUN_IGNORE, so the app can steer a run)"
+  fact file created .gitignore "adds $FOREMAN_RUN_IGNORE, so the app can steer a run"
+  wrote_any=1
+fi
+
 say ""
 
 # The header and the files, drawn now: the agent passes below take as long as they take.

@@ -336,16 +336,28 @@ read -r -d '' GITATTRIBUTES_BLOCK <<'BLOCK'
 foreman.conf text eol=lf
 BLOCK
 
-missing_ignore=0
-for pat in '**/.foreman-iter.bundle' '**/.foreman-stall-marker' '**/foreman-runs.jsonl' '**/foreman-runs.log'; do
+# The desktop app's one line (foreman-repo.sh), which only matters where the app is installed: it is
+# checked, written and said here only then, and without the app the sheet is the one it always was.
+ignore_patterns=('**/.foreman-iter.bundle' '**/.foreman-stall-marker' '**/foreman-runs.jsonl' '**/foreman-runs.log')
+foreman_app_installed && ignore_patterns+=("$FOREMAN_RUN_IGNORE")
+missing_ignore=0   # how many lines are missing, of ${#ignore_patterns[@]}
+missing_base=0     # ... of the four every machine needs
+missing_app=0      # ... and the app's
+for pat in "${ignore_patterns[@]}"; do
   if grep -qxF "$pat" .gitignore 2>/dev/null; then
     ok "${pat#\*\*/} ignored"
   else
     missing_ignore=$((missing_ignore + 1))
+    if [ "$pat" = "$FOREMAN_RUN_IGNORE" ]; then missing_app=1; else missing_base=$((missing_base + 1)); fi
     fix "${pat#\*\*/} not ignored"
     _hint "foreman doctor --fix appends it to .gitignore"
   fi
 done
+# What `--fix` appends to .gitignore: the base block when any of its lines is missing, then the app's.
+ignore_append=""
+[ "$missing_base" -eq 0 ] || ignore_append="$GITIGNORE_BLOCK"
+# A blank line before it, so its comment is not glued to whatever the file ended with.
+if [ "$missing_app" -eq 1 ]; then ignore_append+="${ignore_append:+$'\n'}"$'\n'"$FOREMAN_RUN_IGNORE_BLOCK"; fi
 
 # The attribute only matters where git rewrites line endings in the first place.
 needs_attr=0
@@ -371,8 +383,8 @@ if [ "$missing_ignore" -gt 0 ] || [ "$needs_attr" -eq 2 ]; then fixable=1; fi
 # took off the end of the block). With --json the plan is given whether or not --fix was asked for,
 # so a program can show what it will do before it does it.
 if [ "$JSON" -eq 1 ]; then
-  [ "$missing_ignore" -eq 0 ] || _jfact plan .gitignore "$GITIGNORE_BLOCK"$'\n' \
-    "the repo does not ignore foreman's run state ($missing_ignore of 4 lines missing), so a run's files would show up as changes"
+  [ "$missing_ignore" -eq 0 ] || _jfact plan .gitignore "$ignore_append"$'\n' \
+    "the repo does not ignore foreman's run state ($missing_ignore of ${#ignore_patterns[@]} lines missing), so a run's files would show up as changes"
   [ "$needs_attr" -ne 2 ] || _jfact plan .gitattributes "$GITATTRIBUTES_BLOCK"$'\n' \
     "this repo rewrites line endings, and a foreman.conf with CRLF is read by bash with a carriage return on every value"
 fi
@@ -383,10 +395,10 @@ fi
 _doctor_fix() {
   if [ "$missing_ignore" -gt 0 ]; then
     if [ "$JSON" -eq 1 ]; then
-      printf '%s\n' "$GITIGNORE_BLOCK" >> .gitignore 2>/dev/null || { echo "foreman doctor: could not write .gitignore" >&2; exit 1; }
-      _jfact appended .gitignore "$GITIGNORE_BLOCK"$'\n'
+      printf '%s\n' "$ignore_append" >> .gitignore 2>/dev/null || { echo "foreman doctor: could not write .gitignore" >&2; exit 1; }
+      _jfact appended .gitignore "$ignore_append"$'\n'
     else
-      printf '%s\n' "$GITIGNORE_BLOCK" >> .gitignore
+      printf '%s\n' "$ignore_append" >> .gitignore
       echo "  wrote  .gitignore  (+$missing_ignore pattern(s))"
     fi
     problems=$((problems - missing_ignore))

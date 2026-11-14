@@ -64,6 +64,21 @@ case_is() {
 export FOREMAN_HOME
 build_fixture_template "$WORK/template"
 
+# The toolkit as a machine without the desktop app has it, and as one with it: a copy of bin/ and lib/
+# (foreman finds everything from where its own script is), with and without `gui/node_modules/electron`,
+# the one thing foreman_app_installed looks for. The cases about what the app being installed changes
+# run foreman from the copy they mean, so none of them depends on whether this checkout has the app.
+toolkit_copy() {    # toolkit_copy app|noapp : the copy's bin/foreman in $TOOLKIT_FOREMAN
+  local dir="$WORK/toolkit-$1"
+  if [ ! -d "$dir" ]; then
+    mkdir -p "$dir" && cp -R "$FOREMAN_HOME/bin" "$FOREMAN_HOME/lib" "$dir/"
+    [ "$1" != app ] || mkdir -p "$dir/gui/node_modules/electron"
+  fi
+  TOOLKIT_FOREMAN="$dir/bin/foreman"
+}
+toolkit_copy noapp; FOREMAN_NOAPP="$TOOLKIT_FOREMAN"
+toolkit_copy app;   FOREMAN_APP="$TOOLKIT_FOREMAN"
+
 # Run foreman in $1 with the rest as arguments. Stdout in $OUT, stderr in $ERR, status in $ST.
 # FOREMAN_SHOW=never, as the app runs it: a pipe is never drawn, but nothing here should depend on
 # that.
@@ -195,7 +210,7 @@ doctor_golden_repo() {    # doctor_golden_repo REPO ready|fixable
 doctor_golden_run() {    # doctor_golden_run REPO [args] -> the output, normalised, in $WORK/doctor.out
   local repo="$1"; shift
   mkdir -p "$WORK/doctor-home"
-  (cd "$repo" && HOME="$WORK/doctor-home" FOREMAN_SHOW=never FOREMAN_COLOR=never "$FOREMAN" doctor "$@" 2>&1; echo "exit $?") |
+  (cd "$repo" && HOME="$WORK/doctor-home" FOREMAN_SHOW=never FOREMAN_COLOR=never "$FOREMAN_NOAPP" doctor "$@" 2>&1; echo "exit $?") |
     sed -e "s|$WORK|@WORK@|g" -e 's/^\(║  SITE INSPECTION\).*/\1 @TITLE@/' \
         -e 's/bash [0-9][0-9.]* (4+ required) *│/bash @V@ (4+ required)│/' > "$WORK/doctor.out"
 }
@@ -1699,6 +1714,465 @@ if case_is "doctor --json: a credential is set or unset, and no part of its valu
   done
   OUT="$(cd "$repo" && FOREMAN_DOCKER_PAT="$token" HOME="$WORK/doctor-home" FOREMAN_SHOW=never "$FOREMAN" doctor 2>&1)"
   assert_eq "$(leaks "$OUT" "$token")" 0 "the plain doctor never printed it either"
+fi
+
+# ---------------------------------------------------------------------------
+# The control directory, `foreman keys`, `foreman stop` and `# reason:`
+# ---------------------------------------------------------------------------
+
+# A repository of $2 tickets whose .gitignore also ignores `**/.foreman-run/` (as `doctor --fix` does
+# once the app is installed), so a run keeps its control directory in the batch. `plain` leaves the
+# line out, and the run keeps a temporary directory, as it always did.
+ctl_repo() {    # ctl_repo REPO TICKETS [ignored|plain]
+  copy_fixture "$WORK/template" "$1" "$2"
+  if [ "${3:-ignored}" = ignored ]; then
+    printf '**/.foreman-run/\n' >> "$1/.gitignore"
+    git -C "$1" add -A >/dev/null
+    git -C "$1" commit --quiet -m "ignore the control directory"
+  fi
+}
+
+# `foreman run` in the background in $1, with the words in BG_ENV as its environment. What it printed
+# is in $WORK/bg.out and its exit status in $WORK/bg.st; bg_wait waits for it and sets BG_ST and BG_OUT.
+BG_ENV=()
+BG_PID=""
+bg_run() {    # bg_run REPO RUN-ARGS...
+  local repo="$1"; shift
+  rm -f "$WORK/bg.st" "$WORK/bg.out"
+  ( cd "$repo" && env FOREMAN_SHOW=never FOREMAN_COLOR=never ${BG_ENV[@]+"${BG_ENV[@]}"} "$FOREMAN" run "$@" > "$WORK/bg.out" 2>&1
+    echo $? > "$WORK/bg.st" ) &
+  BG_PID=$!
+}
+bg_wait() {
+  wait "$BG_PID" 2>/dev/null
+  BG_ST="$(cat "$WORK/bg.st" 2>/dev/null)"
+  BG_OUT="$(cat "$WORK/bg.out" 2>/dev/null)"
+  rm -f "$WORK"/foreman-fake-*.calls
+}
+# Polls every tenth of a second for up to $1 seconds until the rest, run as a command, succeeds.
+wait_until() {    # wait_until SECONDS COMMAND...
+  local n=$(($1 * 10)); shift
+  while [ "$n" -gt 0 ]; do "$@" && return 0; sleep 0.1; n=$((n - 1)); done
+  return 1
+}
+file_is() { [ "$(cat "$1" 2>/dev/null)" = "$2" ]; }
+# Whether a run is in flight in the batch that keeps its control directory at $1.
+run_up() { [ -f "$1/pid" ]; }
+
+# `foreman` in $1 with the words in $2 as its environment, as run_foreman does otherwise.
+run_foreman_env() {    # run_foreman_env REPO "A=1 B=2" ARGS...
+  local repo="$1" envs="$2"; shift 2
+  # shellcheck disable=SC2086
+  OUT="$(cd "$repo" && env FOREMAN_SHOW=never FOREMAN_COLOR=never $envs "$FOREMAN" "$@" 2>"$WORK/stderr")"
+  ST=$?
+  ERR="$(cat "$WORK/stderr")"
+  rm -f "$WORK"/foreman-fake-*.calls
+}
+
+if case_is "control directory: in the batch when .foreman-run/ is ignored, with the files the keys use and pid and run"; then
+  repo="$WORK/ctl-in"; ctl_repo "$repo" 3
+  ctl="$repo/batch/.foreman-run"
+  BG_ENV=(FOREMAN_FAKE_SLEEP=2); bg_run "$repo" batch 2
+  wait_until 30 file_is "$ctl/iteration" 1 && pass || fail "the run is at iteration 1 in <batch>/.foreman-run/"
+  assert_eq "$(cat "$ctl/budget" 2>/dev/null)" 2 "budget: the iteration budget"
+  assert_eq "$(cat "$ctl/live" 2>/dev/null)" 0 "live: off, as the run was started"
+  run_id="$(cut -d' ' -f1 "$ctl/run" 2>/dev/null)"
+  started="$(cut -d' ' -f2 "$ctl/run" 2>/dev/null)"
+  case "$run_id" in [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z-[0-9]*) pass ;; *) fail "run: starts with the run id, not '$run_id'" ;; esac
+  case "$started" in 20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z) pass ;; *) fail "run: ends with the start time, not '$started'" ;; esac
+  assert_eq "$(wc -w < "$ctl/run" | tr -d ' ')" 2 "run: nothing else"
+  # The loop's own pid, as the run id ends with it, and the pid Windows knows it by (the same number elsewhere).
+  assert_eq "$(cut -d' ' -f1 "$ctl/pid" 2>/dev/null)" "${run_id##*-}" "pid: the loop's pid first"
+  case "$(cut -d' ' -f2 "$ctl/pid" 2>/dev/null)" in ''|*[!0-9]*) fail "pid: the Windows pid second" ;; *) pass ;; esac
+  assert_eq "$(wc -w < "$ctl/pid" | tr -d ' ')" 2 "pid: nothing else"
+  assert_eq "$(git -C "$repo" status --porcelain)" "" "the directory is ignored: the tree is clean while the run is going"
+  [ -e "$ctl/feed" ] && fail "feed: not written when live was never on" || pass
+  bg_wait
+  assert_eq "$BG_ST" 10 "the run pauses at its budget"
+  [ -e "$ctl" ] && fail "the directory is gone when the run ends" || pass
+fi
+
+if case_is "control directory: a repo that does not ignore .foreman-run/ keeps today's temporary directory, and nothing else changes"; then
+  repo="$WORK/ctl-out"; ctl_repo "$repo" 2 plain
+  rm -rf "$WORK"/tmp.*
+  BG_ENV=(FOREMAN_FAKE_SLEEP=2); bg_run "$repo" batch 1
+  wait_until 30 bash -c "ls '$WORK'/tmp.*/pid >/dev/null 2>&1" && pass || fail "the run keeps a mktemp directory"
+  [ -e "$repo/batch/.foreman-run" ] && fail "nothing is made in the batch" || pass
+  assert_eq "$(git -C "$repo" status --porcelain)" "" "and the tree is clean"
+  bg_wait
+  assert_eq "$BG_ST" 10 "the run ends as it always did"
+  assert_eq "$(ls -d "$WORK"/tmp.* 2>/dev/null | wc -l | tr -d ' ')" 0 "and the temporary directory is removed"
+
+  # Not steerable, and the answer says so in one line.
+  run_foreman "$repo" keys batch +
+  assert_eq "$ST" 1 "keys: a run whose directory is outside the batch cannot be reached"
+fi
+
+if case_is "control directory: a live run in the batch keeps its directory, and a run that was killed leaves nothing in the way"; then
+  repo="$WORK/ctl-held"; ctl_repo "$repo" 2
+  ctl="$repo/batch/.foreman-run"
+  # Another run holds the directory: this one must not use it (nor take its keys).
+  mkdir -p "$ctl"
+  printf '7\n' > "$ctl/budget"; printf '%s %s\n' "$$" "$$" > "$ctl/pid"
+  run_foreman "$repo" run batch 1
+  assert_eq "$ST" 10 "a second run still runs"
+  assert_eq "$(cat "$ctl/budget")" 7 "the first run's budget is not touched"
+  assert_eq "$(cut -d' ' -f1 "$ctl/pid")" "$$" "nor its pid"
+  rm -rf "$ctl"
+
+  # A run killed too hard to clean up: its files are cleared by the next run, and `out` stays.
+  repo="$WORK/ctl-stale"; ctl_repo "$repo" 2
+  ctl="$repo/batch/.foreman-run"
+  sleep 0 & dead=$!; wait "$dead"
+  mkdir -p "$ctl"
+  printf '99\n' > "$ctl/budget"; printf '%s %s\n' "$dead" "$dead" > "$ctl/pid"; printf '00:01 · Write old\n' > "$ctl/feed"
+  printf 'what the app captured\n' > "$ctl/out"
+  run_foreman "$repo" run batch 1
+  assert_eq "$ST" 10 "a run over a stale directory runs"
+  assert_eq "$(ls -A "$ctl")" "out" "only out is left"
+  assert_eq "$(cat "$ctl/out")" "what the app captured" "and it is as it was"
+fi
+
+# What every way a run can end leaves behind: nothing in the control directory but `out`, and no
+# directory at all when there is no `out`. Run with `out` there, as the app does.
+ctl_exit_case() {    # ctl_exit_case LABEL EXPECTED-EXIT TICKETS "ENV" RUN-ARGS...
+  local label="$1" want="$2" n="$3" envs="$4" repo; shift 4
+  repo="$WORK/ctl-exit-$label"; ctl_repo "$repo" "$n"
+  [ "$label" != waiting ] || { make_human_ticket_json "$repo" 2; }
+  mkdir -p "$repo/batch/.foreman-run"
+  printf 'what the app captured\n' > "$repo/batch/.foreman-run/out"
+  run_foreman_env "$repo" "$envs" run batch "$@"
+  assert_eq "$ST" "$want" "$label: exit $want"
+  assert_eq "$(ls -A "$repo/batch/.foreman-run" 2>/dev/null)" "out" "$label: only out is left"
+  assert_eq "$(cat "$repo/batch/.foreman-run/out" 2>/dev/null)" "what the app captured" "$label: out is as it was"
+  # And with no out, no directory.
+  repo="$repo-bare"; ctl_repo "$repo" "$n"
+  [ "$label" != waiting ] || { make_human_ticket_json "$repo" 2; }
+  run_foreman_env "$repo" "$envs" run batch "$@"
+  assert_eq "$ST" "$want" "$label (no out): exit $want"
+  [ -e "$repo/batch/.foreman-run" ] && fail "$label (no out): the directory is gone" || pass
+}
+make_human_ticket_json() {    # make_human_ticket_json REPO N
+  local repo="$1" n="$2"
+  sed -i 's/^\*\*Status:\*\* todo/**Status:** ready-for-human/' "$repo/batch/issues/0$n-ticket.md"
+  git -C "$repo" add -A >/dev/null
+  git -C "$repo" commit --quiet -m "ticket $n is a human ticket"
+}
+
+if case_is "control directory: removed on exit 10 (budget), 20 (needs a human), 30 (waiting on a human) and 1, out kept"; then
+  ctl_exit_case budget 10 3 "" 1
+  ctl_exit_case needs-human 20 2 "FOREMAN_FAKE_BEHAVIOUR=noop FOREMAN_TICKET_ATTEMPTS=1" --unlimited
+  ctl_exit_case waiting 30 3 "" --unlimited
+  ctl_exit_case prepare-fails 1 2 "FOREMAN_FAKE_PREPARE=fail" 1
+  assert_contains "$ERR" "told not to prepare" "(exit 1 is the one the exec adapter's prepare gave)"
+fi
+
+if case_is "control directory: removed on exit 0 before the batch is renamed DONE_, and on Ctrl-C"; then
+  repo="$WORK/ctl-done"; ctl_repo "$repo" 2
+  mkdir -p "$repo/batch/.foreman-run"; printf 'what the app captured\n' > "$repo/batch/.foreman-run/out"
+  run_foreman "$repo" run batch --unlimited
+  assert_eq "$ST" 0 "every ticket lands: exit 0"
+  [ -e "$repo/batch" ] && fail "the batch is renamed" || pass
+  # Had the directory been removed after the rename it would have been looked for under the old name,
+  # and what the run kept would still be in the renamed batch.
+  assert_eq "$(ls -A "$repo/DONE_batch/.foreman-run" 2>/dev/null)" "out" "only out went with the batch"
+  repo="$WORK/ctl-done-bare"; ctl_repo "$repo" 2
+  run_foreman "$repo" run batch --unlimited
+  assert_eq "$ST" 0 "(no out) exit 0"
+  [ -e "$repo/DONE_batch/.foreman-run" ] && fail "with no out nothing went with the batch" || pass
+
+  # Ctrl-C in the middle of an iteration: the loop's INT handling pauses it (exit 10), the stall marker
+  # stays for the next run's review, and the directory goes like any other end.
+  repo="$WORK/ctl-int"; ctl_repo "$repo" 2
+  mkdir -p "$repo/batch/.foreman-run"; printf 'what the app captured\n' > "$repo/batch/.foreman-run/out"
+  run_foreman_env "$repo" "FOREMAN_FAKE_BEHAVIOUR=interrupt-dirty" run batch --unlimited
+  assert_eq "$ST" 10 "interrupted: paused, as Ctrl-C does"
+  [ -f "$repo/batch/.foreman-stall-marker" ] && pass || fail "interrupted: the stall marker stays"
+  assert_eq "$(ls -A "$repo/batch/.foreman-run")" "out" "interrupted: only out is left"
+fi
+
+if case_is "foreman keys: + raises the budget of a loop in flight, - and L do what the keys do, and the run follows"; then
+  repo="$WORK/keys-run"; ctl_repo "$repo" 4
+  ctl="$repo/batch/.foreman-run"
+  BG_ENV=(FOREMAN_FAKE_SLEEP=3); bg_run "$repo" batch 1
+  wait_until 30 file_is "$ctl/iteration" 1 && pass || fail "the run is at iteration 1"
+
+  run_foreman "$repo" keys batch +
+  assert_eq "$ST" 0 "+: exits 0"
+  assert_eq "$(cat "$ctl/budget")" 2 "+: the budget is 2"
+  assert_contains "$ERR" "iterations: 1 of 2" "+: says what it did"
+
+  # status --json sees the run as it is now.
+  run_foreman "$repo" status batch --json
+  assert_eq "$(jv "$OUT" 'j.run.in_flight')" true "status --json: in flight"
+  assert_eq "$(jv "$OUT" "j.run.id")" "\"$(cut -d' ' -f1 "$ctl/run")\"" "status --json: the run's id"
+  assert_eq "$(jv "$OUT" 'j.run.started_at')" "\"$(cut -d' ' -f2 "$ctl/run")\"" "status --json: and its start"
+  assert_eq "$(jv "$OUT" 'j.run.iteration')" 1 "status --json: the iteration"
+  assert_eq "$(jv "$OUT" 'j.run.budget')" 2 "status --json: the budget as the key made it"
+  assert_eq "$(jv "$OUT" 'j.run.live')" false "status --json: live"
+  assert_eq "$(jv "$OUT" 'j.run.control_dir')" '"batch/.foreman-run"' "status --json: the control directory"
+  assert_eq "$(jv "$OUT" 'j.run.pid.msys')" "$(cut -d' ' -f1 "$ctl/pid")" "status --json: the pid"
+
+  run_foreman "$repo" keys batch + + -
+  assert_eq "$ST" 0 "+ + - as three arguments: exits 0"
+  assert_eq "$(cat "$ctl/budget")" 3 "the budget is 3"
+  run_foreman "$repo" keys batch L
+  assert_eq "$(cat "$ctl/live")" 1 "L: live view on"
+  assert_contains "$ERR" "live view on" "L: says so"
+
+  bg_wait
+  assert_eq "$BG_ST" 10 "the run pauses at the budget the keys left it"
+  assert_contains "$BG_OUT" "iterations run:        3" "and ran three iterations"
+  assert_contains "$(cat "$repo/batch/foreman-runs.log")" "iteration budget changed: 1 → 3 (after iteration 1)" "the log says the budget changed, as it does for the keys"
+
+  # With nothing in flight status says so, and the run was alone in its directory.
+  run_foreman "$repo" status batch --json
+  assert_eq "$(jv "$OUT" 'j.run.in_flight')" false "status --json: not in flight after"
+  assert_eq "$(jv "$OUT" 'JSON.stringify([j.run.id, j.run.iteration, j.run.budget, j.run.live, j.run.control_dir, j.run.pid])')" '"[null,null,null,null,null,null]"' "and the rest is null"
+fi
+
+if case_is "foreman keys: no run in flight, a directory not in the batch, a dead run and a key that is not one are one line and exit 1"; then
+  repo="$WORK/keys-none"; ctl_repo "$repo" 2
+  run_foreman "$repo" keys batch +
+  assert_eq "$ST" 1 "no run: exits 1"
+  assert_contains "$ERR" "foreman keys: no run in flight in batch" "no run: says so"
+  assert_eq "$(printf '%s\n' "$ERR" | wc -l | tr -d ' ')" 1 "no run: in one line"
+  assert_eq "$OUT" "" "no run: and prints nothing to stdout"
+
+  # A run that died with its directory: the pid is not alive.
+  sleep 0 & dead=$!; wait "$dead"
+  mkdir -p "$repo/batch/.foreman-run"
+  printf '3\n' > "$repo/batch/.foreman-run/budget"; printf '%s %s\n' "$dead" "$dead" > "$repo/batch/.foreman-run/pid"
+  run_foreman "$repo" keys batch +
+  assert_eq "$ST" 1 "a dead run: exits 1"
+  assert_eq "$(cat "$repo/batch/.foreman-run/budget")" 3 "a dead run: its files are not touched"
+  run_foreman "$repo" status batch --json
+  assert_eq "$(jv "$OUT" 'j.run.in_flight')" false "status --json: a dead run is not in flight"
+  assert_eq "$(jv "$OUT" 'j.run.control_dir')" null "status --json: and has no control directory to show"
+
+  # A run that keeps its directory outside the batch: the repo does not ignore the name.
+  repo="$WORK/keys-plain"; ctl_repo "$repo" 2 plain
+  run_foreman "$repo" keys batch +
+  assert_eq "$ST" 1 "a directory outside the batch: exits 1"
+  assert_contains "$ERR" ".foreman-run/ in .gitignore" "it says what the batch lacks"
+
+  run_foreman "$repo" keys batch x
+  assert_eq "$ST" 1 "an unknown key: exits 1"
+  assert_contains "$ERR" "not 'x'" "it names it"
+  run_foreman "$repo" keys batch
+  assert_eq "$ST" 1 "no key: exits 1"
+  assert_contains "$ERR" "Usage: foreman keys <batch>" "with the usage"
+  run_foreman "$repo" keys nowhere +
+  assert_eq "$ST" 1 "no such batch: exits 1"
+  assert_contains "$ERR" "no such directory: nowhere" "and says that"
+fi
+
+if case_is "foreman stop: the run finishes the iteration in flight and ends with exit 10, budget reached"; then
+  repo="$WORK/stop-run"; ctl_repo "$repo" 3
+  ctl="$repo/batch/.foreman-run"
+  BG_ENV=(FOREMAN_FAKE_SLEEP=2); bg_run "$repo" batch 3
+  wait_until 30 file_is "$ctl/iteration" 1 && pass || fail "the run is at iteration 1"
+  # The one batch in the repository, so it need not be named.
+  run_foreman "$repo" stop
+  assert_eq "$ST" 0 "stop: exits 0"
+  assert_eq "$(cat "$ctl/budget")" 1 "the budget is the iteration in flight"
+  assert_contains "$ERR" "stops after this iteration (1 of 1)" "and it says so"
+  bg_wait
+  assert_eq "$BG_ST" 10 "the run ends paused"
+  assert_contains "$BG_OUT" "PAUSED: iteration budget reached (1)" "with 'budget reached'"
+  assert_contains "$BG_OUT" "iterations run:        1" "after the one iteration"
+  assert_eq "$(grep -c . "$repo/batch/foreman-runs.jsonl")" 1 "and that one is in the record"
+  assert_eq "$(git -C "$repo" status --porcelain)" "" "nothing is left in the tree"
+
+  # From an unlimited run, and named; and the budget is never lowered under the iteration running.
+  repo="$WORK/stop-unlimited"; ctl_repo "$repo" 4
+  ctl="$repo/batch/.foreman-run"
+  BG_ENV=(FOREMAN_FAKE_SLEEP=2); bg_run "$repo" batch --unlimited
+  wait_until 30 file_is "$ctl/iteration" 2 && pass || fail "the unlimited run reached iteration 2"
+  run_foreman "$repo" stop batch
+  assert_eq "$ST" 0 "stop <batch>: exits 0"
+  assert_eq "$(cat "$ctl/budget")" 2 "the budget is the iteration in flight, 2"
+  run_foreman "$repo" stop batch
+  assert_eq "$(cat "$ctl/budget")" 2 "a second stop leaves it there"
+  bg_wait
+  assert_eq "$BG_ST" 10 "the unlimited run pauses too"
+  assert_contains "$BG_OUT" "iterations run:        2" "after two iterations"
+
+  # No run, and the part that is ticket 09's.
+  run_foreman "$repo" stop batch
+  assert_eq "$ST" 1 "no run in flight: exits 1"
+  assert_contains "$ERR" "foreman stop: no run in flight in batch" "in one line, saying so"
+  run_foreman "$repo" stop --now batch
+  assert_eq "$ST" 1 "stop --now: not here yet, exits 1"
+  assert_contains "$ERR" "--now is not available yet" "and says so"
+fi
+
+if case_is "# reason: a stop for a human gives its one-line reason in the log, for a red flag and for a login that expired"; then
+  # A red flag: the review turn of the next run refuses a stopped run's leftover work.
+  repo="$WORK/reason-redflag"; ctl_repo "$repo" 2 plain
+  run_foreman_env "$repo" "FOREMAN_FAKE_BEHAVIOUR=limit-dirty" run batch --unlimited
+  run_foreman_env "$repo" "FOREMAN_FAKE_BEHAVIOUR=land FOREMAN_FAKE_CHECKPOINT_BEHAVIOUR=reject" run batch --unlimited
+  assert_eq "$ST" 20 "a refusal stops for a human"
+  log="$(cat "$repo/batch/foreman-runs.log")"
+  tail_lines="$(printf '%s\n' "$log" | grep -n -A1 '^# stopped: needs a human$' | tail -2)"
+  assert_contains "$tail_lines" "# stopped: needs a human" "the log says it stopped"
+  reason="$(printf '%s\n' "$log" | sed -n 's/^# reason: //p' | tail -1)"
+  assert_contains "$reason" "The review turn refused to commit batch/issues/01-ticket.md's leftover work:" "red flag: the reason is the line the terminal printed"
+  assert_contains "$reason" "changes outside the ticket's scope" "red flag: with the reviewer's own words"
+  assert_eq "$(printf '%s' "$reason" | wc -l | tr -d ' ')" 0 "red flag: on one line"
+  assert_eq "$(printf '%s\n' "$log" | grep -A1 '^# stopped: needs a human$' | tail -1 | cut -c1-9)" "# reason:" "it follows `# stopped: needs a human` directly"
+  run_foreman "$repo" status batch --json
+  assert_eq "$(jv "$OUT" 'j.last_run.end')" '"needs_human"' "status --json: the run ended needing a human"
+  assert_eq "$(jv "$OUT" 'j.last_run.reason')" "$(jv "$(printf '{"r":%s}' "$(printf '%s' "$reason" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.stringify(s)))')")" 'j.r')" "status --json: and the reason is what the log holds"
+
+  # A login that expired.
+  repo="$WORK/reason-auth"; ctl_repo "$repo" 2 plain
+  run_foreman_env "$repo" "FOREMAN_FAKE_BEHAVIOUR=auth FOREMAN_TICKET_ATTEMPTS=3" run batch --unlimited
+  assert_eq "$ST" 20 "an expired login stops for a human"
+  log="$(cat "$repo/batch/foreman-runs.log")"
+  assert_eq "$(printf '%s\n' "$log" | grep -A1 '^# stopped: needs a human$' | tail -1)" \
+    "# reason: batch/issues/01-ticket.md was not attempted: the agent could not authenticate (its login has expired or was revoked). Retrying cannot help, so the run stops here." \
+    "auth_failed: the reason is the sentence the terminal printed, on one line"
+  run_foreman "$repo" status batch --json
+  assert_contains "$(jv "$OUT" 'j.last_run.reason')" "the agent could not authenticate" "status --json: last_run.reason"
+
+  # The other ends have no reason line.
+  repo="$WORK/reason-none"; ctl_repo "$repo" 2 plain
+  run_foreman "$repo" run batch --unlimited
+  assert_eq "$ST" 0 "a finished batch"
+  assert_missing "$(cat "$repo/DONE_batch/foreman-runs.log")" "# reason:" "complete: no reason line"
+fi
+
+if case_is "feed: foreman-stream.cjs keeps the calls the live view shows, only while the view is on"; then
+  dir="$WORK/feed-unit"; mkdir -p "$dir"
+  call() { printf '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"%s","input":%s}]}}\n' "$1" "$2"; }
+  {
+    call Read '{"file_path":"src/quiet-read.js"}'
+    call Write '{"file_path":"src/foo.js","content":"SECRET-BODY-CONTENT"}'
+    call Bash '{"command":"npm test -- --run"}'
+    printf '{"type":"result","subtype":"success","result":"done"}\n'
+  } > "$dir/events"
+  stream() { node "$FOREMAN_HOME/lib/foreman-stream.cjs" "$@" < "$dir/events" > "$dir/payload" 2> "$dir/stderr"; }
+
+  printf '1\n' > "$dir/live"
+  stream --live-file "$dir/live" --feed-file "$dir/feed"
+  assert_eq "$(wc -l < "$dir/feed" | tr -d ' ')" 2 "live on: a line for each call the view shows (a read is not one)"
+  assert_eq "$(sed -E 's/^[0-9]{2}:[0-9]{2}/@T@/' "$dir/feed")" $'@T@ · Write src/foo.js\n@T@ · Bash npm test -- --run' "each is the clock, a dot and the label"
+  assert_missing "$(cat "$dir/feed")" "SECRET-BODY-CONTENT" "and never what was written"
+
+  printf '0\n' > "$dir/live"; rm -f "$dir/feed"
+  stream --live-file "$dir/live" --feed-file "$dir/feed"
+  [ -e "$dir/feed" ] && fail "live off: nothing is written" || pass
+
+  rm -f "$dir/feed"
+  stream --live --feed-file "$dir/feed"
+  assert_eq "$(wc -l < "$dir/feed" | tr -d ' ')" 2 "--live alone: always on"
+
+  # What it draws and what it passes on are what they were without a feed.
+  stream --live; cp "$dir/stderr" "$dir/stderr.plain"; cp "$dir/payload" "$dir/payload.plain"
+  stream --live --feed-file "$dir/feed2"
+  cmp -s "$dir/stderr" "$dir/stderr.plain" && pass || fail "the feed adds nothing to what is drawn"
+  cmp -s "$dir/payload" "$dir/payload.plain" && pass || fail "nor to the payload"
+
+  # A feed that cannot be written to is no reason to stop the run.
+  stream --live --feed-file "$dir/no-such-dir/feed"
+  cmp -s "$dir/payload" "$dir/payload.plain" && pass || fail "an unwritable feed leaves the payload alone"
+fi
+
+if case_is "feed: a --live run writes each iteration's calls to <batch>/.foreman-run/feed, and the next iteration starts it again"; then
+  repo="$WORK/feed-run"; ctl_repo "$repo" 2
+  ctl="$repo/batch/.foreman-run"
+  BG_ENV=(FOREMAN_FAKE_BEHAVIOUR=stream FOREMAN_FAKE_STREAM_PAUSE=3); bg_run "$repo" batch 2 --live
+  wait_until 30 bash -c "[ -s '$ctl/feed' ]" && pass || fail "the first iteration's calls are in the feed"
+  assert_eq "$(sed -E -e 's/^[0-9]{2}:[0-9]{2}/@T@/' -e 's/y+.*$/Y/' "$ctl/feed")" $'@T@ · Write src/foo.js\n@T@ · Bash npm test -- Y' "the feed holds the calls the live view shows"
+  assert_missing "$(cat "$ctl/feed")" "quiet-read" "a read is not one"
+  assert_missing "$(cat "$ctl/feed")" "SECRET-BODY" "nor is any of what was written"
+  assert_eq "$(cat "$ctl/live")" 1 "live is on, as the run was started"
+  # The second iteration starts the file again rather than adding to the first's.
+  wait_until 30 file_is "$ctl/iteration" 2 && pass || fail "the run reached iteration 2"
+  sleep 1.5
+  assert_eq "$(wc -l < "$ctl/feed" | tr -d ' ')" 2 "iteration 2: its own two calls, not four"
+  run_foreman "$repo" keys batch L
+  assert_eq "$(cat "$ctl/live")" 0 "foreman keys L turns the view off for a run that has no terminal"
+  bg_wait
+  assert_eq "$BG_ST" 0 "the run lands both tickets"
+  [ -e "$repo/DONE_batch/.foreman-run" ] && fail "the feed is gone with the directory" || pass
+fi
+
+if case_is "app installed: doctor warns about .foreman-run/, --fix appends it and nothing else, init writes it"; then
+  # A repo that is ready as the terminal's doctor sees it: every line but the app's.
+  repo="$WORK/app-doctor"; doctor_golden_repo "$repo" ready
+  mkdir -p "$WORK/doctor-home"
+  OUT="$(cd "$repo" && HOME="$WORK/doctor-home" FOREMAN_SHOW=never FOREMAN_COLOR=never "$FOREMAN_NOAPP" doctor 2>&1)"
+  assert_missing "$OUT" ".foreman-run" "without the app: doctor does not mention it"
+  doctor_with_app() { OUT="$(cd "$1" && HOME="$WORK/doctor-home" FOREMAN_SHOW=never FOREMAN_COLOR=never "$FOREMAN_APP" doctor "${@:2}" 2>"$WORK/stderr")"; ST=$?; }
+  doctor_with_app "$repo"
+  assert_contains "$OUT" ".foreman-run/ not ignored" "with the app: doctor warns when the line is missing"
+  doctor_with_app "$repo" --json
+  # The row is the same kind as the four other ignore lines are when missing: a thing `--fix` writes.
+  assert_eq "$(jv "$OUT" 'JSON.stringify(j.sections.find(s => s.id === "repository").rows.filter(r => r.label === ".foreman-run/ not ignored").map(r => [r.result, r.auto]))')" '"[[\"fail\",true]]"' "--json: a row, fixable by --fix"
+  assert_contains "$(jv "$OUT" 'j.plan[0].why')" "1 of 5 lines missing" "--json: the plan counts five lines"
+  assert_eq "$(jv "$OUT" 'j.plan[0].text')" "$(jv "$(printf '{"t":%s}' "$(printf '%s\n' '' "# Foreman desktop app: a run's control directory (its keys, its pid, the live feed), in its batch." '# Disposable, and ignored so that steering a run from the app never shows up as a change.' '**/.foreman-run/' | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.stringify(s)))')")" 'j.t')" "--json: the plan is the app's lines alone, not the four it already has"
+
+  before="$(cat "$repo/.gitignore")"
+  doctor_with_app "$repo" --fix
+  assert_contains "$OUT" "wrote  .gitignore  (+1 pattern(s))" "--fix: says what it wrote"
+  assert_eq "$(grep -cxF '**/.foreman-run/' "$repo/.gitignore")" 1 "--fix: the line is in .gitignore"
+  assert_eq "$(grep -c 'foreman-runs.log' "$repo/.gitignore")" 1 "--fix: the four lines it already had are not repeated"
+  assert_eq "$(head -n "$(printf '%s\n' "$before" | wc -l)" "$repo/.gitignore")" "$before" "--fix: it appended, nothing above changed"
+  doctor_with_app "$repo"
+  assert_contains "$OUT" ".foreman-run/ ignored" "and doctor is content"
+  git -C "$repo" check-ignore -q batch/.foreman-run/pid && pass || fail "git agrees that it is ignored"
+
+  # A repo missing all five: the base block and then the app's, one blank line between.
+  repo="$WORK/app-doctor-all"; doctor_golden_repo "$repo" ready; : > "$repo/.gitignore"
+  doctor_with_app "$repo" --fix --json
+  assert_eq "$(jv "$OUT" 'j.fix.remaining')" 0 "--fix --json: nothing remains"
+  assert_eq "$(grep -c '^\*\*/' "$repo/.gitignore")" 5 "all five lines are written"
+  assert_contains "$(jv "$OUT" 'j.fix.appended[0].text')" '**/foreman-runs.log\n\n# Foreman desktop app' "the app's comment is set apart from the base block"
+
+  # init: written, said, and not again.
+  repo="$WORK/app-init"; copy_fixture "$WORK/template" "$repo" 2
+  mkdir -p "$repo/other/issues"; printf '# One\n\n**Status:** todo\n' > "$repo/other/issues/01-one.md"
+  git -C "$repo" add -A >/dev/null; git -C "$repo" commit --quiet -m other
+  printf 'no-newline-at-the-end' >> "$repo/.gitignore"
+  OUT="$(cd "$repo" && FOREMAN_SHOW=never FOREMAN_COLOR=never "$FOREMAN_APP" init other --no-order --no-commands 2>&1)"
+  assert_contains "$OUT" "updated  .gitignore (+ **/.foreman-run/, so the app can steer a run)" "init: says it"
+  assert_eq "$(grep -cxF '**/.foreman-run/' "$repo/.gitignore")" 1 "init: the line is there"
+  assert_eq "$(grep -cxF 'no-newline-at-the-end' "$repo/.gitignore")" 1 "init: a file with no final newline keeps its last line whole"
+  git -C "$repo" check-ignore -q other/.foreman-run/pid && pass || fail "init: and git ignores it"
+  OUT="$(cd "$repo" && FOREMAN_SHOW=never FOREMAN_COLOR=never "$FOREMAN_APP" init other --no-order --no-commands 2>&1)"
+  assert_missing "$OUT" ".gitignore" "init, again: nothing to say about it"
+  assert_eq "$(grep -cxF '**/.foreman-run/' "$repo/.gitignore")" 1 "init, again: and the line is not repeated"
+fi
+
+if case_is "golden: without the app, doctor --fix and init print and write exactly what they did"; then
+  # doctor and doctor --fix are held by the doctor-*.txt captures above, which run on the copy with
+  # no app. This is init, whose capture (test/golden/init-plain.txt) was taken on the tree before
+  # the app's line existed, and the proof that no .gitignore is touched.
+  repo="$WORK/golden-init"; copy_fixture "$WORK/template" "$repo" 2
+  mkdir -p "$repo/other/issues"; printf '# One\n\n**Status:** todo\n' > "$repo/other/issues/01-one.md"
+  printf '# Two\n\n**Status:** todo\n' > "$repo/other/issues/02-two.md"
+  git -C "$repo" add -A >/dev/null; git -C "$repo" commit --quiet -m other
+  ignore_before="$(cat "$repo/.gitignore")"
+  (cd "$repo" && FOREMAN_SHOW=never FOREMAN_COLOR=never "$FOREMAN_NOAPP" init other --no-order --no-commands > "$WORK/init.out" 2>&1; echo "exit $?" >> "$WORK/init.out")
+  if [ "${FOREMAN_JSON_GOLDEN:-}" = write ]; then
+    cp "$WORK/init.out" "$TEST_DIR/golden/init-plain.txt"
+    printf '  retook test/golden/init-plain.txt\n'
+  fi
+  cmp -s "$WORK/init.out" "$TEST_DIR/golden/init-plain.txt" && pass || fail "init (no app) differs from test/golden/init-plain.txt"
+  assert_eq "$(cat "$repo/.gitignore")" "$ignore_before" "init (no app): .gitignore is untouched"
+  # And a machine without the app does not look at it: doctor says nothing of .foreman-run/ however the line stands.
+  printf '**/.foreman-run/\n' >> "$repo/.gitignore"
+  (cd "$repo" && HOME="$WORK/doctor-home" FOREMAN_SHOW=never FOREMAN_COLOR=never "$FOREMAN_NOAPP" doctor 2>&1) > "$WORK/doctor.noapp"
+  assert_missing "$(cat "$WORK/doctor.noapp")" ".foreman-run" "doctor (no app): does not check for the line"
+fi
+
+if case_is "golden: foreman help is unchanged by keys and stop, which are commands without a line in it"; then
+  (cd "$WORK" && "$FOREMAN" help > "$WORK/help.raw2" 2>&1 < /dev/null)
+  sed "s|$FOREMAN_HOME|@FOREMAN_HOME@|g" "$WORK/help.raw2" > "$WORK/help.out2"
+  cmp -s "$WORK/help.out2" "$TEST_DIR/golden/help.txt" && pass || fail "foreman help differs from test/golden/help.txt"
+  assert_missing "$(cat "$WORK/help.out2")" "foreman keys" "it does not list keys"
 fi
 
 # ---------------------------------------------------------------------------

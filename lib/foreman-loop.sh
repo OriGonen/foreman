@@ -256,7 +256,8 @@ continuation_cap_reached() {
   [ "$MAX_CONTINUATIONS" -gt 0 ] && [ "$CONTINUATIONS_ON_CURRENT" -ge "$MAX_CONTINUATIONS" ] || return 1
   local progressed_count=$((CONTINUATIONS_ON_CURRENT - STALLS_ON_CURRENT))
   warn ""
-  warn "$TICKET_FILE has needed $CONTINUATIONS_ON_CURRENT extra turns without landing ($progressed_count progressed, $STALLS_ON_CURRENT stalled)."
+  NEEDS_REASON="$TICKET_FILE has needed $CONTINUATIONS_ON_CURRENT extra turns without landing ($progressed_count progressed, $STALLS_ON_CURRENT stalled)."
+  warn "$NEEDS_REASON"
   warn "Like running out of context, that is a size problem rather than something a further"
   warn "attempt fixes — split it into smaller tickets rather than rerunning as-is. Every chunk"
   warn "is committed; nothing has been lost, and $PROGRESS_FILE says where it got to."
@@ -739,6 +740,10 @@ status_json_facts() {
     printf 'ticket\t%s\t%s\t%s\t%s\t%s\t%s\n' "$state" "${ticket//\\//}" "$done_t" "$human_t" "$checks_t" "${line//\\//}"
   done < <(next_sh --all)
   printf 'humans\t%s\n' "$humans"
+  # Where a run in flight would keep its control directory in this batch (see where the run makes
+  # it); whether one is there, and alive, is for foreman-json.cjs to read from its files.
+  line="$BATCH_DIR/.foreman-run"; [ "$BATCH_DIR" != . ] || line=.foreman-run
+  printf 'runctl\t%s\n' "${line//\\//}"
   if [ -n "$stop" ]; then printf 'until\t%s\t%s\n' "$until_count" "$stop"; fi
   if [ -n "$next" ] && foreman_ticket_needs_human "$next"; then
     line="$(foreman_was_sent_back "$next")"
@@ -1106,34 +1111,87 @@ VERDICT_FILE="$(mktemp)"
 # because exec_run is now the head of a pipeline rather than a command substitution — see
 # the call site for why that matters.
 PAYLOAD_FILE="$(mktemp)"
-# What the key reader (foreman-keys.sh) and this loop share: `budget` and `live`, which the
-# reader owns once they are seeded here, `iteration`, which only this loop writes, `screen`,
-# the status bar's size, and `activity`, what the agent is doing for the live view's row.
-# See refresh_budget and foreman-keys.sh.
-RUN_CTL_DIR="$(mktemp -d)"
+# What the key reader (foreman-keys.sh), `foreman keys` and `foreman stop` share with this loop —
+# the control directory: `budget` and `live`, which whoever steers owns once they are seeded here,
+# `iteration`, which only this loop writes, `screen`, the status bar's size, `activity`, what the
+# agent is doing for the live view's row, and for a program watching the run `pid`, `run` and
+# `feed` (see foreman-keys.sh for each). See refresh_budget.
+#
+# It is `<batch>/.foreman-run/` when the repository ignores that name (`**/.foreman-run/`, which
+# `foreman doctor --fix` appends when the desktop app is installed), so that `foreman keys` and the
+# app can reach it from outside this terminal. Otherwise it is a temporary directory, as it always
+# was. A batch's directory is also left alone when another run is alive in it (its `pid` file): the
+# second run keeps a directory of its own rather than steal the first one's keys.
+#
+# `out`, if the app put one there (the run's own stdout and stderr), outlives the run; everything
+# else is removed when it ends (run_ctl_end), whichever way, and before the batch can be renamed.
+run_ctl_clear() {    # run_ctl_clear DIR: remove DIR's files, except `out`; DIR itself when there is no `out`
+  local dir="$1" f keep=0
+  local -a victims=()
+  [ -d "$dir" ] || return 0
+  for f in "$dir"/* "$dir"/.[!.]*; do
+    [ -e "$f" ] || [ -L "$f" ] || continue
+    if [ "${f##*/}" = out ]; then keep=1; else victims+=("$f"); fi
+  done
+  if [ "$keep" -eq 0 ]; then rm -rf "$dir"; elif [ "${#victims[@]}" -gt 0 ]; then rm -rf "${victims[@]}"; fi
+}
+RUN_CTL_DIR=""
+RUN_CTL_REL="$BATCH_DIR/.foreman-run"; [ "$BATCH_DIR" != . ] || RUN_CTL_REL=.foreman-run
+if git check-ignore -q -- "$RUN_CTL_REL/pid" 2>/dev/null; then
+  RUN_CTL_PID=""
+  read -r RUN_CTL_PID _ 2>/dev/null < "$REPO_ROOT/$RUN_CTL_REL/pid"
+  if [[ "$RUN_CTL_PID" =~ ^[0-9]+$ ]] && kill -0 "$RUN_CTL_PID" 2>/dev/null; then
+    :
+  elif mkdir -p "$REPO_ROOT/$RUN_CTL_REL" 2>/dev/null; then
+    RUN_CTL_DIR="$REPO_ROOT/$RUN_CTL_REL"
+    # What a run that was killed too hard to clean up after itself left behind.
+    run_ctl_clear "$RUN_CTL_DIR"
+    mkdir -p "$RUN_CTL_DIR" 2>/dev/null
+  fi
+  unset RUN_CTL_PID
+fi
+[ -n "$RUN_CTL_DIR" ] || RUN_CTL_DIR="$(mktemp -d)"
 printf '%s\n' "$MAX_ITERATIONS" > "$RUN_CTL_DIR/budget"
 printf '0\n' > "$RUN_CTL_DIR/iteration"
 printf '%s\n' "$FOREMAN_STREAM" > "$RUN_CTL_DIR/live"
+printf '%s %s\n' "$RUN_ID" "$RUN_STARTED_AT" > "$RUN_CTL_DIR/run"
 if ui_show 1 RUN_TIER && ui_cols RUN_COLS 1 && [ "$RUN_COLS" -ge "$_run_min_cols" ]; then
   RUN_SHOW=1 RECORD_QUIET="--quiet"
   printf -v RUN_STARTED_CLOCK '%(%H:%M)T' -1
   printf '%(%s)T\n' -1 > "$RUN_CTL_DIR/foot"
   run_write_spent
 fi
+# Last, so that a `pid` is a run that has everything else in place: this shell's pid, and the one
+# Windows knows it by (`taskkill` and a Windows program's liveness check want that one; elsewhere
+# the two are the same number).
+RUN_WINPID=""
+read -r RUN_WINPID 2>/dev/null < "/proc/$$/winpid"
+printf '%s %s\n' "$$" "${RUN_WINPID:-$$}" > "$RUN_CTL_DIR/pid"
 KEYS_PID=""
 SAVED_STTY=""
-on_exit() {
-  local rows="" kept=""
+RUN_CTL_ENDED=0
+BAR_CLOSE_ROWS="" BAR_CLOSE_KEPT=""
+# Ends what belongs to the control directory: the key reader (which only this directory's files
+# keep alive), the size of the bar it left open, and the directory itself. Once, whichever comes
+# first — the end of the footer, before the batch is renamed, or the exit trap.
+run_ctl_end() {
+  [ "$RUN_CTL_ENDED" -eq 0 ] || return 0
+  RUN_CTL_ENDED=1
   if [ -n "$KEYS_PID" ]; then
     kill "$KEYS_PID" 2>/dev/null
     wait "$KEYS_PID" 2>/dev/null
+    KEYS_PID=""
   fi
+  read -r BAR_CLOSE_ROWS _ BAR_CLOSE_KEPT 2>/dev/null < "$RUN_CTL_DIR/screen"
+  run_ctl_clear "$RUN_CTL_DIR"
+}
+on_exit() {
+  run_ctl_end
   # The status bar, if there is one: whole-screen scrolling back, before the shell's prompt.
-  read -r rows _ kept 2>/dev/null < "$RUN_CTL_DIR/screen"
-  [[ "$rows" =~ ^[0-9]+$ ]] && [[ "$kept" =~ ^[12]$ ]] && ui_bar_close "$rows" "$kept"
+  [[ "$BAR_CLOSE_ROWS" =~ ^[0-9]+$ ]] && [[ "$BAR_CLOSE_KEPT" =~ ^[12]$ ]] && ui_bar_close "$BAR_CLOSE_ROWS" "$BAR_CLOSE_KEPT"
   # The reader restores the terminal itself; this is for a reader that died too hard to.
   [ -z "$SAVED_STTY" ] || stty "$SAVED_STTY" 2>/dev/null
-  rm -rf "$VERDICT_FILE" "$PAYLOAD_FILE" "$RUN_CTL_DIR"
+  rm -rf "$VERDICT_FILE" "$PAYLOAD_FILE"
 }
 trap on_exit EXIT
 
@@ -1176,8 +1234,13 @@ if [ -t 0 ]; then
     STREAM_ARGS=(--live-file "$RUN_CTL_DIR/live")
   fi
 elif [ "$FOREMAN_STREAM" = "1" ]; then
-  STREAM_ARGS=(--live)
+  # Off a terminal there is no key, but `foreman keys L` (or the app) can still turn the view off
+  # and on through the control directory's `live`, which was seeded 1 just now: until somebody
+  # does, this draws exactly what --live always has.
+  STREAM_ARGS=(--live-file "$RUN_CTL_DIR/live")
 fi
+# While the view is on, the filter also keeps the iteration's calls in the control directory's `feed`.
+[ "${#STREAM_ARGS[@]}" -eq 0 ] || STREAM_ARGS+=(--feed-file "$RUN_CTL_DIR/feed")
 # The ticker is drawn by a node process that cannot see foreman.conf, so the one colour decision
 # (foreman-ui.sh, for stderr, which is where it draws) is made here and handed over as a flag.
 [ "${#STREAM_ARGS[@]}" -gt 0 ] && ui_color_on 2 && STREAM_ARGS+=(--color)
@@ -1252,6 +1315,10 @@ fi
 
 FINAL_STATUS="$EXIT_DONE"
 HUMAN_TICKET=""
+# Why the run stopped for a human, in one line: the first thing the terminal says about it. Set
+# beside every FINAL_STATUS="$EXIT_NEEDS_HUMAN", and written to the run log as `# reason:` after
+# `# stopped: needs a human`, where a program can read it (`foreman status --json`).
+NEEDS_REASON=""
 CURRENT_TICKET=""
 ATTEMPTS_ON_CURRENT=0
 # Whether the PREVIOUS attempt on the current ticket ran out of context. A boolean, held
@@ -1286,9 +1353,16 @@ STALL_MARKER_UNTRUSTED=0
 # way wherever it happens: nothing is left to point a recovery note at.
 checkpoint_discarded_note() {
   warn ""
+  NEEDS_REASON="$TICKET_FILE's uncommitted work is gone: the checkpoint turn left the tree clean without ever committing anything."
   warn "$TICKET_FILE's uncommitted work is gone: the checkpoint turn left the tree clean"
   warn "without ever committing anything. There is nothing to recover — the work will"
   warn "need to be redone, not salvaged."
+}
+
+# The reason for a stop after exec_recovery_note: the sandbox's own first line about it. Nothing
+# says it on the local adapter, which never strands work, and then neither does the log.
+stranded_reason() {
+  NEEDS_REASON="The sandbox committed ${EXEC_AGENT_HEAD:-work} but it could not be brought back to this repo."
 }
 
 # Runs one checkpoint turn for TICKET_FILE against BASE_REF and reports how it went in
@@ -1548,6 +1622,7 @@ while true; do
         rejected)
           # No marker is written back: a rerun would only pay for the same refusal again.
           warn ""
+          NEEDS_REASON="The review turn refused to commit $TICKET_FILE's leftover work: ${CHECKPOINT_REJECTION%%$'\n'*}"
           warn "The review turn refused to commit $TICKET_FILE's leftover work:"
           printf '%s\n' "$CHECKPOINT_REJECTION" | sed 's/^/  /' >&2
           warn ""
@@ -1559,6 +1634,7 @@ while true; do
           ;;
         stranded)
           warn ""
+          stranded_reason
           exec_recovery_note "$BASE_REF"
           FINAL_STATUS="$EXIT_NEEDS_HUMAN"
           break
@@ -1585,6 +1661,7 @@ while true; do
             break
           fi
           warn ""
+          NEEDS_REASON="The review turn could not commit $TICKET_FILE's leftover work either."
           warn "The review turn could not commit $TICKET_FILE's leftover work either."
           warn "Stopping so you can look."
           exec_show_dirty
@@ -1622,6 +1699,8 @@ while true; do
   STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
   printf '%s\n' "$ITERATIONS_RUN" > "$RUN_CTL_DIR/iteration"
+  # The feed is this iteration's: foreman-stream.cjs appends to it while the live view is on.
+  [ ! -e "$RUN_CTL_DIR/feed" ] || : > "$RUN_CTL_DIR/feed"
   iter_of=""; [ "$MAX_ITERATIONS" -le 0 ] || iter_of=" of $MAX_ITERATIONS"
   iter_attempt=""; [ "$ATTEMPTS_ON_CURRENT" -le 1 ] || iter_attempt=" (attempt $ATTEMPTS_ON_CURRENT)"
   run_iteration_line "$iter_of" "$iter_attempt"
@@ -1634,7 +1713,8 @@ while true; do
   # .gitignore) is not mistaken for work: the sync would leave it alone anyway.
   if exec_tree_dirty "$BASE_REF"; then
     warn ""
-    warn "The agent's tree already has uncommitted changes in it. Refusing to sync over them."
+    NEEDS_REASON="The agent's tree already has uncommitted changes in it. Refusing to sync over them."
+    warn "$NEEDS_REASON"
     if [ "$STALL_MARKER_UNTRUSTED" -eq 1 ]; then
       warn "(A stall marker was found, but it does not match this tree — a different sandbox,"
       warn "commit or ticket — so nothing here can be shown to be $TICKET_FILE's own.)"
@@ -1655,6 +1735,7 @@ while true; do
   # second pass over the first one's leftovers. (Only the clone arrangement has anything
   # to do here; the adapter decides.)
   if ! exec_sync_down "$BASE_REF"; then
+    NEEDS_REASON="could not sync the sandbox to $BASE_REF — stopping before spending anything."
     FINAL_STATUS="$EXIT_NEEDS_HUMAN"
     break
   fi
@@ -1773,6 +1854,7 @@ while true; do
   #     cause sits in the run log.
   if [ "$auth_failed" = "1" ]; then
     warn ""
+    NEEDS_REASON="$TICKET_FILE was not attempted: the agent could not authenticate (its login has expired or was revoked). Retrying cannot help, so the run stops here."
     warn "$TICKET_FILE was not attempted: the agent could not authenticate (its login has"
     warn "expired or was revoked). Retrying cannot help, so the run stops here."
     case "$FOREMAN_EXEC" in
@@ -1794,6 +1876,7 @@ while true; do
   #    clone over it.
   if [ "$sync_failed" -eq 1 ]; then
     warn ""
+    stranded_reason
     exec_recovery_note "$BASE_REF"
     FINAL_STATUS="$EXIT_NEEDS_HUMAN"
     break
@@ -1806,7 +1889,8 @@ while true; do
   #    identically and will be denied identically — so stop and say what to change.
   if [ "$permission_denied" = "1" ]; then
     warn ""
-    warn "$TICKET_FILE was stopped by a permission denial, not by its own work."
+    NEEDS_REASON="$TICKET_FILE was stopped by a permission denial, not by its own work."
+    warn "$NEEDS_REASON"
     warn "\`claude --print\` has no one to approve a tool call, so anything outside the"
     warn "allowlist is denied outright — including the \`git commit\` this prompt asks for,"
     warn "after the ticket's work has been done and paid for."
@@ -1852,6 +1936,7 @@ while true; do
       case "$CHECKPOINT_OUTCOME" in
         stranded)
           warn ""
+          stranded_reason
           exec_recovery_note "$BASE_REF"
           FINAL_STATUS="$EXIT_NEEDS_HUMAN"
           break
@@ -1889,6 +1974,7 @@ while true; do
       # HEAD as it is now, which is past BASE_REF if the stalled turn committed part of it.
       write_stall_marker "$TICKET_FILE" "$HEAD_REF"
       warn ""
+      NEEDS_REASON="$TICKET_FILE left uncommitted changes behind, and the checkpoint turn could not commit them either. Stopping so you can look."
       warn "$TICKET_FILE left uncommitted changes behind, and the checkpoint turn could not"
       warn "commit them either. Stopping so you can look."
       exec_show_dirty
@@ -1901,7 +1987,8 @@ while true; do
     # ticket flipped with something still left uncommitted). No
     # checkpoint turn: it exists only for the stall it was built for. Stop, as always.
     warn ""
-    warn "$TICKET_FILE left uncommitted changes behind. Stopping so you can look."
+    NEEDS_REASON="$TICKET_FILE left uncommitted changes behind. Stopping so you can look."
+    warn "$NEEDS_REASON"
     exec_show_dirty
     FINAL_STATUS="$EXIT_NEEDS_HUMAN"
     break
@@ -1974,10 +2061,12 @@ while true; do
   if [ "$context_exhausted" = "1" ]; then
     # A second blind retry cannot fix a structural size mismatch, so say what it is rather
     # than leaving it to be re-derived from the log.
+    NEEDS_REASON="$TICKET_FILE ran out of context on its last attempt. That usually means the ticket is too large for one iteration — split it into smaller tickets rather than rerunning as-is."
     warn "$TICKET_FILE ran out of context on its last attempt. That usually means the ticket is"
     warn "too large for one iteration — split it into smaller tickets rather than rerunning as-is."
   else
-    warn "$TICKET_FILE is still not '$FOREMAN_DONE_WORD' after $ATTEMPTS_ON_CURRENT attempt(s)."
+    NEEDS_REASON="$TICKET_FILE is still not '$FOREMAN_DONE_WORD' after $ATTEMPTS_ON_CURRENT attempt(s)."
+    warn "$NEEDS_REASON"
   fi
   warn "Read the tail of $RUN_LOG and of $PROGRESS_FILE, then either fix it by hand or"
   warn "adjust the ticket. Rerun to continue from here."
@@ -2070,7 +2159,11 @@ case "$FINAL_STATUS" in
     human_ticket_note "$HUMAN_TICKET" >&2
     log_append "# stopped: waiting on a human — $HUMAN_TICKET"
     ;;
-  "$EXIT_NEEDS_HUMAN") log_append "# stopped: needs a human" ;;
+  "$EXIT_NEEDS_HUMAN")
+    log_append "# stopped: needs a human"
+    # One line, whatever the sentence held: the log is read a line at a time.
+    [ -z "$NEEDS_REASON" ] || log_append "# reason: ${NEEDS_REASON//$'\n'/ }"
+    ;;
   "$EXIT_DONE")        log_append "# complete" ;;
 esac
 
@@ -2078,6 +2171,9 @@ log_append "####################################################################
 say ""
 say "Appended to $RUN_JSONL and $RUN_LOG"
 
+# The control directory goes first: it is inside the batch directory this moves, and the exit trap
+# would otherwise look for it under the old name.
+run_ctl_end
 # Last, because the footer above writes into the batch directory this moves.
 [ "$MODE" = "run" ] && [ "$FINAL_STATUS" = "$EXIT_DONE" ] && mark_batch_done_on_disk
 

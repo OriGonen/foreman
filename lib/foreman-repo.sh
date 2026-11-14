@@ -154,3 +154,22 @@ foreman_mixed_path() {
   if command -v cygpath >/dev/null 2>&1; then _mp="$(cygpath -m "$2" 2>/dev/null)" || _mp="$2"; fi
   printf -v "$1" '%s' "$_mp"
 }
+
+# Whether the desktop app is installed on this machine: its dependencies are in the checkout this
+# toolkit runs from (`gui/node_modules/electron`, put there by install.sh). That one question lives
+# here, so the things that only matter when the app is there — the `.foreman-run/` line in
+# .gitignore, which doctor checks and `--fix` and `init` write — all ask it the same way. A machine
+# without the app answers no, and none of them changes.
+_FOREMAN_REPO_SH_DIR="${BASH_SOURCE[0]%/*}"
+foreman_app_installed() {
+  [ -e "$_FOREMAN_REPO_SH_DIR/../gui/node_modules/electron" ]
+}
+
+# The one line the desktop app needs in .gitignore, and the comment that goes with it: a run's control
+# directory lives in its batch when the repository ignores this, and that is what lets the app (and
+# `foreman keys`) steer a run. `foreman doctor` checks for it and `--fix` appends it, `foreman init`
+# writes it, and each only when foreman_app_installed.
+FOREMAN_RUN_IGNORE='**/.foreman-run/'
+FOREMAN_RUN_IGNORE_BLOCK='# Foreman desktop app: a run'"'"'s control directory (its keys, its pid, the live feed), in its batch.
+# Disposable, and ignored so that steering a run from the app never shows up as a change.
+'"$FOREMAN_RUN_IGNORE"

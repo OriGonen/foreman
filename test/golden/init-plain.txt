@@ -1,0 +1,12 @@
+Batch: other
+   created  other/foreman.conf
+   created  other/order.md (2 ticket(s) — re-order it before running)
+   created  other/progress.txt
+
+
+Next:
+  1. review other/foreman.conf   — at minimum FOREMAN_CHECK_CMD and FOREMAN_TEST_CMD
+  2. review foreman order picked in other/order.md — it is a first pass, not a guarantee
+  3. foreman dry-run other   (free; prints the exact prompt)
+  4. foreman run other       (one iteration, then look)
+exit 0
