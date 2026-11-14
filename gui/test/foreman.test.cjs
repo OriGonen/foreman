@@ -211,3 +211,10 @@ test('report: the CLI\'s own words when there is no log, and a status answer is 
   const wrong = setup({ code: 0, stdout: JSON.stringify(good), stderr: '' });
   await assert.rejects(() => wrong.f.report('b'), (e) => e.kind === 'version' && /asked for report/.test(e.message));
 });
+
+test('report with no options, or null, asks for the default view', async () => {
+  const { f, calls } = setup({ code: 0, stdout: JSON.stringify(rep), stderr: '' });
+  await f.report('b', null);
+  await f.report('b', undefined);
+  assert.deepEqual(calls.map((c) => c.args.slice(1)), [['report', 'b', '--json'], ['report', 'b', '--json']]);
+});

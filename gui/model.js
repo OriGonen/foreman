@@ -1,5 +1,6 @@
 'use strict';
-// What the overview shows, worked out from `foreman status --json` (and `--all` for the rail).
+// What the screens show, worked out from `foreman status --json` (and `--all` for the rail), `dry-run --json`
+// and `report --json`.
 //
 // Loaded two ways: as a plain <script> in the page (it puts `ForemanModel` on the window) and with
 // require() in the tests. No DOM and no Node in here — it takes the objects the CLI printed and

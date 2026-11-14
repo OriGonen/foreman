@@ -293,7 +293,7 @@
       r.bill.perIteration ? h('div', { cls: 'rule' }) : null,
       r.bill.perIteration ? line('per iteration', r.bill.perIteration, '', r.bill.perIterationHint) : null);
 
-    const ledger = h('div', { cls: 'card flush grow ledger', attrs: { role: 'list', 'aria-label': r.by === 'run' ? 'Runs' : 'Tickets' } },
+    const ledger = h('div', { cls: 'card flush grow ledger' },
       h('div', { cls: 't ledgerrow headrow' }, span('label', r.by === 'run' ? 'Run' : 'Ticket'), span('label', 'Iterations · landed'), span('label', 'Cost'), span('', '')));
     for (const row of r.rows) {
       ledger.append(ledgerRow(row, r.by));

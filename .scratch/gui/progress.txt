@@ -32,3 +32,13 @@
 - Full smoke suite: 2741 passed in 2m 10s, 1 failed: "convert ... CRLF kept" (smoke.sh:3609), pre-existing. `ui_color_tier` (pty) flaked once in 3 runs, passes alone.
 - NOT verified: the window (no Electron/browser). `main.cjs` dryrun:load was driven through a stand-in electron against the real CLI. A human must open it on Windows (ticket 04's by-hand box, then 15).
 - Next iteration: ticket 10 reuses `dryRun` and the `view`/`dry` state in app.js; Start run… on the dry run screen is disabled, waiting for 10.
+
+
+## 05 — report, as JSON and as a screen (implemented; by-hand Windows check still open)
+- Built: `foreman report --json [--by-ticket] [--run <id>]` in lib/foreman-report.cjs (never drawn; `outcomeOf` now decides the plain counts and the per-iteration words), `foreman.cjs report()`, `report:load` IPC + preload, `model.report`/`reportIterations`, the Report screen (bill, ledger newest first, expand a run -> fetches `--run <id>` once, By run/By ticket, Read again), rail "Tools > Report" marked free.
+- Test-driven: the CLI object end to end in smoke-json.sh (totals == plain lines, rows add up, by-ticket, `--run` words, errors, never drawn, `--jsonl`, plain golden); foreman.cjs report argv/run-id checks; model.report; the screen under the fake DOM (lazy expand, cached views, stale answers, markup as text).
+- Review: quiet cached git root for `--json` paths; `report(batch, null)` safe; dropped `role=list` on the ledger. Skipped: Failures button (CLI refuses `--failures` with `--json`); no auto re-read on a file change (Read again does it).
+- Ticket 16: `outcome` words come from `outcomeOf` in foreman-report.cjs, which is a script, not a module. 16 must reuse the same rule (extract it to a shared require-able file, or call `report --json --run`) so the words cannot drift.
+- Rail now has a Tools section; ticket 06 adds Doctor beside Report. The Report screen's iteration colours (ok/rust/dim) are display only.
+- Full smoke suite: 2741 passed in 2m 31s, 1 failed: "convert ... CRLF kept" (smoke.sh:3609), pre-existing. `ui_color_tier` (pty) flaked once again; passes alone.
+- NOT verified: the window (no Electron/browser). A human opens it on Windows (ticket 05's by-hand box, then 15).

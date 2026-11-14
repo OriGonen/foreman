@@ -130,7 +130,8 @@ function createForeman({ bash, checkout, repoRoot, run = defaultRun, env = proce
     dryRun: (batch) => call('dry-run', [checkBatchPath(batch), '--json']),
     // What the batch has cost: the totals and a row for each run (or ticket, with byTicket). With
     // `run`, also that run's iterations and the outcome word of each. Free: it reads the run record.
-    report: (batch, { byTicket = false, run = null } = {}) => {
+    report: (batch, opts) => {
+      const { byTicket = false, run = null } = opts || {};
       const args = [checkBatchPath(batch), '--json'];
       if (byTicket) args.push('--by-ticket');
       if (run !== null && run !== undefined) args.push('--run', checkRunId(run));
