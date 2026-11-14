@@ -31,7 +31,12 @@ function resolveInside(repoRoot, rel, io = fs) {
   const segments = rel.split('/').filter((s) => s !== '' && s !== '.');
   if (segments.length === 0) throw refuse(rel, 'no path');
   if (segments.includes('..')) throw refuse(rel, 'reaches out of the repository with ..');
-  if (segments.some((s) => s.toLowerCase() === '.git')) throw refuse(rel, 'is inside .git');
+  // Windows reads some other names as the same thing: a trailing dot or space is dropped, `GIT~1` is
+  // `.git`'s short name, and `name:stream` is a hidden stream of `name`. None of them is a handoff.
+  if (segments.some((s) => s.includes(':'))) throw refuse(rel, 'has a : in a name (a drive or a stream)');
+  if (segments.some((s) => s.replace(/[. ]+$/, '').toLowerCase() === '.git' || /^git~\d+$/i.test(s.replace(/[. ]+$/, '')))) {
+    throw refuse(rel, 'is inside .git');
+  }
 
   let realRoot;
   try { realRoot = io.realpathSync(path.resolve(repoRoot)); } catch (e) {
@@ -131,8 +136,8 @@ function createTicketFiles({ repoRoot, foreman, known = () => null, io = fs }) {
       }
       const file = resolveInside(repoRoot, ticket.handoff, io);
       const ticketFile = resolveInside(repoRoot, ticket.file, io);
-      if (file === ticketFile) throw refuse(ticket.handoff, 'that is the ticket itself, which is only ever edited in your own editor');
-      if (path.basename(file).toLowerCase() === 'foreman.conf') throw refuse(ticket.handoff, 'foreman.conf is only ever edited in your own editor');
+      if (path.relative(file, ticketFile) === '') throw refuse(ticket.handoff, 'that is the ticket itself, which is only ever edited in your own editor');
+      if (path.basename(file).replace(/[. ]+$/, '').toLowerCase() === 'foreman.conf') throw refuse(ticket.handoff, 'foreman.conf is only ever edited in your own editor');
 
       let disk;
       try { disk = readOrNull(file, io); } catch (e) {

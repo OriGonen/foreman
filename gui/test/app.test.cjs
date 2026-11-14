@@ -67,13 +67,14 @@ function boot(api) {
   document.createElementNS = (_ns, tag) => make(tag);
   const app = make('div');
   document.getElementById = (id) => { assert.equal(id, 'app'); return app; };
-  const win = { document, foreman: api };
+  const win = { document, foreman: api, listeners: {} };
+  win.addEventListener = (type, fn) => { (win.listeners[type] = win.listeners[type] || []).push(fn); };
   win.window = win;
   vm.createContext(win);
   for (const f of ['model.js', 'art.js', 'preview.js', 'app.js']) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), win, { filename: f });
   }
-  return { app, document };
+  return { app, document, window: win };
 }
 
 const tick = () => new Promise((r) => setImmediate(r));
@@ -675,11 +676,11 @@ const sw = (app, label) => buttons(app).find((b) => b.textContent === label && b
 
 async function openPage(name, { api = null, d = data(), tk = ticketApi().tk } = {}) {
   const fake = api || fakeApi(d, undefined, undefined, tk);
-  const { app, document } = boot(fake);
+  const { app, document, window } = boot(fake);
   await tick();
   rowFor(app, name).click();
   await tick();
-  return { app, document, api: fake };
+  return { app, document, window, api: fake };
 }
 
 test('a click on a ticket in the order opens its page, which reads that ticket once', async () => {
@@ -1092,4 +1093,35 @@ test('on the ticket page the rail marks no tool; Report from there opens the rep
   await tick();
   assert.equal(api.calls.report.length, 1);
   assert.ok(!app.querySelector('.ticketcols'));
+});
+
+test('Ctrl+S in the editor saves, when there is something to save; other keys do nothing', async () => {
+  const { app, api } = await openPage(HUMAN);
+  const ed = editorOf(app);
+  const press = (e) => { let stopped = false; for (const fn of ed.listeners.keydown || []) fn({ preventDefault() { stopped = true; }, ...e }); return stopped; };
+  assert.equal(press({ ctrlKey: true, key: 's' }), false, 'nothing to save: the key is left alone');
+  ed.value = 'changed';
+  for (const fn of ed.listeners.input) fn({});
+  assert.equal(press({ key: 's' }), false);
+  assert.equal(press({ ctrlKey: true, key: 'x' }), false);
+  assert.equal(api.calls.save.length, 0);
+  assert.equal(press({ ctrlKey: true, key: 's' }), true);
+  await tick();
+  assert.equal(api.calls.save.length, 1);
+  assert.equal(api.calls.save[0].text, 'changed');
+});
+
+test('coming back to the window re-reads the ticket page, for a handoff the watcher does not see; elsewhere it reads nothing', async () => {
+  const st = ticketApi();
+  const { app, api, window } = await openPage(HUMAN, { tk: st.tk });
+  assert.equal(api.calls.ticket.length, 1);
+  st.st.docs[HUMAN] = ticketDoc(HUMAN, { handoff: { path: HANDOFF, text: 'from elsewhere\n', error: null } });
+  for (const fn of window.listeners.focus) fn({});
+  await tick();
+  assert.equal(api.calls.ticket.length, 2);
+  assert.equal(editorOf(app).value, 'from elsewhere\n');
+  buttonNamed(app, '← b').click();
+  for (const fn of window.listeners.focus) fn({});
+  await tick();
+  assert.equal(api.calls.ticket.length, 2, 'on the overview there is nothing to re-read');
 });

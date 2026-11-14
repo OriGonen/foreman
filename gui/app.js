@@ -469,6 +469,12 @@
     if (!t.editor) {
       t.editor = h('textarea', { cls: 'editor', attrs: { spellcheck: 'false', 'aria-label': 'Handoff file', 'data-editor': 'handoff' } });
       t.editor.addEventListener('input', () => syncEditor());
+      t.editor.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && String(e.key).toLowerCase() === 's' && tp === t && t.ui && !t.ui.save.disabled) {
+          e.preventDefault();
+          saveHandoff(t.base);
+        }
+      });
       t.base = disk;
       t.editor.value = disk === null ? '' : disk;
       return;
@@ -782,6 +788,11 @@
   }
 
   // A file changed: the screen redraws from the new overview, and a ticket page reads its own files again.
+  // Back from the person's own editor: read the page again. The watcher sees the batch's files; this
+  // is for a handoff file kept elsewhere in the repository, and for an event that never came.
+  if (typeof window.addEventListener === 'function') {
+    window.addEventListener('focus', () => { if (view === 'ticket' && tp && tp.state !== 'loading') readTicket(); });
+  }
   api.onUpdate((fresh) => {
     data = fresh;
     draw();

@@ -307,3 +307,24 @@ test('save never uses the cache: the path it writes is the CLI\'s answer of the 
   assert.equal(get(root, 'b/handoff/now.md'), 'x');
   assert.ok(!fs.existsSync(path.join(root, 'b', 'handoff', 'stale.md')));
 });
+
+// ---- names Windows reads as something else ----
+
+test('resolveInside refuses what Windows would read as another file: a stream, a trailing dot or space, an 8.3 name for .git', () => {
+  const root = repo();
+  for (const bad of ['b/handoff/x.md:stream', 'b/handoff/x.md::$DATA', '.git./config', '.git /config', 'b/.GIT../x', 'GIT~1/config', 'b/git~2/x']) {
+    assert.throws(() => resolveInside(root, bad), refused, bad);
+  }
+  assert.ok(resolveInside(root, 'b/handoff/git-notes.md'), 'a name that only looks a little like it is fine');
+});
+
+test('save refuses foreman.conf however it is spelt, and the ticket itself however its case', async () => {
+  const root = repo();
+  put(root, 'b/issues/07-try-it.md', 'ticket');
+  put(root, 'b/foreman.conf', 'conf');
+  for (const bad of ['b/FOREMAN.CONF', 'b/foreman.conf.', 'b/foreman.conf ']) {
+    const { tf } = files(root, status({ handoff: bad }));
+    await assert.rejects(tf.save('b', '07-try-it', 'x', 'conf'), refused, bad);
+  }
+  assert.equal(get(root, 'b/foreman.conf'), 'conf');
+});

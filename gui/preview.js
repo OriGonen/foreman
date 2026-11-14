@@ -19,7 +19,7 @@
   else root.ForemanPreview = factory();
 }(typeof self !== 'undefined' ? self : this, function () {
 
-  const HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;           // the space after the #s is required
+  const HEADING = /^(#{1,6})\s+(.*?)(?:\s+#+)?\s*$/;        // the space after the #s is required; so is the one before a closing run of them
   const BULLET = /^(\s*)[-*+]\s+(.*)$/;
   const BOX = /^\[([ xX])\](?:\s+|$)(.*)$/;               // `[x]` must be followed by a space or the end:
                                                           // `[x](javascript:…)` is a link's shape, not a box

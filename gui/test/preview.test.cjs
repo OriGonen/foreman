@@ -134,3 +134,9 @@ test('the page script builds the nodes with createElement and textContent only',
     assert.ok(!src.includes(bad), `preview.js must not use ${bad}`);
   }
 });
+
+test('a heading keeps a # that belongs to its text; only a closing run of #s after a space is dropped', () => {
+  assert.deepEqual(preview('# C#'), [{ type: 'heading', level: 1, children: [t('C#')] }]);
+  assert.deepEqual(preview('## issue #12'), [{ type: 'heading', level: 2, children: [t('issue #12')] }]);
+  assert.deepEqual(preview('## closed ##'), [{ type: 'heading', level: 2, children: [t('closed')] }]);
+});
