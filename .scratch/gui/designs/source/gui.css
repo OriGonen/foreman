@@ -12,6 +12,9 @@
   --on-accent: #171614;         /* text on an amber fill */
   --sky-top: #1c1a17; --sky-bot: #3a2a18; --sunfill: #f6d58e; --halo: #e0a84a;
   --ground: #30231a; --scrim: rgba(0,0,0,.55); --outline: #8a5a24; --ink: #3b1d12; --paper: #f6e7c1; --sweat: #7fc8f0;
+  /* the run-end silhouettes (05): the terminal's sun bands and its silhouette */
+  --sil: #0a0908; --sun-core: #f6d58e; --sun-mid: #e0a84a; --sun-rim: #c9772f; --sun-ring1: #3a2a18; --sun-ring2: #241a12;
+  --night: #1c1a17; --glint: #8a5a24; --letter: #f6d58e; --glow: .17;
   color-scheme: dark;
 }
 .theme-light {
@@ -23,6 +26,8 @@
   --on-accent: #2a2117;
   --sky-top: #fff8ea; --sky-bot: #fbe2b0; --sunfill: #eaa43a; --halo: #f6d58e;
   --ground: #e9dcc4; --scrim: rgba(42,33,23,.35); --outline: #3a2a18; --ink: #3b1d12; --paper: #f6e7c1; --sweat: #3f9fd8;
+  --sil: #241910; --sun-core: #f8dc98; --sun-mid: #eaa43a; --sun-rim: #c9772f; --sun-ring1: #f0c88a; --sun-ring2: #f6dfba;
+  --night: #dccaa9; --glint: #d08a3a; --letter: #f6d58e; --glow: .32;
   color-scheme: light;
 }
 
@@ -255,3 +260,6 @@ pre.src { font: 12px/1.6 var(--mono); margin: 0; white-space: pre-wrap; color: v
 
 /* run-end scenes */
 .scene { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+.frame.end { height: 900px; }
+.pane.end { gap: 8px; padding-top: 12px; }
+.pane.end .scene { margin: 2px auto 4px; }

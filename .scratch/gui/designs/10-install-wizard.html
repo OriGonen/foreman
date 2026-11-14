@@ -15,6 +15,9 @@
   --on-accent: #171614;         /* text on an amber fill */
   --sky-top: #1c1a17; --sky-bot: #3a2a18; --sunfill: #f6d58e; --halo: #e0a84a;
   --ground: #30231a; --scrim: rgba(0,0,0,.55); --outline: #8a5a24; --ink: #3b1d12; --paper: #f6e7c1; --sweat: #7fc8f0;
+  /* the run-end silhouettes (05): the terminal's sun bands and its silhouette */
+  --sil: #0a0908; --sun-core: #f6d58e; --sun-mid: #e0a84a; --sun-rim: #c9772f; --sun-ring1: #3a2a18; --sun-ring2: #241a12;
+  --night: #1c1a17; --glint: #8a5a24; --letter: #f6d58e; --glow: .17;
   color-scheme: dark;
 }
 .theme-light {
@@ -26,6 +29,8 @@
   --on-accent: #2a2117;
   --sky-top: #fff8ea; --sky-bot: #fbe2b0; --sunfill: #eaa43a; --halo: #f6d58e;
   --ground: #e9dcc4; --scrim: rgba(42,33,23,.35); --outline: #3a2a18; --ink: #3b1d12; --paper: #f6e7c1; --sweat: #3f9fd8;
+  --sil: #241910; --sun-core: #f8dc98; --sun-mid: #eaa43a; --sun-rim: #c9772f; --sun-ring1: #f0c88a; --sun-ring2: #f6dfba;
+  --night: #dccaa9; --glint: #d08a3a; --letter: #f6d58e; --glow: .32;
   color-scheme: light;
 }
 
@@ -258,6 +263,9 @@ pre.src { font: 12px/1.6 var(--mono); margin: 0; white-space: pre-wrap; color: v
 
 /* run-end scenes */
 .scene { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+.frame.end { height: 900px; }
+.pane.end { gap: 8px; padding-top: 12px; }
+.pane.end .scene { margin: 2px auto 4px; }
 </style><script>
 // Foreman GUI design canvases. Clones each <template data-take> into a dark and a light frame,
 // fills the shared parts (title bar, rail) and draws the art from data attributes:
@@ -265,8 +273,9 @@ pre.src { font: 12px/1.6 var(--mono); margin: 0; white-space: pre-wrap; color: v
 //   <span data-art="inspector" data-w="90">                          the inspector (doctor)
 //   <span data-art="figure" data-w="70">                             the foreman (run)
 //   <span data-art="sunrise" data-p="0.4">                           a sunrise band (p = how high the sun is)
-//   <span data-art="scene" data-kind="done|problem|human" data-w="250">   the run-end scenes: thumbs-up under a full sun, the "problem!" sign, the "need human inspection!" sign
 //   <span data-art="runner">                                         the doctor's inspector, running across and back, sweating (CSS animation)
+//   <span data-art="end" data-kind="done|paused|problem|human" data-w="400">
+//                                                                    the run-end scenes as silhouettes: a big banded sun on a low horizon, the terminal's pixel foreman a flat dark shape in front of it
 // Stakes: d landed · > next · h human ticket · f followup · . to go · x missing.
 // Local file, no network, no dependencies.
 (function () {
@@ -330,103 +339,93 @@ pre.src { font: 12px/1.6 var(--mono); margin: 0; white-space: pre-wrap; color: v
   }
 
 
-  // ---- the foreman, a little more human than the figure: ear, neck, a tilted hat, outlines like a quick pen drawing ----
+  // shared by the runner (OUT) and the end scenes' signs (HAND)
   const OUT = 'stroke:var(--outline);stroke-width:1.3;stroke-linejoin:round;stroke-linecap:round';
   const HAND = "'Segoe Print','Bradley Hand','Chalkboard SE','Comic Sans MS',cursive";
-  const arm = (d) => `<path d="${d}" fill="none" style="stroke:var(--outline);stroke-width:8.4;stroke-linecap:round"/><path d="${d}" fill="none" style="stroke:var(--amber);stroke-width:6.2;stroke-linecap:round"/>`;
-  const hand = (x, y, r = 4.2) => `<circle cx="${x}" cy="${y}" r="${r}" style="fill:var(--sun);${OUT}"/>`;
+  // ---- run-end scenes, the silhouette world (05). Drawn like the terminal's sunrise in lib/foreman-draw.cjs:
+  // a big sun in flat bands (sun, amber, rust, then two rings) sitting on a low horizon, its glint on the
+  // ground below, and the foreman as one flat dark shape in front of it: no face, no colour, no detail.
+  // 320 x 170, horizon at y = 148. The sun is the same in every scene but for its height, and exit 30's
+  // sun is drawn exactly as exit 10's. The figure is the terminal's half-block
+  // sprite, picked at the second sign-off. The pose carries the meaning.
+  const EH = 148, ESUN = { cx: 160, r: 70 };
+  const ESUN_Y = { done: EH - 68, paused: EH, human: EH, problem: EH + 8 };
+  const EPOSE = { done: 'raise', paused: 'hold', problem: 'scratch', human: 'shrug' };
+  const EAT = { done: 160, paused: 144, problem: 136, human: 190 };      // where the foreman stands
 
-  // pose: thumbs (grinning, fist and thumb up, other hand on the hip) · worry (scratching under the hat, pointing right) · shrug (both palms up)
-  function worker(pose) {
-    const face = {
-      thumbs: `<path d="M33.5 36 q2.5 -2.4 5 0 M41.5 36 q2.5 -2.4 5 0" fill="none" style="stroke:var(--ink);stroke-width:1.2;stroke-linecap:round"/>
-               <path d="M34.5 45 Q40 52.5 45.5 45 Z" style="fill:var(--ink)"/><path d="M36.5 47.4 q3.5 2.2 7 0" fill="none" style="stroke:var(--paper);stroke-width:1.1"/>`,
-      worry:  `<path d="M33.5 38 l5.5 -2 M46.5 38 l-5.5 -2" fill="none" style="stroke:var(--ink);stroke-width:1.2;stroke-linecap:round"/>
-               <path d="M35.5 48.5 q4.5 -3.6 9 0" fill="none" style="stroke:var(--ink);stroke-width:1.5;stroke-linecap:round"/>
-               <path d="M53 37 q2.6 3.4 0 5.6 q-2.6 -2.2 0 -5.6z" style="fill:var(--sweat)"/>`,
-      shrug:  `<path d="M33.5 36.4 q2.5 -2 5 0 M41.5 38 q2.5 -2.4 5 -.4" fill="none" style="stroke:var(--ink);stroke-width:1.2;stroke-linecap:round"/>
-               <path d="M36.5 47.6 h7" fill="none" style="stroke:var(--ink);stroke-width:1.5;stroke-linecap:round"/>`
-    }[pose];
-    const arms = {
-      thumbs: arm('M28 57 Q17 66 27 79') + hand(27, 80) +
-              arm('M52 57 Q66 60 65 50') + hand(65, 47, 4.8) +
-              `<path d="M62.6 44 q-.6 -7.4 2.8 -7.8 q3.2 .4 2.2 4.4 l-.9 3.8z" style="fill:var(--sun);${OUT}"/>
-               <path d="M73 38 l5 -3.5 M74.5 46 h5.5 M70 30.5 l2 -5" fill="none" style="stroke:var(--sunfill);stroke-width:2;stroke-linecap:round"/>`,
-      worry:  arm('M28 57 Q15 53 24 42') + hand(25, 40) +
-              arm('M52 57 L66 61') + hand(68, 61, 3.8) + `<path d="M71 60.5 h7" style="stroke:var(--outline);stroke-width:2.4;stroke-linecap:round"/><path d="M71 60.5 h7" style="stroke:var(--sun);stroke-width:1.2;stroke-linecap:round"/>`,
-      shrug:  arm('M28 57 Q14 63 12 51') + hand(12, 47.5) + `<path d="M8.6 42.5 l-1.4 -3.2 M12 41.4 v-3.6 M15.4 42.5 l1.4 -3.2" fill="none" style="stroke:var(--outline);stroke-width:1.6;stroke-linecap:round"/>` +
-              arm('M52 57 Q66 63 68 51') + hand(68, 47.5) + `<path d="M64.6 42.5 l-1.4 -3.2 M68 41.4 v-3.6 M71.4 42.5 l1.4 -3.2" fill="none" style="stroke:var(--outline);stroke-width:1.6;stroke-linecap:round"/>`
-    }[pose];
-    return `
-      <path d="M30 84 L28 116 L37 116 L40 93 L43 116 L52 116 L50 84 Z" style="fill:var(--earth);${OUT}"/>
-      <rect x="25" y="116" width="14" height="7" rx="3" style="fill:var(--post);${OUT}"/><rect x="41" y="116" width="14" height="7" rx="3" style="fill:var(--post);${OUT}"/>
-      <path d="M27 54 Q40 48.5 53 54 L55.5 86 L24.5 86 Z" style="fill:var(--rust);${OUT}"/>
-      <path d="M26.2 70 h27.6 M25.6 78 h28.8" style="stroke:var(--sun);stroke-width:2.8"/>
-      <path d="M34.5 51.5 L40 60 L45.5 51.5z" style="fill:var(--amber);${OUT}"/>
-      <rect x="24.5" y="83.5" width="31" height="4.5" rx="1.2" style="fill:var(--post);${OUT}"/><rect x="37.5" y="84.2" width="5" height="3.2" rx=".6" style="fill:var(--sunfill)"/>
-      <rect x="36" y="45" width="8" height="9" style="fill:var(--sun);${OUT}"/>
-      ${arms}
-      <circle cx="29.6" cy="39.5" r="2.7" style="fill:var(--sun);${OUT}"/>
-      <circle cx="40" cy="38.5" r="10.2" style="fill:var(--sun);${OUT}"/>
-      <circle cx="36" cy="40.2" r="1.3" style="fill:var(--ink)"/><circle cx="44" cy="40.2" r="1.3" style="fill:var(--ink)"/>
-      <path d="M40 41.6 l-1.7 3.6 h3" fill="none" style="stroke:var(--outline);stroke-width:1;stroke-linecap:round;stroke-linejoin:round"/>
-      ${face}
-      <g transform="rotate(-4 40 36)"><path d="M29 35 Q28.6 19.5 40 19.5 Q51.4 19.5 51 35 Z" style="fill:var(--amber);${OUT}"/><path d="M40 20 V34" style="stroke:var(--rust);stroke-width:2.2"/>
-        <rect x="25.5" y="33" width="29" height="4.6" rx="2.3" style="fill:var(--amber);${OUT}"/></g>`;
+  function endSun(cx, cy, r, id) {
+    const glow = `<radialGradient id="${id}g"><stop offset=".3" style="stop-color:var(--sun-mid);stop-opacity:var(--glow)"/><stop offset="1" style="stop-color:var(--sun-mid);stop-opacity:0"/></radialGradient>`;
+    return `<defs>${glow}</defs><circle cx="${cx}" cy="${cy}" r="${(r * 2.2).toFixed(1)}" fill="url(#${id}g)"/>` + [[r + 10, '--sun-ring2'], [r + 5, '--sun-ring1'], [r, '--sun-rim'], [r * .84, '--sun-mid'], [r * .56, '--sun-core']]
+      .map(([rr, c]) => `<circle cx="${cx}" cy="${cy}" r="${rr.toFixed(1)}" style="fill:var(${c})"/>`).join('');
   }
 
-  // ---- hand-written signs: a leaning post, an uneven board, wobbly letters ----
-  // `tilt` leans the whole sign about the foot of its post, so it never stands square to the floor.
-  function sign(kind, x, y, tilt) {
+  // the ground: a band that fades down and out to the sides, a hard horizon, and the sun's glint under it
+  function endGround(id, cx, cy, r) {
+    const half = cy <= EH - r ? r * .72 : Math.sqrt(Math.max(0, r * r - (EH - cy) ** 2));
+    const glint = [0, 1, 2, 3].map(k => { const w = half * (1 - k * .23), y = EH + 4 + k * 5;
+      return `<line x1="${(cx - w).toFixed(1)}" x2="${(cx + w).toFixed(1)}" y1="${y}" y2="${y}" style="stroke:var(--glint)" stroke-width="1.7" stroke-linecap="round" opacity="${(.95 - k * .22).toFixed(2)}"/>`; }).join('');
+    return `<defs><linearGradient id="${id}v" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--night)"/><stop offset="1" style="stop-color:var(--night);stop-opacity:0"/></linearGradient>
+      <linearGradient id="${id}h" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000"/><stop offset=".18" stop-color="#fff"/><stop offset=".82" stop-color="#fff"/><stop offset="1" stop-color="#000"/></linearGradient>
+      <mask id="${id}m" maskUnits="userSpaceOnUse" x="0" y="0" width="320" height="170"><rect x="0" y="0" width="320" height="170" fill="url(#${id}h)"/></mask></defs>
+      <g mask="url(#${id}m)"><rect x="0" y="${EH}" width="320" height="${170 - EH}" fill="url(#${id}v)"/><rect x="0" y="${EH - .6}" width="320" height="1.5" style="fill:var(--sil)"/></g>${glint}`;
+  }
+
+  const SIL = 'var(--sil)';
+  // The figure (picked at the second sign-off, Option 1): the terminal's foreman (FIGURE_TOP + FIGURE_LEGS in foreman-draw.cjs, 18 x 25 cells), his
+  // left arm taken off so each pose can put both arms where it needs them. [column, row] cells.
+  const PX_BODY = ['.......####.......', '......######......', '.....########.....', '..##############..', '......######......', '......######......',
+    '.......####.......', '.......####.......', '.....########.....', '....##########....', '...###########....', '...###########....', '...###########....',
+    '.....#########....', '.....#########....', '.....#########....', '.....#########....', '.....#########....', '.....#########....',
+    '.....####.####....', '.....####..####...', '.....###....###...', '.....###....###...', '.....###.....###..', '....####.....####.'];
+  const pxRun = (x, y, n) => [...Array(n)].map((_, i) => [x + i, y]);
+  const PX_HIP = [[2, 12], [2, 13], [1, 13], [1, 14], [2, 14], [1, 15], [2, 15], [2, 16], [3, 16], [3, 17], [4, 17]];
+  const PX_ARMS = {
+    raise: PX_HIP.concat([[14, 10], [14, 9], [15, 9], [15, 8], [15, 7], [16, 7], [15, 6], [16, 6], [16, 5], [16, 4], [17, 4], [16, 3], [17, 3], [16, 2], [17, 2]],
+      pxRun(15, -1, 3), pxRun(15, 0, 3), pxRun(15, 1, 3)),
+    hold: PX_HIP.concat(pxRun(14, 10, 6), pxRun(14, 11, 6), [[20, 5], [21, 5]], pxRun(20, 6, 2), pxRun(20, 7, 2), pxRun(20, 8, 2), pxRun(20, 9, 2), pxRun(20, 10, 2), pxRun(20, 11, 2), [[19, 9], [19, 10]]),
+    scratch: PX_HIP.concat([[14, 10], [14, 9], [15, 9], [15, 8], [16, 8], [16, 7], [17, 7], [17, 6], [16, 6], [17, 5], [16, 5], [15, 5], [15, 4], [14, 4], [14, 5], [13, 4], [13, 5], [12, 4], [12, 5]]),
+    shrug: (() => { const l = [[3, 12], [2, 12], [2, 13], [1, 13], [1, 14], [2, 14], [1, 15], [0, 15], [0, 14], [-1, 14], [-1, 13], [-2, 13], [-2, 12], [-3, 12], [-4, 12], [-4, 11], [-3, 11]];
+      return l.concat(l.map(([x, y]) => [17 - x, y])); })(),
+  };
+  function figPixel(pose) {
+    const cells = [];
+    PX_BODY.forEach((row, j) => [...row].forEach((ch, i) => { if (ch === '#') cells.push([i, j]); }));
+    cells.push(...PX_ARMS[pose]);
+    return `<path d="${cells.map(([i, j]) => `M${i} ${j}h1.04v1.04h-1.04z`).join('')}" shape-rendering="crispEdges"/>`;
+  }
+
+  function endFigure(pose, x) {
+    const c = 1.72;
+    return `<g transform="translate(${(x - 8.8 * c).toFixed(2)} ${(EH - 25 * c).toFixed(2)}) scale(${c})" style="fill:${SIL}">${figPixel(pose)}</g>`;
+  }
+
+  // The two hand-lettered signs, as silhouettes: a dark post and board leaning off square, the letters
+  // painted on in the sun's colour so they read against the sun and the sky in either theme.
+  function endSign(kind, x, tilt) {
     const wob = (n) => [...Array(n)].map((_, i) => [-2, 1.5, -1, 2.5, 0, -2.5, 1, -1.5, 2, 0][i % 10]).join(' ');
     const dy = (n) => [...Array(n)].map((_, i) => [0, -1, 1, 0, -1.2, 1, 0, -.8, .8, 0][i % 10]).join(' ');
-    const text = (t, tx, ty, fs, len, fill) => `<text x="${tx}" y="${ty}" text-anchor="middle" font-size="${fs}" font-weight="700" textLength="${len}" lengthAdjust="spacingAndGlyphs"
-        rotate="${wob(t.length)}" dy="${dy(t.length)}" style="font-family:${HAND};fill:${fill}">${t}</text>`;
+    const text = (t, tx, ty, fs, len) => `<text x="${tx}" y="${ty}" text-anchor="middle" font-size="${fs}" font-weight="700" textLength="${len}" lengthAdjust="spacingAndGlyphs"
+        rotate="${wob(t.length)}" dy="${dy(t.length)}" style="font-family:${HAND};fill:var(--letter)">${t}</text>`;
     const body = kind === 'problem'
-      ? `<path d="M-2.4 0 L-3 -64 L3 -64 L2.2 0z" style="fill:var(--post);${OUT}"/>
-         <path d="M-31 -94 L30 -97.5 L32 -58 L-29 -55.5 Z" style="fill:var(--paper);stroke:var(--outline);stroke-width:1.8;stroke-linejoin:round"/>
-         <path d="M-26.5 -89.5 L26 -92.5 L27.5 -62.5 L-25 -60.5 Z" fill="none" style="stroke:var(--err);stroke-width:1.5;stroke-linejoin:round" stroke-dasharray="40 3 22 2"/>
-         ${text('problem!', 0, -70.5, 14.5, 49, 'var(--ink)')}
-         <path d="M-19 -64.5 q9 -2.4 18 -.4 t18 -1" fill="none" style="stroke:var(--err);stroke-width:1.4;stroke-linecap:round"/>
-         <circle cx="-26" cy="-89" r="1.4" style="fill:var(--outline)"/><circle cx="27" cy="-92" r="1.4" style="fill:var(--outline)"/>`
-      : `<path d="M-2.6 0 L-2.2 -58 L3 -58 L2.6 0z" style="fill:var(--post);${OUT}"/>
-         <path d="M-38 -60 L-36.5 -101 Q0 -112 38.5 -102 L37 -58 Z" style="fill:var(--rust);stroke:var(--outline);stroke-width:1.8;stroke-linejoin:round"/>
-         <path d="M-33 -64 L-32 -97 Q0 -105 33 -98" fill="none" style="stroke:var(--paper);stroke-width:1.2;stroke-linecap:round" stroke-dasharray="3 2.4"/>
-         ${text('need human', 0, -83, 13.5, 56, 'var(--paper)')}${text('inspection!', 0, -67.5, 13.5, 58, 'var(--paper)')}
-         <circle cx="-31.5" cy="-97" r="1.5" style="fill:var(--paper)"/><circle cx="33" cy="-98" r="1.5" style="fill:var(--paper)"/>`;
-    return `<g transform="translate(${x} ${y}) rotate(${tilt})">${body}</g>`;
+      ? `<path d="M-1.8 0 L-2.2 -26 L2.4 -26 L1.8 0z"/><path d="M-30 -52 L29 -55 L30.5 -24 L-28.5 -22.5 Z"/>
+         ${text('problem!', .5, -32.5, 15, 50)}`
+      : `<path d="M-1.8 0 L-1.6 -24 L2.2 -24 L1.8 0z"/><path d="M-37 -22 L-36 -59 Q0 -69 37.5 -60 L36.5 -21 Z"/>
+         ${text('need human', 0, -43, 13, 58)}${text('inspection!', 0, -29, 13, 60)}`;
+    return `<g transform="translate(${x} ${EH}) rotate(${tilt})" style="fill:${SIL}">${body}</g>`;
   }
 
-  // ---- run-end scenes, 260 x 150, feet on the ground at y = 138 ----
-  function scene(el) {
-    const kind = el.dataset.kind || 'done', w = +el.dataset.w || 250, h = Math.round(w * 150 / 260), id = 's' + (++uid);
-    const ground = `<rect x="0" y="138" width="260" height="4" rx="2" style="fill:var(--earth)"/>`;
-    const sunAt = (cx, cy, full) => {
-      const rays = [...Array(full ? 16 : 11)].map((_, i) => {
-        const n = full ? 16 : 11, a = full ? (2 * Math.PI * i) / n : Math.PI * (i + .5) / n + Math.PI, long = i % 2 === 0;
-        const r1 = 33, r2 = long ? 47 : 42;
-        return `<line x1="${(cx + Math.cos(a) * r1).toFixed(1)}" y1="${(cy + Math.sin(a) * r1).toFixed(1)}" x2="${(cx + Math.cos(a) * r2).toFixed(1)}" y2="${(cy + Math.sin(a) * r2).toFixed(1)}" style="stroke:var(--sunfill)" stroke-width="3.2" stroke-linecap="round"/>`; }).join('');
-      return `<circle cx="${cx}" cy="${cy}" r="52" style="fill:var(--halo)" opacity=".2"/>${rays}<circle cx="${cx}" cy="${cy}" r="27" style="fill:var(--sunfill)"/>`;
-    };
-    let body;
-    if (kind === 'done') {
-      const confetti = [[18,18,'var(--amber)',20],[40,40,'var(--rust)',-30],[150,14,'var(--ok)',40],[168,46,'var(--sunfill)',-15],[132,34,'var(--rust)',60],[60,12,'var(--ok)',-50],
-        [208,12,'var(--amber)',10],[236,34,'var(--ok)',-25],[250,64,'var(--rust)',35],[196,38,'var(--sunfill)',70],[12,64,'var(--sunfill)',15],[154,70,'var(--amber)',-65],[226,8,'var(--rust)',45],[104,6,'var(--sunfill)',-10]];
-      const stakes = [...Array(10)].map((_, i) => { const x = 14 + i * 14.4;
-        return `<rect x="${(x - 1.6).toFixed(1)}" y="126" width="3.2" height="12" rx="1" style="fill:var(--amber)"/><path d="M${(x + 1.6).toFixed(1)} 126 l9 3 l-9 3z" style="fill:${['var(--rust)','var(--sunfill)','var(--ok)'][i % 3]}"/>`; }).join('');
-      body = `<defs><linearGradient id="${id}g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--sky-top)"/><stop offset="1" style="stop-color:var(--sky-bot)"/></linearGradient></defs>
-        <rect x="0" y="0" width="260" height="140" rx="12" fill="url(#${id}g)"/>
-        ${sunAt(88, 72, true)}${confetti.map(([x, y, c, r]) => `<rect x="${x}" y="${y}" width="6" height="3" rx=".8" transform="rotate(${r} ${x + 3} ${y + 1.5})" style="fill:${c}"/>`).join('')}
-        ${stakes}${ground}<g transform="translate(168 21) scale(.95)">${worker('thumbs')}</g>`;
-    } else if (kind === 'problem') {
-      body = `${ground}<g transform="translate(38 21) scale(.95)">${worker('worry')}</g>${sign('problem', 190, 138, 9)}
-        <path d="M150 138 l7 -7 l6 7z M222 138 l5 -5 l5 5z" style="fill:var(--dim)"/>`;
-    } else {
-      body = `<defs><clipPath id="${id}c"><rect x="0" y="0" width="260" height="138"/></clipPath></defs>
-        <g clip-path="url(#${id}c)">${sunAt(214, 124, false)}</g>${ground}
-        <g transform="translate(100 21) scale(.95)">${worker('shrug')}</g>${sign('human', 60, 138, -7)}`;
-    }
-    el.innerHTML = svg(w, h, '0 0 260 150', body);
+  function endScene(el) {
+    const kind = ESUN_Y[el.dataset.kind] !== undefined ? el.dataset.kind : 'done';
+    const w = +el.dataset.w || 400, h = Math.round(w * 170 / 320), id = 'e' + (++uid);
+    const { cx, r } = ESUN, cy = ESUN_Y[kind];
+    let extra = '';
+    if (kind === 'done') extra = [22, 44, 66, 88, 110, 210, 232, 254, 276, 298].map(x =>
+      `<rect x="${x - 1.1}" y="${EH - 12}" width="2.2" height="12"/><path d="M${x + 1.1} ${EH - 12} l8 2.8 l-8 2.8z"/>`).join('');
+    if (kind === 'problem') extra = endSign('problem', 206, 8);
+    if (kind === 'human') extra = endSign('human', 124, -7);
+    el.innerHTML = svg(w, h, '0 0 320 170', `<defs><clipPath id="${id}c"><rect x="0" y="0" width="320" height="${EH}"/></clipPath></defs>
+      <g clip-path="url(#${id}c)">${endSun(cx, cy, r, id)}</g>${endGround(id, cx, cy, r)}
+      <g style="fill:${SIL}">${extra}</g>${endFigure(EPOSE[kind], EAT[kind])}`);
     el.firstChild.setAttribute('class', 'scene');
   }
 
@@ -467,7 +466,7 @@ pre.src { font: 12px/1.6 var(--mono); margin: 0; white-space: pre-wrap; color: v
     root.querySelectorAll('[data-art=sunrise]').forEach(sunrise);
     root.querySelectorAll('[data-art=inspector]').forEach(el => person(el, 'inspector'));
     root.querySelectorAll('[data-art=figure]').forEach(el => person(el, 'figure'));
-    root.querySelectorAll('[data-art=scene]').forEach(scene);
+    root.querySelectorAll('[data-art=end]').forEach(endScene);
     root.querySelectorAll('[data-art=runner]').forEach(runner);
   }
 
@@ -476,7 +475,8 @@ pre.src { font: 12px/1.6 var(--mono); margin: 0; white-space: pre-wrap; color: v
     document.querySelectorAll('template[data-take]').forEach(t => {
       const sec = document.createElement('section'); sec.className = 'take';
       const take = t.dataset.take;
-      sec.innerHTML = `<h2>${take} · ${t.dataset.title}${picks.includes((take.match(/^[a-z]+/) || [])[0]) ? '<span class="badge">PICK</span>' : ''}</h2><p></p><div class="frames"></div>`;
+      const badge = t.dataset.badge !== undefined ? t.dataset.badge : 'PICK';   // data-badge="" drops it, e.g. for options still to choose between
+      sec.innerHTML = `<h2>${take} · ${t.dataset.title}${badge && picks.includes((take.match(/^[a-z]+/) || [])[0]) ? `<span class="badge">${badge}</span>` : ''}</h2><p></p><div class="frames"></div>`;
       sec.querySelector('p').textContent = t.dataset.note || '';
       const themes = (t.dataset.themes || 'dark light').split(' ');
       themes.forEach(th => {
@@ -498,17 +498,65 @@ pre.src { font: 12px/1.6 var(--mono); margin: 0; white-space: pre-wrap; color: v
   <p class="small"><a href="source/WizardTakes.dc.html">All takes: source/WizardTakes.dc.html</a></p>
   <h1>10 · The install wizard (terminal)</h1>
   <p><code>bash install.sh</code> asks one question when — and only when — stdin and stdout are both terminals: CLI only, or CLI + desktop app. Everywhere else (the smoke suite captures its output; CI; a pipe) it behaves exactly as today. <code>--gui</code> / <code>--no-gui</code> answer it up front for scripted installs. On a rerun it asks only about the missing piece; with everything installed it asks nothing. Installed-or-not is read from disk: <code>gui/node_modules</code> and the Start-menu shortcut.</p>
-  <p>This is terminal output, so it is drawn in the dark palette only (ADR 0003); a terminal too narrow or without colour gets the same words as plain lines.</p>
-  <div class="pick" data-pick="a"><b>Pick: a · numbered choice</b>, with a redrawn sun at sign-off: the half-dome that read as a hat is now a round sun with eight rays (│ ╱ ╲ ─) over the horizon line, in the terminal's sun and amber colours. Typing 1 or 2 works with a plain <code>read</code> in any terminal, Git Bash's mintty included; b's arrow-key menu needs raw key reading in bash, which foreman avoids everywhere but the run's own status bar — and it looks no better for one question.</div>
+  <p>This is terminal output, so it uses the terminal's own palette (ADR 0003) whatever the window's background; a and a2 show it on a dark and a light terminal. The header is drawn only in a 256-colour or 24-bit terminal at least 80 columns wide; a 16-colour or narrower terminal, or one without colour, gets the same words as plain lines.</p>
+  <div class="pick" data-pick="a"><b>Pick: a · numbered choice</b>, with a new header at sign-off: a mini-scene in the half-block style of <code>lib/foreman-draw.cjs</code>. The sun stands high and whole, and the foreman's silhouette (hard hat, hands on hips) stands against it on the lit plain, his shadow running toward you. It is 12 rows by 36 columns, with FOREMAN install beside it; its exact pixels are below. Typing 1 or 2 works with a plain <code>read</code> in any terminal, Git Bash's mintty included; b's arrow-key menu needs raw key reading in bash, which foreman avoids everywhere but the run's own status bar — and it looks no better for one question.</div>
+  <details class="small"><summary>The header's exact pixels</summary>
+  <p>24 pixel rows by 36, two to a terminal row, as <code>halfBlocks</code> and <code>encode</code> in <code>lib/foreman-draw.cjs</code> draw them: <code>▀</code> with the top pixel as foreground and the bottom one as background, <code>█</code> when both match, <code>▄</code> when only the bottom one is set, a space when neither is. Colours: <code>y</code> sun, <code>a</code> amber, <code>r</code> rust, <code>p</code> post, <code>e</code> earth, <code>s</code> shade, <code>n</code> night (from <code>_UI_PALETTE</code> in <code>lib/foreman-ui.sh</code>), <code>#</code> the silhouette (<code>#0a0908</code>, 232 in 256 colours), <code>.</code> the terminal's background. <code>install.sh</code> carries the 12 rows as fixed lines, once in 24-bit escapes and once in 256-colour ones, each row ending in a reset; it needs no node to print them. It prints them when <code>ui_show</code> says yes on stdout (stdin and stdout are terminals, no <code>CI</code>, <code>FOREMAN_SHOW</code> not <code>never</code>), the tier is 24 or 256 and the terminal is at least 80 columns wide.</p>
+<pre>....................................
+...........ssseeesss................
+..........seeeeeeeees...............
+........sseerrrrrrreess.............
+........serraaaaaaarres.............
+.......serraaaaaaaaarres............
+......seeraaaayyyaaaarees...........
+......seraaayyyyyyyaaares...........
+......seraaayyyy###aaares...........
+......eeraayyyy#####aaree...........
+......eeraayy#########ree...........
+......eeraayyyyy###yaaree...........
+......seraaayyyy###aaares...........
+......seraaayy#######ares...........
+......seeraaa##y###a##ees...........
+.......serra##aa###ar##s............
+........serra##a###r##s.............
+........sseerrr#####ess.............
+..........seeee##e##s...............
+eeppprrrraaaaa##aaa##arrrrpppeesssss
+sseeepppprrrr##rrrrr##ppppeeessnnnnn
+nnssseeeepppp##ppppp##eeeesssnn.....
+..nnnsssseeeeee##eee###sssnnn.......
+.....nnnnsssssss##########..........</pre>
+  </details>
 </header>
 
-<template data-take="a" data-title="Numbered choice" data-themes="dark" data-frame="termframe" data-note="The small sunrise, the question, two numbered answers with what each one does (and its size), Enter for the default.">
-<div class="term"><span class="a">      ╲     │     ╱</span>
-<span class="a">         </span><span class="s">▄▄███▄▄</span>             <span class="b">FOREMAN</span>  <span class="m">install</span>
-<span class="a">    ──  </span><span class="s">█████████</span><span class="a">  ──</span>        <span class="m">from /c/Projects/foreman · d0d6874</span>
-<span class="a">         </span><span class="s">▀▀███▀▀</span>
-<span class="a">      ╱     │     ╲</span>
-<span class="d">▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔</span>
+<template data-take="a" data-title="Numbered choice" data-themes="dark light" data-frame="termframe" data-note="The header (the sun high, the foreman against it), the question, two numbered answers with what each one does (and its size), Enter for the default.">
+<style>/* the header art: half-block cells, as mintty draws them (line height 1.2, so two pixels a cell are near square) */
+.term.hb { line-height: 1.2; }
+.term.hb i { display: inline-block; width: 1ch; height: 1.2em; vertical-align: top; font-style: normal; color: transparent; background: linear-gradient(var(--t, transparent) 50%, var(--b, transparent) 50%); }
+.hb .Ty { --t: #f6d58e; } .hb .By { --b: #f6d58e; }
+.hb .Ta { --t: #e0a84a; } .hb .Ba { --b: #e0a84a; }
+.hb .Tr { --t: #c9772f; } .hb .Br { --b: #c9772f; }
+.hb .Tp { --t: #8a5a24; } .hb .Bp { --b: #8a5a24; }
+.hb .Te { --t: #3a2a18; } .hb .Be { --b: #3a2a18; }
+.hb .Ts { --t: #30231a; } .hb .Bs { --b: #30231a; }
+.hb .Tn { --t: #1c1a17; } .hb .Bn { --b: #1c1a17; }
+.hb .Tk { --t: #0a0908; } .hb .Bk { --b: #0a0908; }
+/* a light terminal: the same escapes on a light background */
+.frame.termframe.theme-light { background: #fbf8f1; }
+.theme-light .term.hb { background: #fbf8f1; color: #1c1a17; }
+</style>
+<div class="term hb">           <i class="Bs">▄</i><i class="Bs">▄</i><i class="Bs">▄</i><i class="Be">▄</i><i class="Be">▄</i><i class="Be">▄</i><i class="Bs">▄</i><i class="Bs">▄</i><i class="Bs">▄</i>                
+        <i class="Bs">▄</i><i class="Bs">▄</i><i class="Ts Be">▀</i><i class="Te Be">█</i><i class="Te Br">▀</i><i class="Te Br">▀</i><i class="Te Br">▀</i><i class="Te Br">▀</i><i class="Te Br">▀</i><i class="Te Br">▀</i><i class="Te Br">▀</i><i class="Te Be">█</i><i class="Ts Be">▀</i><i class="Bs">▄</i><i class="Bs">▄</i>             
+       <i class="Bs">▄</i><i class="Ts Be">▀</i><i class="Te Br">▀</i><i class="Tr Br">█</i><i class="Tr Ba">▀</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Tr Ba">▀</i><i class="Tr Br">█</i><i class="Te Br">▀</i><i class="Ts Be">▀</i><i class="Bs">▄</i>            
+      <i class="Ts Bs">█</i><i class="Te Be">█</i><i class="Te Br">▀</i><i class="Tr Ba">▀</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta By">▀</i><i class="Ta By">▀</i><i class="Ty By">█</i><i class="Ty By">█</i><i class="Ty By">█</i><i class="Ta By">▀</i><i class="Ta By">▀</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Tr Ba">▀</i><i class="Te Br">▀</i><i class="Te Be">█</i><i class="Ts Bs">█</i>           
+      <i class="Ts Be">▀</i><i class="Te Be">█</i><i class="Tr Br">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta By">▀</i><i class="Ty By">█</i><i class="Ty By">█</i><i class="Ty By">█</i><i class="Ty Bk">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Ta Bk">▀</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Tr Br">█</i><i class="Te Be">█</i><i class="Ts Be">▀</i>                 <span class="b">FOREMAN</span>  <span class="m">install</span>
+      <i class="Te Be">█</i><i class="Te Be">█</i><i class="Tr Br">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ty By">█</i><i class="Ty By">█</i><i class="Tk By">▀</i><i class="Tk By">▀</i><i class="Tk By">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tk By">▀</i><i class="Tk Ba">▀</i><i class="Tk Ba">▀</i><i class="Tr Br">█</i><i class="Te Be">█</i><i class="Te Be">█</i>                 <span class="m">from /c/Projects/foreman · d0d6874</span>
+      <i class="Ts Bs">█</i><i class="Te Be">█</i><i class="Tr Br">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ty By">█</i><i class="Ty By">█</i><i class="Ty Bk">▀</i><i class="Ty Bk">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Ta Bk">▀</i><i class="Ta Bk">▀</i><i class="Ta Ba">█</i><i class="Tr Br">█</i><i class="Te Be">█</i><i class="Ts Bs">█</i>           
+      <i class="Ts">▀</i><i class="Te Bs">▀</i><i class="Te Be">█</i><i class="Tr Br">█</i><i class="Ta Br">▀</i><i class="Ta Ba">█</i><i class="Ta Bk">▀</i><i class="Tk Bk">█</i><i class="Tk Ba">▀</i><i class="Ty Ba">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Ta Ba">█</i><i class="Tk Br">▀</i><i class="Tk Bk">█</i><i class="Te Bk">▀</i><i class="Te Bs">▀</i><i class="Ts">▀</i>           
+        <i class="Ts Bs">█</i><i class="Te Bs">▀</i><i class="Tr Be">▀</i><i class="Tr Be">▀</i><i class="Ta Br">▀</i><i class="Tk Br">▀</i><i class="Tk Br">▀</i><i class="Ta Bk">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tr Bk">▀</i><i class="Tk Be">▀</i><i class="Tk Bs">▀</i><i class="Ts Bs">█</i>             
+<i class="Be">▄</i><i class="Be">▄</i><i class="Bp">▄</i><i class="Bp">▄</i><i class="Bp">▄</i><i class="Br">▄</i><i class="Br">▄</i><i class="Br">▄</i><i class="Br">▄</i><i class="Ba">▄</i><i class="Ts Ba">▀</i><i class="Te Ba">▀</i><i class="Te Ba">▀</i><i class="Te Ba">▀</i><i class="Te Bk">▀</i><i class="Tk Bk">█</i><i class="Tk Ba">▀</i><i class="Te Ba">▀</i><i class="Tk Ba">▀</i><i class="Tk Bk">█</i><i class="Ts Bk">▀</i><i class="Ba">▄</i><i class="Br">▄</i><i class="Br">▄</i><i class="Br">▄</i><i class="Br">▄</i><i class="Bp">▄</i><i class="Bp">▄</i><i class="Bp">▄</i><i class="Be">▄</i><i class="Be">▄</i><i class="Bs">▄</i><i class="Bs">▄</i><i class="Bs">▄</i><i class="Bs">▄</i><i class="Bs">▄</i>
+<i class="Ts Bn">▀</i><i class="Ts Bn">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Tp Be">▀</i><i class="Tp Be">▀</i><i class="Tp Be">▀</i><i class="Tp Be">▀</i><i class="Tr Bp">▀</i><i class="Tr Bp">▀</i><i class="Tr Bp">▀</i><i class="Tr Bp">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tr Bp">▀</i><i class="Tr Bp">▀</i><i class="Tr Bp">▀</i><i class="Tr Bp">▀</i><i class="Tr Bp">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tp Be">▀</i><i class="Tp Be">▀</i><i class="Tp Be">▀</i><i class="Tp Be">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Ts Bn">▀</i><i class="Ts Bn">▀</i><i class="Tn">▀</i><i class="Tn">▀</i><i class="Tn">▀</i><i class="Tn">▀</i><i class="Tn">▀</i>
+  <i class="Tn">▀</i><i class="Tn">▀</i><i class="Tn">▀</i><i class="Ts Bn">▀</i><i class="Ts Bn">▀</i><i class="Ts Bn">▀</i><i class="Ts Bn">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Tk Bs">▀</i><i class="Tk Bk">█</i><i class="Te Bk">▀</i><i class="Te Bk">▀</i><i class="Te Bk">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Ts Bk">▀</i><i class="Ts Bk">▀</i><i class="Ts Bk">▀</i><i class="Tn">▀</i><i class="Tn">▀</i><i class="Tn">▀</i>       
 
   What should this install?
 
@@ -524,13 +572,34 @@ pre.src { font: 12px/1.6 var(--mono); margin: 0; white-space: pre-wrap; color: v
 </div>
 </template>
 
-<template data-take="a2" data-title="Numbered choice — rerun with the CLI already installed" data-themes="dark" data-frame="termframe" data-note="On a rerun only the missing piece is offered. With everything installed, the installer asks nothing and prints its usual result.">
-<div class="term"><span class="a">      ╲     │     ╱</span>
-<span class="a">         </span><span class="s">▄▄███▄▄</span>             <span class="b">FOREMAN</span>  <span class="m">install</span>
-<span class="a">    ──  </span><span class="s">█████████</span><span class="a">  ──</span>        <span class="m">from /c/Projects/foreman · d0d6874</span>
-<span class="a">         </span><span class="s">▀▀███▀▀</span>
-<span class="a">      ╱     │     ╲</span>
-<span class="d">▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔</span>
+<template data-take="a2" data-title="Numbered choice — rerun with the CLI already installed" data-themes="dark light" data-frame="termframe" data-note="On a rerun only the missing piece is offered. With everything installed, the installer asks nothing and prints its usual result.">
+<style>/* the header art: half-block cells, as mintty draws them (line height 1.2, so two pixels a cell are near square) */
+.term.hb { line-height: 1.2; }
+.term.hb i { display: inline-block; width: 1ch; height: 1.2em; vertical-align: top; font-style: normal; color: transparent; background: linear-gradient(var(--t, transparent) 50%, var(--b, transparent) 50%); }
+.hb .Ty { --t: #f6d58e; } .hb .By { --b: #f6d58e; }
+.hb .Ta { --t: #e0a84a; } .hb .Ba { --b: #e0a84a; }
+.hb .Tr { --t: #c9772f; } .hb .Br { --b: #c9772f; }
+.hb .Tp { --t: #8a5a24; } .hb .Bp { --b: #8a5a24; }
+.hb .Te { --t: #3a2a18; } .hb .Be { --b: #3a2a18; }
+.hb .Ts { --t: #30231a; } .hb .Bs { --b: #30231a; }
+.hb .Tn { --t: #1c1a17; } .hb .Bn { --b: #1c1a17; }
+.hb .Tk { --t: #0a0908; } .hb .Bk { --b: #0a0908; }
+/* a light terminal: the same escapes on a light background */
+.frame.termframe.theme-light { background: #fbf8f1; }
+.theme-light .term.hb { background: #fbf8f1; color: #1c1a17; }
+</style>
+<div class="term hb">           <i class="Bs">▄</i><i class="Bs">▄</i><i class="Bs">▄</i><i class="Be">▄</i><i class="Be">▄</i><i class="Be">▄</i><i class="Bs">▄</i><i class="Bs">▄</i><i class="Bs">▄</i>                
+        <i class="Bs">▄</i><i class="Bs">▄</i><i class="Ts Be">▀</i><i class="Te Be">█</i><i class="Te Br">▀</i><i class="Te Br">▀</i><i class="Te Br">▀</i><i class="Te Br">▀</i><i class="Te Br">▀</i><i class="Te Br">▀</i><i class="Te Br">▀</i><i class="Te Be">█</i><i class="Ts Be">▀</i><i class="Bs">▄</i><i class="Bs">▄</i>             
+       <i class="Bs">▄</i><i class="Ts Be">▀</i><i class="Te Br">▀</i><i class="Tr Br">█</i><i class="Tr Ba">▀</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Tr Ba">▀</i><i class="Tr Br">█</i><i class="Te Br">▀</i><i class="Ts Be">▀</i><i class="Bs">▄</i>            
+      <i class="Ts Bs">█</i><i class="Te Be">█</i><i class="Te Br">▀</i><i class="Tr Ba">▀</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta By">▀</i><i class="Ta By">▀</i><i class="Ty By">█</i><i class="Ty By">█</i><i class="Ty By">█</i><i class="Ta By">▀</i><i class="Ta By">▀</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Tr Ba">▀</i><i class="Te Br">▀</i><i class="Te Be">█</i><i class="Ts Bs">█</i>           
+      <i class="Ts Be">▀</i><i class="Te Be">█</i><i class="Tr Br">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta By">▀</i><i class="Ty By">█</i><i class="Ty By">█</i><i class="Ty By">█</i><i class="Ty Bk">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Ta Bk">▀</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Tr Br">█</i><i class="Te Be">█</i><i class="Ts Be">▀</i>                 <span class="b">FOREMAN</span>  <span class="m">install</span>
+      <i class="Te Be">█</i><i class="Te Be">█</i><i class="Tr Br">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ty By">█</i><i class="Ty By">█</i><i class="Tk By">▀</i><i class="Tk By">▀</i><i class="Tk By">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tk By">▀</i><i class="Tk Ba">▀</i><i class="Tk Ba">▀</i><i class="Tr Br">█</i><i class="Te Be">█</i><i class="Te Be">█</i>                 <span class="m">from /c/Projects/foreman · d0d6874</span>
+      <i class="Ts Bs">█</i><i class="Te Be">█</i><i class="Tr Br">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ty By">█</i><i class="Ty By">█</i><i class="Ty Bk">▀</i><i class="Ty Bk">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Ta Bk">▀</i><i class="Ta Bk">▀</i><i class="Ta Ba">█</i><i class="Tr Br">█</i><i class="Te Be">█</i><i class="Ts Bs">█</i>           
+      <i class="Ts">▀</i><i class="Te Bs">▀</i><i class="Te Be">█</i><i class="Tr Br">█</i><i class="Ta Br">▀</i><i class="Ta Ba">█</i><i class="Ta Bk">▀</i><i class="Tk Bk">█</i><i class="Tk Ba">▀</i><i class="Ty Ba">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Ta Ba">█</i><i class="Tk Br">▀</i><i class="Tk Bk">█</i><i class="Te Bk">▀</i><i class="Te Bs">▀</i><i class="Ts">▀</i>           
+        <i class="Ts Bs">█</i><i class="Te Bs">▀</i><i class="Tr Be">▀</i><i class="Tr Be">▀</i><i class="Ta Br">▀</i><i class="Tk Br">▀</i><i class="Tk Br">▀</i><i class="Ta Bk">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tr Bk">▀</i><i class="Tk Be">▀</i><i class="Tk Bs">▀</i><i class="Ts Bs">█</i>             
+<i class="Be">▄</i><i class="Be">▄</i><i class="Bp">▄</i><i class="Bp">▄</i><i class="Bp">▄</i><i class="Br">▄</i><i class="Br">▄</i><i class="Br">▄</i><i class="Br">▄</i><i class="Ba">▄</i><i class="Ts Ba">▀</i><i class="Te Ba">▀</i><i class="Te Ba">▀</i><i class="Te Ba">▀</i><i class="Te Bk">▀</i><i class="Tk Bk">█</i><i class="Tk Ba">▀</i><i class="Te Ba">▀</i><i class="Tk Ba">▀</i><i class="Tk Bk">█</i><i class="Ts Bk">▀</i><i class="Ba">▄</i><i class="Br">▄</i><i class="Br">▄</i><i class="Br">▄</i><i class="Br">▄</i><i class="Bp">▄</i><i class="Bp">▄</i><i class="Bp">▄</i><i class="Be">▄</i><i class="Be">▄</i><i class="Bs">▄</i><i class="Bs">▄</i><i class="Bs">▄</i><i class="Bs">▄</i><i class="Bs">▄</i>
+<i class="Ts Bn">▀</i><i class="Ts Bn">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Tp Be">▀</i><i class="Tp Be">▀</i><i class="Tp Be">▀</i><i class="Tp Be">▀</i><i class="Tr Bp">▀</i><i class="Tr Bp">▀</i><i class="Tr Bp">▀</i><i class="Tr Bp">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tr Bp">▀</i><i class="Tr Bp">▀</i><i class="Tr Bp">▀</i><i class="Tr Bp">▀</i><i class="Tr Bp">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tp Be">▀</i><i class="Tp Be">▀</i><i class="Tp Be">▀</i><i class="Tp Be">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Ts Bn">▀</i><i class="Ts Bn">▀</i><i class="Tn">▀</i><i class="Tn">▀</i><i class="Tn">▀</i><i class="Tn">▀</i><i class="Tn">▀</i>
+  <i class="Tn">▀</i><i class="Tn">▀</i><i class="Tn">▀</i><i class="Ts Bn">▀</i><i class="Ts Bn">▀</i><i class="Ts Bn">▀</i><i class="Ts Bn">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Tk Bs">▀</i><i class="Tk Bk">█</i><i class="Te Bk">▀</i><i class="Te Bk">▀</i><i class="Te Bk">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Ts Bk">▀</i><i class="Ts Bk">▀</i><i class="Ts Bk">▀</i><i class="Tn">▀</i><i class="Tn">▀</i><i class="Tn">▀</i>       
 
   <span class="g">■</span> CLI installed           <span class="m">~/.local/bin/foreman → this checkout</span>
   <span class="d">·</span> desktop app             <span class="m">not installed</span>
@@ -540,6 +609,5 @@ pre.src { font: 12px/1.6 var(--mono); margin: 0; white-space: pre-wrap; color: v
   [y/<span class="b">N</span>]: <span class="inv"> </span>
 </div>
 </template>
-
 
 </body></html>

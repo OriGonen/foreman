@@ -14,7 +14,10 @@
   --accent: #e0a84a;            /* accent used as text */
   --on-accent: #171614;         /* text on an amber fill */
   --sky-top: #1c1a17; --sky-bot: #3a2a18; --sunfill: #f6d58e; --halo: #e0a84a;
-  --ground: #30231a; --scrim: rgba(0,0,0,.55);
+  --ground: #30231a; --scrim: rgba(0,0,0,.55); --outline: #8a5a24; --ink: #3b1d12; --paper: #f6e7c1; --sweat: #7fc8f0;
+  /* the run-end silhouettes (05): the terminal's sun bands and its silhouette */
+  --sil: #0a0908; --sun-core: #f6d58e; --sun-mid: #e0a84a; --sun-rim: #c9772f; --sun-ring1: #3a2a18; --sun-ring2: #241a12;
+  --night: #1c1a17; --glint: #8a5a24; --letter: #f6d58e; --glow: .17;
   color-scheme: dark;
 }
 .theme-light {
@@ -25,7 +28,9 @@
   --accent: #9a5a17;            /* amber darkened to 5:1 on --panel, for text */
   --on-accent: #2a2117;
   --sky-top: #fff8ea; --sky-bot: #fbe2b0; --sunfill: #eaa43a; --halo: #f6d58e;
-  --ground: #e9dcc4; --scrim: rgba(42,33,23,.35);
+  --ground: #e9dcc4; --scrim: rgba(42,33,23,.35); --outline: #3a2a18; --ink: #3b1d12; --paper: #f6e7c1; --sweat: #3f9fd8;
+  --sil: #241910; --sun-core: #f8dc98; --sun-mid: #eaa43a; --sun-rim: #c9772f; --sun-ring1: #f0c88a; --sun-ring2: #f6dfba;
+  --night: #dccaa9; --glint: #d08a3a; --letter: #f6d58e; --glow: .32;
   color-scheme: light;
 }
 
@@ -48,6 +53,7 @@ body.canvas { margin: 0; background: #2b2926; color: #ece8e1; font: 14px/1.5 var
 .canvas .frame-wrap > .cap { font: 12px var(--mono); color: #a8a299; margin-bottom: 6px; }
 .frame { width: 1040px; height: 660px; border-radius: 10px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,.45); position: relative; }
 .frame.tall { height: 760px; }
+.frame.compact { width: 440px; height: 300px; }
 .frame.termframe { width: 860px; height: 470px; background: #0d0c0b; }
 
 /* ---------- the app ---------- */
@@ -187,6 +193,79 @@ body.canvas { margin: 0; background: #2b2926; color: #ece8e1; font: 14px/1.5 var
 .term { background: #0d0c0b; color: #ece8e1; font: 13px/1.5 var(--mono); padding: 16px 18px; white-space: pre; }
 .term .s { color: #f6d58e; } .term .a { color: #e0a84a; } .term .r { color: #c9772f; } .term .m { color: #a8a299; } .term .d { color: #5c574f; } .term .g { color: #8fcf8f; } .term .e { color: #f08078; } .term .b { font-weight: 700; }
 .term .inv { background: #e0a84a; color: #171614; }
+
+/* ---------- additions after sign-off (ticket 01a) ---------- */
+
+/* a segmented toggle: Preview | Markdown, Full view | Compact view */
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--panel); }
+.seg span { padding: 3px 10px; font: 600 11.5px var(--ui); color: var(--muted); border-right: 1px solid var(--line); }
+.seg span:last-child { border-right: 0; }
+.seg span.on { background: var(--shade); color: var(--text); box-shadow: inset 0 -2px 0 var(--amber); }
+
+/* the ticket's markdown, drawn as a preview: a small safe subset built from DOM nodes, never innerHTML */
+.md { font: 13px/1.6 var(--ui); color: var(--text); overflow: hidden; }
+.md h1 { font: 600 17px var(--ui); margin: 0 0 8px; }
+.md p { margin: 0 0 8px; }
+.md code { font: 12px var(--mono); background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+.md ul { list-style: none; margin: 0 0 8px; padding: 0; }
+.md li { display: flex; gap: 8px; margin: 3px 0; }
+.md li .bx { flex: none; width: 14px; height: 14px; margin-top: 3px; border: 1.5px solid var(--muted); border-radius: 3px; text-align: center; font: 700 10px/12px var(--mono); }
+.md li .bx.on { background: var(--ok); border-color: var(--ok); color: var(--panel); }
+.md .meta { display: grid; grid-template-columns: max-content 1fr; gap: 2px 10px; margin: 0 0 10px; font-size: 12px; }
+.md .meta b { color: var(--muted); font: 600 10.5px var(--mono); letter-spacing: .08em; text-transform: uppercase; padding-top: 2px; }
+.md .meta span { font-family: var(--mono); }
+pre.src { font: 12px/1.6 var(--mono); margin: 0; white-space: pre-wrap; color: var(--text); }
+
+/* (?) help buttons and the popover they open */
+.help { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 15px; height: 15px; border-radius: 50%; border: 1px solid var(--muted);
+        color: var(--muted); font: 700 10px/1 var(--ui); background: transparent; vertical-align: 1px; position: relative; }
+.help.open { background: var(--amber); border-color: var(--amber); color: var(--on-accent); }
+.pop { position: absolute; z-index: 3; width: 270px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--amber); background: var(--panel); color: var(--text);
+       font: 12px/1.5 var(--ui); box-shadow: 0 10px 30px rgba(0,0,0,.35); text-align: left; white-space: normal; }
+.pop b { display: block; margin-bottom: 2px; }
+.pop .dim { display: block; margin-top: 4px; font: 11px var(--mono); }
+
+/* the three tiles (iterations, spend cap, time cap) on the start-run receipt */
+.tiles { display: flex; gap: 8px; font-family: var(--ui); }
+.tiles .tile { flex: 1; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px 9px; text-align: center; background: var(--panel-2); }
+.tiles .tile.edit { border-color: var(--amber); background: color-mix(in srgb, var(--amber) 8%, var(--panel)); }
+.tiles .tile .v { font: 600 24px var(--ui); letter-spacing: -.01em; line-height: 1.2; }
+.tiles .tile .lab { font: 600 10.5px var(--mono); letter-spacing: .1em; color: var(--muted); text-transform: uppercase; display: flex; gap: 5px; justify-content: center; align-items: center; }
+.tiles .tile .src { font: 10.5px var(--mono); color: var(--dim); }
+.field { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--amber); border-radius: 6px; padding: 1px 8px; background: var(--panel-2); color: var(--text); font: 600 20px var(--ui); }
+.field small { font: 12px var(--mono); color: var(--muted); }
+
+/* a stat tile on the ticket page of a finished ticket */
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.stats .s { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--panel-2); }
+.stats .s .v { font: 600 17px var(--ui); } .stats .s .k { font: 600 10px var(--mono); letter-spacing: .1em; color: var(--muted); text-transform: uppercase; }
+
+/* the doctor's track: the inspector runs across and back, sweating, then stands and sweats while the sheet fills in.
+   Same story as the terminal's doctor animation (six ticks of legs, drops trailing him). One cycle = 6s here so the
+   pick page keeps looping it; the app plays it once per inspection. */
+.track { position: relative; flex: none; height: 74px; border-radius: 10px; border: 1px solid var(--line); background: linear-gradient(var(--sky-top), var(--sky-bot)); overflow: hidden; }
+.track .ground { position: absolute; left: 0; right: 0; bottom: 0; height: 10px; background: var(--ground); border-top: 2px solid var(--post); }
+.track .tick { position: absolute; bottom: 10px; width: 3px; background: var(--post); opacity: .6; border-radius: 1px; }
+.track .say { position: absolute; right: 14px; top: 10px; font: 600 11px var(--mono); letter-spacing: .1em; color: var(--muted); text-transform: uppercase; }
+.runner { position: absolute; bottom: 9px; left: 8px; width: 40px; height: 60px; animation: run-across 6s linear infinite; }
+.runner .flip { display: block; width: 100%; height: 100%; animation: run-turn 6s steps(1, end) infinite; }
+.runner svg { display: block; overflow: visible; }
+.runner .lg-a { animation: stride .28s steps(1, end) infinite; }
+.runner .lg-b { animation: stride-b .28s steps(1, end) infinite; }
+.runner .drop { fill: var(--sweat); animation: drip .56s linear infinite; }
+.runner .drop.d2 { animation-delay: -.28s; }
+@keyframes run-across { 0% { left: 8px; } 25% { left: calc(100% - 52px); } 50% { left: 8px; } 100% { left: 8px; } }
+@keyframes run-turn { 0% { transform: scaleX(1); } 25% { transform: scaleX(-1); } 50% { transform: scaleX(1); } 100% { transform: scaleX(1); } }
+@keyframes stride { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 1; } }
+@keyframes stride-b { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes drip { 0% { transform: translate(0, 0); opacity: 1; } 100% { transform: translate(-5px, 9px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .runner, .runner .flip, .runner .lg-a, .runner .lg-b, .runner .drop { animation: none; } .runner .lg-b { opacity: 0; } }
+
+/* run-end scenes */
+.scene { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+.frame.end { height: 900px; }
+.pane.end { gap: 8px; padding-top: 12px; }
+.pane.end .scene { margin: 2px auto 4px; }
 </style><script>
 // Foreman GUI design canvases. Clones each <template data-take> into a dark and a light frame,
 // fills the shared parts (title bar, rail) and draws the art from data attributes:
@@ -194,6 +273,9 @@ body.canvas { margin: 0; background: #2b2926; color: #ece8e1; font: 14px/1.5 var
 //   <span data-art="inspector" data-w="90">                          the inspector (doctor)
 //   <span data-art="figure" data-w="70">                             the foreman (run)
 //   <span data-art="sunrise" data-p="0.4">                           a sunrise band (p = how high the sun is)
+//   <span data-art="runner">                                         the doctor's inspector, running across and back, sweating (CSS animation)
+//   <span data-art="end" data-kind="done|paused|problem|human" data-w="400">
+//                                                                    the run-end scenes as silhouettes: a big banded sun on a low horizon, the terminal's pixel foreman a flat dark shape in front of it
 // Stakes: d landed · > next · h human ticket · f followup · . to go · x missing.
 // Local file, no network, no dependencies.
 (function () {
@@ -256,6 +338,112 @@ body.canvas { margin: 0; background: #2b2926; color: #ece8e1; font: 14px/1.5 var
       <rect x="0" y="116" width="80" height="3" rx="1.5" style="fill:var(--earth)"/>`);
   }
 
+
+  // shared by the runner (OUT) and the end scenes' signs (HAND)
+  const OUT = 'stroke:var(--outline);stroke-width:1.3;stroke-linejoin:round;stroke-linecap:round';
+  const HAND = "'Segoe Print','Bradley Hand','Chalkboard SE','Comic Sans MS',cursive";
+  // ---- run-end scenes, the silhouette world (05). Drawn like the terminal's sunrise in lib/foreman-draw.cjs:
+  // a big sun in flat bands (sun, amber, rust, then two rings) sitting on a low horizon, its glint on the
+  // ground below, and the foreman as one flat dark shape in front of it: no face, no colour, no detail.
+  // 320 x 170, horizon at y = 148. The sun is the same in every scene but for its height, and exit 30's
+  // sun is drawn exactly as exit 10's. The figure is the terminal's half-block
+  // sprite, picked at the second sign-off. The pose carries the meaning.
+  const EH = 148, ESUN = { cx: 160, r: 70 };
+  const ESUN_Y = { done: EH - 68, paused: EH, human: EH, problem: EH + 8 };
+  const EPOSE = { done: 'raise', paused: 'hold', problem: 'scratch', human: 'shrug' };
+  const EAT = { done: 160, paused: 144, problem: 136, human: 190 };      // where the foreman stands
+
+  function endSun(cx, cy, r, id) {
+    const glow = `<radialGradient id="${id}g"><stop offset=".3" style="stop-color:var(--sun-mid);stop-opacity:var(--glow)"/><stop offset="1" style="stop-color:var(--sun-mid);stop-opacity:0"/></radialGradient>`;
+    return `<defs>${glow}</defs><circle cx="${cx}" cy="${cy}" r="${(r * 2.2).toFixed(1)}" fill="url(#${id}g)"/>` + [[r + 10, '--sun-ring2'], [r + 5, '--sun-ring1'], [r, '--sun-rim'], [r * .84, '--sun-mid'], [r * .56, '--sun-core']]
+      .map(([rr, c]) => `<circle cx="${cx}" cy="${cy}" r="${rr.toFixed(1)}" style="fill:var(${c})"/>`).join('');
+  }
+
+  // the ground: a band that fades down and out to the sides, a hard horizon, and the sun's glint under it
+  function endGround(id, cx, cy, r) {
+    const half = cy <= EH - r ? r * .72 : Math.sqrt(Math.max(0, r * r - (EH - cy) ** 2));
+    const glint = [0, 1, 2, 3].map(k => { const w = half * (1 - k * .23), y = EH + 4 + k * 5;
+      return `<line x1="${(cx - w).toFixed(1)}" x2="${(cx + w).toFixed(1)}" y1="${y}" y2="${y}" style="stroke:var(--glint)" stroke-width="1.7" stroke-linecap="round" opacity="${(.95 - k * .22).toFixed(2)}"/>`; }).join('');
+    return `<defs><linearGradient id="${id}v" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--night)"/><stop offset="1" style="stop-color:var(--night);stop-opacity:0"/></linearGradient>
+      <linearGradient id="${id}h" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000"/><stop offset=".18" stop-color="#fff"/><stop offset=".82" stop-color="#fff"/><stop offset="1" stop-color="#000"/></linearGradient>
+      <mask id="${id}m" maskUnits="userSpaceOnUse" x="0" y="0" width="320" height="170"><rect x="0" y="0" width="320" height="170" fill="url(#${id}h)"/></mask></defs>
+      <g mask="url(#${id}m)"><rect x="0" y="${EH}" width="320" height="${170 - EH}" fill="url(#${id}v)"/><rect x="0" y="${EH - .6}" width="320" height="1.5" style="fill:var(--sil)"/></g>${glint}`;
+  }
+
+  const SIL = 'var(--sil)';
+  // The figure (picked at the second sign-off, Option 1): the terminal's foreman (FIGURE_TOP + FIGURE_LEGS in foreman-draw.cjs, 18 x 25 cells), his
+  // left arm taken off so each pose can put both arms where it needs them. [column, row] cells.
+  const PX_BODY = ['.......####.......', '......######......', '.....########.....', '..##############..', '......######......', '......######......',
+    '.......####.......', '.......####.......', '.....########.....', '....##########....', '...###########....', '...###########....', '...###########....',
+    '.....#########....', '.....#########....', '.....#########....', '.....#########....', '.....#########....', '.....#########....',
+    '.....####.####....', '.....####..####...', '.....###....###...', '.....###....###...', '.....###.....###..', '....####.....####.'];
+  const pxRun = (x, y, n) => [...Array(n)].map((_, i) => [x + i, y]);
+  const PX_HIP = [[2, 12], [2, 13], [1, 13], [1, 14], [2, 14], [1, 15], [2, 15], [2, 16], [3, 16], [3, 17], [4, 17]];
+  const PX_ARMS = {
+    raise: PX_HIP.concat([[14, 10], [14, 9], [15, 9], [15, 8], [15, 7], [16, 7], [15, 6], [16, 6], [16, 5], [16, 4], [17, 4], [16, 3], [17, 3], [16, 2], [17, 2]],
+      pxRun(15, -1, 3), pxRun(15, 0, 3), pxRun(15, 1, 3)),
+    hold: PX_HIP.concat(pxRun(14, 10, 6), pxRun(14, 11, 6), [[20, 5], [21, 5]], pxRun(20, 6, 2), pxRun(20, 7, 2), pxRun(20, 8, 2), pxRun(20, 9, 2), pxRun(20, 10, 2), pxRun(20, 11, 2), [[19, 9], [19, 10]]),
+    scratch: PX_HIP.concat([[14, 10], [14, 9], [15, 9], [15, 8], [16, 8], [16, 7], [17, 7], [17, 6], [16, 6], [17, 5], [16, 5], [15, 5], [15, 4], [14, 4], [14, 5], [13, 4], [13, 5], [12, 4], [12, 5]]),
+    shrug: (() => { const l = [[3, 12], [2, 12], [2, 13], [1, 13], [1, 14], [2, 14], [1, 15], [0, 15], [0, 14], [-1, 14], [-1, 13], [-2, 13], [-2, 12], [-3, 12], [-4, 12], [-4, 11], [-3, 11]];
+      return l.concat(l.map(([x, y]) => [17 - x, y])); })(),
+  };
+  function figPixel(pose) {
+    const cells = [];
+    PX_BODY.forEach((row, j) => [...row].forEach((ch, i) => { if (ch === '#') cells.push([i, j]); }));
+    cells.push(...PX_ARMS[pose]);
+    return `<path d="${cells.map(([i, j]) => `M${i} ${j}h1.04v1.04h-1.04z`).join('')}" shape-rendering="crispEdges"/>`;
+  }
+
+  function endFigure(pose, x) {
+    const c = 1.72;
+    return `<g transform="translate(${(x - 8.8 * c).toFixed(2)} ${(EH - 25 * c).toFixed(2)}) scale(${c})" style="fill:${SIL}">${figPixel(pose)}</g>`;
+  }
+
+  // The two hand-lettered signs, as silhouettes: a dark post and board leaning off square, the letters
+  // painted on in the sun's colour so they read against the sun and the sky in either theme.
+  function endSign(kind, x, tilt) {
+    const wob = (n) => [...Array(n)].map((_, i) => [-2, 1.5, -1, 2.5, 0, -2.5, 1, -1.5, 2, 0][i % 10]).join(' ');
+    const dy = (n) => [...Array(n)].map((_, i) => [0, -1, 1, 0, -1.2, 1, 0, -.8, .8, 0][i % 10]).join(' ');
+    const text = (t, tx, ty, fs, len) => `<text x="${tx}" y="${ty}" text-anchor="middle" font-size="${fs}" font-weight="700" textLength="${len}" lengthAdjust="spacingAndGlyphs"
+        rotate="${wob(t.length)}" dy="${dy(t.length)}" style="font-family:${HAND};fill:var(--letter)">${t}</text>`;
+    const body = kind === 'problem'
+      ? `<path d="M-1.8 0 L-2.2 -26 L2.4 -26 L1.8 0z"/><path d="M-30 -52 L29 -55 L30.5 -24 L-28.5 -22.5 Z"/>
+         ${text('problem!', .5, -32.5, 15, 50)}`
+      : `<path d="M-1.8 0 L-1.6 -24 L2.2 -24 L1.8 0z"/><path d="M-37 -22 L-36 -59 Q0 -69 37.5 -60 L36.5 -21 Z"/>
+         ${text('need human', 0, -43, 13, 58)}${text('inspection!', 0, -29, 13, 60)}`;
+    return `<g transform="translate(${x} ${EH}) rotate(${tilt})" style="fill:${SIL}">${body}</g>`;
+  }
+
+  function endScene(el) {
+    const kind = ESUN_Y[el.dataset.kind] !== undefined ? el.dataset.kind : 'done';
+    const w = +el.dataset.w || 400, h = Math.round(w * 170 / 320), id = 'e' + (++uid);
+    const { cx, r } = ESUN, cy = ESUN_Y[kind];
+    let extra = '';
+    if (kind === 'done') extra = [22, 44, 66, 88, 110, 210, 232, 254, 276, 298].map(x =>
+      `<rect x="${x - 1.1}" y="${EH - 12}" width="2.2" height="12"/><path d="M${x + 1.1} ${EH - 12} l8 2.8 l-8 2.8z"/>`).join('');
+    if (kind === 'problem') extra = endSign('problem', 206, 8);
+    if (kind === 'human') extra = endSign('human', 124, -7);
+    el.innerHTML = svg(w, h, '0 0 320 170', `<defs><clipPath id="${id}c"><rect x="0" y="0" width="320" height="${EH}"/></clipPath></defs>
+      <g clip-path="url(#${id}c)">${endSun(cx, cy, r, id)}</g>${endGround(id, cx, cy, r)}
+      <g style="fill:${SIL}">${extra}</g>${endFigure(EPOSE[kind], EAT[kind])}`);
+    el.firstChild.setAttribute('class', 'scene');
+  }
+
+  // ---- the doctor's inspector at a run: two stances swapped by CSS, sweat drops trailing him ----
+  function runner(el) {
+    el.classList.add('runner');
+    el.innerHTML = `<span class="flip">${svg(40, 60, '0 0 40 60', `
+      <path class="lg-a" d="M13 40 L8 57 h7 L20 45 L26 57 h7 L27 40z" style="fill:var(--earth);${OUT}"/>
+      <path class="lg-b" d="M15 40 L16 57 h6 L20 47 L20 57 h6 L25 40z" style="fill:var(--earth);${OUT}"/>
+      <path d="M12 21 Q20 17 28 21 L30 41 L10 41 Z" style="fill:var(--rust);${OUT}"/><path d="M12 30 h16" style="stroke:var(--sun);stroke-width:2.2"/>
+      <path d="M14 23 l-6 9" fill="none" style="stroke:var(--amber);stroke-width:4.4;stroke-linecap:round"/>
+      <rect x="27" y="26" width="9" height="12" rx="1.4" style="fill:var(--panel);stroke:var(--post);stroke-width:1.5"/><rect x="29.5" y="24.5" width="4" height="3" rx=".8" style="fill:var(--post)"/>
+      <path d="M29.5 31 h4 M29.5 34 h4" style="stroke:var(--muted);stroke-width:1"/>
+      <circle cx="20" cy="13" r="6.2" style="fill:var(--sun);${OUT}"/><circle cx="23" cy="13.4" r=".9" style="fill:var(--ink)"/>
+      <path d="M12.6 11.5 Q13 4.2 20 4.2 Q27 4.2 27.4 11.5 Z" style="fill:var(--amber);${OUT}"/><rect x="11" y="10.8" width="19" height="3" rx="1.5" style="fill:var(--amber);${OUT}"/>
+      <path class="drop" d="M8 8 q1.8 2.4 0 4 q-1.8 -1.6 0 -4z"/><path class="drop d2" d="M5.5 16 q1.8 2.4 0 4 q-1.8 -1.6 0 -4z"/>`)}</span>`;
+  }
+
   const RAIL = (on, running) => `
     <div class="mark"><span data-art="dome" data-w="34" data-stakes="dddd>.hf.."></span><div><b>FOREMAN</b><small>~/projects/app</small></div></div>
     <div class="label" style="padding:0 8px 4px">Batches</div>
@@ -278,14 +466,17 @@ body.canvas { margin: 0; background: #2b2926; color: #ece8e1; font: 14px/1.5 var
     root.querySelectorAll('[data-art=sunrise]').forEach(sunrise);
     root.querySelectorAll('[data-art=inspector]').forEach(el => person(el, 'inspector'));
     root.querySelectorAll('[data-art=figure]').forEach(el => person(el, 'figure'));
+    root.querySelectorAll('[data-art=end]').forEach(endScene);
+    root.querySelectorAll('[data-art=runner]').forEach(runner);
   }
 
   function build() {
-    const pick = (document.querySelector('[data-pick]') || {}).dataset?.pick;
+    const picks = ((document.querySelector('[data-pick]') || {}).dataset?.pick || '').split(/\s+/).filter(Boolean);   // data-pick="a c" marks every picked take
     document.querySelectorAll('template[data-take]').forEach(t => {
       const sec = document.createElement('section'); sec.className = 'take';
       const take = t.dataset.take;
-      sec.innerHTML = `<h2>${take} · ${t.dataset.title}${pick && (take.match(/^[a-z]+/) || [])[0] === pick ? '<span class="badge">PICK</span>' : ''}</h2><p></p><div class="frames"></div>`;
+      const badge = t.dataset.badge !== undefined ? t.dataset.badge : 'PICK';   // data-badge="" drops it, e.g. for options still to choose between
+      sec.innerHTML = `<h2>${take} · ${t.dataset.title}${badge && picks.includes((take.match(/^[a-z]+/) || [])[0]) ? `<span class="badge">${badge}</span>` : ''}</h2><p></p><div class="frames"></div>`;
       sec.querySelector('p').textContent = t.dataset.note || '';
       const themes = (t.dataset.themes || 'dark light').split(' ');
       themes.forEach(th => {

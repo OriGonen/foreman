@@ -5,17 +5,65 @@
 <header class="top">
   <h1>10 · The install wizard (terminal)</h1>
   <p><code>bash install.sh</code> asks one question when — and only when — stdin and stdout are both terminals: CLI only, or CLI + desktop app. Everywhere else (the smoke suite captures its output; CI; a pipe) it behaves exactly as today. <code>--gui</code> / <code>--no-gui</code> answer it up front for scripted installs. On a rerun it asks only about the missing piece; with everything installed it asks nothing. Installed-or-not is read from disk: <code>gui/node_modules</code> and the Start-menu shortcut.</p>
-  <p>This is terminal output, so it is drawn in the dark palette only (ADR 0003); a terminal too narrow or without colour gets the same words as plain lines.</p>
-  <div class="pick" data-pick="a"><b>Pick: a · numbered choice</b>, with a redrawn sun at sign-off: the half-dome that read as a hat is now a round sun with eight rays (│ ╱ ╲ ─) over the horizon line, in the terminal's sun and amber colours. Typing 1 or 2 works with a plain <code>read</code> in any terminal, Git Bash's mintty included; b's arrow-key menu needs raw key reading in bash, which foreman avoids everywhere but the run's own status bar — and it looks no better for one question.</div>
+  <p>This is terminal output, so it uses the terminal's own palette (ADR 0003) whatever the window's background; a and a2 show it on a dark and a light terminal. The header is drawn only in a 256-colour or 24-bit terminal at least 80 columns wide; a 16-colour or narrower terminal, or one without colour, gets the same words as plain lines.</p>
+  <div class="pick" data-pick="a"><b>Pick: a · numbered choice</b>, with a new header at sign-off: a mini-scene in the half-block style of <code>lib/foreman-draw.cjs</code>. The sun stands high and whole, and the foreman's silhouette (hard hat, hands on hips) stands against it on the lit plain, his shadow running toward you. It is 12 rows by 36 columns, with FOREMAN install beside it; its exact pixels are below. Typing 1 or 2 works with a plain <code>read</code> in any terminal, Git Bash's mintty included; b's arrow-key menu needs raw key reading in bash, which foreman avoids everywhere but the run's own status bar — and it looks no better for one question.</div>
+  <details class="small"><summary>The header's exact pixels</summary>
+  <p>24 pixel rows by 36, two to a terminal row, as <code>halfBlocks</code> and <code>encode</code> in <code>lib/foreman-draw.cjs</code> draw them: <code>▀</code> with the top pixel as foreground and the bottom one as background, <code>█</code> when both match, <code>▄</code> when only the bottom one is set, a space when neither is. Colours: <code>y</code> sun, <code>a</code> amber, <code>r</code> rust, <code>p</code> post, <code>e</code> earth, <code>s</code> shade, <code>n</code> night (from <code>_UI_PALETTE</code> in <code>lib/foreman-ui.sh</code>), <code>#</code> the silhouette (<code>#0a0908</code>, 232 in 256 colours), <code>.</code> the terminal's background. <code>install.sh</code> carries the 12 rows as fixed lines, once in 24-bit escapes and once in 256-colour ones, each row ending in a reset; it needs no node to print them. It prints them when <code>ui_show</code> says yes on stdout (stdin and stdout are terminals, no <code>CI</code>, <code>FOREMAN_SHOW</code> not <code>never</code>), the tier is 24 or 256 and the terminal is at least 80 columns wide.</p>
+<pre>....................................
+...........ssseeesss................
+..........seeeeeeeees...............
+........sseerrrrrrreess.............
+........serraaaaaaarres.............
+.......serraaaaaaaaarres............
+......seeraaaayyyaaaarees...........
+......seraaayyyyyyyaaares...........
+......seraaayyyy###aaares...........
+......eeraayyyy#####aaree...........
+......eeraayy#########ree...........
+......eeraayyyyy###yaaree...........
+......seraaayyyy###aaares...........
+......seraaayy#######ares...........
+......seeraaa##y###a##ees...........
+.......serra##aa###ar##s............
+........serra##a###r##s.............
+........sseerrr#####ess.............
+..........seeee##e##s...............
+eeppprrrraaaaa##aaa##arrrrpppeesssss
+sseeepppprrrr##rrrrr##ppppeeessnnnnn
+nnssseeeepppp##ppppp##eeeesssnn.....
+..nnnsssseeeeee##eee###sssnnn.......
+.....nnnnsssssss##########..........</pre>
+  </details>
 </header>
 
-<template data-take="a" data-title="Numbered choice" data-themes="dark" data-frame="termframe" data-note="The small sunrise, the question, two numbered answers with what each one does (and its size), Enter for the default.">
-<div class="term"><span class="a">      ╲     │     ╱</span>
-<span class="a">         </span><span class="s">▄▄███▄▄</span>             <span class="b">FOREMAN</span>  <span class="m">install</span>
-<span class="a">    ──  </span><span class="s">█████████</span><span class="a">  ──</span>        <span class="m">from /c/Projects/foreman · d0d6874</span>
-<span class="a">         </span><span class="s">▀▀███▀▀</span>
-<span class="a">      ╱     │     ╲</span>
-<span class="d">▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔</span>
+<template data-take="a" data-title="Numbered choice" data-themes="dark light" data-frame="termframe" data-note="The header (the sun high, the foreman against it), the question, two numbered answers with what each one does (and its size), Enter for the default.">
+<style>/* the header art: half-block cells, as mintty draws them (line height 1.2, so two pixels a cell are near square) */
+.term.hb { line-height: 1.2; }
+.term.hb i { display: inline-block; width: 1ch; height: 1.2em; vertical-align: top; font-style: normal; color: transparent; background: linear-gradient(var(--t, transparent) 50%, var(--b, transparent) 50%); }
+.hb .Ty { --t: #f6d58e; } .hb .By { --b: #f6d58e; }
+.hb .Ta { --t: #e0a84a; } .hb .Ba { --b: #e0a84a; }
+.hb .Tr { --t: #c9772f; } .hb .Br { --b: #c9772f; }
+.hb .Tp { --t: #8a5a24; } .hb .Bp { --b: #8a5a24; }
+.hb .Te { --t: #3a2a18; } .hb .Be { --b: #3a2a18; }
+.hb .Ts { --t: #30231a; } .hb .Bs { --b: #30231a; }
+.hb .Tn { --t: #1c1a17; } .hb .Bn { --b: #1c1a17; }
+.hb .Tk { --t: #0a0908; } .hb .Bk { --b: #0a0908; }
+/* a light terminal: the same escapes on a light background */
+.frame.termframe.theme-light { background: #fbf8f1; }
+.theme-light .term.hb { background: #fbf8f1; color: #1c1a17; }
+</style>
+<div class="term hb">           <i class="Bs">▄</i><i class="Bs">▄</i><i class="Bs">▄</i><i class="Be">▄</i><i class="Be">▄</i><i class="Be">▄</i><i class="Bs">▄</i><i class="Bs">▄</i><i class="Bs">▄</i>                
+        <i class="Bs">▄</i><i class="Bs">▄</i><i class="Ts Be">▀</i><i class="Te Be">█</i><i class="Te Br">▀</i><i class="Te Br">▀</i><i class="Te Br">▀</i><i class="Te Br">▀</i><i class="Te Br">▀</i><i class="Te Br">▀</i><i class="Te Br">▀</i><i class="Te Be">█</i><i class="Ts Be">▀</i><i class="Bs">▄</i><i class="Bs">▄</i>             
+       <i class="Bs">▄</i><i class="Ts Be">▀</i><i class="Te Br">▀</i><i class="Tr Br">█</i><i class="Tr Ba">▀</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Tr Ba">▀</i><i class="Tr Br">█</i><i class="Te Br">▀</i><i class="Ts Be">▀</i><i class="Bs">▄</i>            
+      <i class="Ts Bs">█</i><i class="Te Be">█</i><i class="Te Br">▀</i><i class="Tr Ba">▀</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta By">▀</i><i class="Ta By">▀</i><i class="Ty By">█</i><i class="Ty By">█</i><i class="Ty By">█</i><i class="Ta By">▀</i><i class="Ta By">▀</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Tr Ba">▀</i><i class="Te Br">▀</i><i class="Te Be">█</i><i class="Ts Bs">█</i>           
+      <i class="Ts Be">▀</i><i class="Te Be">█</i><i class="Tr Br">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta By">▀</i><i class="Ty By">█</i><i class="Ty By">█</i><i class="Ty By">█</i><i class="Ty Bk">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Ta Bk">▀</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Tr Br">█</i><i class="Te Be">█</i><i class="Ts Be">▀</i>                 <span class="b">FOREMAN</span>  <span class="m">install</span>
+      <i class="Te Be">█</i><i class="Te Be">█</i><i class="Tr Br">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ty By">█</i><i class="Ty By">█</i><i class="Tk By">▀</i><i class="Tk By">▀</i><i class="Tk By">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tk By">▀</i><i class="Tk Ba">▀</i><i class="Tk Ba">▀</i><i class="Tr Br">█</i><i class="Te Be">█</i><i class="Te Be">█</i>                 <span class="m">from /c/Projects/foreman · d0d6874</span>
+      <i class="Ts Bs">█</i><i class="Te Be">█</i><i class="Tr Br">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ty By">█</i><i class="Ty By">█</i><i class="Ty Bk">▀</i><i class="Ty Bk">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Ta Bk">▀</i><i class="Ta Bk">▀</i><i class="Ta Ba">█</i><i class="Tr Br">█</i><i class="Te Be">█</i><i class="Ts Bs">█</i>           
+      <i class="Ts">▀</i><i class="Te Bs">▀</i><i class="Te Be">█</i><i class="Tr Br">█</i><i class="Ta Br">▀</i><i class="Ta Ba">█</i><i class="Ta Bk">▀</i><i class="Tk Bk">█</i><i class="Tk Ba">▀</i><i class="Ty Ba">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Ta Ba">█</i><i class="Tk Br">▀</i><i class="Tk Bk">█</i><i class="Te Bk">▀</i><i class="Te Bs">▀</i><i class="Ts">▀</i>           
+        <i class="Ts Bs">█</i><i class="Te Bs">▀</i><i class="Tr Be">▀</i><i class="Tr Be">▀</i><i class="Ta Br">▀</i><i class="Tk Br">▀</i><i class="Tk Br">▀</i><i class="Ta Bk">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tr Bk">▀</i><i class="Tk Be">▀</i><i class="Tk Bs">▀</i><i class="Ts Bs">█</i>             
+<i class="Be">▄</i><i class="Be">▄</i><i class="Bp">▄</i><i class="Bp">▄</i><i class="Bp">▄</i><i class="Br">▄</i><i class="Br">▄</i><i class="Br">▄</i><i class="Br">▄</i><i class="Ba">▄</i><i class="Ts Ba">▀</i><i class="Te Ba">▀</i><i class="Te Ba">▀</i><i class="Te Ba">▀</i><i class="Te Bk">▀</i><i class="Tk Bk">█</i><i class="Tk Ba">▀</i><i class="Te Ba">▀</i><i class="Tk Ba">▀</i><i class="Tk Bk">█</i><i class="Ts Bk">▀</i><i class="Ba">▄</i><i class="Br">▄</i><i class="Br">▄</i><i class="Br">▄</i><i class="Br">▄</i><i class="Bp">▄</i><i class="Bp">▄</i><i class="Bp">▄</i><i class="Be">▄</i><i class="Be">▄</i><i class="Bs">▄</i><i class="Bs">▄</i><i class="Bs">▄</i><i class="Bs">▄</i><i class="Bs">▄</i>
+<i class="Ts Bn">▀</i><i class="Ts Bn">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Tp Be">▀</i><i class="Tp Be">▀</i><i class="Tp Be">▀</i><i class="Tp Be">▀</i><i class="Tr Bp">▀</i><i class="Tr Bp">▀</i><i class="Tr Bp">▀</i><i class="Tr Bp">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tr Bp">▀</i><i class="Tr Bp">▀</i><i class="Tr Bp">▀</i><i class="Tr Bp">▀</i><i class="Tr Bp">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tp Be">▀</i><i class="Tp Be">▀</i><i class="Tp Be">▀</i><i class="Tp Be">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Ts Bn">▀</i><i class="Ts Bn">▀</i><i class="Tn">▀</i><i class="Tn">▀</i><i class="Tn">▀</i><i class="Tn">▀</i><i class="Tn">▀</i>
+  <i class="Tn">▀</i><i class="Tn">▀</i><i class="Tn">▀</i><i class="Ts Bn">▀</i><i class="Ts Bn">▀</i><i class="Ts Bn">▀</i><i class="Ts Bn">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Tk Bs">▀</i><i class="Tk Bk">█</i><i class="Te Bk">▀</i><i class="Te Bk">▀</i><i class="Te Bk">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Ts Bk">▀</i><i class="Ts Bk">▀</i><i class="Ts Bk">▀</i><i class="Tn">▀</i><i class="Tn">▀</i><i class="Tn">▀</i>       
 
   What should this install?
 
@@ -31,13 +79,34 @@
 </div>
 </template>
 
-<template data-take="a2" data-title="Numbered choice — rerun with the CLI already installed" data-themes="dark" data-frame="termframe" data-note="On a rerun only the missing piece is offered. With everything installed, the installer asks nothing and prints its usual result.">
-<div class="term"><span class="a">      ╲     │     ╱</span>
-<span class="a">         </span><span class="s">▄▄███▄▄</span>             <span class="b">FOREMAN</span>  <span class="m">install</span>
-<span class="a">    ──  </span><span class="s">█████████</span><span class="a">  ──</span>        <span class="m">from /c/Projects/foreman · d0d6874</span>
-<span class="a">         </span><span class="s">▀▀███▀▀</span>
-<span class="a">      ╱     │     ╲</span>
-<span class="d">▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔</span>
+<template data-take="a2" data-title="Numbered choice — rerun with the CLI already installed" data-themes="dark light" data-frame="termframe" data-note="On a rerun only the missing piece is offered. With everything installed, the installer asks nothing and prints its usual result.">
+<style>/* the header art: half-block cells, as mintty draws them (line height 1.2, so two pixels a cell are near square) */
+.term.hb { line-height: 1.2; }
+.term.hb i { display: inline-block; width: 1ch; height: 1.2em; vertical-align: top; font-style: normal; color: transparent; background: linear-gradient(var(--t, transparent) 50%, var(--b, transparent) 50%); }
+.hb .Ty { --t: #f6d58e; } .hb .By { --b: #f6d58e; }
+.hb .Ta { --t: #e0a84a; } .hb .Ba { --b: #e0a84a; }
+.hb .Tr { --t: #c9772f; } .hb .Br { --b: #c9772f; }
+.hb .Tp { --t: #8a5a24; } .hb .Bp { --b: #8a5a24; }
+.hb .Te { --t: #3a2a18; } .hb .Be { --b: #3a2a18; }
+.hb .Ts { --t: #30231a; } .hb .Bs { --b: #30231a; }
+.hb .Tn { --t: #1c1a17; } .hb .Bn { --b: #1c1a17; }
+.hb .Tk { --t: #0a0908; } .hb .Bk { --b: #0a0908; }
+/* a light terminal: the same escapes on a light background */
+.frame.termframe.theme-light { background: #fbf8f1; }
+.theme-light .term.hb { background: #fbf8f1; color: #1c1a17; }
+</style>
+<div class="term hb">           <i class="Bs">▄</i><i class="Bs">▄</i><i class="Bs">▄</i><i class="Be">▄</i><i class="Be">▄</i><i class="Be">▄</i><i class="Bs">▄</i><i class="Bs">▄</i><i class="Bs">▄</i>                
+        <i class="Bs">▄</i><i class="Bs">▄</i><i class="Ts Be">▀</i><i class="Te Be">█</i><i class="Te Br">▀</i><i class="Te Br">▀</i><i class="Te Br">▀</i><i class="Te Br">▀</i><i class="Te Br">▀</i><i class="Te Br">▀</i><i class="Te Br">▀</i><i class="Te Be">█</i><i class="Ts Be">▀</i><i class="Bs">▄</i><i class="Bs">▄</i>             
+       <i class="Bs">▄</i><i class="Ts Be">▀</i><i class="Te Br">▀</i><i class="Tr Br">█</i><i class="Tr Ba">▀</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Tr Ba">▀</i><i class="Tr Br">█</i><i class="Te Br">▀</i><i class="Ts Be">▀</i><i class="Bs">▄</i>            
+      <i class="Ts Bs">█</i><i class="Te Be">█</i><i class="Te Br">▀</i><i class="Tr Ba">▀</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta By">▀</i><i class="Ta By">▀</i><i class="Ty By">█</i><i class="Ty By">█</i><i class="Ty By">█</i><i class="Ta By">▀</i><i class="Ta By">▀</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Tr Ba">▀</i><i class="Te Br">▀</i><i class="Te Be">█</i><i class="Ts Bs">█</i>           
+      <i class="Ts Be">▀</i><i class="Te Be">█</i><i class="Tr Br">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta By">▀</i><i class="Ty By">█</i><i class="Ty By">█</i><i class="Ty By">█</i><i class="Ty Bk">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Ta Bk">▀</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Tr Br">█</i><i class="Te Be">█</i><i class="Ts Be">▀</i>                 <span class="b">FOREMAN</span>  <span class="m">install</span>
+      <i class="Te Be">█</i><i class="Te Be">█</i><i class="Tr Br">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ty By">█</i><i class="Ty By">█</i><i class="Tk By">▀</i><i class="Tk By">▀</i><i class="Tk By">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tk By">▀</i><i class="Tk Ba">▀</i><i class="Tk Ba">▀</i><i class="Tr Br">█</i><i class="Te Be">█</i><i class="Te Be">█</i>                 <span class="m">from /c/Projects/foreman · d0d6874</span>
+      <i class="Ts Bs">█</i><i class="Te Be">█</i><i class="Tr Br">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ta Ba">█</i><i class="Ty By">█</i><i class="Ty By">█</i><i class="Ty Bk">▀</i><i class="Ty Bk">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Ta Bk">▀</i><i class="Ta Bk">▀</i><i class="Ta Ba">█</i><i class="Tr Br">█</i><i class="Te Be">█</i><i class="Ts Bs">█</i>           
+      <i class="Ts">▀</i><i class="Te Bs">▀</i><i class="Te Be">█</i><i class="Tr Br">█</i><i class="Ta Br">▀</i><i class="Ta Ba">█</i><i class="Ta Bk">▀</i><i class="Tk Bk">█</i><i class="Tk Ba">▀</i><i class="Ty Ba">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Ta Ba">█</i><i class="Tk Br">▀</i><i class="Tk Bk">█</i><i class="Te Bk">▀</i><i class="Te Bs">▀</i><i class="Ts">▀</i>           
+        <i class="Ts Bs">█</i><i class="Te Bs">▀</i><i class="Tr Be">▀</i><i class="Tr Be">▀</i><i class="Ta Br">▀</i><i class="Tk Br">▀</i><i class="Tk Br">▀</i><i class="Ta Bk">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tr Bk">▀</i><i class="Tk Be">▀</i><i class="Tk Bs">▀</i><i class="Ts Bs">█</i>             
+<i class="Be">▄</i><i class="Be">▄</i><i class="Bp">▄</i><i class="Bp">▄</i><i class="Bp">▄</i><i class="Br">▄</i><i class="Br">▄</i><i class="Br">▄</i><i class="Br">▄</i><i class="Ba">▄</i><i class="Ts Ba">▀</i><i class="Te Ba">▀</i><i class="Te Ba">▀</i><i class="Te Ba">▀</i><i class="Te Bk">▀</i><i class="Tk Bk">█</i><i class="Tk Ba">▀</i><i class="Te Ba">▀</i><i class="Tk Ba">▀</i><i class="Tk Bk">█</i><i class="Ts Bk">▀</i><i class="Ba">▄</i><i class="Br">▄</i><i class="Br">▄</i><i class="Br">▄</i><i class="Br">▄</i><i class="Bp">▄</i><i class="Bp">▄</i><i class="Bp">▄</i><i class="Be">▄</i><i class="Be">▄</i><i class="Bs">▄</i><i class="Bs">▄</i><i class="Bs">▄</i><i class="Bs">▄</i><i class="Bs">▄</i>
+<i class="Ts Bn">▀</i><i class="Ts Bn">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Tp Be">▀</i><i class="Tp Be">▀</i><i class="Tp Be">▀</i><i class="Tp Be">▀</i><i class="Tr Bp">▀</i><i class="Tr Bp">▀</i><i class="Tr Bp">▀</i><i class="Tr Bp">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tr Bp">▀</i><i class="Tr Bp">▀</i><i class="Tr Bp">▀</i><i class="Tr Bp">▀</i><i class="Tr Bp">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tp Be">▀</i><i class="Tp Be">▀</i><i class="Tp Be">▀</i><i class="Tp Be">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Ts Bn">▀</i><i class="Ts Bn">▀</i><i class="Tn">▀</i><i class="Tn">▀</i><i class="Tn">▀</i><i class="Tn">▀</i><i class="Tn">▀</i>
+  <i class="Tn">▀</i><i class="Tn">▀</i><i class="Tn">▀</i><i class="Ts Bn">▀</i><i class="Ts Bn">▀</i><i class="Ts Bn">▀</i><i class="Ts Bn">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Te Bs">▀</i><i class="Tk Bs">▀</i><i class="Tk Bk">█</i><i class="Te Bk">▀</i><i class="Te Bk">▀</i><i class="Te Bk">▀</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Tk Bk">█</i><i class="Ts Bk">▀</i><i class="Ts Bk">▀</i><i class="Ts Bk">▀</i><i class="Tn">▀</i><i class="Tn">▀</i><i class="Tn">▀</i>       
 
   <span class="g">■</span> CLI installed           <span class="m">~/.local/bin/foreman → this checkout</span>
   <span class="d">·</span> desktop app             <span class="m">not installed</span>

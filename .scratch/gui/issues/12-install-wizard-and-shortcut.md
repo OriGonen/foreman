@@ -23,9 +23,12 @@ and a2 for the rerun).
 - [ ] Everywhere else, including under `test/smoke.sh`, in a pipe and in CI, its output is byte
       for byte what it is today. Check this against a capture.
 - [ ] The question is a numbered choice read with a plain `read`. Enter picks 1, CLI only.
-- [ ] The wording follows `designs/10-install-wizard.html`, with its header: a round sun with
-      eight rays (`╲ │ ╱`, `──`, `▄▄███▄▄`, `█████████`, `▀▀███▀▀`) over the horizon line, in the
-      terminal's sun and amber colours. The half-dome of the first drawing is not used
+- [ ] The wording follows `designs/10-install-wizard.html`, with its header: the sun high and
+      whole, with the foreman's silhouette standing against it and his shadow on the lit plain,
+      in the half-block style of `lib/foreman-draw.cjs` (12 rows by 36 columns). The exact pixels
+      and colours are in the design under "The header's exact pixels". `install.sh` prints them
+      as fixed lines, without node, and only at the 24-bit or 256-colour tier in a terminal at
+      least 80 columns wide. Everywhere else it prints the same words without the art
 - [ ] `--gui` installs the app without asking. `--no-gui` removes the app and its shortcut if
       they are there, and never asks.
 

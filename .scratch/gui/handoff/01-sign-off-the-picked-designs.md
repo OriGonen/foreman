@@ -62,3 +62,25 @@ Each change is written under its screen in the section above: 02, 03, 04, 05, 08
      the row and what you meant instead. -->
 
 Confirmed, every row as it stands.
+
+## Second round, after 01a (2026-11-12)
+
+The user looked at the pages 01a regenerated and asked for these changes. Their words:
+
+03: spend cap and time cap should be under "more settings"
+
+05: no. the foreman design should stay way more minimalistic than this. don't make confetti. make
+the scene epic, like with the terminal, where the foreman stands infront of the sun and you only
+see the shadow. for the exit 30, the sun shouldn't change its style, stay consistent with exit 10
+sun. perhaps you could give me a couple of options for these character designs
+
+10: I don't like this sun. do an epic mini-art like in the terminal, with the sun high and the
+foreman with the shadow on it.
+
+The redrawn 05 offered three figures (pixel silhouette, smooth silhouette in a hard hat,
+pictogram). The user's pick, in their words (2026-11-14):
+
+for 05, I want the pixelated one (b1).
+
+Applied: 03, 05 (b1 only) and 10 are redrawn, `spec.md` and tickets 10, 11 and 12 match them,
+and every pick page is rebuilt from the current canvases.

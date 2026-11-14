@@ -5,10 +5,11 @@
 **The confirmation.** Start run… and Resume… open it. It shows:
 
 - where the run starts and how far it can reach
-- the iteration budget, which can be changed. It is the only field that is editable at first
-- `FOREMAN_MAX_COST_USD` and `FOREMAN_MAX_MINUTES`, each with where it is set; a cap that isn't
-  set says "none set", in rust. They become editable, for this run only, under **Advanced
-  options**, which also holds the live view and shows the model and mode
+- the iteration budget, which can be changed. It is the only budget shown up front, and the only
+  field that is editable there
+- under **More settings** (closed at first): `FOREMAN_MAX_COST_USD` and `FOREMAN_MAX_MINUTES`,
+  each with where it is set, editable for this run only; a cap that isn't set says "none set",
+  in rust. More settings also holds the live view and shows the model and mode
 - a `?` beside every field that says what it does
 - the exact command
 - one button: "Start run · up to $X", or "Start run · no spend cap" when there is no cap
@@ -27,7 +28,7 @@ never stops the run.
 See `spec.md`, "Starting, watching and stopping a run" and "Free and paid". The designs are:
 
 - `designs/03-run-confirm.html`, from `designs/source/ConfirmTakes.dc.html` (take c; c1 is
-  Advanced options open and c2 holds the words behind each `?`)
+  More settings open and c2 holds the words behind each `?`)
 - `designs/04-live-run.html`, from `designs/source/LiveRunTakes.dc.html` (take a, and c for the
   compact view)
 
@@ -38,10 +39,12 @@ See `spec.md`, "Starting, watching and stopping a run" and "Free and paid". The 
 **The confirmation**
 
 - [ ] Its facts come from `dry-run --json` and `foreman.conf`
-- [ ] By default only the iteration count is editable. The batch, where the run starts and where
-      it can reach are shown. The spend cap and time cap are shown with where each comes from
-- [ ] Advanced options opens the spend cap, the time cap and the live view, and shows the model
-      and mode without letting them be edited
+- [ ] By default only the iteration count is shown and editable as a budget. The batch, where
+      the run starts and where it can reach are shown. The spend cap and the time cap are not
+      shown up front; the button still says "up to $X" or "no spend cap"
+- [ ] More settings (closed by default) holds the spend cap and the time cap, each with where it
+      comes from and "none set" in rust when unset, editable for this run only, and the live
+      view; it shows the model and mode without letting them be edited
 - [ ] A cap edited there applies to this run only: it is passed to the spawned run as
       `FOREMAN_MAX_COST_USD` or `FOREMAN_MAX_MINUTES` in its environment, and it appears as a
       prefix in the exact command. `foreman.conf` is not written, and the next confirmation starts
@@ -106,7 +109,7 @@ See `spec.md`, "Starting, watching and stopping a run" and "Free and paid". The 
       the screen from fixture files
 - [ ] By hand on Windows, on a throwaway batch with a low `FOREMAN_MAX_COST_USD`:
   1. Start a 2-iteration run from the app
-  2. Compare the screens with both designs, in light and dark, with Advanced options open and
+  2. Compare the screens with both designs, in light and dark, with More settings open and
      closed and in the compact view
   3. Press `+`, then `L`
   4. Close and reopen the app

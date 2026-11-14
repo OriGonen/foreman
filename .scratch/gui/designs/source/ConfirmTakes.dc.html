@@ -4,11 +4,24 @@
 <body class="canvas">
 <header class="top">
   <h1>03 · Starting a run: the confirmation</h1>
-  <p>Starting a run costs money, so <b>Start run…</b> always opens this first, and nothing is spawned until the person confirms. It shows the three budgets: iterations (set here, as <code>&lt;n&gt;</code> or <code>--unlimited</code>), <code>FOREMAN_MAX_COST_USD</code> and <code>FOREMAN_MAX_MINUTES</code> (read from <code>foreman dry-run --json</code>, i.e. foreman.conf and the environment; take c can change them for this one run, under Advanced options, by passing them as environment variables to that run — foreman.conf is never written). It also shows the exact command that will run. Esc or Cancel spends nothing.</p>
-  <div class="pick" data-pick="c"><b>Pick: c · the bill with the tiles</b>, a merge asked for at sign-off: a's receipt (what it will run on, how far it can reach, the exact command, the button that says the most it can spend) with b's three tiles — iterations, spend cap, time cap — added to it. By default only the iteration count is editable; the batch, where it starts and where it can reach are shown, and everything else sits behind <b>Advanced options</b>, where the spend cap, the time cap and the live view become editable for this run. Every field has a <b>?</b> that says what it does, for example whether the time cap is per iteration or for the whole run (the whole run; c2 has every text). a and b are kept below as drawn.</div>
+  <p>Starting a run costs money, so <b>Start run…</b> always opens this first, and nothing is spawned until the person confirms. It shows the three budgets: iterations (set here, as <code>&lt;n&gt;</code> or <code>--unlimited</code>), <code>FOREMAN_MAX_COST_USD</code> and <code>FOREMAN_MAX_MINUTES</code> (read from <code>foreman dry-run --json</code>, i.e. foreman.conf and the environment; take c can change them for this one run, under More settings, by passing them as environment variables to that run — foreman.conf is never written). It also shows the exact command that will run. Esc or Cancel spends nothing.</p>
+  <div class="pick" data-pick="c"><b>Pick: c · the bill with the tiles</b>, a merge asked for at sign-off: a's receipt (what it will run on, how far it can reach, the exact command, the button that says the most it can spend) with b's tiles added to it. Up front only the iteration budget is shown, and it is the only field that can be edited; the batch, where it starts and where it can reach are shown as well. The spend cap and the time cap sit behind <b>More settings</b>, each with where it is set and editable for this run only, next to the live view and the model and mode. Every field has a <b>?</b> that says what it does, for example whether the time cap is per iteration or for the whole run (the whole run; c2 has every text). a and b are kept below as drawn.</div>
 </header>
 
-<template data-take="c" data-title="The bill with the tiles" data-note="a's receipt with b's three tiles. Only the iteration count is editable (amber). Spend cap and time cap are shown with where they come from; the unset cap is in rust. Advanced options is closed. The time cap's ? is open to show how the help reads: the whole run, not each iteration.">
+<template data-take="c" data-title="The bill with the tiles" data-note="a's receipt with only the iteration budget up front: it is the one field shown and editable (amber). The spend cap and the time cap moved under More settings, which is closed; the button still says the most the run can spend. The iterations ? is open to show how the help reads: counted across the whole run, not per ticket.">
+  <style>
+    .tiles .tile.c3-wide { display: flex; align-items: center; gap: 14px; text-align: left; padding: 8px 12px; }
+    .tiles .tile.c3-wide .lab { justify-content: flex-start; }
+    .c3-more { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; font-size: 12px; }
+    .c3-more .btn { padding: 2px 8px 2px 0; font-family: var(--ui); color: var(--text); }
+    .c3-panel { margin-top: 4px; padding: 10px 12px; background: var(--panel-2); font-family: var(--mono); }
+    .c3-panel .tiles .tile { background: var(--panel); }
+    .c3-panel .tiles .tile.edit { background: color-mix(in srgb, var(--amber) 8%, var(--panel)); }
+    .c3-panel .tiles .tile .src { margin-top: 4px; }
+    .c3-panel .tiles .tile .src + .src { margin-top: 1px; }
+    .bill .line > .muted { white-space: nowrap; }
+    .bill .line > .muted + span { text-align: right; }
+  </style>
   <div class="app">
     <div data-part="titlebar"></div>
     <div data-part="rail"></div>
@@ -22,12 +35,10 @@
         <div class="line"><span class="muted">can reach <span class="help">?</span></span><span>05 → 06, then stops at <span class="rust">07 (human)</span></span></div>
         <div class="rule"></div>
         <div class="tiles">
-          <div class="tile edit"><div class="lab">iterations <span class="help">?</span></div><div class="row" style="gap:6px;justify-content:center;margin-top:4px"><span class="btn sq">−</span><b style="width:26px;text-align:center;font:600 24px var(--ui)">3</b><span class="btn sq">+</span></div><div style="text-align:center"><span class="btn quiet" style="padding:1px 6px;font-size:11px">unlimited</span></div><div class="src">argument · 1–∞</div></div>
-          <div class="tile"><div class="lab">spend cap <span class="help">?</span></div><div class="v">$25.00</div><div class="src">FOREMAN_MAX_COST_USD · foreman.conf</div></div>
-          <div class="tile"><div class="lab">time cap <span class="help  open">?</span></div><div class="v rust">none</div><div class="src">FOREMAN_MAX_MINUTES=0 · not set</div></div>
+          <div class="tile edit c3-wide"><div class="col" style="gap:3px"><div class="lab">iterations <span class="help open">?</span></div><div class="src">argument · 1–∞</div></div><div class="row" style="gap:6px;margin-left:auto"><span class="btn sq">−</span><b style="width:26px;text-align:center;font:600 24px var(--ui)">3</b><span class="btn sq">+</span><span class="btn quiet" style="padding:1px 6px;font-size:11px">unlimited</span></div></div>
         </div>
-        <div class="pop" style="right:14px;top:236px"><b>Time cap — the whole run</b>The most wall-clock time the whole run may take, in minutes. It is not a limit on each iteration. It is checked before each iteration starts, so an iteration already running is never cut off.<span class="dim">FOREMAN_MAX_MINUTES · 0 = no cap</span></div>
-        <div class="line" style="margin-top:10px"><span class="muted">more settings</span><span class="row" style="gap:6px"><span class="btn quiet" style="padding:2px 8px;font-family:var(--ui)">Advanced options ▸</span></span></div>
+        <div class="pop" style="left:168px;top:174px"><b>Iterations — across the whole run</b>How many iterations this run may use, counted across all tickets, not per ticket. The run pauses after the last one. You can add or take away iterations while it runs.<span class="dim">&lt;n&gt; or --unlimited · argument</span></div>
+        <div class="c3-more"><span class="btn quiet">More settings ▸</span><span class="dim" style="font-size:11px">spend cap · time cap · live view · model</span></div>
         <div class="rule"></div>
         <div class="line"><span class="muted">runs <span class="help">?</span></span><span>foreman run .scratch/human-tickets 3 --live</span></div>
         <div class="small muted" style="font-family:var(--ui);margin-top:8px">The run stops at whichever budget comes first. You can add or take away iterations while it runs. Closing this window doesn't stop it.</div>
@@ -37,7 +48,7 @@
   </div>
 </template>
 
-<template data-take="c1" data-title="The bill with the tiles — Advanced options open" data-frame="tall" data-note="Advanced options opened. The spend cap, the time cap and the live view are now editable for this run only. Here the time cap was set to 90 and the spend cap left at foreman.conf's $25. A value that differs from foreman.conf says so, with a way back; a raised cap is marked in rust. The model and mode are shown but not editable. The command now carries what was changed, and the button still says the most it can spend.">
+<template data-take="c1" data-title="The bill with the tiles — More settings open" data-frame="tall" data-note="More settings opened. The spend cap and the time cap sit here, each with where it is set, and are editable for this run only, next to the live view; the model and mode are shown but not editable. Here the spend cap was lowered to $10 for this run: it says so, with a way back to foreman.conf's $25, the command carries it as a prefix and the button follows it. The time cap is not set, so it says none set, in rust. A cap raised above the file's, or set to 0 where the file has one, is marked in rust.">
   <div class="app">
     <div data-part="titlebar"></div>
     <div data-part="rail"></div>
@@ -51,20 +62,22 @@
         <div class="line"><span class="muted">can reach <span class="help">?</span></span><span>05 → 06, then stops at <span class="rust">07 (human)</span></span></div>
         <div class="rule"></div>
         <div class="tiles">
-          <div class="tile edit"><div class="lab">iterations <span class="help">?</span></div><div class="row" style="gap:6px;justify-content:center;margin-top:4px"><span class="btn sq">−</span><b style="width:26px;text-align:center;font:600 24px var(--ui)">3</b><span class="btn sq">+</span></div><div style="text-align:center"><span class="btn quiet" style="padding:1px 6px;font-size:11px">unlimited</span></div><div class="src">argument · 1–∞</div></div>
-          <div class="tile edit"><div class="lab">spend cap <span class="help">?</span></div><div class="row" style="justify-content:center;margin-top:4px"><span class="field">$ 25.00</span></div><div class="src" style="margin-top:4px">foreman.conf · 0 = no cap</div></div>
-          <div class="tile edit"><div class="lab">time cap <span class="help">?</span></div><div class="row" style="justify-content:center;margin-top:4px"><span class="field">90 <small>min</small></span></div><div class="src" style="margin-top:4px"><span class="rust">this run only</span> · <span style="text-decoration:underline">reset: none</span></div></div>
+          <div class="tile edit c3-wide"><div class="col" style="gap:3px"><div class="lab">iterations <span class="help">?</span></div><div class="src">argument · 1–∞</div></div><div class="row" style="gap:6px;margin-left:auto"><span class="btn sq">−</span><b style="width:26px;text-align:center;font:600 24px var(--ui)">3</b><span class="btn sq">+</span><span class="btn quiet" style="padding:1px 6px;font-size:11px">unlimited</span></div></div>
         </div>
-        <div class="line" style="margin-top:10px"><span class="muted">more settings</span><span class="btn quiet" style="padding:2px 8px;font-family:var(--ui)">Advanced options ▾</span></div>
-        <div class="card" style="margin-top:6px;padding:8px 12px;background:var(--panel-2);font-family:var(--mono)">
-          <div class="line"><span class="muted">live tool calls <span class="help">?</span></span><span class="row" style="gap:6px"><span class="btn sq" style="width:18px;height:18px;padding:0;border-color:var(--amber)">✓</span>on</span></div>
+        <div class="c3-more"><span class="btn quiet">More settings ▾</span><span class="dim" style="font-size:11px">for this run only</span></div>
+        <div class="card c3-panel">
+          <div class="tiles">
+            <div class="tile edit"><div class="lab">spend cap <span class="help">?</span></div><div class="row" style="justify-content:center;margin-top:4px"><span class="field">$ 10.00</span></div><div class="src"><span class="acc">this run only</span> · <span style="text-decoration:underline">reset: $25.00</span></div><div class="src">FOREMAN_MAX_COST_USD</div><div class="src">set in foreman.conf</div></div>
+            <div class="tile edit"><div class="lab">time cap <span class="help">?</span></div><div class="row" style="justify-content:center;margin-top:4px"><span class="field"><span class="rust" style="font-size:16px;padding:2px 0">none set</span> <small>min</small></span></div><div class="src">FOREMAN_MAX_MINUTES=0</div><div class="src">not set · 0 = no cap</div></div>
+          </div>
+          <div class="line" style="margin-top:8px"><span class="muted">live tool calls <span class="help">?</span></span><span class="row" style="gap:6px"><span class="btn sq" style="width:18px;height:18px;padding:0;border-color:var(--amber)">✓</span>on</span></div>
           <div class="line"><span class="muted">model <span class="help">?</span></span><span>claude-sonnet-5-5 · exec local · acceptEdits <span class="dim">foreman.conf</span></span></div>
           <div class="small dim" style="font-family:var(--ui);margin-top:4px">Changes here apply to this run only. foreman.conf is not edited, and the app remembers nothing.</div>
         </div>
         <div class="rule"></div>
-        <div class="line"><span class="muted">runs <span class="help">?</span></span><span><span class="rust">FOREMAN_MAX_MINUTES=90</span> foreman run .scratch/human-tickets 3 --live</span></div>
+        <div class="line"><span class="muted">runs <span class="help">?</span></span><span><span class="acc">FOREMAN_MAX_COST_USD=10.00</span> foreman run .scratch/human-tickets 3 --live</span></div>
         <div class="small muted" style="font-family:var(--ui);margin-top:8px">The run stops at whichever budget comes first. You can add or take away iterations while it runs. Closing this window doesn't stop it.</div>
-        <div class="row" style="margin-top:14px;justify-content:flex-end"><span class="btn">Cancel</span><span class="btn primary">Start run · up to $25.00</span></div>
+        <div class="row" style="margin-top:14px;justify-content:flex-end"><span class="btn">Cancel</span><span class="btn primary">Start run · up to $10.00</span></div>
       </div>
     </div>
   </div>
