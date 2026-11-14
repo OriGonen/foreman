@@ -177,6 +177,43 @@ if case_is "golden: plain dry-run is byte for byte what it was"; then
   cmp -s "$WORK/dry.out" "$TEST_DIR/golden/dry-run-plain.txt" && pass || fail "plain dry-run differs from test/golden/dry-run-plain.txt"
 fi
 
+# A run on the fake exec, in two shapes (a ticket that took two iterations and then another ticket;
+# a stalled one that a checkpoint turn salvages), is what it was: what it printed, and the lines it
+# recorded, whose only change is `model`. The captures in test/golden/run-fake-*.txt were taken on the
+# tree before the model was recorded; `model` is taken off the lines before they are compared.
+fake_run_capture() {    # fake_run_capture BEHAVIOURS PREFIX : the run's output and its record, normalised, in $WORK/PREFIX.{out,jsonl}
+  local beh="$1" prefix="$2" repo="$WORK/$2-repo"
+  copy_fixture "$WORK/template" "$repo" 3
+  (cd "$repo" && FOREMAN_FAKE_BEHAVIOUR="$beh" FOREMAN_SHOW=never FOREMAN_COLOR=never "$FOREMAN" run batch 3 > "$WORK/$prefix.raw" 2>&1)
+  # What differs from one run to the next: the run's id and clock, the commits' ids, where the
+  # temporary repository is.
+  sed -E -e "s|$WORK|@WORK@|g" -e 's/[0-9]{8}T[0-9]{6}Z-[0-9]+/@RUN@/g' -e 's/[0-9]+\.[0-9]s/@S@/g' \
+    -e 's/(·  )[0-9a-f]{7,40}$/\1@SHA@/' "$WORK/$prefix.raw" > "$WORK/$prefix.out"
+  sed -E -e 's/"model":"[^"]*",//' -e 's/[0-9]{8}T[0-9]{6}Z-[0-9]+/@RUN@/g' \
+    -e 's/20[0-9]{2}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z/@T@/g' -e 's/[0-9a-f]{40}/@SHA@/g' \
+    -e 's/"duration_ms":[0-9]+/"duration_ms":N/' -e 's/"duration_api_ms":[0-9]+/"duration_api_ms":N/' \
+    "$repo/batch/foreman-runs.jsonl" > "$WORK/$prefix.jsonl"
+}
+
+if case_is "golden: a run on the fake exec prints and records what it did, plus model"; then
+  fake_run_capture "partial-turn:land" run-partial
+  fake_run_capture "dirty:land" run-dirty
+  if [ "${FOREMAN_JSON_GOLDEN:-}" = write ]; then
+    cp "$WORK/run-partial.out" "$TEST_DIR/golden/run-fake-partial.txt"
+    cp "$WORK/run-partial.jsonl" "$TEST_DIR/golden/run-fake-partial.jsonl"
+    cp "$WORK/run-dirty.out" "$TEST_DIR/golden/run-fake-dirty.txt"
+    cp "$WORK/run-dirty.jsonl" "$TEST_DIR/golden/run-fake-dirty.jsonl"
+    printf '  retook test/golden/run-fake-*\n'
+  fi
+  for shape in partial dirty; do
+    cmp -s "$WORK/run-$shape.out" "$TEST_DIR/golden/run-fake-$shape.txt" && pass || fail "run ($shape) output differs from test/golden/run-fake-$shape.txt"
+    cmp -s "$WORK/run-$shape.jsonl" "$TEST_DIR/golden/run-fake-$shape.jsonl" && pass || fail "run ($shape) record, without model, differs from test/golden/run-fake-$shape.jsonl"
+  done
+  # And with model, the record has it on every line (the checkpoint turn's included).
+  assert_eq "$(grep -c '"model":"claude-sonnet-5-5"' "$WORK/run-dirty-repo/batch/foreman-runs.jsonl")" 4 "every line of the stalled run has the model, the checkpoint's too"
+  assert_contains "$(cat "$WORK/run-dirty-repo/batch/foreman-runs.jsonl")" '"kind":"checkpoint"' "(and it has a checkpoint row)"
+fi
+
 if case_is "plain status and dry-run start no node; --json starts it once"; then
   # A shim `node` ahead of the real one on PATH logs every start. Plain status on a pipe starts
   # none (the picture is only drawn at a terminal), and that must stay so; the JSON path is the
@@ -854,6 +891,141 @@ if case_is "report: plain output is byte for byte what it was"; then
     sed "s|@LOG@|@LOG@|" "$TEST_DIR/golden/report-$view.txt" > "$WORK/report.gold"
     cmp -s "$WORK/report.cmp" "$WORK/report.gold" && pass || fail "plain report ($view) differs from test/golden/report-$view.txt"
   done
+fi
+
+# ---------------------------------------------------------------------------
+# The model in the run record, and per-ticket stats in status --json
+# ---------------------------------------------------------------------------
+
+# A batch whose run record has what a finished ticket's page needs, over make_status_repo's tickets:
+#   01 (landed, renamed DONE_ since)  three iterations: progressed, stalled (with a checkpoint turn
+#      of its own), landed — and a model change (none recorded, then sonnet, then opus). The first
+#      line has no `model` at all, as every line written before this change.
+#   02  one line whose model is the empty string
+#   04  a model that changes and comes back: sonnet, opus, sonnet
+#   03 and 05  never ran: no stats
+M_SONNET=claude-sonnet-5-5
+M_OPUS=claude-opus-5-5
+make_stats_repo() {
+  local repo="$1" t1="batch/issues/01-ticket.md" t1d="batch/issues/DONE_01-ticket.md" m
+  make_status_repo "$repo"
+  {
+    printf '%s\n' '{"run_id":"RA","iteration":1,"kind":"iteration","ticket":"'$t1'","started_at":"2026-10-21T09:12:00Z","finished_at":"2026-10-21T09:22:00Z","committed":true,"status_flipped":false,"tree_dirty":false,"is_error":false,"progressed":true,"stalled":false,"cost_usd":1.25,"duration_ms":600000,"num_turns":10,"tokens":{"input":1000,"output":2000,"cache_read":3000,"cache_creation":400}}'
+    printf '%s\n' '{"run_id":"RA","iteration":2,"kind":"iteration","ticket":"'$t1'","model":"'$M_SONNET'","started_at":"2026-10-21T09:23:00Z","finished_at":"2026-10-21T09:28:00Z","committed":false,"status_flipped":false,"tree_dirty":true,"is_error":false,"progressed":false,"stalled":true,"cost_usd":0.5,"duration_ms":300000,"num_turns":6,"tokens":{"input":100,"output":200,"cache_read":300,"cache_creation":40}}'
+    printf '%s\n' '{"run_id":"RA","iteration":2,"kind":"checkpoint","ticket":"'$t1'","model":"'$M_SONNET'","started_at":"2026-10-21T09:28:10Z","finished_at":"2026-10-21T09:29:10Z","committed":true,"status_flipped":false,"tree_dirty":false,"is_error":false,"cost_usd":0.1,"duration_ms":60000,"num_turns":2,"tokens":{"input":10,"output":20,"cache_read":30,"cache_creation":4}}'
+    printf '%s\n' '{"run_id":"RB","iteration":1,"kind":"iteration","ticket":"'$t1d'","model":"'$M_OPUS'","started_at":"2026-10-22T10:10:00Z","finished_at":"2026-10-22T10:12:00Z","committed":true,"status_flipped":true,"tree_dirty":false,"is_error":false,"progressed":false,"stalled":false,"cost_usd":0.75,"duration_ms":120000,"num_turns":5,"tokens":{"input":1,"output":2,"cache_read":3,"cache_creation":4}}'
+    printf '%s\n' '{"run_id":"RC","iteration":1,"kind":"iteration","ticket":"batch/issues/02-ticket.md","model":"","started_at":"2026-10-23T08:00:00Z","finished_at":"2026-10-23T08:01:00Z","committed":true,"status_flipped":false,"tree_dirty":false,"is_error":false,"cost_usd":0.25,"duration_ms":60000,"num_turns":1,"tokens":{"input":5,"output":6,"cache_read":7,"cache_creation":8}}'
+    printf 'this line is not a record\n'
+    for m in $M_SONNET $M_OPUS $M_SONNET; do
+      # An iteration that committed nothing and changed nothing: unproductive.
+      printf '%s\n' '{"run_id":"RD","iteration":1,"kind":"iteration","ticket":"batch/issues/04-ticket.md","model":"'$m'","started_at":"2026-10-24T08:00:00Z","finished_at":"2026-10-24T08:01:00Z","committed":false,"status_flipped":false,"tree_dirty":false,"is_error":false,"cost_usd":0.5,"duration_ms":1000,"num_turns":1,"tokens":{"input":1,"output":1,"cache_read":1,"cache_creation":1}}'
+    done
+  } > "$repo/batch/foreman-runs.jsonl"
+}
+
+if case_is "stats: a ticket that ran has stats, the sums are the record's, and a ticket that never ran has none"; then
+  repo="$WORK/stats-repo"
+  make_stats_repo "$repo"
+  run_foreman "$repo" status batch --json
+  assert_eq "$ST" 0 "exits 0"
+  assert_eq "$ERR" "" "says nothing on stderr"
+  assert_eq "$(jv "$OUT" 'j.tickets.map(t => t.name + ":" + ("stats" in t))')" \
+    '["01-ticket:true","02-ticket:true","03-ticket:false","04-ticket:true","05-ticket:false"]' \
+    "stats on the tickets that ran, no key at all on the two that did not"
+  assert_eq "$(jv "$OUT" 'Object.keys(j.tickets[0].stats).join()')" \
+    '"iterations,cost_usd,duration_ms,turns,tokens,models,runs"' "the stats' keys, in this order"
+  # Three iterations; the checkpoint turn is a fourth row of its own, counted in the sums (it spent
+  # real money) and not in the iterations, as `foreman report` counts it.
+  assert_eq "$(jv "$OUT" 'j.tickets[0].stats.iterations')" 3 "01: three iterations (a checkpoint turn is not one)"
+  assert_eq "$(jv "$OUT" 'j.tickets[0].stats.cost_usd')" 2.6 "01: cost is the sum of all four rows"
+  assert_eq "$(jv "$OUT" 'j.tickets[0].stats.duration_ms')" 1080000 "01: duration_ms is the sum"
+  assert_eq "$(jv "$OUT" 'j.tickets[0].stats.turns')" 23 "01: turns (num_turns) is the sum"
+  assert_eq "$(jv "$OUT" 'j.tickets[0].stats.tokens')" '{"input":1111,"output":2222,"cache_read":3333,"cache_creation":448}' "01: tokens are the sums"
+  assert_eq "$(jv "$OUT" 'j.tickets[0].stats.cost_usd === j.tickets[0].spent_usd')" true "stats.cost_usd is what spent_usd already says"
+  assert_eq "$(jv "$OUT" 'j.tickets[0].stats.runs')" \
+    '[{"run":"RA","kind":"iteration","outcome":"progressed","cost_usd":1.25,"duration_ms":600000,"started_at":"2026-10-21T09:12:00Z","finished_at":"2026-10-21T09:22:00Z"},{"run":"RA","kind":"iteration","outcome":"stalled","cost_usd":0.5,"duration_ms":300000,"started_at":"2026-10-21T09:23:00Z","finished_at":"2026-10-21T09:28:00Z"},{"run":"RA","kind":"checkpoint","outcome":"checkpoint","cost_usd":0.1,"duration_ms":60000,"started_at":"2026-10-21T09:28:10Z","finished_at":"2026-10-21T09:29:10Z"},{"run":"RB","kind":"iteration","outcome":"landed","cost_usd":0.75,"duration_ms":120000,"started_at":"2026-10-22T10:10:00Z","finished_at":"2026-10-22T10:12:00Z"}]' \
+    "01: one entry per row, in order, with the report's outcome word, across the DONE_ rename"
+  assert_eq "$(jv "$OUT" 'j.tickets[1].stats.iterations + ":" + j.tickets[1].stats.turns')" '"1:1"' "02: its one iteration"
+fi
+
+if case_is "stats: models are the distinct ones, in order; a line with no model counts and adds none"; then
+  repo="$WORK/stats-models-repo"
+  make_stats_repo "$repo"
+  run_foreman "$repo" status batch --json
+  # 01's first line has no `model`: it is in every sum above, and the list starts at the second.
+  assert_eq "$(jv "$OUT" 'j.tickets[0].stats.models')" '["'$M_SONNET'","'$M_OPUS'"]' "01: a model change reads sonnet then opus, the unrecorded line adds nothing"
+  assert_eq "$(jv "$OUT" 'j.tickets[0].stats.runs[0].cost_usd')" 1.25 "01: the line without a model is still in runs"
+  assert_eq "$(jv "$OUT" 'j.tickets[1].stats.models')" '[]' "02: the empty string is not a model"
+  assert_eq "$(jv "$OUT" 'j.tickets[3].stats.models')" '["'$M_SONNET'","'$M_OPUS'"]' "04: sonnet, opus, sonnet is two models, in first-seen order"
+  assert_eq "$(jv "$OUT" 'j.tickets[3].stats.iterations')" 3 "04: three iterations"
+fi
+
+if case_is "stats: each outcome is the word foreman report --json --run gives the same iteration"; then
+  repo="$WORK/stats-outcome-repo"
+  make_stats_repo "$repo"
+  run_foreman "$repo" status batch --json
+  stats="$OUT"
+  all_words=""
+  for id in RA RB RC RD; do
+    run_foreman "$repo" report batch --json --run "$id"
+    assert_eq "$ST" 0 "report --run $id exits 0"
+    report_words="$(jv "$OUT" 'j.run.iterations.map(i => i.outcome)')"
+    stats_words="$(jv "$stats" 'j.tickets.flatMap(t => (t.stats ? t.stats.runs : []).filter(r => r.run === "'$id'")).map(r => r.outcome)')"
+    assert_eq "$stats_words" "$report_words" "run $id: the words are the same, in the same order"
+    all_words="$all_words$report_words"
+  done
+  for w in landed progressed stalled checkpoint unproductive; do
+    assert_contains "$all_words" "\"$w\"" "(the fixture has a $w iteration, so the words are not all alike)"
+  done
+fi
+
+if case_is "stats: a batch with no run record has no stats, and a ticket's keys gain only stats"; then
+  repo="$WORK/stats-none-repo"
+  make_status_repo "$repo"
+  rm -f "$repo/batch/foreman-runs.jsonl"
+  run_foreman "$repo" status batch --json
+  assert_eq "$ST" 0 "exits 0"
+  assert_eq "$(jv "$OUT" 'j.tickets.some(t => "stats" in t)')" false "no ticket has stats"
+  assert_eq "$(jv "$OUT" 'Object.keys(j.tickets[0]).join()')" \
+    '"file,name,number,slug,title,status,state,done,human,blocked_by,checks,handoff,spent_usd"' "the ticket's keys are what they were"
+  make_status_repo "$WORK/stats-plain-repo"
+  run_foreman "$WORK/stats-plain-repo" status batch --json
+  assert_eq "$(jv "$OUT" 'Object.keys(j.tickets[0]).join()')" \
+    '"file,name,number,slug,title,status,state,done,human,blocked_by,checks,handoff,spent_usd,stats"' "a ticket that ran gains stats at the end, nothing else"
+fi
+
+if case_is "record: --model is written on the line, and is empty when it is not given"; then
+  rec="$WORK/record-model"
+  mkdir -p "$rec"
+  payload='{"type":"result","subtype":"success","is_error":false,"num_turns":2,"duration_ms":1000,"total_cost_usd":0.5,"usage":{"input_tokens":1,"output_tokens":2}}'
+  common=(--log "$rec/log" --verdict "$rec/verdict" --run-id R --iteration 1 --ticket t.md --batch b --base-ref a --head-ref b --started-at 2026-01-01T00:00:00Z --exit-status 0 --tree-dirty 0 --status-flipped 0 --quiet)
+  printf '%s' "$payload" | node "$FOREMAN_HOME/lib/foreman-record.cjs" --jsonl "$rec/with.jsonl" "${common[@]}" --model claude-opus-5-5
+  cp "$rec/verdict" "$rec/verdict-with"
+  printf '%s' "$payload" | node "$FOREMAN_HOME/lib/foreman-record.cjs" --jsonl "$rec/without.jsonl" "${common[@]}"
+  assert_eq "$(jv "$(cat "$rec/with.jsonl")" 'j.model')" '"claude-opus-5-5"' "--model is on the line"
+  assert_eq "$(jv "$(cat "$rec/without.jsonl")" 'j.model')" '""' "no --model is the empty string"
+  assert_eq "$(jv "$(cat "$rec/without.jsonl")" 'Object.keys(j).filter(k => k !== "model").join()')" \
+    '"run_id,iteration,kind,ticket,batch,started_at,finished_at,base_ref,head_ref,committed,status_flipped,tree_dirty,exit_status,parse_ok,result_count,is_error,limit_hit,limit_reset,transient_error,context_exhausted,auth_failed,permission_denied,progressed,stalled,subtype,session_id,num_turns,duration_ms,duration_api_ms,cost_usd,tokens,reply"' \
+    "every key the line had is still there"
+  strip() { printf '%s' "$1" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);delete j.model;delete j.finished_at;console.log(JSON.stringify(j))})'; }
+  assert_eq "$(strip "$(cat "$rec/with.jsonl")")" "$(strip "$(cat "$rec/without.jsonl")")" "the two lines differ in nothing but model (and the clock)"
+  # The verdict file is the loop's input: it must not change at all.
+  assert_eq "$(cat "$rec/verdict-with")" "$(cat "$rec/verdict")" "the verdict file is the same with and without --model"
+fi
+
+if case_is "run on the fake exec: the line carries the model the run started with, however it was set"; then
+  repo="$WORK/stats-run-repo"
+  copy_fixture "$WORK/template" "$repo" 4
+  # The default, then foreman.conf, then the environment (which wins over the file).
+  (cd "$repo" && FOREMAN_SHOW=never FOREMAN_COLOR=never "$FOREMAN" run batch 1 >/dev/null 2>&1)
+  assert_eq "$(jv "$(sed -n 1p "$repo/batch/foreman-runs.jsonl")" 'j.model')" '"claude-sonnet-5-5"' "the default model"
+  printf 'FOREMAN_MODEL=claude-haiku-5-5\n' >> "$repo/batch/foreman.conf"
+  git -C "$repo" commit --quiet -am "conf" >/dev/null
+  (cd "$repo" && FOREMAN_SHOW=never FOREMAN_COLOR=never "$FOREMAN" run batch 1 >/dev/null 2>&1)
+  assert_eq "$(jv "$(sed -n 2p "$repo/batch/foreman-runs.jsonl")" 'j.model')" '"claude-haiku-5-5"' "the model foreman.conf sets"
+  (cd "$repo" && FOREMAN_MODEL=claude-opus-5-5 FOREMAN_SHOW=never FOREMAN_COLOR=never "$FOREMAN" run batch 1 >/dev/null 2>&1)
+  assert_eq "$(jv "$(sed -n 3p "$repo/batch/foreman-runs.jsonl")" 'j.model')" '"claude-opus-5-5"' "the model the environment sets"
+  assert_eq "$(grep -c . "$repo/batch/foreman-runs.jsonl")" 3 "three lines were written (one per run)"
 fi
 
 # ---------------------------------------------------------------------------

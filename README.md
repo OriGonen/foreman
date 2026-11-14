@@ -836,9 +836,9 @@ The renderer's header lists every scene, the facts it takes and the design it wa
 
 Two files per batch, both **append-only**, both gitignored:
 
-- `foreman-runs.jsonl` — one JSON object per iteration, forever: ticket, batch, run id,
-  commits, exit status, subtype, turns, wall and API duration, every token count, cost, the
-  pass/fail flags, and the agent's own reply.
+- `foreman-runs.jsonl` — one JSON object per iteration, forever: ticket, batch, run id, the
+  model it ran on, commits, exit status, subtype, turns, wall and API duration, every token
+  count, cost, the pass/fail flags, and the agent's own reply.
 - `foreman-runs.log` — the same runs as readable text, with the agent's reply inline and a
   header/footer per run.
 

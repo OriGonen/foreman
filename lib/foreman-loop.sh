@@ -1367,7 +1367,7 @@ run_checkpoint_turn() {    # run_checkpoint_turn [stall|review]
   printf '%s' "$checkpoint_result" | node "$FOREMAN_TOOL_DIR/foreman-record.cjs" \
     --jsonl "$RUN_JSONL" --log "$RUN_LOG" --verdict "$VERDICT_FILE" \
     --run-id "$RUN_ID" --iteration "$ITERATIONS_RUN" --ticket "$TICKET_FILE" \
-    --batch "$BATCH_DIR" --kind checkpoint $RECORD_QUIET \
+    --batch "$BATCH_DIR" --kind checkpoint --model "$FOREMAN_MODEL" $RECORD_QUIET \
     --base-ref "$BASE_REF" --head-ref "$HEAD_REF" --started-at "$checkpoint_started_at" \
     --exit-status "$checkpoint_agent_status" --tree-dirty "$EXEC_DIRTY" --status-flipped 0 \
     || warn_note "could not record the checkpoint turn (usage figures will read as zero)"
@@ -1718,7 +1718,7 @@ while true; do
   printf '%s' "$result" | node "$FOREMAN_TOOL_DIR/foreman-record.cjs" \
     --jsonl "$RUN_JSONL" --log "$RUN_LOG" --verdict "$VERDICT_FILE" \
     --run-id "$RUN_ID" --iteration "$ITERATIONS_RUN" --ticket "$TICKET_FILE" \
-    --batch "$BATCH_DIR" $RECORD_QUIET \
+    --batch "$BATCH_DIR" --model "$FOREMAN_MODEL" $RECORD_QUIET \
     --base-ref "$BASE_REF" --head-ref "$HEAD_REF" --started-at "$STARTED_AT" \
     --exit-status "$agent_status" --tree-dirty "$dirty" --status-flipped "$flipped" \
     || warn_note "could not record iteration $ITERATIONS_RUN (usage figures will read as zero)"

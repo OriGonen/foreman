@@ -1,0 +1,32 @@
+run @RUN@  ·  batch  ·  fake  ·  model claude-sonnet-5-5  ·  effort high
+Tickets done: 0 / 3
+
+── iteration 1 of 3  ·  batch/issues/01-ticket.md
+   usage: billed 1,200 tok  (in 1,000 / out 200, cache r 5,000 / w 300)  ·  $0.0100  ·  @S@ (0.0m)
+   ⋯ progressed  ·  @SHA@
+── iteration 2 of 3  ·  batch/issues/01-ticket.md
+   usage: billed 1,200 tok  (in 1,000 / out 200, cache r 5,000 / w 300)  ·  $0.0100  ·  @S@ (0.0m)
+   ✓ landed  ·  @SHA@
+   ✓ marked done  ·  batch/issues/DONE_01-ticket.md
+── iteration 3 of 3  ·  batch/issues/02-ticket.md
+   usage: billed 1,200 tok  (in 1,000 / out 200, cache r 5,000 / w 300)  ·  $0.0100  ·  @S@ (0.0m)
+   ✓ landed  ·  @SHA@
+   ✓ marked done  ·  batch/issues/DONE_02-ticket.md
+
+== run @RUN@  ·  batch ==
+iterations run:        3
+tickets landed:        2
+elapsed:               0m
+input tokens (billed): 3000
+output tokens:         600
+cache read tokens:     15000
+cache write tokens:    900
+billed tokens total:   3600
+cost (USD, reported):  $0.030000
+
+PAUSED: iteration budget reached (3)
+Next up:  batch/issues/03-ticket.md
+Resume:   foreman run batch 3
+          (nothing to restore — the tickets' Status lines are the resume point)
+
+Appended to batch/foreman-runs.jsonl and batch/foreman-runs.log
