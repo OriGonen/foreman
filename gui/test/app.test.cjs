@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { sample, statsSample, dryRunSample, reportSample, reportByTicketSample, reportRunSample } = require('./sample.cjs');
+const { sample, statsSample, dryRunSample, reportSample, reportByTicketSample, reportRunSample, doctorSample } = require('./sample.cjs');
 
 // ---- the fake DOM: only what app.js and art.js use ----
 
@@ -101,8 +101,8 @@ function reportAnswer(_batch, opts = {}) {
   return { ok: true, doc: opts.byTicket ? reportByTicketSample() : reportSample() };
 }
 
-function fakeApi(first, dry = { ok: true, doc: dryRunSample() }, report = reportAnswer, tk = {}) {
-  const calls = { load: [], open: [], dryRun: [], report: [], ticket: [], save: [] };
+function fakeApi(first, dry = { ok: true, doc: dryRunSample() }, report = reportAnswer, tk = {}, dr = {}) {
+  const calls = { load: [], open: [], dryRun: [], report: [], ticket: [], save: [], doctor: 0, doctorFix: 0 };
   let update = null;
   return {
     calls, push: (d) => update(d),
@@ -110,6 +110,8 @@ function fakeApi(first, dry = { ok: true, doc: dryRunSample() }, report = report
     dryRun: async (b) => { calls.dryRun.push(b); return typeof dry === 'function' ? dry(b) : dry; },
     report: async (b, opts) => { calls.report.push({ batch: b, opts }); return typeof report === 'function' ? report(b, opts) : report; },
     open: async (p) => { calls.open.push(p); return null; },
+    doctor: async () => { calls.doctor++; const r = dr.doctor === undefined ? { ok: true, doc: doctorSample() } : dr.doctor; return typeof r === 'function' ? r(calls.doctor) : r; },
+    doctorFix: async () => { calls.doctorFix++; const r = dr.fix === undefined ? { ok: true, doc: { ...doctorSample(), fix: { appended: doctorSample().plan.map((p) => ({ file: p.file, text: p.text })), remaining: 0 } } } : dr.fix; return typeof r === 'function' ? r(calls.doctorFix) : r; },
     ticket: async (b, n) => { calls.ticket.push([b, n]); return tk.ticket ? tk.ticket(b, n) : { ok: false, error: { kind: 'exit', message: 'no ticket handler' } }; },
     saveHandoff: async (b, n, text, base) => { calls.save.push({ batch: b, name: n, text, base }); return tk.save ? tk.save(b, n, text, base) : { ok: true, saved: true, text }; },
     onUpdate: (fn) => { update = fn; return () => {}; },
@@ -1124,4 +1126,279 @@ test('coming back to the window re-reads the ticket page, for a handoff the watc
   for (const fn of window.listeners.focus) fn({});
   await tick();
   assert.equal(api.calls.ticket.length, 2, 'on the overview there is nothing to re-read');
+});
+
+
+// ---- the doctor ----
+
+async function openDoctor(api) {
+  const b = boot(api);
+  await tick();
+  railItem(b.app, 'Doctor').click();
+  await tick();
+  return b;
+}
+const trackOf = (app) => app.querySelector('.track');
+const runnerOf = (app) => app.querySelector('.runner');
+const classes = (e) => e.className.split(/\s+/);
+
+test('the rail has a Doctor entry, marked free, above Report; nothing is read until it is clicked, and then once', async () => {
+  const api = fakeApi(data());
+  const b = boot(api);
+  await tick();
+  const entry = railItem(b.app, 'Doctor');
+  assert.ok(entry, 'the rail has a Doctor entry');
+  assert.ok(entry.all().some((e) => classes(e).includes('free')), 'marked free');
+  const tools = b.app.all().filter((e) => e.attrs['data-tool']).map((e) => e.attrs['data-tool']);
+  assert.deepEqual(tools, ['doctor', 'report']);
+  assert.equal(api.calls.doctor, 0);
+  entry.click();
+  await tick();
+  assert.equal(api.calls.doctor, 1);
+  assert.equal(api.calls.doctorFix, 0, 'reading the sheet writes nothing');
+});
+
+test('while foreman inspects: the track with the inspector on it, a sentence that says nothing is sent or written, and no sheet yet', async () => {
+  let release;
+  const api = fakeApi(data(), undefined, undefined, undefined, { doctor: () => new Promise((r) => { release = r; }) });
+  const { app, document } = await openDoctor(api);
+  assert.ok(trackOf(app), 'the track is there');
+  assert.ok(!classes(trackOf(app)).includes('inspected'), 'and it is the one that is running');
+  assert.ok(runnerOf(app), 'with the inspector on it');
+  assert.equal(trackOf(app).attrs['aria-label'], 'inspecting');
+  assert.ok(text(app).includes('inspecting…'));
+  assert.ok(text(app).includes('Nothing is sent and nothing is written'));
+  assert.ok(!text(app).includes('Machine'), 'no sheet');
+  assert.equal(document.title, 'Foreman — doctor');
+  assert.equal(buttonNamed(app, 'Run again').disabled, true, 'one inspection at a time');
+  release({ ok: true, doc: doctorSample() });
+  await tick();
+  assert.ok(text(app).includes('Machine'));
+});
+
+test('the sheet: the sections in order, every row, its fix, the stamp, the next command and the title', async () => {
+  const { app } = await openDoctor(fakeApi(data()));
+  const t = text(app);
+  assert.deepEqual(app.all().filter((e) => e.attrs['data-section']).map((e) => e.attrs['data-section']), ['machine', 'repository', 'skill', 'batches'], 'the terminal\'s order');
+  assert.deepEqual(app.all().filter((e) => e.attrs['data-section']).map((e) => e.firstChild.textContent), ['Machine', 'Repository', 'Skill', 'Batches']);
+  for (const want of ['git', 'bash 5.2.26 (4+ required)', 'foreman-runs.log not ignored', 'run state would show up as changes',
+    'foreman doctor --fix appends it to .gitignore', 'run: bash C:/tools/foreman/install.sh', 'gui', '3 of 14 done',
+    'NOT PASSED', '1 to fix', 'foreman doctor --fix', 'C:/Projects/app · foreman d0d6874 · 2026-10-21', 'Site inspection']) {
+    assert.ok(t.includes(want), `the sheet shows ${JSON.stringify(want)}`);
+  }
+  const stamp = app.querySelector('.stamp');
+  assert.ok(stamp && stamp.textContent.includes('NOT PASSED') && stamp.textContent.includes('1 to fix'));
+  assert.ok(classes(stamp).includes('err'), 'a failing sheet is stamped in the error colour');
+  const marks = app.all().filter((e) => classes(e).includes('mark')).map((e) => e.textContent);
+  assert.ok(marks.includes('■') && marks.includes('!'));
+  assert.ok(app.all().some((e) => classes(e).includes('mono') && e.textContent === 'fix foreman doctor --fix'), 'the next command has its label');
+});
+
+test('a passing sheet is stamped PASSED in the ok colour and offers no fix', async () => {
+  const { app } = await openDoctor(fakeApi(data(), undefined, undefined, undefined, { doctor: { ok: true, doc: doctorSample('ready') } }));
+  const stamp = app.querySelector('.stamp');
+  assert.ok(stamp.textContent.includes('PASSED') && stamp.textContent.includes('ready to run') && !stamp.textContent.includes('NOT'));
+  assert.ok(classes(stamp).includes('ok'));
+  assert.ok(text(app).includes('foreman run .scratch/gui'));
+  assert.equal(buttonNamed(app, 'Fix what it can'), undefined);
+});
+
+test('a blocker --fix cannot write is a ✗ row with what to do, and there is no Fix button for it', async () => {
+  const { app } = await openDoctor(fakeApi(data(), undefined, undefined, undefined, { doctor: { ok: true, doc: doctorSample('blocked') } }));
+  assert.ok(text(app).includes('1 blocker'));
+  assert.ok(text(app).includes('Add to other/foreman.conf: FOREMAN_CLAUDE_ARGS'));
+  assert.ok(app.all().some((e) => classes(e).includes('mark') && e.textContent === '✗'));
+  assert.equal(buttonNamed(app, 'Fix what it can'), undefined);
+});
+
+test('once the sheet is filled in the inspector has stopped: the track is marked inspected and says so', async () => {
+  const { app } = await openDoctor(fakeApi(data()));
+  assert.ok(classes(trackOf(app)).includes('inspected'));
+  assert.equal(trackOf(app).attrs['aria-label'], 'inspected');
+  assert.ok(!text(app).includes('inspecting…'));
+});
+
+test('the inspector is CSS only: app.js has no timer and the stylesheet plays the run once, still under reduced motion', () => {
+  const js = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  assert.ok(!/setTimeout|setInterval|requestAnimationFrame/.test(js), 'no timer in app.js');
+  const css = fs.readFileSync(path.join(__dirname, '..', 'app.css'), 'utf8');
+  assert.match(css, /\.runner\s*\{[^}]*animation:\s*run-across[^;}]*forwards/, 'the run across and back is one pass');
+  assert.match(css, /@keyframes run-across/); assert.match(css, /@keyframes stride\b/); assert.match(css, /@keyframes drip/);
+  const reduced = /@media \(prefers-reduced-motion: reduce\)\s*\{([^@]*?\})\s*\}/.exec(css);
+  assert.ok(reduced && /\.runner/.test(reduced[1]) && /animation:\s*none/.test(reduced[1]), 'reduced motion stops him');
+  assert.ok(!/@import|url\(http/.test(css), 'no library');
+});
+
+test('Run again reads the sheet again and the inspector runs again: a new track, not the old one', async () => {
+  const api = fakeApi(data());
+  const { app } = await openDoctor(api);
+  const first = trackOf(app);
+  buttonNamed(app, 'Run again').click();
+  assert.ok(trackOf(app) && trackOf(app) !== first, 'the track is built again');
+  assert.ok(!classes(trackOf(app)).includes('inspected'), 'and is running');
+  await tick();
+  assert.equal(api.calls.doctor, 2);
+  assert.ok(classes(trackOf(app)).includes('inspected'));
+});
+
+test('a file changing while the inspection runs does not redraw it, so the run is not restarted; the sheet comes in once it is read', async () => {
+  let release;
+  const api = fakeApi(data(), undefined, undefined, undefined, { doctor: () => new Promise((r) => { release = r; }) });
+  const { app } = await openDoctor(api);
+  const track = trackOf(app);
+  api.push(data());
+  await tick();
+  assert.equal(trackOf(app), track, 'the same track: the run goes on');
+  release({ ok: true, doc: doctorSample() });
+  await tick();
+  assert.ok(text(app).includes('Machine'));
+});
+
+test('a push that arrives after the sheet is up redraws it without reading again', async () => {
+  const api = fakeApi(data());
+  const { app } = await openDoctor(api);
+  api.push(data());
+  await tick();
+  assert.equal(api.calls.doctor, 1);
+  assert.ok(text(app).includes('NOT PASSED'));
+});
+
+test('Fix what it can opens what it will append, and nothing is written until it is confirmed', async () => {
+  const api = fakeApi(data());
+  const { app } = await openDoctor(api);
+  const fix = buttonNamed(app, 'Fix what it can');
+  assert.ok(fix, 'the button is there');
+  assert.ok(fix.all().some((e) => classes(e).includes('free')), 'marked free');
+  fix.click();
+  const t = text(app);
+  for (const want of ['.gitignore', '# Foreman: per-batch run state.', '**/foreman-runs.log', 'does not ignore foreman',
+    'Appends 5 lines to .gitignore. Nothing else is written.']) assert.ok(t.includes(want), `the plan shows ${JSON.stringify(want)}`);
+  assert.equal(api.calls.doctorFix, 0, 'nothing has run');
+  const go = buttonNamed(app, 'Append these lines');
+  assert.ok(go && go.all().some((e) => classes(e).includes('free')), 'the confirmation is marked free too');
+  buttonNamed(app, 'Cancel').click();
+  assert.ok(!text(app).includes('Appends 5 lines'), 'cancelled: the plan is closed');
+  assert.equal(api.calls.doctorFix, 0);
+  assert.equal(api.calls.doctor, 1);
+});
+
+test('confirming runs the fix once, reads the sheet again, and says what was appended and where', async () => {
+  const fixed = { ok: true, doc: doctorSample('ready') };
+  const api = fakeApi(data(), undefined, undefined, undefined, { doctor: (n) => (n === 1 ? { ok: true, doc: doctorSample() } : fixed) });
+  const { app } = await openDoctor(api);
+  buttonNamed(app, 'Fix what it can').click();
+  buttonNamed(app, 'Append these lines').click();
+  await tick(); await tick();
+  assert.equal(api.calls.doctorFix, 1);
+  assert.equal(api.calls.doctor, 2, 'the sheet was read again after the fix');
+  const t = text(app);
+  assert.ok(t.includes('Appended 5 lines to .gitignore.'));
+  assert.ok(t.includes('a run refuses to start on a dirty tree'));
+  assert.ok(app.querySelector('.stamp').textContent.includes('PASSED'), 'the sheet shown is the one read after');
+  assert.ok(!text(app).includes('Appends 5 lines'), 'the plan is closed');
+  assert.equal(buttonNamed(app, 'Fix what it can'), undefined, 'nothing left to fix');
+});
+
+test('the confirmation cannot be pressed twice while the fix runs', async () => {
+  let release;
+  const api = fakeApi(data(), undefined, undefined, undefined, { fix: () => new Promise((r) => { release = r; }) });
+  const { app } = await openDoctor(api);
+  buttonNamed(app, 'Fix what it can').click();
+  const go = buttonNamed(app, 'Append these lines');
+  go.click();
+  assert.equal(buttonNamed(app, 'Append').disabled || buttonNamed(app, 'Appending').disabled, true);
+  go.click();
+  assert.equal(api.calls.doctorFix, 1);
+  release({ ok: true, doc: { ...doctorSample(), fix: { appended: [], remaining: 0 } } });
+  await tick(); await tick();
+  assert.equal(api.calls.doctorFix, 1);
+});
+
+test('a fix that fails says so in foreman\'s words, leaves the sheet and the plan where they were, and can be tried again', async () => {
+  const api = fakeApi(data(), undefined, undefined, undefined, { fix: { ok: false, error: { kind: 'exit', message: 'foreman doctor: could not write .gitignore' } } });
+  const { app } = await openDoctor(api);
+  buttonNamed(app, 'Fix what it can').click();
+  buttonNamed(app, 'Append these lines').click();
+  await tick(); await tick();
+  assert.ok(text(app).includes('foreman doctor: could not write .gitignore'));
+  assert.ok(text(app).includes('NOT PASSED'), 'the sheet is still there');
+  assert.ok(buttonNamed(app, 'Append these lines') && !buttonNamed(app, 'Append these lines').disabled, 'and it can be pressed again');
+  assert.equal(api.calls.doctor, 1, 'no re-read of a sheet nothing changed under');
+});
+
+test('no batch: the Doctor still opens, which is what it is for, and says what to do', async () => {
+  const none = data({ selected: null, status: null, all: { batches: [] } });
+  const doc = doctorSample('ready');
+  doc.sections[3] = { id: 'batches', title: 'Batches', rows: [], info: ['none — no directory here has a foreman.conf.', 'Create one:  foreman init <batch-dir>'] };
+  const api = fakeApi(none, undefined, undefined, undefined, { doctor: { ok: true, doc } });
+  const b = boot(api);
+  await tick();
+  assert.ok(text(b.app).includes('No batch here.'));
+  const entry = railItem(b.app, 'Doctor');
+  assert.equal(entry.disabled, false, 'not greyed out');
+  entry.click();
+  await tick();
+  assert.ok(text(b.app).includes('Create one:  foreman init <batch-dir>'));
+  assert.ok(text(b.app).includes('PASSED'));
+});
+
+test('on the Doctor the rail marks Doctor, not a batch; a batch in the rail leaves it, and Back does too', async () => {
+  const api = fakeApi(data());
+  const { app } = await openDoctor(api);
+  assert.equal(app.all().find((e) => e.attrs['data-tool'] === 'doctor').attrs['aria-current'], 'page');
+  assert.equal(app.all().find((e) => e.attrs['data-tool'] === 'report').attrs['aria-current'], 'false');
+  assert.ok(app.all().filter((e) => e.attrs['data-batch']).every((e) => e.attrs['aria-current'] === 'false'));
+  buttonNamed(app, 'Back').click();
+  await tick();
+  assert.ok(!text(app).includes('Site inspection') && text(app).includes('landed · 6 to go'), 'the overview is back');
+  railItem(app, 'Doctor').click();
+  await tick();
+  app.all().find((e) => e.attrs['data-batch'] === '.scratch/c').click();
+  await tick();
+  assert.ok(!text(app).includes('Site inspection'));
+});
+
+test('Doctor from the report, the dry run and the ticket page replaces them, and Report from the Doctor replaces it', async () => {
+  const api = fakeApi(data());
+  const { app } = await openDoctor(api);
+  railItem(app, 'Report').click();
+  await tick();
+  assert.ok(text(app).includes('Total, all runs') && !text(app).includes('Site inspection'));
+  railItem(app, 'Doctor').click();
+  await tick();
+  assert.ok(text(app).includes('Site inspection') && !text(app).includes('Total, all runs'));
+});
+
+test('a failure to read the sheet is in foreman\'s words, with Try again and Back, and no track', async () => {
+  const api = fakeApi(data(), undefined, undefined, undefined, { doctor: { ok: false, error: { kind: 'exit', message: 'foreman doctor: not inside a git repository.' } } });
+  const { app } = await openDoctor(api);
+  assert.ok(text(app).includes('foreman reported a problem.') && text(app).includes('not inside a git repository'));
+  assert.ok(buttonNamed(app, 'Try again') && buttonNamed(app, 'Back'));
+  assert.ok(!trackOf(app));
+  buttonNamed(app, 'Try again').click();
+  await tick();
+  assert.equal(api.calls.doctor, 2);
+});
+
+test('a read that comes back after the person left the Doctor is thrown away', async () => {
+  let release;
+  const api = fakeApi(data(), undefined, undefined, undefined, { doctor: () => new Promise((r) => { release = r; }) });
+  const { app } = await openDoctor(api);
+  buttonNamed(app, 'Back').click();
+  await tick();
+  release({ ok: true, doc: doctorSample() });
+  await tick();
+  assert.ok(!text(app).includes('Site inspection') && text(app).includes('landed · 6 to go'));
+});
+
+test('what the sheet says is text: a label, a fix and a line to append with markup in them are characters', async () => {
+  const doc = doctorSample();
+  doc.sections[0].rows[0].label = '<img src=x onerror=alert(1)>';
+  doc.sections[1].rows[1].fix = '<script>alert(2)</script>';
+  doc.plan[0].text = '<b>bold</b>\n';
+  const { app } = await openDoctor(fakeApi(data(), undefined, undefined, undefined, { doctor: { ok: true, doc } }));
+  assert.ok(text(app).includes('<img src=x onerror=alert(1)>') && text(app).includes('<script>alert(2)</script>'));
+  assert.ok(!app.all().some((e) => e.tagName === 'img' || e.tagName === 'script'));
+  buttonNamed(app, 'Fix what it can').click();
+  assert.ok(text(app).includes('<b>bold</b>') && !app.all().some((e) => e.tagName === 'b' && e.textContent === 'bold'));
 });

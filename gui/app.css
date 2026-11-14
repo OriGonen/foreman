@@ -191,6 +191,9 @@ svg .f-halo { fill: var(--halo); } svg .f-sunfill { fill: var(--sunfill); } svg 
 svg .f-amber { fill: var(--amber); } svg .f-rust { fill: var(--rust); } svg .f-dim { fill: var(--dim); }
 svg .f-err { fill: var(--err); } svg .f-muted { fill: var(--muted); }
 svg .k-sunfill { stroke: var(--sunfill); } svg .k-post { stroke: var(--post); }
+svg .f-sun { fill: var(--sun); } svg .f-panel { fill: var(--panel); } svg .f-post { fill: var(--post); } svg .f-ink { fill: var(--ink); }
+svg .k-amber { stroke: var(--amber); } svg .k-sun { stroke: var(--sun); } svg .k-muted { stroke: var(--muted); }
+svg .k-out { stroke: var(--outline); stroke-width: 1.3; stroke-linejoin: round; stroke-linecap: round; }
 svg .s-top { stop-color: var(--sky-top); } svg .s-bot { stop-color: var(--sky-bot); }
 
 /* the order's rows are buttons that open the ticket */
@@ -253,3 +256,51 @@ pre.said.err { color: var(--err); }
 .stats .s .k { font: 600 10px var(--mono); letter-spacing: .1em; color: var(--muted); text-transform: uppercase; }
 .iters { overflow: auto; }
 .iters .t { grid-template-columns: 22px 34px 1fr auto auto; }
+
+/* the doctor (design 08, take a): the track, the inspector, the sheet and its stamp */
+.main.doctor { overflow: auto; }
+.track { position: relative; flex: none; height: 74px; border-radius: 10px; border: 1px solid var(--line); background: linear-gradient(var(--sky-top), var(--sky-bot)); overflow: hidden; }
+.track .ground { position: absolute; left: 0; right: 0; bottom: 0; height: 10px; background: var(--ground); border-top: 2px solid var(--post); }
+.track .tick { position: absolute; bottom: 10px; width: 3px; background: var(--post); opacity: .6; border-radius: 1px; }
+.track .say { position: absolute; right: 14px; top: 10px; font: 600 11px var(--mono); letter-spacing: .1em; color: var(--muted); text-transform: uppercase; }
+
+/* The inspector. One pass per inspection, because the track is built when the inspection starts and
+   drawn stopped (.inspected) when the sheet is in: he runs across and back in 3s (the legs swap on the
+   beat, he turns at each end), ends where he began, and stands; the sweat keeps dripping until the
+   sheet is filled in. No script moves him. */
+.runner { position: absolute; bottom: 9px; left: 8px; width: 40px; height: 60px; animation: run-across 3s linear 1 forwards; }
+.runner .flip { display: block; width: 100%; height: 100%; animation: run-turn 3s steps(1, end) 1 forwards; }
+.runner svg { display: block; overflow: visible; }
+.runner .lg-a { animation: stride .28s steps(1, end) 11; }
+.runner .lg-b { opacity: 0; animation: stride-b .28s steps(1, end) 11; }
+.runner .drop { fill: var(--sweat); animation: drip .56s linear infinite; }
+.runner .drop.d2 { animation-delay: -.28s; }
+@keyframes run-across { 0% { left: 8px; } 50% { left: calc(100% - 52px); } 100% { left: 8px; } }
+@keyframes run-turn { 0% { transform: scaleX(1); } 50% { transform: scaleX(-1); } 100% { transform: scaleX(1); } }
+@keyframes stride { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 1; } }
+@keyframes stride-b { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes drip { 0% { transform: translate(0, 0); opacity: 1; } 100% { transform: translate(-5px, 9px); opacity: 0; } }
+.track.inspected .runner, .track.inspected .runner .flip, .track.inspected .runner .lg-a, .track.inspected .runner .lg-b { animation: none; }
+.track.inspected .runner .drop { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .runner, .runner .flip, .runner .lg-a, .runner .lg-b, .runner .drop { animation: none; }
+  .runner .lg-b { opacity: 0; }
+}
+
+.sheet { gap: 14px; border-top: 6px solid var(--post); }
+.dtop { gap: 24px; }
+.dsec { gap: 4px; }
+.drow { display: flex; gap: 8px; align-items: flex-start; }
+.drow .mark { flex: none; width: 12px; text-align: center; font: 700 12px var(--mono); line-height: 1.5; }
+.drow .dtext { min-width: 0; line-height: 1.5; }
+.dfix { padding-top: 2px; }
+.dfix .label { font-size: 10px; }
+.applied { padding: 8px 12px; border: 1px solid color-mix(in srgb, var(--ok) 45%, var(--line)); border-radius: 8px; background: color-mix(in srgb, var(--ok) 7%, var(--panel)); }
+.plan { gap: 8px; padding: 12px 14px; border: 1px dashed var(--post); border-radius: 8px; background: var(--panel-2); }
+.plancol { gap: 4px; }
+.planlines { margin: 0; padding: 8px 10px; font: 12px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; color: var(--text); }
+.dbottom { margin-top: auto; align-items: flex-end; gap: 16px; }
+.dfoot { gap: 6px; }
+.dfixbtn { align-self: flex-start; }
+.stamp { flex: none; border: 3px double currentColor; padding: 6px 16px; transform: rotate(-4deg); text-align: center; font: 700 16px var(--mono); letter-spacing: .12em; }
+.stamp .sub { font: 600 11px var(--mono); letter-spacing: .04em; }

@@ -36,7 +36,8 @@
 
   function railView(data, select) {
     const reporting = view === 'report';
-    const entries = M.rail(data.all, reporting ? null : data.selected);
+    const doctoring = view === 'doctor';
+    const entries = M.rail(data.all, reporting || doctoring ? null : data.selected);
     const rail = h('nav', { cls: 'rail', attrs: { 'aria-label': 'Batches' } });
     const where = data.repoRoot.split('/').filter(Boolean).slice(-1)[0] || data.repoRoot;
     rail.append(
@@ -57,7 +58,13 @@
         rail.append(bar);
       }
     }
-    // Tools: what the app can tell about a batch without running it. Doctor arrives with its own ticket.
+    // Tools: what the app can tell without running anything. The Doctor is of the repository and the
+    // machine, not of a batch, so it is there when there is no batch at all.
+    const doctor = h('button', {
+      cls: 'item' + (doctoring ? ' on' : ''),
+      attrs: { type: 'button', 'data-tool': 'doctor', 'aria-current': doctoring ? 'page' : 'false' },
+      on: { click: () => leaving(openDoctor) },
+    }, 'Doctor', span('free', 'free'));
     const report = h('button', {
       cls: 'item' + (reporting ? ' on' : ''),
       attrs: { type: 'button', 'data-tool': 'report', 'aria-current': reporting ? 'page' : 'false' },
@@ -65,7 +72,7 @@
     }, 'Report', span('free', 'free'));
     if (!data.selected) { report.disabled = true; report.title = 'There is no batch to report on.'; }
     const read = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    rail.append(h('div', { cls: 'spacer' }), h('div', { cls: 'label', text: 'Tools' }), report,
+    rail.append(h('div', { cls: 'spacer' }), h('div', { cls: 'label', text: 'Tools' }), doctor, report,
       h('div', { cls: 'foot', text: 'read from disk · ' + read }));
     return rail;
   }
@@ -327,7 +334,7 @@
   async function openReport() {
     const batch = data && data.selected;
     if (!batch) return;
-    dryToken++; dry = null; tp = null;
+    dryToken++; dry = null; tp = null; drToken++; dr = null;
     const by = rep && rep.batch === batch ? rep.by : 'run';          // Read again keeps the view
     view = 'report';
     rep = { batch, by, state: 'loading', docs: {}, runs: {}, open: new Set(), error: null, at: null };
@@ -402,7 +409,7 @@
     const batch = data && data.selected;
     if (!batch) return;
     const token = ++dryToken;
-    tp = null;
+    tp = null; drToken++; dr = null;
     view = 'dryrun';
     dry = { batch, state: 'loading' };
     draw();
@@ -417,6 +424,155 @@
       ? { batch, state: 'ready', doc: answer.doc, at: new Date() }
       : { batch, state: 'error', error: (answer && answer.error) || { kind: 'spawn', message: 'No answer.' } };
     draw();
+  }
+
+  // ---- the doctor (design 08, take a) ----
+
+  // The inspection sheet of the machine and the repository. It is read once, when asked for (Run
+  // again reads it again), and a file changing does not read it again. While it is being read the
+  // inspector runs across the track and back, then stands and sweats; that is all CSS, started by
+  // the track being built, so a redraw during the read is held back (see the push handler) and the
+  // run is not restarted. When the sheet is in, the track is drawn stopped.
+  let dr = null;             // { state: 'loading' | 'ready' | 'error', doc, error, at, planOpen, fixing, fixError, applied }
+  let drToken = 0;
+
+  function leaveDoctor() {
+    drToken++;
+    dr = null;
+    view = 'overview';
+    draw();
+  }
+
+  function trackView(running) {
+    const track = h('div', { cls: 'track' + (running ? '' : ' inspected'), attrs: { role: 'img', 'aria-label': running ? 'inspecting' : 'inspected' } },
+      h('div', { cls: 'say', text: running ? 'inspecting…' : 'inspected' }));
+    for (const [left, height] of [[15, 10], [30, 6], [45, 10], [60, 6], [75, 10]]) {
+      const tick = h('i', { cls: 'tick' });
+      tick.style.left = left + '%';
+      tick.style.height = height + 'px';
+      track.append(tick);
+    }
+    track.append(h('div', { cls: 'ground' }), A.runner());
+    return track;
+  }
+
+  function doctorRow(r) {
+    const row = h('div', { cls: 'drow' }, span('mark ' + r.tone, r.mark), h('div', { cls: 'dtext' },
+      h('div', { cls: 'small wordy' }, r.label, r.detail ? ' ' : null, r.detail ? span('muted', r.detail) : null)));
+    const body = row.lastChild;
+    for (const n of r.notes) body.append(h('div', { cls: 'small muted wordy', text: n }));
+    if (r.fix) body.append(h('div', { cls: 'small wordy dfix' }, span('label', 'fix'), ' ', span(r.auto ? 'mono' : 'mono muted', r.fix)));
+    return row;
+  }
+
+  function doctorSection(sec) {
+    const col = h('div', { cls: 'col dsec', attrs: { 'data-section': sec.id } }, h('div', { cls: 'label', text: sec.title }));
+    for (const r of sec.rows) col.append(doctorRow(r));
+    for (const line of sec.info) col.append(h('div', { cls: 'small muted wordy', text: line }));
+    return col;
+  }
+
+  // What Fix what it can will append, shown before it does. Nothing is written until Append is pressed.
+  function planCard(fix) {
+    const card = h('div', { cls: 'plan col', attrs: { role: 'group', 'aria-label': 'What Fix what it can will append' } },
+      h('div', { cls: 'label', text: 'Will append' }));
+    for (const f of fix.files) {
+      card.append(h('div', { cls: 'col plancol' },
+        h('div', { cls: 'mono small' }, f.file),
+        h('pre', { cls: 'planlines', text: f.lines.join('\n') }),
+        f.why ? h('div', { cls: 'small muted wordy', text: f.why }) : null));
+    }
+    card.append(h('div', { cls: 'small muted', text: fix.summary }));
+    if (dr.fixError) card.append(h('pre', { cls: 'said err', text: dr.fixError.message }));
+    card.append(h('div', { cls: 'row' },
+      button(dr.fixing ? 'Appending…' : 'Append these lines', { cls: 'primary', tag: { cls: 'free', text: 'free' }, onClick: dr.fixing ? null : runFix, title: 'Appending…' }),
+      button('Cancel', { cls: 'quiet', onClick: () => { if (!dr.fixing) { dr.planOpen = false; dr.fixError = null; draw(); } } })));
+    return card;
+  }
+
+  function doctorView() {
+    const back = button('Back', { cls: 'quiet', onClick: leaveDoctor });
+    if (dr.state === 'error') return failureView(dr.error, openDoctor, back);
+    const loading = dr.state === 'loading';
+    const d = loading ? null : M.doctor(dr.doc);
+    const head = h('div', { cls: 'row' },
+      h('div', { cls: 'h2 grow' }, 'Site inspection ', span('free', 'free'), d && d.meta ? ' ' : null, d && d.meta ? span('mono small muted', d.meta) : null),
+      span('small dim mono', loading ? 'reading…' : 'read ' + dr.at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })),
+      button('Run again', { onClick: loading ? null : openDoctor, title: 'Reading…' }),
+      back);
+    const main = h('main', { cls: 'main doctor' }, head, trackView(loading));
+    if (loading) {
+      main.append(h('div', { cls: 'small muted', text: 'foreman is looking over the machine and this repository. Nothing is sent and nothing is written.' }));
+      return main;
+    }
+
+    const sheet = h('div', { cls: 'card col sheet' });
+    const byId = Object.fromEntries(d.sections.map((x) => [x.id, x]));
+    const top = [byId.machine, byId.repository].filter(Boolean);
+    if (top.length) sheet.append(h('div', { cls: 'row top dtop' }, ...top.map((x) => h('div', { cls: 'grow col' }, doctorSection(x)))));
+    for (const x of d.sections) if (x !== byId.machine && x !== byId.repository) sheet.append(doctorSection(x));
+
+    if (dr.applied) sheet.append(h('div', { cls: 'applied small' }, span('ok', '■ '), dr.applied.text, ' ', span('muted', dr.applied.then)));
+    if (dr.planOpen && d.fix) sheet.append(planCard(d.fix));
+
+    const stamp = h('div', { cls: 'stamp ' + d.stamp.tone, attrs: { 'aria-label': `${d.stamp.label}: ${d.stamp.detail}` } },
+      h('div', { cls: 'word', text: d.stamp.label }), h('div', { cls: 'sub', text: d.stamp.detail }));
+    const legend = h('div', { cls: 'small muted legend' });
+    d.legend.forEach((l, i) => legend.append(span('', i ? '   ' : ''), span(l.tone, l.mark), ' ' + l.text));
+    const foot = h('div', { cls: 'col grow dfoot' }, legend);
+    if (d.next) foot.append(h('div', { cls: 'mono small' }, span('muted', d.next.label), ' ' + d.next.command));
+    if (d.fix && !dr.planOpen) {
+      foot.append(button('Fix what it can…', { cls: 'dfixbtn', tag: { cls: 'free', text: 'free' }, onClick: () => { dr.planOpen = true; dr.fixError = null; draw(); } }));
+    }
+    sheet.append(h('div', { cls: 'row dbottom' }, foot, stamp));
+    main.append(sheet);
+    return main;
+  }
+
+  // Read the sheet. `applied` is what a fix just appended, kept across the read that follows it.
+  async function openDoctor(applied = null) {
+    if (!applied || typeof applied.text !== 'string') applied = null;
+    dryToken++; dry = null; rep = null; tp = null;
+    const token = ++drToken;
+    view = 'doctor';
+    dr = { state: 'loading', doc: null, error: null, at: null, planOpen: false, fixing: false, fixError: null, applied: applied && applied.text ? applied : null };
+    draw();
+    let answer;
+    try {
+      answer = await api.doctor();
+    } catch (e) {
+      answer = { ok: false, error: asError(e) };
+    }
+    if (token !== drToken) return;
+    if (answer && answer.ok) { dr.state = 'ready'; dr.doc = answer.doc; dr.at = new Date(); }
+    else { dr.state = 'error'; dr.error = (answer && answer.error) || { kind: 'spawn', message: 'No answer.' }; }
+    draw();
+  }
+
+  // Fix what it can, once the person has seen what it will append: the CLI appends, and the sheet is
+  // read again so what is shown is what is on disk now.
+  async function runFix() {
+    const mine = dr;
+    if (!mine || mine.fixing) return;
+    const token = drToken;
+    mine.fixing = true;
+    mine.fixError = null;
+    draw();
+    let answer;
+    try {
+      answer = await api.doctorFix();
+    } catch (e) {
+      answer = { ok: false, error: asError(e) };
+    }
+    if (token !== drToken || dr !== mine) return;
+    mine.fixing = false;
+    if (answer && answer.ok) {
+      const done = M.doctor(answer.doc).applied;
+      await openDoctor(done);
+    } else {
+      mine.fixError = (answer && answer.error) || { kind: 'spawn', message: 'No answer.' };
+      draw();
+    }
   }
 
   // ---- the ticket page (design 02: b, b1, b2, b3) ----
@@ -448,7 +604,7 @@
   async function openTicket(name) {
     const batch = data && data.selected;
     if (!batch || !name) return;
-    dryToken++; dry = null; rep = null;
+    dryToken++; dry = null; rep = null; drToken++; dr = null;
     view = 'ticket';
     tp = {
       batch, name, state: 'loading', doc: null, error: null, readError: null, mode: 'preview',
@@ -729,11 +885,15 @@
     // The dry run, the report and a ticket's page are of the batch that was selected when they were asked for.
     if (view === 'dryrun' && (!dry || !data.status || dry.batch !== data.selected)) { dryToken++; view = 'overview'; dry = null; }
     if (view === 'report' && (!rep || rep.batch !== data.selected)) { view = 'overview'; rep = null; }
+    if (view === 'doctor' && !dr) view = 'overview';
     if (view === 'ticket' && (!tp || tp.batch !== data.selected || !data.status)) { view = 'overview'; tp = null; }
     const rail = railView(data, (batch) => { if (!selecting) leaving(() => start(batch)); });
     app.append(rail);
 
-    if (data.all.batches.length === 0) {
+    if (view === 'doctor') {
+      app.append(doctorView());
+      document.title = 'Foreman — doctor';
+    } else if (data.all.batches.length === 0) {
       app.append(paneView('No batch here.', 'A batch is a directory with a foreman.conf in it.\n' + data.repoRoot));
       document.title = 'Foreman — ' + data.repoRoot;
     } else if (view === 'report') {
@@ -771,9 +931,10 @@
   }
 
   async function start(batch) {
-    dryToken++;
+    dryToken++; drToken++;
     view = 'overview';
     dry = null;
+    dr = null;
     rep = null;
     tp = null;
     selecting = true;
@@ -795,7 +956,8 @@
   }
   api.onUpdate((fresh) => {
     data = fresh;
-    draw();
+    // Not while the inspector is running: building the track again would start the run over.
+    if (!(view === 'doctor' && dr && dr.state === 'loading')) draw();
     if (view === 'ticket' && tp && fresh && fresh.ok && fresh.selected === tp.batch) readTicket();
   });
   start(null);

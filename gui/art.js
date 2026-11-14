@@ -4,8 +4,8 @@
 // app.css (f-amber, k-post, ...): the strict CSP allows no inline style, and the classes let the
 // light and dark themes redraw the same shapes.
 //
-// Only what the overview needs so far. The other scenes (inspector, foreman, end scenes) arrive
-// with the screens that show them.
+// Only what the screens built so far need (the dome, the doctor's runner). The other scenes
+// (foreman, end scenes) arrive with the screens that show them.
 (function (root) {
   const NS = 'http://www.w3.org/2000/svg';
   let uid = 0;
@@ -68,5 +68,37 @@
     return svg('svg', { xmlns: NS, width: w, height: h, viewBox: '0 0 200 124', 'aria-hidden': 'true' }, kids);
   }
 
-  root.ForemanArt = { dome };
+  // The doctor's inspector: a clipboard under his arm, sweat drops trailing him. Two stances (lg-a and
+  // lg-b) and the drops are swapped and moved by the stylesheet's keyframes, and the run across the
+  // track and back is the element's own animation: nothing here moves anything. The shapes are the
+  // design's (designs/08-doctor.html), their colours classes of app.css.
+  //   runner()   -> <span class="runner"><span class="flip"><svg>…</svg></span></span>
+  function runner() {
+    const o = 'k-out';
+    const kids = [
+      svg('path', { class: 'lg-a f-earth ' + o, d: 'M13 40 L8 57 h7 L20 45 L26 57 h7 L27 40z' }),
+      svg('path', { class: 'lg-b f-earth ' + o, d: 'M15 40 L16 57 h6 L20 47 L20 57 h6 L25 40z' }),
+      svg('path', { class: 'f-rust ' + o, d: 'M12 21 Q20 17 28 21 L30 41 L10 41 Z' }),
+      svg('path', { class: 'k-sun', 'stroke-width': 2.2, d: 'M12 30 h16' }),
+      svg('path', { class: 'k-amber', fill: 'none', 'stroke-width': 4.4, 'stroke-linecap': 'round', d: 'M14 23 l-6 9' }),
+      svg('rect', { class: 'f-panel k-post', x: 27, y: 26, width: 9, height: 12, rx: 1.4, 'stroke-width': 1.5 }),
+      svg('rect', { class: 'f-post', x: 29.5, y: 24.5, width: 4, height: 3, rx: 0.8 }),
+      svg('path', { class: 'k-muted', 'stroke-width': 1, d: 'M29.5 31 h4 M29.5 34 h4' }),
+      svg('circle', { class: 'f-sun ' + o, cx: 20, cy: 13, r: 6.2 }),
+      svg('circle', { class: 'f-ink', cx: 23, cy: 13.4, r: 0.9 }),
+      svg('path', { class: 'f-amber ' + o, d: 'M12.6 11.5 Q13 4.2 20 4.2 Q27 4.2 27.4 11.5 Z' }),
+      svg('rect', { class: 'f-amber ' + o, x: 11, y: 10.8, width: 19, height: 3, rx: 1.5 }),
+      svg('path', { class: 'drop', d: 'M8 8 q1.8 2.4 0 4 q-1.8 -1.6 0 -4z' }),
+      svg('path', { class: 'drop d2', d: 'M5.5 16 q1.8 2.4 0 4 q-1.8 -1.6 0 -4z' }),
+    ];
+    const flip = document.createElement('span');
+    flip.className = 'flip';
+    flip.appendChild(svg('svg', { xmlns: NS, width: 40, height: 60, viewBox: '0 0 40 60', 'aria-hidden': 'true' }, kids));
+    const el = document.createElement('span');
+    el.className = 'runner';
+    el.appendChild(flip);
+    return el;
+  }
+
+  root.ForemanArt = { dome, runner };
 }(window));
