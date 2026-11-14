@@ -170,6 +170,4 @@ foreman_app_installed() {
 # `foreman keys`) steer a run. `foreman doctor` checks for it and `--fix` appends it, `foreman init`
 # writes it, and each only when foreman_app_installed.
 FOREMAN_RUN_IGNORE='**/.foreman-run/'
-FOREMAN_RUN_IGNORE_BLOCK='# Foreman desktop app: a run'"'"'s control directory (its keys, its pid, the live feed), in its batch.
-# Disposable, and ignored so that steering a run from the app never shows up as a change.
-'"$FOREMAN_RUN_IGNORE"
+FOREMAN_RUN_IGNORE_BLOCK="# Foreman desktop app: the control directory of a run (its keys, its pid, the live feed), in its batch."$'\n'"# Disposable, and ignored so that steering a run from the app never shows up as a change."$'\n'"$FOREMAN_RUN_IGNORE"

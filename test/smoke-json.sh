@@ -2112,7 +2112,7 @@ if case_is "app installed: doctor warns about .foreman-run/, --fix appends it an
   # The row is the same kind as the four other ignore lines are when missing: a thing `--fix` writes.
   assert_eq "$(jv "$OUT" 'JSON.stringify(j.sections.find(s => s.id === "repository").rows.filter(r => r.label === ".foreman-run/ not ignored").map(r => [r.result, r.auto]))')" '"[[\"fail\",true]]"' "--json: a row, fixable by --fix"
   assert_contains "$(jv "$OUT" 'j.plan[0].why')" "1 of 5 lines missing" "--json: the plan counts five lines"
-  assert_eq "$(jv "$OUT" 'j.plan[0].text')" "$(jv "$(printf '{"t":%s}' "$(printf '%s\n' '' "# Foreman desktop app: a run's control directory (its keys, its pid, the live feed), in its batch." '# Disposable, and ignored so that steering a run from the app never shows up as a change.' '**/.foreman-run/' | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.stringify(s)))')")" 'j.t')" "--json: the plan is the app's lines alone, not the four it already has"
+  assert_eq "$(jv "$OUT" 'j.plan[0].text')" "$(jv "$(printf '{"t":%s}' "$(printf '%s\n' '' "# Foreman desktop app: the control directory of a run (its keys, its pid, the live feed), in its batch." '# Disposable, and ignored so that steering a run from the app never shows up as a change.' '**/.foreman-run/' | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.stringify(s)))')")" 'j.t')" "--json: the plan is the app's lines alone, not the four it already has"
 
   before="$(cat "$repo/.gitignore")"
   doctor_with_app "$repo" --fix
