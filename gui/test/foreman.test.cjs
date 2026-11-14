@@ -168,3 +168,46 @@ test('dryRun: the CLI\'s own words when it fails (a dirty tree), and a status an
   const wrong = setup({ code: 0, stdout: JSON.stringify(good), stderr: '' });
   await assert.rejects(() => wrong.f.dryRun('b'), (e) => e.kind === 'version' && /asked for dry-run/.test(e.message));
 });
+
+// ---- report ----
+
+const rep = { foreman_json: 1, command: 'report', batch: { path: 'b', name: 'b' }, by: 'run', rows: [] };
+
+test('report runs bin/foreman report from the repo root: the batch repo-relative, --json, and --by-ticket / --run only when asked', async () => {
+  const { f, calls } = setup({ code: 0, stdout: JSON.stringify(rep) + '\n', stderr: '' });
+  assert.deepEqual(await f.report('.scratch/gui'), rep);
+  assert.deepEqual(calls[0].args, ['C:/tools/foreman/bin/foreman', 'report', '.scratch/gui', '--json']);
+  assert.equal(calls[0].opts.cwd, 'C:/Projects/app');
+  await f.report('.scratch/gui', { byTicket: true });
+  assert.deepEqual(calls[1].args, ['C:/tools/foreman/bin/foreman', 'report', '.scratch/gui', '--json', '--by-ticket']);
+  await f.report('.scratch/gui', { run: '20261021T091200Z-4411' });
+  assert.deepEqual(calls[2].args, ['C:/tools/foreman/bin/foreman', 'report', '.scratch/gui', '--json', '--run', '20261021T091200Z-4411']);
+  await f.report('.scratch/gui', { byTicket: false, run: null });
+  assert.deepEqual(calls[3].args, ['C:/tools/foreman/bin/foreman', 'report', '.scratch/gui', '--json'], 'false and null ask for nothing');
+});
+
+test('report takes a batch path the way status does, and a run id that cannot be read as a flag or a shell word', () => {
+  const { f, calls } = setup({ code: 0, stdout: JSON.stringify(rep), stderr: '' });
+  for (const bad of ['', '--all', '../up', 'C:/x', null, undefined]) {
+    assert.throws(() => f.report(bad), (e) => e instanceof ForemanError && e.kind === 'bad-batch', String(bad));
+  }
+  for (const bad of ['', '--json', '-x', 'a b', 'a;b', '$(x)', 'a\nb', 'a\0b', 7, {}, '../x']) {
+    assert.throws(() => f.report('b', { run: bad }), (e) => e instanceof ForemanError && e.kind === 'bad-run', JSON.stringify(bad));
+  }
+  assert.equal(calls.length, 0, 'nothing was run');
+});
+
+test('report accepts the run ids the loop writes, and the one a record with no id is filed under', async () => {
+  const { f, calls } = setup({ code: 0, stdout: JSON.stringify(rep), stderr: '' });
+  for (const ok of ['20261021T091200Z-4411', '20261021T091200Z-4411-with-a-long-name', '(unknown)', 'run_1.2']) {
+    await f.report('b', { run: ok });
+  }
+  assert.equal(calls.length, 4);
+});
+
+test('report: the CLI\'s own words when there is no log, and a status answer is not a report answer', async () => {
+  const none = setup({ code: 1, stdout: '', stderr: 'No run log at b/foreman-runs.jsonl — nothing has been run for this batch yet.\n' });
+  await assert.rejects(() => none.f.report('b'), (e) => e.kind === 'exit' && /nothing has been run/.test(e.message));
+  const wrong = setup({ code: 0, stdout: JSON.stringify(good), stderr: '' });
+  await assert.rejects(() => wrong.f.report('b'), (e) => e.kind === 'version' && /asked for report/.test(e.message));
+});

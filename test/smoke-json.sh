@@ -663,10 +663,204 @@ if case_is "dry-run --json: a batch that cannot be read, a dirty tree: the plain
 fi
 
 # ---------------------------------------------------------------------------
+# foreman report --json
+# ---------------------------------------------------------------------------
+
+# A batch holding the report's own fixture log (test/golden/report-runs.jsonl, which test/smoke.sh
+# checks the plain report against): three runs, seven iterations and a checkpoint turn, one line that
+# is not JSON, and every outcome there is.
+make_report_repo() {
+  local repo="$1"
+  make_status_repo "$repo"
+  cp "$TEST_DIR/golden/report-runs.jsonl" "$repo/batch/foreman-runs.jsonl"
+}
+
+# What follows a label on the plain report's text: plain_line PLAIN 'label' (the line that starts with it).
+plain_line() { printf '%s\n' "$1" | sed -n "s/^  $2 *//p" | head -1; }
+
+if case_is "report --json: one object, versioned, naming its command"; then
+  repo="$WORK/report-shape-repo"
+  make_report_repo "$repo"
+  run_foreman "$repo" report batch --json
+  assert_eq "$ST" 0 "exits 0"
+  assert_eq "$ERR" "" "says nothing on stderr"
+  assert_eq "$(jv "$OUT" 'typeof j')" '"object"' "it parses, and is one object"
+  assert_eq "$(jv "$OUT" 'j.foreman_json')" 1 "foreman_json is 1"
+  assert_eq "$(jv "$OUT" 'j.command')" '"report"' "it names its command"
+  assert_eq "$(printf '%s\n' "$OUT" | grep -c .)" 1 "on one line, so a reader can take it whole"
+  assert_eq "$(jv "$OUT" 'j.batch')" '{"path":"batch","name":"batch"}' "the batch, repo-relative"
+  assert_eq "$(jv "$OUT" 'j.log')" '"batch/foreman-runs.jsonl"' "the run log it read"
+  assert_eq "$(jv "$OUT" 'j.by')" '"run"' "the rows are by run"
+  assert_eq "$(jv "$OUT" 'Object.keys(j).join()')" '"foreman_json,command,batch,log,by,totals,rows"' "the keys, in this order"
+  assert_eq "$(jv "$OUT" 'Object.keys(j.totals).join()')" \
+    '"runs,iterations,landed,progressed,stalled,unproductive,checkpoints,limit_hits,unreadable,tokens,cost_usd,minutes,turns,per_iteration"' \
+    "the totals' keys"
+fi
+
+if case_is "report --json: its totals are the plain report's"; then
+  repo="$WORK/report-totals-repo"
+  make_report_repo "$repo"
+  run_foreman "$repo" report batch
+  plain="$OUT"
+  run_foreman "$repo" report batch --json
+  assert_eq "$ST" 0 "exits 0"
+  head="$(plain_line "$plain" iterations)"
+  assert_eq "$head" "7  ·  landed 3  ·  progressed 1  ·  stalled 1  ·  unproductive 2  ·  checkpoint turns 1  ·  limit hits 1" "(the plain line this is checked against)"
+  assert_eq "$(jv "$OUT" '`${j.totals.iterations}  ·  landed ${j.totals.landed}  ·  progressed ${j.totals.progressed}  ·  stalled ${j.totals.stalled}  ·  unproductive ${j.totals.unproductive}  ·  checkpoint turns ${j.totals.checkpoints}  ·  limit hits ${j.totals.limit_hits}`')" \
+    "\"$head\"" "the outcome counts are the plain line's"
+  assert_eq "$(plain_line "$plain" tokens)" "in 21,200  out 146,300  cache-read 5,820,000  cache-write 432,000" "(the plain tokens line)"
+  assert_eq "$(jv "$OUT" 'const t = j.totals.tokens, f = (v) => v.toLocaleString("en-US"); `in ${f(t.input)}  out ${f(t.output)}  cache-read ${f(t.cache_read)}  cache-write ${f(t.cache_write)}`')" \
+    '"in 21,200  out 146,300  cache-read 5,820,000  cache-write 432,000"' "the tokens are the plain line's"
+  assert_eq "$(plain_line "$plain" billed)" "167,500 tokens  ·  \$6.9500  ·  48.2 model-minutes  ·  220 turns" "(the plain billed line)"
+  assert_eq "$(jv "$OUT" 'const t = j.totals; `${t.tokens.billed.toLocaleString("en-US")} tokens  ·  $${t.cost_usd.toFixed(4)}  ·  ${t.minutes.toFixed(1)} model-minutes  ·  ${t.turns.toLocaleString("en-US")} turns`')" \
+    '"167,500 tokens  ·  $6.9500  ·  48.2 model-minutes  ·  220 turns"' "the bill is the plain line's"
+  assert_eq "$(plain_line "$plain" average)" "\$0.9929 and 23,929 billed tokens per iteration" "(the plain average line)"
+  assert_eq "$(jv "$OUT" 'const p = j.totals.per_iteration; `$${p.cost_usd.toFixed(4)} and ${p.billed_tokens.toLocaleString("en-US")} billed tokens per iteration`')" \
+    '"$0.9929 and 23,929 billed tokens per iteration"' "the average is the plain line's"
+  assert_eq "$(jv "$OUT" 'j.totals.runs')" 3 "three runs"
+  assert_eq "$(jv "$OUT" 'j.totals.unreadable')" 1 "the line that is not JSON is counted, as the plain report counts it"
+fi
+
+if case_is "report --json: one row per run, in the order they appear, and their counts add up to the totals"; then
+  repo="$WORK/report-rows-repo"
+  make_report_repo "$repo"
+  run_foreman "$repo" report batch --json
+  assert_eq "$(jv "$OUT" 'j.rows.map((r) => r.id).join()')" '"20261021T091200Z-4411,20261022T140533Z-9020,20261023T081014Z-1207"' "the runs"
+  assert_eq "$(jv "$OUT" 'j.rows.map((r) => r.started_at).join()')" '"2026-10-21T09:12:00Z,2026-10-22T14:05:33Z,2026-10-23T08:10:14Z"' "each run's first start"
+  assert_eq "$(jv "$OUT" 'JSON.stringify(j.rows[1])')" \
+    '"{\"id\":\"20261022T140533Z-9020\",\"started_at\":\"2026-10-22T14:05:33Z\",\"iterations\":3,\"landed\":1,\"progressed\":1,\"stalled\":0,\"unproductive\":1,\"checkpoints\":1,\"limit_hits\":1,\"tokens\":{\"input\":12500,\"output\":93000,\"cache_read\":3650000,\"cache_write\":265000,\"billed\":105500},\"cost_usd\":4.25,\"minutes\":28.5,\"turns\":137}"' \
+    "a run's whole row"
+  for key in iterations landed progressed stalled unproductive checkpoints limit_hits turns; do
+    assert_eq "$(jv "$OUT" "j.rows.reduce((n, r) => n + r.$key, 0) === j.totals.$key")" true "the rows' $key add up to the total"
+  done
+  assert_eq "$(jv "$OUT" 'Math.abs(j.rows.reduce((n, r) => n + r.cost_usd, 0) - j.totals.cost_usd) < 1e-9')" true "and so does the cost"
+fi
+
+if case_is "report --json --by-ticket: the rows are tickets, in the order they were first attempted"; then
+  repo="$WORK/report-ticket-repo"
+  make_report_repo "$repo"
+  run_foreman "$repo" report batch --by-ticket
+  plain="$OUT"
+  run_foreman "$repo" report batch --by-ticket --json
+  assert_eq "$ST" 0 "exits 0"
+  assert_eq "$(jv "$OUT" 'j.by')" '"ticket"' "the rows are by ticket"
+  assert_eq "$(jv "$OUT" 'j.rows.map((r) => r.id).join()')" \
+    '"batch/issues/01-first.md,batch/issues/02-second.md,batch/issues/03-third.md,batch/issues/04-fourth.md,batch/issues/05-fifth.md"' "the tickets"
+  assert_eq "$(jv "$OUT" 'j.rows.map((r) => r.started_at === undefined).join()')" '"true,true,true,true,true"' "a ticket has no start of its own"
+  assert_contains "$plain" "batch/issues/03-third.md" "(the plain report lists it)"
+  assert_eq "$(jv "$OUT" 'const r = j.rows[2]; `${r.iterations} ${r.landed} ${r.progressed} ${r.cost_usd}`')" '"2 1 1 3.5"' "03's counts"
+  assert_eq "$(jv "$OUT" 'const r = j.rows[3]; `${r.iterations} ${r.unproductive} ${r.checkpoints} ${r.limit_hits} ${r.cost_usd}`')" '"1 1 1 1 0.75"' "04's counts, its checkpoint turn apart"
+  assert_eq "$(jv "$OUT" 'j.rows.reduce((n, r) => n + r.iterations, 0) === j.totals.iterations')" true "the rows add up to the totals"
+  assert_eq "$(jv "$OUT" 'j.run === undefined')" true "and it has no run's iterations unless asked"
+fi
+
+if case_is "report --json --run: that run's iterations, each with the outcome word the report counts it under"; then
+  repo="$WORK/report-run-repo"
+  make_report_repo "$repo"
+  run_foreman "$repo" report batch --json --run 20261022T140533Z-9020
+  assert_eq "$ST" 0 "exits 0"
+  assert_eq "$ERR" "" "says nothing on stderr"
+  assert_eq "$(jv "$OUT" 'Object.keys(j).join()')" '"foreman_json,command,batch,log,by,totals,rows,run"' "everything it printed without --run, then the run"
+  assert_eq "$(jv "$OUT" 'j.run.id')" '"20261022T140533Z-9020"' "the run"
+  assert_eq "$(jv "$OUT" 'j.run.started_at')" '"2026-10-22T14:05:33Z"' "its start"
+  assert_eq "$(jv "$OUT" 'j.run.iterations.map((i) => i.iteration + ":" + i.outcome).join()')" \
+    '"1:progressed,2:landed,3:unproductive,3:checkpoint"' "each iteration and its word (the checkpoint turn keeps its own)"
+  assert_eq "$(jv "$OUT" 'JSON.stringify(j.run.iterations[2])')" \
+    '"{\"iteration\":3,\"kind\":\"iteration\",\"ticket\":\"batch/issues/04-fourth.md\",\"outcome\":\"unproductive\",\"flags\":[\"error\",\"limit\"],\"limit_hit\":true,\"cost_usd\":0.5,\"duration_ms\":60000,\"turns\":8,\"exit_status\":1,\"started_at\":\"2026-10-22T15:00:00Z\"}"' \
+    "an unproductive iteration, whole: what went wrong is in its flags"
+  assert_eq "$(jv "$OUT" 'j.run.iterations[3].kind')" '"checkpoint"' "a checkpoint turn says what it is"
+  assert_eq "$(jv "$OUT" 'const row = j.rows.find((r) => r.id === j.run.id), n = (w) => j.run.iterations.filter((i) => i.outcome === w).length; [n("landed") === row.landed, n("progressed") === row.progressed, n("stalled") === row.stalled, n("unproductive") === row.unproductive, n("checkpoint") === row.checkpoints, j.run.iterations.length - n("checkpoint") === row.iterations].join()')" \
+    '"true,true,true,true,true,true"' "its words add up to the run's row"
+  run_foreman "$repo" report batch --json --run 20261023T081014Z-1207
+  assert_eq "$(jv "$OUT" 'j.run.iterations.map((i) => i.outcome).join()')" '"stalled,unproductive"' "a stalled iteration is stalled, not unproductive"
+  assert_eq "$(jv "$OUT" 'j.run.iterations[1].flags.join()')" '""' "an unproductive iteration with nothing wrong beyond not landing has no flags"
+  run_foreman "$repo" report batch --json --run 20261021T091200Z-4411
+  assert_eq "$(jv "$OUT" 'j.run.iterations.map((i) => i.outcome).join()')" '"landed,landed"' "a landed iteration is landed"
+  assert_eq "$(jv "$OUT" 'j.run.iterations[0].flags.length')" 0 "and has no flags"
+  run_foreman "$repo" report batch --json --by-ticket --run 20261021T091200Z-4411
+  assert_eq "$(jv "$OUT" '[j.by, j.run.id].join()')" '"ticket,20261021T091200Z-4411"' "--by-ticket and --run can be asked at once"
+fi
+
+if case_is "report --json --run: a run that is not in the log, and flags that do not go together"; then
+  repo="$WORK/report-norun-repo"
+  make_report_repo "$repo"
+  run_foreman "$repo" report batch --json --run no-such-run
+  assert_eq "$ST" 1 "an unknown run exits 1"
+  assert_eq "$OUT" "" "and prints no JSON"
+  assert_contains "$ERR" "no-such-run" "its stderr names the run"
+  run_foreman "$repo" report batch --json --run
+  assert_eq "$ST" 1 "--run with no id exits 1"
+  assert_contains "$ERR" "--run" "and says what was missing"
+  run_foreman "$repo" report batch --run 20261021T091200Z-4411
+  assert_eq "$ST" 1 "--run without --json exits 1"
+  assert_contains "$ERR" "--json" "and says it needs --json"
+  run_foreman "$repo" report batch --json --failures
+  assert_eq "$ST" 1 "--failures is the text's; --json refuses it"
+  assert_contains "$ERR" "--failures" "and names it"
+fi
+
+if case_is "report --json: no log, or no readable record, is the plain report's answer"; then
+  repo="$WORK/report-empty-repo"
+  make_status_repo "$repo"
+  rm -f "$repo/batch/foreman-runs.jsonl"
+  run_foreman "$repo" report batch
+  plain_err="$ERR"; plain_st="$ST"
+  run_foreman "$repo" report batch --json
+  assert_eq "$ST" "$plain_st" "no log: the same exit status"
+  assert_eq "$OUT" "" "no log: nothing on stdout"
+  assert_eq "$ERR" "$plain_err" "no log: the same words"
+  printf 'nothing readable here\n' > "$repo/batch/foreman-runs.jsonl"
+  run_foreman "$repo" report batch
+  plain_err="$ERR"; plain_st="$ST"
+  run_foreman "$repo" report batch --json
+  assert_eq "$ST" "$plain_st" "no record: the same exit status"
+  assert_eq "$OUT" "" "no record: nothing on stdout"
+  assert_eq "$ERR" "$plain_err" "no record: the same words"
+fi
+
+if case_is "report --json: it is never drawn, wherever the terminal could show a picture"; then
+  repo="$WORK/report-nodraw-repo"
+  make_report_repo "$repo"
+  # The dispatcher says the picture is wanted in these two variables; a window reading JSON must not
+  # get escape codes for it, however they got set.
+  OUT="$(cd "$repo" && FOREMAN_DRAW_TIER=24 FOREMAN_DRAW_COLS=140 node "$FOREMAN_HOME/lib/foreman-report.cjs" batch --json)"
+  assert_eq "$(jv "$OUT" 'j.command')" '"report"' "node on its own, with the picture asked for"
+  OUT="$(cd "$repo" && FOREMAN_DRAW_TIER=24 FOREMAN_DRAW_COLS=140 FOREMAN_SHOW=always "$FOREMAN" report batch --json)"
+  assert_eq "$(jv "$OUT" 'j.command')" '"report"' "through the dispatcher with the show forced on"
+fi
+
+if case_is "report --json: the batch can be named from anywhere in the repository, and --jsonl still points at a moved log"; then
+  repo="$WORK/report-where-repo"
+  make_report_repo "$repo"
+  mkdir -p "$repo/sub"
+  OUT="$(cd "$repo/sub" && FOREMAN_SHOW=never "$FOREMAN" report ../batch --json)"
+  assert_eq "$(jv "$OUT" 'j.batch.path')" '"batch"' "the batch is repo-relative, not relative to where it was run"
+  assert_eq "$(jv "$OUT" 'j.log')" '"batch/foreman-runs.jsonl"' "and so is the log"
+  run_foreman "$repo" report --json
+  assert_eq "$(jv "$OUT" 'j.batch.name')" '"batch"' "the repository's only batch is inferred, as the plain report infers it"
+  mv "$repo/batch/foreman-runs.jsonl" "$repo/batch/moved.jsonl"
+  run_foreman "$repo" report --jsonl batch/moved.jsonl --json
+  assert_eq "$ST" 0 "--jsonl with --json exits 0"
+  assert_eq "$(jv "$OUT" 'j.totals.iterations')" 7 "and reads that log"
+fi
+
+if case_is "report: plain output is byte for byte what it was"; then
+  repo="$WORK/report-golden-repo"
+  make_report_repo "$repo"
+  for view in by-run by-ticket failures; do
+    flag=""; [ "$view" = by-run ] || flag="--$view"
+    (cd "$repo" && FOREMAN_SHOW=never FOREMAN_COLOR=never "$FOREMAN" report batch $flag > "$WORK/report.out" 2>&1)
+    sed "s|batch/foreman-runs.jsonl|@LOG@|" "$WORK/report.out" > "$WORK/report.cmp"
+    sed "s|@LOG@|@LOG@|" "$TEST_DIR/golden/report-$view.txt" > "$WORK/report.gold"
+    cmp -s "$WORK/report.cmp" "$WORK/report.gold" && pass || fail "plain report ($view) differs from test/golden/report-$view.txt"
+  done
+fi
+
+# ---------------------------------------------------------------------------
 # Flags that are not status's
 # ---------------------------------------------------------------------------
 
-if case_is "--json is for status and dry-run, for now: the others still refuse it as they did"; then
+if case_is "--json is for status, dry-run and report, for now: the others still refuse it as they did"; then
   repo="$WORK/json-others-repo"
   make_status_repo "$repo"
   run_foreman "$repo" run batch --json

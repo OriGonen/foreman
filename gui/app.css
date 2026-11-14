@@ -145,6 +145,40 @@ button { font: inherit; color: inherit; }
                  -webkit-user-select: none; user-select: none; }
 .code pre.prompt { flex: 1 0 auto; padding-left: 12px; padding-right: 14px; color: var(--text); }
 
+/* the rail's tools: a name and the word that says it costs nothing */
+.rail .item .free { margin-left: auto; }
+.btn.quiet.on { background: var(--shade); color: var(--text); }
+
+/* the report: the bill on the left, the ledger on the right */
+.main.report { overflow: hidden; }
+.reportrow { flex: 1; min-height: 0; gap: 16px; align-items: stretch; }
+.billcol { width: 260px; flex: none; overflow: auto; min-height: 0; padding-bottom: 12px; }
+/* the bill: a receipt edge */
+.bill { background: var(--panel); border: 1px solid var(--line); border-bottom: 0; border-radius: 8px 8px 0 0; padding: 16px 18px 22px; position: relative; font-family: var(--mono); }
+.bill::after { content: ""; position: absolute; left: -1px; right: -1px; bottom: -8px; height: 9px;
+  background: linear-gradient(-45deg, transparent 6px, var(--panel) 0) 0 0 / 12px 9px repeat-x,
+              linear-gradient(45deg, transparent 6px, var(--panel) 0) 0 0 / 12px 9px repeat-x; }
+.bill .label { color: var(--text); }
+.bill .big { margin: 6px 0 2px; }
+.bill .line { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; padding: 2px 0; }
+.bill .rule { border-top: 1px dashed var(--line); margin: 8px 0; }
+.meter { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--amber); border-radius: 3px; }
+.meter.hot i { background: var(--rust); }
+/* the ledger: one row a run (or ticket); a run's row is a button that opens its iterations */
+.ledger { overflow: auto; min-height: 0; }
+.ledger .t { display: grid; grid-template-columns: minmax(150px, 215px) 1fr 70px 56px; gap: 12px; align-items: center; padding: 7px 14px;
+             border-bottom: 1px solid var(--line); width: 100%; box-sizing: border-box; border-left: 0; border-right: 0; border-top: 0;
+             background: transparent; text-align: left; color: inherit; }
+.ledger .t:last-child { border-bottom: 0; }
+.ledger button.t { cursor: pointer; }
+.ledger button.t:hover { background: color-mix(in srgb, var(--shade) 55%, transparent); }
+.ledger .t.open { background: color-mix(in srgb, var(--amber) 7%, transparent); }
+.ledger .rowname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ledger .t > :last-child { text-align: right; }
+.ledger .iterrow { grid-template-columns: 1fr auto; padding-left: 40px; }
+.ledger .iterrow > :first-child { overflow-wrap: anywhere; }
+
 /* what the CLI said, as text */
 pre.said { font: 12px/1.5 var(--mono); margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text); }
 

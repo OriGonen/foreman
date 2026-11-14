@@ -197,6 +197,96 @@
     };
   }
 
+  // ---- the report (`foreman report --json`) ----
+
+  const count = (v) => Number(v || 0).toLocaleString('en-US');
+  const plural = (n, one, many) => `${count(n)} ${n === 1 ? one : many || one + 's'}`;
+  const exact = (v) => '$' + Number(v || 0).toFixed(4);          // what the plain report prints
+
+  // "batch/issues/DONE_07a-followup-x.md" -> "07a followup-x": how the order names a ticket. Anything
+  // that is not a numbered ticket file (the `(unknown)` of a record with none) is kept as it is.
+  function ticketName(file) {
+    if (file === null || file === undefined || file === '') return '(no ticket)';
+    const base = basename(file).replace(/\.md$/i, '').replace(/^[A-Za-z]+_(?=\d)/, '');
+    const m = /^(\d+[a-z]?)-(.+)$/i.exec(base);
+    return m ? m[1] + ' ' + m[2] : base;
+  }
+
+  // The words under a ledger row's name: how many iterations, and how they came out. Counts that are
+  // none are left out, as the plain report leaves them out.
+  function ledgerParts(row) {
+    const parts = [{ text: count(row.iterations), tone: '' }];
+    if (row.landed) parts.push({ text: count(row.landed) + ' landed', tone: 'ok' });
+    if (row.progressed) parts.push({ text: count(row.progressed) + ' progressed', tone: '' });
+    if (row.stalled) parts.push({ text: count(row.stalled) + ' stalled', tone: '' });
+    if (row.unproductive) parts.push({ text: count(row.unproductive) + ' unproductive', tone: '' });
+    if (row.limit_hits) parts.push({ text: row.limit_hits === 1 ? 'limit hit' : count(row.limit_hits) + ' limit hits', tone: 'rust' });
+    if (row.checkpoints) parts.push({ text: plural(row.checkpoints, 'checkpoint turn'), tone: 'dim' });
+    return parts;
+  }
+
+  // Everything the Report screen draws: the bill, and the ledger. Every figure is the CLI's own
+  // sum; this words them and decides nothing about what an iteration was.
+  function report(doc) {
+    const t = doc.totals;
+    const outcomes = [{ label: 'landed', value: count(t.landed), tone: 'ok' }];
+    if (t.progressed) outcomes.push({ label: 'progressed', value: count(t.progressed), tone: '' });
+    if (t.stalled) outcomes.push({ label: 'stalled', value: count(t.stalled), tone: '' });
+    outcomes.push({ label: 'unproductive', value: count(t.unproductive), tone: '' });
+    if (t.checkpoints) outcomes.push({ label: 'checkpoint turns', value: count(t.checkpoints), tone: '' });
+    if (t.limit_hits) outcomes.push({ label: 'limit hits', value: count(t.limit_hits), tone: 'rust' });
+
+    const tk = t.tokens;
+    const bill = {
+      total: usd(t.cost_usd),
+      exact: exact(t.cost_usd),
+      sub: [plural(t.runs, 'run'), plural(t.iterations, 'iteration'), t.minutes.toFixed(1) + ' model-minutes']
+        .concat(t.unreadable ? [plural(t.unreadable, 'unreadable line')] : []).join(' · '),
+      outcomes,
+      tokens: [
+        { label: 'billed tokens', value: count(tk.billed), hint: `in ${count(tk.input)} · out ${count(tk.output)}` },
+        { label: 'cache read', value: count(tk.cache_read) },
+        { label: 'cache write', value: count(tk.cache_write) },
+        { label: 'turns', value: count(t.turns) },
+      ],
+      perIteration: t.per_iteration ? usd(t.per_iteration.cost_usd) : null,
+      perIterationHint: t.per_iteration ? count(t.per_iteration.billed_tokens) + ' billed tokens' : null,
+    };
+
+    const byRun = doc.by !== 'ticket';
+    const dearest = doc.rows.reduce((m, r) => Math.max(m, r.cost_usd), 0);
+    const rows = doc.rows.map((r) => ({
+      id: r.id,
+      label: byRun ? r.id : ticketName(r.id),
+      title: byRun ? 'started ' + r.started_at : r.id,
+      parts: ledgerParts(r),
+      cost: usd(r.cost_usd),
+      exact: exact(r.cost_usd),
+      // never rounded away to nothing: a run that cost something has a bar
+      frac: r.cost_usd > 0 && dearest > 0 ? Math.max(r.cost_usd / dearest, 0.02) : 0,
+      hot: r.limit_hits > 0,
+      expandable: byRun,
+    }));
+    // The log is oldest first; the newest run is the one asked about. Tickets stay as first attempted.
+    if (byRun) rows.reverse();
+    return { title: doc.batch.path, by: byRun ? 'run' : 'ticket', bill, rows };
+  }
+
+  // The iterations of the run `--run <id>` was asked about, each as its number, its ticket and the
+  // CLI's outcome word — kept whole, with what went wrong beside it. The colour is a way of showing
+  // the word, not a second opinion about it.
+  const OUTCOME_TONE = { landed: 'ok', unproductive: 'rust', checkpoint: 'dim' };
+  function reportIterations(doc) {
+    if (!doc.run) return [];
+    return doc.run.iterations.map((i) => ({
+      label: [i.iteration, ticketName(i.ticket), i.outcome + (i.flags && i.flags.length ? ` (${i.flags.join(', ')})` : '')].join(' · '),
+      tone: OUTCOME_TONE[i.outcome] || '',
+      cost: usd(i.cost_usd),
+      exact: exact(i.cost_usd),
+      limit: !!i.limit_hit,
+    }));
+  }
+
   // The rail: every batch in the repo, the finished (DONE_) ones last and dimmed.
   function rail(all, selected) {
     const entries = (all.batches || []).map((b) => {
@@ -232,5 +322,5 @@
     return list.length ? list[0].path : null;
   }
 
-  return { usd, ticketRef, checksChip, stakes, blockers, lastRun, overview, dryRun, rail, pickBatch };
+  return { usd, ticketRef, checksChip, stakes, blockers, lastRun, overview, dryRun, report, reportIterations, ticketName, rail, pickBatch };
 }));

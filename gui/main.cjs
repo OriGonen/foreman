@@ -85,6 +85,20 @@ ipcMain.handle('dryrun:load', async (event, batch) => {
   }
 });
 
+// The report is free too: foreman reads the run record and sends nothing. `opts` is the page's
+// question — by ticket, or one run's iterations — and is taken only as far as it is understood; the
+// batch and the run id are checked before they reach the CLI (foreman.cjs).
+ipcMain.handle('report:load', async (event, batch, opts) => {
+  if (!trusted(event)) return { ok: false, error: describe(new Error('refused')) };
+  try {
+    if (!ctx) await setup();
+    const o = opts && typeof opts === 'object' ? opts : {};
+    return { ok: true, doc: await ctx.foreman.report(batch, { byTicket: o.byTicket === true, run: o.run === undefined ? null : o.run }) };
+  } catch (e) {
+    return { ok: false, error: describe(e) };
+  }
+});
+
 ipcMain.handle('open', async (event, relativePath) => {
   if (!trusted(event) || !ctx) return 'refused';
   try {

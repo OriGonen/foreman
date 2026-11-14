@@ -15,6 +15,10 @@ contextBridge.exposeInMainWorld('foreman', {
   // What a run of that batch would do, its settings and its exact prompt: `foreman dry-run --json`.
   // Free: nothing is sent. Answers { ok: true, doc } or { ok: false, error }.
   dryRun: (batch) => ipcRenderer.invoke('dryrun:load', batch),
+  // What a batch has cost: `foreman report --json`. `opts` is { byTicket } or { run: <id> } (that
+  // run's iterations); with neither, the totals and a row for each run. Free: it reads a file.
+  // Answers { ok: true, doc } or { ok: false, error }.
+  report: (batch, opts) => ipcRenderer.invoke('report:load', batch, opts === undefined ? {} : opts),
   // Open a repo-relative path (a ticket, a batch folder) with Windows' own default.
   open: (relativePath) => ipcRenderer.invoke('open', relativePath),
 });

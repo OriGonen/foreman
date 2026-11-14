@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { sample, dryRunSample } = require('./sample.cjs');
+const { sample, dryRunSample, reportSample, reportByTicketSample, reportRunSample } = require('./sample.cjs');
 
 // ---- the fake DOM: only what app.js and art.js use ----
 
@@ -89,13 +89,20 @@ function data(over = {}) {
   };
 }
 
-function fakeApi(first, dry = { ok: true, doc: dryRunSample() }) {
-  const calls = { load: [], open: [], dryRun: [] };
+// What `foreman report --json` would answer for each question the screen can ask.
+function reportAnswer(_batch, opts = {}) {
+  if (opts.run) return { ok: true, doc: reportRunSample() };
+  return { ok: true, doc: opts.byTicket ? reportByTicketSample() : reportSample() };
+}
+
+function fakeApi(first, dry = { ok: true, doc: dryRunSample() }, report = reportAnswer) {
+  const calls = { load: [], open: [], dryRun: [], report: [] };
   let update = null;
   return {
     calls, push: (d) => update(d),
     load: async (b) => { calls.load.push(b); return typeof first === 'function' ? first(b) : first; },
     dryRun: async (b) => { calls.dryRun.push(b); return typeof dry === 'function' ? dry(b) : dry; },
+    report: async (b, opts) => { calls.report.push({ batch: b, opts }); return typeof report === 'function' ? report(b, opts) : report; },
     open: async (p) => { calls.open.push(p); return null; },
     onUpdate: (fn) => { update = fn; return () => {}; },
   };
@@ -388,4 +395,244 @@ test('warnings on the dry run are shown as the CLI printed them', async () => {
   doc.warnings = ['batch/issues/05-ticket.md Checks: ghost.md, which is not a ticket in this batch'];
   const { app } = await openDry(fakeApi(data(), { ok: true, doc }));
   assert.ok(text(app).includes(doc.warnings[0]));
+});
+
+// ---- the report ----
+
+// what the page built, as plain data: its objects come from another realm, which deepEqual tells apart
+const plain = (v) => JSON.parse(JSON.stringify(v));
+const railItem = (app, name) => app.all().find((e) => e.className.split(' ').includes('item') && e.textContent.startsWith(name));
+
+async function openReport(api) {
+  const b = boot(api);
+  await tick();
+  railItem(b.app, 'Report').click();
+  await tick();
+  return b;
+}
+
+const rowNamed = (app, id) => app.all().find((e) => e.attrs['data-run'] === id);
+
+test('the rail has a Report entry, marked free, and a click asks for that batch\'s report, nothing more', async () => {
+  const api = fakeApi(data());
+  const b = boot(api);
+  await tick();
+  const entry = railItem(b.app, 'Report');
+  assert.ok(entry, 'the rail has a Report entry');
+  assert.ok(entry.all().some((e) => e.className.split(' ').includes('free')), 'marked free');
+  assert.deepEqual(api.calls.report, [], 'nothing is read until it is asked for');
+  entry.click();
+  await tick();
+  assert.deepEqual(plain(api.calls.report), [{ batch: '.scratch/b', opts: {} }], 'the default view, and no run: iterations come only when a run is opened');
+});
+
+test('the report: the bill with its totals and the ledger with a row for each run, newest first, marked free', async () => {
+  const { app, document } = await openReport(fakeApi(data()));
+  const t = text(app);
+  for (const want of ['Report', 'batch', 'free', 'Total, all runs', '$6.95', '3 runs · 7 iterations · 48.2 model-minutes · 1 unreadable line',
+    'landed', 'progressed', 'stalled', 'unproductive', 'checkpoint turns', 'limit hits',
+    'billed tokens', '167,500', 'cache read', '5,820,000', 'cache write', '432,000', 'turns', '220', 'per iteration', '$0.99',
+    '20261023T081014Z-1207', '20261022T140533Z-9020', '20261021T091200Z-4411', '1 landed', 'limit hit', '$4.25', '$2.00']) {
+    assert.ok(t.includes(want), `the screen shows ${JSON.stringify(want)}`);
+  }
+  assert.ok(t.indexOf('20261023T081014Z-1207') < t.indexOf('20261022T140533Z-9020') && t.indexOf('20261022T140533Z-9020') < t.indexOf('20261021T091200Z-4411'), 'newest first');
+  assert.equal(document.title, 'Foreman — report · .scratch/b');
+  assert.ok(app.all().some((e) => e.attrs.title === '$6.9500'), 'the total carries the figure the plain report prints');
+  assert.ok(app.all().some((e) => e.className.split(' ').includes('bill')), 'the bill');
+});
+
+test('on the report the rail marks Report, not a batch; a click on a batch leaves it for that batch\'s overview', async () => {
+  const api = fakeApi(data());
+  const { app } = await openReport(api);
+  assert.ok(railItem(app, 'Report').className.split(' ').includes('on'));
+  assert.equal(railItem(app, 'Report').attrs['aria-current'], 'page');
+  assert.ok(app.all().filter((e) => e.attrs['data-batch']).every((e) => !e.className.split(' ').includes('on')));
+  app.all().find((e) => e.attrs['data-batch'] === '.scratch/c').click();
+  await tick();
+  assert.deepEqual(api.calls.load, [null, '.scratch/c']);
+  assert.ok(!text(app).includes('Total, all runs'), 'the report is gone');
+});
+
+test('a run is not opened until it is asked for; opening it fetches --run <id> once and shows each iteration with the CLI\'s word', async () => {
+  const api = fakeApi(data());
+  const { app } = await openReport(api);
+  assert.equal(api.calls.report.length, 1, 'only the report itself so far');
+  assert.ok(!text(app).includes('3 · 04 fourth'), 'no iterations on show');
+  const row = rowNamed(app, '20261022T140533Z-9020');
+  assert.equal(row.attrs['aria-expanded'], 'false');
+  row.click();
+  await tick();
+  assert.deepEqual(plain(api.calls.report[1]), { batch: '.scratch/b', opts: { run: '20261022T140533Z-9020' } });
+  const t = text(app);
+  for (const want of ['1 · 03 third · progressed', '2 · 03 third · landed', '3 · 04 fourth · unproductive (error, limit)', '3 · 04 fourth · checkpoint', '$0.50', '$0.25']) {
+    assert.ok(t.includes(want), `shows ${JSON.stringify(want)}`);
+  }
+  assert.equal(rowNamed(app, '20261022T140533Z-9020').attrs['aria-expanded'], 'true');
+});
+
+test('closing a run hides its iterations, and opening it again does not ask again', async () => {
+  const api = fakeApi(data());
+  const { app } = await openReport(api);
+  rowNamed(app, '20261022T140533Z-9020').click();
+  await tick();
+  rowNamed(app, '20261022T140533Z-9020').click();
+  await tick();
+  assert.ok(!text(app).includes('3 · 04 fourth'), 'closed');
+  rowNamed(app, '20261022T140533Z-9020').click();
+  await tick();
+  assert.ok(text(app).includes('3 · 04 fourth'), 'open again');
+  assert.equal(api.calls.report.filter((c) => c.opts.run).length, 1, 'asked once');
+});
+
+test('while a run\'s iterations are being read the row says so, and a failure is said under that row, with the others untouched', async () => {
+  let release;
+  const slow = (b, o) => (o.run ? new Promise((r) => { release = () => r({ ok: false, error: { kind: 'exit', message: 'foreman: no such run' } }); }) : reportAnswer(b, o));
+  const api = fakeApi(data(), undefined, slow);
+  const { app } = await openReport(api);
+  rowNamed(app, '20261022T140533Z-9020').click();
+  await tick();
+  assert.ok(text(app).includes('Reading the iterations…'));
+  release();
+  await tick();
+  assert.ok(text(app).includes('foreman: no such run'), 'the CLI\'s own words');
+  assert.ok(text(app).includes('$6.95'), 'the bill is still there');
+  // asking again is a second try, not a stuck row
+  rowNamed(app, '20261022T140533Z-9020').click();
+  await tick();
+  rowNamed(app, '20261022T140533Z-9020').click();
+  await tick();
+  assert.equal(api.calls.report.filter((c) => c.opts.run).length, 2, 'a failed read is read again when asked again');
+});
+
+test('By ticket asks for --by-ticket and shows a row for each ticket; going back to By run does not ask again', async () => {
+  const api = fakeApi(data());
+  const { app } = await openReport(api);
+  buttonNamed(app, 'By ticket').click();
+  await tick();
+  assert.deepEqual(plain(api.calls.report[1]), { batch: '.scratch/b', opts: { byTicket: true } });
+  const t = text(app);
+  for (const want of ['01 first', '03 third', '04 fourth', '05 fifth']) assert.ok(t.includes(want), want);
+  assert.ok(!t.includes('20261022T140533Z-9020'), 'the runs are not listed in this view');
+  assert.equal(buttonNamed(app, 'By ticket').attrs['aria-pressed'], 'true');
+  assert.equal(buttonNamed(app, 'By run').attrs['aria-pressed'], 'false');
+  assert.equal(app.all().filter((e) => e.attrs['data-run']).length, 0, 'a ticket row has nothing to open');
+  buttonNamed(app, 'By run').click();
+  await tick();
+  assert.equal(api.calls.report.length, 2, 'the first answer is kept');
+  assert.ok(text(app).includes('20261022T140533Z-9020'));
+});
+
+test('the bill is the same in both views: the totals come from the CLI, not from the rows', async () => {
+  const api = fakeApi(data());
+  const { app } = await openReport(api);
+  buttonNamed(app, 'By ticket').click();
+  await tick();
+  const t = text(app);
+  assert.ok(t.includes('$6.95') && t.includes('167,500'));
+});
+
+test('Read again asks for the report again and forgets which runs were open', async () => {
+  const api = fakeApi(data());
+  const { app } = await openReport(api);
+  rowNamed(app, '20261022T140533Z-9020').click();
+  await tick();
+  buttonNamed(app, 'Read again').click();
+  await tick();
+  assert.equal(api.calls.report.filter((c) => !c.opts.run).length, 2);
+  assert.ok(!text(app).includes('3 · 04 fourth'), 'the run is closed again');
+});
+
+test('Back returns to the overview; the report and its rows are gone', async () => {
+  const api = fakeApi(data());
+  const { app } = await openReport(api);
+  buttonNamed(app, '← b').click();
+  await tick();
+  assert.ok(text(app).includes('document-human-tickets'), 'the overview');
+  assert.ok(!text(app).includes('Total, all runs'));
+});
+
+test('while foreman works the screen says so; a failure is shown in the CLI\'s own words, with Try again and Back', async () => {
+  let release;
+  const slow = () => new Promise((r) => { release = r; });
+  const { app } = await openReport(fakeApi(data(), undefined, slow));
+  assert.ok(text(app).includes('Reading the report…'));
+  assert.ok(buttonNamed(app, 'Back'));
+  release({ ok: false, error: { kind: 'exit', message: 'No run log at batch/foreman-runs.jsonl — nothing has been run for this batch yet.' } });
+  await tick();
+  assert.ok(text(app).includes('foreman reported a problem.'));
+  assert.ok(text(app).includes('nothing has been run for this batch yet.'));
+  assert.ok(buttonNamed(app, 'Try again') && buttonNamed(app, 'Back'));
+});
+
+test('Try again on a failed report asks again, and a second attempt that works shows the report', async () => {
+  let n = 0;
+  const flaky = (b, o) => (++n === 1 ? { ok: false, error: { kind: 'exit', message: 'boom' } } : reportAnswer(b, o));
+  const api = fakeApi(data(), undefined, flaky);
+  const { app } = await openReport(api);
+  buttonNamed(app, 'Try again').click();
+  await tick();
+  assert.equal(api.calls.report.length, 2);
+  assert.ok(text(app).includes('Total, all runs'));
+});
+
+test('a report that comes back after the person went elsewhere is thrown away', async () => {
+  let release;
+  const slow = () => new Promise((r) => { release = r; });
+  const api = fakeApi(data(), undefined, slow);
+  const { app } = await openReport(api);
+  buttonNamed(app, 'Back').click();
+  await tick();
+  release({ ok: true, doc: reportSample() });
+  await tick();
+  assert.ok(!text(app).includes('Total, all runs'), 'it did not come back onto the overview');
+  assert.ok(text(app).includes('document-human-tickets'));
+});
+
+test('a file changing on disk redraws the rail and keeps the report on screen, with its open runs', async () => {
+  const api = fakeApi(data());
+  const { app } = await openReport(api);
+  rowNamed(app, '20261022T140533Z-9020').click();
+  await tick();
+  api.push(data({ all: { batches: [{ path: '.scratch/b', name: 'b', finished: false, counts: { done: 5, total: 10 }, human_remaining: 1, next: 'x', error: null }] } }));
+  assert.ok(text(app).includes('Total, all runs'));
+  assert.ok(text(app).includes('3 · 04 fourth'));
+  assert.ok(text(app).includes('5/10'), 'the rail is fresh');
+  assert.equal(api.calls.report.length, 2, 'a push does not read the report again');
+});
+
+test('a push for a different batch than the report was of takes the window back to the overview', async () => {
+  const api = fakeApi(data());
+  const { app } = await openReport(api);
+  api.push(data({ selected: '.scratch/c', status: sample() }));
+  assert.ok(!text(app).includes('Total, all runs'));
+});
+
+test('ticket names, run ids and CLI words that look like markup are drawn as the characters they are', async () => {
+  const doc = reportRunSample();
+  doc.rows[0].id = '<img src=x onerror=alert(1)>';
+  doc.run.id = doc.rows[0].id;
+  doc.run.iterations[0].ticket = 'batch/issues/01-<b>bold.md';
+  doc.run.iterations[0].flags = ['<i>x</i>'];
+  const api = fakeApi(data(), undefined, (b, o) => ({ ok: true, doc: o.run ? doc : { ...doc, run: undefined } }));
+  const { app } = await openReport(api);
+  assert.ok(text(app).includes('<img src=x onerror=alert(1)>'));
+  rowNamed(app, '<img src=x onerror=alert(1)>').click();
+  await tick();
+  assert.ok(text(app).includes('01 <b>bold'));
+  assert.ok(text(app).includes('<i>x</i>'));
+  assert.equal(app.all().filter((e) => e.tagName === 'img').length, 0, 'no element came of it');
+  assert.deepEqual(app.all().filter((e) => e.tagName === 'b').map((e) => e.textContent), ['FOREMAN'], 'the only <b> is the rail\'s own mark');
+});
+
+test('a batch with no run record yet is the CLI\'s own sentence, in the report\'s place', async () => {
+  const none = () => ({ ok: false, error: { kind: 'exit', message: 'No run log at .scratch/b/foreman-runs.jsonl — nothing has been run for this batch yet.' } });
+  const { app } = await openReport(fakeApi(data(), undefined, none));
+  assert.ok(text(app).includes('nothing has been run for this batch yet.'));
+});
+
+test('the rail\'s Report is disabled, and says why, when there is no batch to report on', async () => {
+  const empty = data({ selected: null, status: null, all: { batches: [] } });
+  const b = boot(fakeApi(empty));
+  await tick();
+  assert.equal(railItem(b.app, 'Report').disabled, true);
 });

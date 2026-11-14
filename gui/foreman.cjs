@@ -7,13 +7,13 @@
 //   parse       what it printed was not one JSON object
 //   version     it was JSON, but not an answer this app understands (a newer `foreman_json`, or to
 //               a different command)
-// plus `bad-batch`, for a batch path the page should never have produced, and `not-a-repo`, for a
+// plus `bad-batch` (and `bad-run`), for a batch path or run id the page should never have produced, and `not-a-repo`, for a
 // directory that is not inside a git repository.
 //
 // The paths given to foreman are repo-relative with forward slashes and the working directory is
 // the repo root, so a `C:\` path never reaches the CLI (spec: "Windows paths").
 //
-// Starting and stopping runs is a later ticket; this is the read side (status, dry-run).
+// Starting and stopping runs is a later ticket; this is the read side (status, dry-run, report).
 const { execFile } = require('child_process');
 
 const SUPPORTED_JSON = 1;
@@ -63,6 +63,16 @@ function checkBatchPath(p) {
   if (p.startsWith('/') || /^[A-Za-z]:/.test(p)) throw bad('is absolute');
   if (p.split('/').includes('..')) throw bad('reaches out of the repository');
   return p;
+}
+
+// A run id as the loop writes them (20261021T091200Z-4411, longer if the batch's name is), or the
+// `(unknown)` a record with no id is filed under. Letters, digits and . _ - : ( ) + only, never a
+// leading dash: it is handed to the CLI as the value of --run, and must not be read as anything else.
+function checkRunId(id) {
+  if (typeof id !== 'string' || !/^[A-Za-z0-9(][A-Za-z0-9._:()+-]*$/.test(id)) {
+    throw new ForemanError('bad-run', `not a run id: ${JSON.stringify(id)}`);
+  }
+  return id;
 }
 
 function parseOutput(command, { code, stdout, stderr }) {
@@ -118,6 +128,14 @@ function createForeman({ bash, checkout, repoRoot, run = defaultRun, env = proce
     // What a run would do, its settings and its exact prompt. Free: nothing is sent and no sandbox
     // starts (the CLI says so; this only reads).
     dryRun: (batch) => call('dry-run', [checkBatchPath(batch), '--json']),
+    // What the batch has cost: the totals and a row for each run (or ticket, with byTicket). With
+    // `run`, also that run's iterations and the outcome word of each. Free: it reads the run record.
+    report: (batch, { byTicket = false, run = null } = {}) => {
+      const args = [checkBatchPath(batch), '--json'];
+      if (byTicket) args.push('--by-ticket');
+      if (run !== null && run !== undefined) args.push('--run', checkRunId(run));
+      return call('report', args);
+    },
   };
 }
 
@@ -141,4 +159,4 @@ async function findRepoRoot({ bash, dir, run = defaultRun, env = process.env }) 
   return root;
 }
 
-module.exports = { findRepoRoot, createForeman, parseOutput, checkBatchPath, cliEnv, ForemanError, SUPPORTED_JSON };
+module.exports = { findRepoRoot, createForeman, parseOutput, checkBatchPath, checkRunId, cliEnv, ForemanError, SUPPORTED_JSON };

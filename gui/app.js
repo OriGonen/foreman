@@ -34,7 +34,8 @@
   // ---- the rail ----
 
   function railView(data, select) {
-    const entries = M.rail(data.all, data.selected);
+    const reporting = view === 'report';
+    const entries = M.rail(data.all, reporting ? null : data.selected);
     const rail = h('nav', { cls: 'rail', attrs: { 'aria-label': 'Batches' } });
     const where = data.repoRoot.split('/').filter(Boolean).slice(-1)[0] || data.repoRoot;
     rail.append(
@@ -55,8 +56,16 @@
         rail.append(bar);
       }
     }
+    // Tools: what the app can tell about a batch without running it. Doctor arrives with its own ticket.
+    const report = h('button', {
+      cls: 'item' + (reporting ? ' on' : ''),
+      attrs: { type: 'button', 'data-tool': 'report', 'aria-current': reporting ? 'page' : 'false' },
+      on: { click: openReport },
+    }, 'Report', span('free', 'free'));
+    if (!data.selected) { report.disabled = true; report.title = 'There is no batch to report on.'; }
     const read = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    rail.append(h('div', { cls: 'spacer' }), h('div', { cls: 'foot', text: 'read from disk · ' + read }));
+    rail.append(h('div', { cls: 'spacer' }), h('div', { cls: 'label', text: 'Tools' }), report,
+      h('div', { cls: 'foot', text: 'read from disk · ' + read }));
     return rail;
   }
 
@@ -216,10 +225,160 @@
     return h('main', { cls: 'main dry' }, head, h('div', { cls: 'row top dryrow' }, side, card));
   }
 
-  // What the window is showing: the batch overview, or the dry run of the selected batch. The dry
-  // run is read once, when asked for; a file changing does not read it again (Run again does), and a
-  // read that comes back after the person has left the screen is dropped.
+  // ---- the report (design 07, take a) ----
+
+  const reportName = (batch) => String(batch).split('/').pop();
+
+  function ledgerRow(r, by) {
+    const open = by === 'run' && rep.open.has(r.id);
+    const cells = [
+      span('mono small rowname', (r.expandable ? (open ? '▾ ' : '▸ ') : '') + r.label),
+      h('span', { cls: 'small' }, ...r.parts.flatMap((p, i) => [i > 0 ? ' · ' : null, p.tone ? span(p.tone, p.text) : p.text])),
+      h('span', { cls: 'meter' + (r.hot ? ' hot' : '') }, h('i')),
+      span('mono small', r.cost),
+    ];
+    cells[2].firstChild.style.width = Math.round(r.frac * 100) + '%';
+    cells[3].title = r.exact;
+    if (!r.expandable) return h('div', { cls: 't ledgerrow', attrs: { title: r.title } }, ...cells);
+    return h('button', {
+      cls: 't ledgerrow run' + (open ? ' open' : ''),
+      attrs: { type: 'button', 'data-run': r.id, 'aria-expanded': open ? 'true' : 'false', title: r.title },
+      on: { click: () => toggleRun(r.id) },
+    }, ...cells);
+  }
+
+  // What is under an open run: its iterations as the CLI worded them, or that it is being read, or
+  // why it could not be.
+  function iterationRows(id) {
+    const st = rep.runs[id];
+    const note = (cls, text) => h('div', { cls: 't iterrow ' + cls }, span('mono small muted', text));
+    if (!st || st.state === 'loading') return [note('muted', 'Reading the iterations…')];
+    if (st.state === 'error') return [note('err', st.error.message || 'Could not read the iterations.')];
+    return st.iterations.map((i) => h('div', { cls: 't iterrow' }, span('mono small ' + (i.tone || 'muted'), i.label),
+      h('span', { cls: 'mono small muted', text: i.cost, attrs: { title: i.exact } })));
+  }
+
+  function reportView(data) {
+    const back = button('Back', { cls: 'quiet', onClick: leaveReport });
+    if (rep.state === 'loading') return paneView('Reading the report…', 'foreman is reading the run record. Nothing is sent.', back);
+    if (rep.state === 'error') return failureView(rep.error, () => readReport(rep.by), back);
+
+    const r = M.report(rep.docs[rep.by]);
+    const read = rep.at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const pick = (by, label) => {
+      const b = button(label, { cls: 'quiet' + (rep.by === by ? ' on' : ''), onClick: () => showBy(by) });
+      b.setAttribute('aria-pressed', rep.by === by ? 'true' : 'false');
+      return b;
+    };
+    const head = h('div', { cls: 'row' },
+      button('← ' + reportName(rep.batch), { cls: 'quiet', onClick: leaveReport }),
+      h('div', { cls: 'h2 grow' }, 'Report · ', span('mono', r.title), ' ', span('free', 'free')),
+      pick('run', 'By run'), pick('ticket', 'By ticket'),
+      span('small dim mono', 'read ' + read),
+      button('Read again', { onClick: openReport }));
+
+    const line = (label, value, tone, hint) => {
+      const v = span(tone || '', value);
+      if (hint) v.title = hint;
+      return h('div', { cls: 'line' }, span('', label), v);
+    };
+    const bill = h('div', { cls: 'bill' },
+      h('div', { cls: 'label total', text: 'Total, all runs' }),
+      h('div', { cls: 'big', text: r.bill.total, attrs: { title: r.bill.exact } }),
+      h('div', { cls: 'small muted', text: r.bill.sub }),
+      h('div', { cls: 'rule' }),
+      ...r.bill.outcomes.map((o) => line(o.label, o.value, o.tone)),
+      h('div', { cls: 'rule' }),
+      ...r.bill.tokens.map((o) => line(o.label, o.value, '', o.hint)),
+      r.bill.perIteration ? h('div', { cls: 'rule' }) : null,
+      r.bill.perIteration ? line('per iteration', r.bill.perIteration, '', r.bill.perIterationHint) : null);
+
+    const ledger = h('div', { cls: 'card flush grow ledger', attrs: { role: 'list', 'aria-label': r.by === 'run' ? 'Runs' : 'Tickets' } },
+      h('div', { cls: 't ledgerrow headrow' }, span('label', r.by === 'run' ? 'Run' : 'Ticket'), span('label', 'Iterations · landed'), span('label', 'Cost'), span('', '')));
+    for (const row of r.rows) {
+      ledger.append(ledgerRow(row, r.by));
+      if (r.by === 'run' && rep.open.has(row.id)) ledger.append(...iterationRows(row.id));
+    }
+    return h('main', { cls: 'main report' }, head, h('div', { cls: 'row top reportrow' }, h('div', { cls: 'billcol' }, bill), ledger));
+  }
+
+  // What the window is showing: the batch overview, the dry run, or the report of the selected batch.
+  // Each is read once, when asked for; a file changing does not read it again (Run again, Read again
+  // do), and a read that comes back after the person has left the screen is dropped.
   let view = 'overview';
+  let rep = null;            // { batch, by, state: 'loading' | 'ready' | 'error', docs: { run, ticket }, runs: { id: { state, iterations, error } }, open: Set, error, at }
+
+  function leaveReport() {
+    rep = null;
+    view = 'overview';
+    draw();
+  }
+
+  // Open the report of the selected batch (again, if it is already open): the default view is by run.
+  async function openReport() {
+    const batch = data && data.selected;
+    if (!batch) return;
+    dryToken++; dry = null;
+    const by = rep && rep.batch === batch ? rep.by : 'run';          // Read again keeps the view
+    view = 'report';
+    rep = { batch, by, state: 'loading', docs: {}, runs: {}, open: new Set(), error: null, at: null };
+    await readReport(by);
+  }
+
+  // Ask for one view of the report. `rep` is held in `mine`, so an answer that comes back after the
+  // person left, or read again, is dropped.
+  async function readReport(by) {
+    const mine = rep;
+    mine.by = by;
+    mine.state = 'loading';
+    draw();
+    let answer;
+    try {
+      answer = await api.report(mine.batch, by === 'ticket' ? { byTicket: true } : {});
+    } catch (e) {
+      answer = { ok: false, error: { kind: 'spawn', message: String(e && e.message ? e.message : e) } };
+    }
+    if (rep !== mine) return;
+    if (answer && answer.ok) {
+      mine.docs[by] = answer.doc;
+      mine.state = 'ready';
+      mine.at = new Date();
+    } else {
+      mine.state = 'error';
+      mine.error = (answer && answer.error) || { kind: 'spawn', message: 'No answer.' };
+    }
+    draw();
+  }
+
+  function showBy(by) {
+    if (rep.by === by) return;
+    if (rep.docs[by]) { rep.by = by; draw(); } else readReport(by);
+  }
+
+  // Open or close a run. Its iterations are asked for the first time it is opened, and again only
+  // if that failed.
+  async function toggleRun(id) {
+    const mine = rep;
+    if (mine.open.has(id)) { mine.open.delete(id); draw(); return; }
+    mine.open.add(id);
+    const have = mine.runs[id];
+    if (have && have.state !== 'error') { draw(); return; }
+    mine.runs[id] = { state: 'loading' };
+    draw();
+    let answer;
+    try {
+      answer = await api.report(mine.batch, { run: id });
+    } catch (e) {
+      answer = { ok: false, error: { kind: 'spawn', message: String(e && e.message ? e.message : e) } };
+    }
+    if (rep !== mine) return;
+    mine.runs[id] = answer && answer.ok
+      ? { state: 'ready', iterations: M.reportIterations(answer.doc) }
+      : { state: 'error', error: (answer && answer.error) || { message: 'No answer.' } };
+    draw();
+  }
+
+  // The dry run, likewise.
   let dry = null;            // { batch, state: 'loading' | 'ready' | 'error', doc, error, at }
   let dryToken = 0;
 
@@ -268,14 +427,18 @@
       return;
     }
     app.classList.remove('solo');
-    // The dry run is of the batch that was selected when it was asked for.
+    // The dry run and the report are of the batch that was selected when they were asked for.
     if (view === 'dryrun' && (!dry || !data.status || dry.batch !== data.selected)) { dryToken++; view = 'overview'; dry = null; }
+    if (view === 'report' && (!rep || rep.batch !== data.selected)) { view = 'overview'; rep = null; }
     const rail = railView(data, (batch) => { if (!selecting) start(batch); });
     app.append(rail);
 
     if (data.all.batches.length === 0) {
       app.append(paneView('No batch here.', 'A batch is a directory with a foreman.conf in it.\n' + data.repoRoot));
       document.title = 'Foreman — ' + data.repoRoot;
+    } else if (view === 'report') {
+      app.append(reportView(data));
+      document.title = 'Foreman — report · ' + rep.batch;
     } else if (data.status) {
       app.append(view === 'dryrun' ? dryRunView(data) : overviewView(data));
       document.title = (view === 'dryrun' ? 'Foreman — dry run · ' : 'Foreman — ') + data.status.batch.path;
@@ -295,6 +458,7 @@
     dryToken++;
     view = 'overview';
     dry = null;
+    rep = null;
     selecting = true;
     try {
       data = await api.load(batch);

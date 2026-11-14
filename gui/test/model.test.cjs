@@ -5,7 +5,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const M = require('../model.js');
 
-const { sample, dryRunSample } = require('./sample.cjs');
+const { sample, dryRunSample, reportSample, reportByTicketSample, reportRunSample } = require('./sample.cjs');
 
 test('stakes: one character per ticket, in order — landed, next, human, followup, to go', () => {
   assert.equal(M.stakes(sample().tickets), 'dddd>.hf..');
@@ -258,4 +258,95 @@ test('dry run: warnings are the CLI\'s own lines, unchanged', () => {
   const doc = dryRunSample();
   doc.warnings = ['batch/issues/05-ticket.md Checks: ghost.md, which is not a ticket in this batch'];
   assert.deepEqual(M.dryRun(doc).warnings, doc.warnings);
+});
+
+// ---- the report (`foreman report --json`) ----
+
+test('report: the bill is the totals as the CLI counted them, in the words the plain report uses', () => {
+  const r = M.report(reportSample());
+  assert.equal(r.title, 'batch');
+  assert.equal(r.bill.total, '$6.95');
+  assert.equal(r.bill.exact, '$6.9500', 'the figure the plain report prints, for the tooltip');
+  assert.equal(r.bill.sub, '3 runs · 7 iterations · 48.2 model-minutes · 1 unreadable line');
+  assert.deepEqual(r.bill.outcomes.map((o) => [o.label, o.value, o.tone]), [
+    ['landed', '3', 'ok'], ['progressed', '1', ''], ['stalled', '1', ''], ['unproductive', '2', ''],
+    ['checkpoint turns', '1', ''], ['limit hits', '1', 'rust'],
+  ]);
+  assert.deepEqual(r.bill.tokens.map((o) => [o.label, o.value]), [
+    ['billed tokens', '167,500'], ['cache read', '5,820,000'], ['cache write', '432,000'], ['turns', '220'],
+  ]);
+  assert.equal(r.bill.tokens[0].hint, 'in 21,200 · out 146,300', 'billed is input plus output; the tooltip says so');
+  assert.deepEqual([r.bill.perIteration, r.bill.perIterationHint], ['$0.99', '23,929 billed tokens']);
+});
+
+test('report: like the plain report, a count that is zero is left out, except landed and unproductive', () => {
+  const doc = reportSample();
+  Object.assign(doc.totals, { runs: 1, iterations: 1, landed: 1, progressed: 0, stalled: 0, unproductive: 0, checkpoints: 0, limit_hits: 0, unreadable: 0 });
+  const r = M.report(doc);
+  assert.deepEqual(r.bill.outcomes.map((o) => o.label), ['landed', 'unproductive']);
+  assert.equal(r.bill.sub, '1 run · 1 iteration · 48.2 model-minutes', 'singular, and nothing about unreadable lines when there were none');
+});
+
+test('report: a log of checkpoint turns only has no per-iteration figure, and says so by leaving it out', () => {
+  const doc = reportSample();
+  Object.assign(doc.totals, { iterations: 0, per_iteration: null });
+  const r = M.report(doc);
+  assert.equal(r.bill.perIteration, null);
+  assert.equal(r.bill.perIterationHint, null);
+});
+
+test('report: the ledger is one row per run, newest first, with a cost bar relative to the dearest run', () => {
+  const r = M.report(reportSample());
+  assert.equal(r.by, 'run');
+  assert.deepEqual(r.rows.map((x) => x.id), ['20261023T081014Z-1207', '20261022T140533Z-9020', '20261021T091200Z-4411']);
+  const mid = r.rows[1];
+  assert.deepEqual([mid.label, mid.title, mid.cost, mid.exact, mid.expandable], ['20261022T140533Z-9020', 'started 2026-10-22T14:05:33Z', '$4.25', '$4.2500', true]);
+  assert.deepEqual(mid.parts.map((p) => [p.text, p.tone]), [
+    ['3', ''], ['1 landed', 'ok'], ['1 progressed', ''], ['1 unproductive', ''], ['limit hit', 'rust'], ['1 checkpoint turn', 'dim'],
+  ]);
+  assert.equal(mid.frac, 1, 'the dearest run is a full bar');
+  assert.equal(r.rows[2].frac, 2 / 4.25);
+  assert.ok(r.rows[0].frac > 0.15 && r.rows[0].frac < 0.17);
+});
+
+test('report: a run of checkpoint turns only reads "0 · 1 checkpoint turn", and a tiny cost still shows a bar', () => {
+  const doc = reportSample();
+  doc.rows = [{ ...doc.rows[0], iterations: 0, landed: 0, checkpoints: 2, limit_hits: 3, cost_usd: 0.001 }, { ...doc.rows[1], cost_usd: 100 }];
+  const [small] = M.report(doc).rows.slice().reverse();
+  assert.deepEqual(small.parts.map((p) => p.text), ['0', '3 limit hits', '2 checkpoint turns']);
+  assert.equal(small.frac, 0.02, 'never rounded away to nothing');
+  doc.rows[0].cost_usd = 0;
+  assert.equal(M.report(doc).rows.at(-1).frac, 0);
+  doc.rows.forEach((x) => { x.cost_usd = 0; });
+  assert.equal(M.report(doc).rows[0].frac, 0, 'no division by a cost of nothing');
+});
+
+test('report: by ticket the rows are the tickets in the order first attempted, named as the order names them, and do not expand', () => {
+  const r = M.report(reportByTicketSample());
+  assert.equal(r.by, 'ticket');
+  assert.deepEqual(r.rows.map((x) => x.label), ['01 first', '02 second', '03 third', '04 fourth', '05 fifth']);
+  assert.equal(r.rows[3].title, 'batch/issues/04-fourth.md');
+  assert.ok(r.rows.every((x) => x.expandable === false));
+  assert.equal(M.report({ ...reportByTicketSample(), rows: [{ ...reportByTicketSample().rows[0], id: 'batch/issues/DONE_07a-followup-x.md' }] }).rows[0].label, '07a followup-x');
+  assert.equal(M.report({ ...reportByTicketSample(), rows: [{ ...reportByTicketSample().rows[0], id: '(unknown)' }] }).rows[0].label, '(unknown)');
+});
+
+test('report: an iteration is its number, its ticket and the CLI\'s outcome word, whole; what went wrong is beside it', () => {
+  const its = M.reportIterations(reportRunSample());
+  assert.deepEqual(its.map((i) => i.label), [
+    '1 · 03 third · progressed', '2 · 03 third · landed', '3 · 04 fourth · unproductive (error, limit)', '3 · 04 fourth · checkpoint',
+  ]);
+  assert.deepEqual(its.map((i) => i.cost), ['$2.00', '$1.50', '$0.50', '$0.25']);
+  assert.deepEqual(its.map((i) => i.tone), ['', 'ok', 'rust', 'dim']);
+  assert.equal(its[2].exact, '$0.5000');
+  assert.equal(its[2].limit, true);
+});
+
+test('report: the app has no outcome logic: a word it does not know is shown as it came, and nothing is worked out from the flags', () => {
+  const doc = reportRunSample();
+  doc.run.iterations = [{ ...doc.run.iterations[0], outcome: 'melted', flags: [], limit_hit: false, ticket: null }];
+  const [i] = M.reportIterations(doc);
+  assert.equal(i.label, '1 · (no ticket) · melted');
+  assert.equal(i.tone, '');
+  assert.deepEqual(M.reportIterations(reportSample()), [], 'no run asked for: no iterations');
 });
