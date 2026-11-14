@@ -21,40 +21,41 @@ finished ticket with its run stats. The stats come from `status --json` (ticket 
 
 **Blocked by:** 02, 16
 
-**Status:** ready-for-agent
+**Status:** implemented
 
-- [ ] The ticket page shows the facts strip, the text, the criteria and this ticket's notes from
+- [x] The ticket page shows the facts strip, the text, the criteria and this ticket's notes from
       `progress.txt`. All of it is set as text and never parsed into HTML: a `<script>` in a
       ticket shows up as plain characters
-- [ ] A **Preview | Markdown** switch sits over the ticket text. Preview is the default.
+- [x] A **Preview | Markdown** switch sits over the ticket text. Preview is the default.
       Markdown shows the file's own text in the mono font, and the notes and the handoff editor
       are the same in both
-- [ ] Preview draws only a heading, bold, inline code, bullets, check boxes and paragraphs, from
+- [x] Preview draws only a heading, bold, inline code, bullets, check boxes and paragraphs, from
       a pure function that returns plain nodes, and the page builds them with `createElement` and
       `textContent`. There is no `innerHTML`, no link and no image
-- [ ] `node --test gui/test/` covers that function: a `<script>` or `<img onerror=…>` in the
+- [x] `node --test gui/test/` covers that function: a `<script>` or `<img onerror=…>` in the
       text comes out as text nodes, `[x](javascript:alert(1))` is not a link, `- [x]` is a ticked
       box and `- [ ]` an unticked one, a line that is not Markdown comes out as itself, and a
       ticket with no heading still renders
-- [ ] A human ticket shows its handoff file in an editor, with the reminder from "Secrets" above
+- [x] A human ticket shows its handoff file in an editor, with the reminder from "Secrets" above
       it
-- [ ] A ticket that is done and has run shows Run stats instead of "What the loop knows": cost,
+- [x] A ticket that is done and has run shows Run stats instead of "What the loop knows": cost,
       runtime, model, iterations, turns, tokens in and out, and one row per iteration with its
       run, outcome, duration and cost, all from `status --json`'s `stats`. A done ticket that never
       ran shows "none yet". A done human ticket shows its handoff and no stats
-- [ ] A ticket that is not done shows "What the loop knows" as in b1- [ ] Save writes only the path on the `Handoff:` line
-- [ ] Save refuses any path that resolves outside the repo, including through `..` or a symlink,
+- [x] A ticket that is not done shows "What the loop knows" as in b1
+- [x] Save writes only the path on the `Handoff:` line
+- [x] Save refuses any path that resolves outside the repo, including through `..` or a symlink,
       and shows the refusal as text
-- [ ] Save keeps the file's line endings, and writes LF for a new file
-- [ ] Changes made on disk while the page is open show up on the page. If the file changed on
+- [x] Save keeps the file's line endings, and writes LF for a new file
+- [x] Changes made on disk while the page is open show up on the page. If the file changed on
       disk while the editor has unsaved changes, Save asks before it overwrites
-- [ ] Open in editor opens the ticket file. The app has no control that changes a status line
-- [ ] `node --test gui/test/` covers the handoff path check: a `..` path, an absolute path, and a
+- [x] Open in editor opens the ticket file. The app has no control that changes a status line
+- [x] `node --test gui/test/` covers the handoff path check: a `..` path, an absolute path, and a
       path outside the repo
 - [ ] By hand on Windows: open a human ticket and an agent ticket from this repo, and compare
       them with `designs/02-ticket.html` (b, b1, b2 and b3) in light and dark, and flip the switch
       on both. Open a done agent ticket that has run. Fill in a handoff and
       save it. `git diff` shows only that file changed
-- [ ] Nothing under `bin/` or `lib/` changes in this ticket
-- [ ] `test/smoke.sh` is unchanged and passes. The closing note records
+- [x] Nothing under `bin/` or `lib/` changes in this ticket
+- [x] `test/smoke.sh` is unchanged and passes. The closing note records
       `Full smoke suite: N passed in Mm Ss`
