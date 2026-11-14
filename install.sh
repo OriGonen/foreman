@@ -151,6 +151,7 @@ _foreman_legacy_cleanup() {
 # ---------------------------------------------------------------------------------------
 # The desktop app: gui/node_modules (npm ci) and a Start-menu shortcut.
 # ---------------------------------------------------------------------------------------
+APP_FAILED=0    # set when the app could not be installed or removed: the installer then exits 1
 GUI_DIR="$FOREMAN_HOME/gui"
 ELECTRON_DIR="$GUI_DIR/node_modules/electron"
 
@@ -180,12 +181,24 @@ _foreman_app_installed() {
 }
 
 # Removes what the app put on the machine: gui/node_modules and the shortcut. Nothing else.
+# A file that cannot be removed (electron.exe, while the app is open, is locked on Windows) is
+# said so, and makes the installer exit 1 at the end.
 _foreman_remove_app() {
   if [ -e "$GUI_DIR/node_modules" ] || [ -L "$GUI_DIR/node_modules" ]; then
-    rm -rf "$GUI_DIR/node_modules" && echo "removed  $GUI_DIR/node_modules"
+    if rm -rf "$GUI_DIR/node_modules" 2>/dev/null && [ ! -e "$GUI_DIR/node_modules" ]; then
+      echo "removed  $GUI_DIR/node_modules"
+    else
+      echo "install: could not remove $GUI_DIR/node_modules — is the app open? Close it and run this again." >&2
+      APP_FAILED=1
+    fi
   fi
   if [ -n "$SHORTCUT" ] && [ -e "$SHORTCUT" ]; then
-    rm -f "$SHORTCUT" && echo "removed  $SHORTCUT"
+    if rm -f "$SHORTCUT" 2>/dev/null && [ ! -e "$SHORTCUT" ]; then
+      echo "removed  $SHORTCUT"
+    else
+      echo "install: could not remove $SHORTCUT" >&2
+      APP_FAILED=1
+    fi
   fi
 }
 
@@ -223,7 +236,6 @@ _foreman_write_shortcut() {
 # Installs the app: npm ci in gui/, then the shortcut. Without npm it says so and leaves the
 # CLI as it is — the CLI is already installed by now. A failure is reported and makes the
 # installer exit 1 at the end, after everything else has been done.
-APP_FAILED=0
 _foreman_install_app() {
   if ! command -v npm >/dev/null 2>&1; then
     echo "note: the desktop app needs Node's npm, and npm is not on your PATH. Installed the CLI only."
@@ -330,7 +342,7 @@ _foreman_header() {
 # _foreman_ask_gui — sets GUI to 1 (install the app) or 0 (CLI only). Sourcing the colour helpers
 # here, not at the top, keeps everything above it exactly as it was for a non-terminal.
 _foreman_ask_gui() {
-  local ans accent="" muted_open muted_close good dimmed b="" r="" tier
+  local ans muted_open muted_close good dimmed b="" r="" tier
   . "$FOREMAN_HOME/lib/foreman-ui.sh"
   ui_color_tier tier 1
   if [ "$tier" != none ]; then b=$'\033[1m'; r=$'\033[0m'; fi
@@ -398,7 +410,7 @@ if [ "$UNINSTALL" -eq 1 ]; then
   _foreman_remove_app
 
   echo "The toolkit itself is untouched at $FOREMAN_HOME."
-  exit 0
+  exit "$APP_FAILED"
 fi
 
 # Both conflicts are checked before either write — including creating $TARGET itself —

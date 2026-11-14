@@ -1251,6 +1251,23 @@ if case_is "install --no-gui and --uninstall: the app and its shortcut go, and n
   [ -e "$IN_CHECKOUT/gui/package.json" ] && [ -e "$IN_CHECKOUT/gui/icon.ico" ] && pass || fail "the rest of gui/ is still there"
 fi
 
+if case_is "install --no-gui: an app that cannot be removed is said so, and exits 1"; then
+  install_setup locked; install_stubs
+  install_plain --gui
+  chmod a-w "$IN_CHECKOUT/gui"
+  if [ -w "$IN_CHECKOUT/gui" ]; then
+    printf '  (this machine ignores a read-only directory: not run)\n'
+  else
+    install_plain --no-gui
+    assert_eq "$ST" 1 "exits 1"
+    assert_contains "$OUT" "could not remove" "says what it could not remove"
+    assert_contains "$OUT" "is the app open" "and what to try"
+    assert_missing "$OUT" "removed  ROOT/checkout/gui/node_modules" "and does not claim it removed it"
+    [ -e "$IN_BIN/foreman" ] && pass || fail "the CLI is installed all the same"
+  fi
+  chmod u+w "$IN_CHECKOUT/gui"
+fi
+
 if case_is "install: --help lists --gui and --no-gui, and a bad flag's usage does"; then
   install_setup help
   assert_contains "$(bash "$IN_CHECKOUT/install.sh" --help)" "--gui" "--help names --gui"

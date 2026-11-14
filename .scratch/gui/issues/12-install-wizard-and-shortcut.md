@@ -15,43 +15,43 @@ and a2 for the rerun).
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** implemented
 
 **The question**
 
-- [ ] The installer asks only when `[ -t 0 ] && [ -t 1 ]`.
-- [ ] Everywhere else, including under `test/smoke.sh`, in a pipe and in CI, its output is byte
+- [x] The installer asks only when `[ -t 0 ] && [ -t 1 ]`.
+- [x] Everywhere else, including under `test/smoke.sh`, in a pipe and in CI, its output is byte
       for byte what it is today. Check this against a capture.
-- [ ] The question is a numbered choice read with a plain `read`. Enter picks 1, CLI only.
-- [ ] The wording follows `designs/10-install-wizard.html`, with its header: the sun high and
+- [x] The question is a numbered choice read with a plain `read`. Enter picks 1, CLI only.
+- [x] The wording follows `designs/10-install-wizard.html`, with its header: the sun high and
       whole, with the foreman's silhouette standing against it and his shadow on the lit plain,
       in the half-block style of `lib/foreman-draw.cjs` (12 rows by 36 columns). The exact pixels
       and colours are in the design under "The header's exact pixels". `install.sh` prints them
       as fixed lines, without node, and only at the 24-bit or 256-colour tier in a terminal at
       least 80 columns wide. Everywhere else it prints the same words without the art
-- [ ] `--gui` installs the app without asking. `--no-gui` removes the app and its shortcut if
+- [x] `--gui` installs the app without asking. `--no-gui` removes the app and its shortcut if
       they are there, and never asks.
 
 **Installed or not**
 
-- [ ] Whether the app is installed is read from disk: `gui/node_modules/electron` and the
+- [x] Whether the app is installed is read from disk: `gui/node_modules/electron` and the
       shortcut. On a rerun with only the CLI installed, the installer shows take a2.
-- [ ] Without `npm`, choosing the app says it needs Node's npm, and installs the CLI only.
+- [x] Without `npm`, choosing the app says it needs Node's npm, and installs the CLI only.
 
 **The shortcut**
 
-- [ ] The shortcut is `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Foreman.lnk`, written
+- [x] The shortcut is `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Foreman.lnk`, written
       through `powershell.exe -NoProfile` and `WScript.Shell`. Its target is the checkout's
       `electron.exe`, its argument is `gui`, and its icon is `gui\icon.ico`.
 
 **Uninstall**
 
-- [ ] `--uninstall` also removes `gui/node_modules` and the shortcut.
-- [ ] It touches no batch, no `~/.config/foreman/env` and no credential.
+- [x] `--uninstall` also removes `gui/node_modules` and the shortcut.
+- [x] It touches no batch, no `~/.config/foreman/env` and no credential.
 
 **Checks**
 
-- [ ] `test/smoke-json.sh` covers the non-TTY path (unchanged), `--gui` with a stub `npm` and a
+- [x] `test/smoke-json.sh` covers the non-TTY path (unchanged), `--gui` with a stub `npm` and a
       stub `powershell.exe` on PATH, `--no-gui`, and `--uninstall`.
 - [ ] By hand on Windows, in Git Bash's mintty:
   1. Run `bash install.sh` and pick 2. The Start-menu entry opens the app.
@@ -59,7 +59,7 @@ and a2 for the rerun).
   3. Run `--no-gui`. The app and its shortcut are gone.
   4. Rerun it. It shows take a2.
   5. Run `--uninstall`.
-- [ ] Nothing under `bin/` or `lib/` changes in this ticket, apart from what `install.sh` itself
+- [x] Nothing under `bin/` or `lib/` changes in this ticket, apart from what `install.sh` itself
       needs.
-- [ ] `test/smoke.sh` is unchanged and passes. The closing note records
+- [x] `test/smoke.sh` is unchanged and passes. The closing note records
       `Full smoke suite: N passed in Mm Ss`.
