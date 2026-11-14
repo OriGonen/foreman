@@ -22,3 +22,13 @@
 - Full smoke suite: 2741 passed in 2m 21s, 1 failed: "convert ... CRLF kept" (test/smoke.sh:3609), pre-existing, fails on 1651230 too; left alone. `ui_color_tier` flaked once (pty), not again.
 - NOT verified: the window itself (no Electron/browser in the sandbox). A human must `npm install && npm start -- <repo>` in gui/ on Windows (ticket 02's by-hand box, then ticket 15). `run` in status --json is null until the control-directory ticket (08).
 - Later tickets: app.js `h()`/`button()` helpers and art.js `svg()` are the pattern to extend; disabled buttons name the ticket that enables them.
+
+
+## 04 — dry run, as JSON and as a screen (implemented; by-hand Windows check still open)
+- Built: `foreman dry-run --json` (`dry_run_json_facts` in foreman-loop.sh -> `buildDryRun` in foreman-json.cjs), `foreman.cjs dryRun`, `ipc dryrun:load`, `model.dryRun`, the Dry run screen in app.js (take a), `test/bench.sh dry-run`, `test/golden/dry-run-plain.txt` (taken before the change).
+- Test-driven: the CLI object end to end in smoke-json.sh (facts match plain, prompt byte for byte incl. awkward progress text, reach vs iteration budget, human next / nothing left, fake exec never called with a real-run control, flags still refused, node spawn shim); foreman.cjs dryRun; model.dryRun; the screen under the fake DOM (prompt is one text node in a <pre>, late answer dropped, back/run again/rail/watcher).
+- The prompt crosses to node as one escaped fact line (`fact_escape`, bash builtins only) so it is exact. JSON path only starts node; plain dry-run spawns identical (116/182).
+- Review: header comment fixed. Skipped: Copy button (not in ticket); no auto re-read of the dry run on a file change (Run again does it); dry-run refuses a dirty tree, in plain and --json alike, so the screen shows the CLI's message on an uncommitted tree. Changing that would alter plain behaviour; ticket 10/15 may want to decide.
+- Full smoke suite: 2741 passed in 2m 10s, 1 failed: "convert ... CRLF kept" (smoke.sh:3609), pre-existing. `ui_color_tier` (pty) flaked once in 3 runs, passes alone.
+- NOT verified: the window (no Electron/browser). `main.cjs` dryrun:load was driven through a stand-in electron against the real CLI. A human must open it on Windows (ticket 04's by-hand box, then 15).
+- Next iteration: ticket 10 reuses `dryRun` and the `view`/`dry` state in app.js; Start run… on the dry run screen is disabled, waiting for 10.
