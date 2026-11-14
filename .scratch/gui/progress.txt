@@ -42,3 +42,12 @@
 - Rail now has a Tools section; ticket 06 adds Doctor beside Report. The Report screen's iteration colours (ok/rust/dim) are display only.
 - Full smoke suite: 2741 passed in 2m 31s, 1 failed: "convert ... CRLF kept" (smoke.sh:3609), pre-existing. `ui_color_tier` (pty) flaked once again; passes alone.
 - NOT verified: the window (no Electron/browser). A human opens it on Windows (ticket 05's by-hand box, then 15).
+
+
+## 16 — the model in the record, and per-ticket `stats` in status --json (implemented)
+- Built: `--model` on `foreman-record.cjs` (+ both loop call sites) writes `model`; `status --json` tickets that ran gain `stats` (iterations, cost_usd, duration_ms, turns, tokens, models, runs[]) from `readSpend` in foreman-json.cjs; no `stats` key on a ticket that never ran.
+- Test-driven (test/smoke-json.sh): fixture of progressed/stalled+checkpoint/landed with a model change and a model-less line; sums, models order/dedupe, empty model ignored; `outcome` == `report --json --run`; record `--model`/no `--model`; run on the fake exec with default/foreman.conf/env model; goldens `run-fake-*` taken on the pre-change tree.
+- `outcomeOf` stays in foreman-report.cjs (moved to its top; exports when `require`d, `return`s before the report body). A separate lib file broke smoke.sh's stand-in toolkit ("report is the text when the picture cannot be made"), and smoke.sh must stay unchanged.
+- `iterations` excludes checkpoint rows (as `report`); sums include them. Ticket 03 should show `models.join(" → ")`; ticket 14 documents `model` and `stats`.
+- Fake-exec cases in smoke-json.sh remove `$TMPDIR/foreman-fake-*.calls` after running: the dry-run "never called" case counts them.
+- Skipped: nothing; no review finding left open. Full smoke suite: 2741 passed in 2m 18s, 1 failed: "convert ... CRLF kept" (smoke.sh:3609), pre-existing. smoke-json.sh 322 passed.

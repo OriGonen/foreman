@@ -32,25 +32,42 @@ See `spec.md`, additive change 1 and "How data comes from the CLI".
 
 **Blocked by:** 02, 05
 
-**Status:** ready-for-agent
+**Status:** implemented
 
-- [ ] Each new line in `foreman-runs.jsonl` has `model`, equal to the model the run was started
+- [x] Each new line in `foreman-runs.jsonl` has `model`, equal to the model the run was started
       with, including a run whose model comes from `foreman.conf` or the environment
-- [ ] When `foreman-record.cjs` is called without `--model`, `model` is `""`, and nothing else
+- [x] When `foreman-record.cjs` is called without `--model`, `model` is `""`, and nothing else
       about the line changes
-- [ ] `status --json` gives each ticket that has run a `stats` object as above, and no `stats` to
+- [x] `status --json` gives each ticket that has run a `stats` object as above, and no `stats` to
       a ticket that has not. A test builds a fixture jsonl with a ticket that took three
       iterations (progressed, stalled with a checkpoint, landed) and a model change, and checks
       every field, including the sums
-- [ ] A line with no `model` (written before this ticket) counts toward the sums and adds nothing
+- [x] A line with no `model` (written before this ticket) counts toward the sums and adds nothing
       to `models`
-- [ ] `outcome` in `stats.runs` equals the word `foreman report --json --run <id>` gives for the
+- [x] `outcome` in `stats.runs` equals the word `foreman report --json --run <id>` gives for the
       same iteration, checked on the same fixture
-- [ ] Plain `foreman status`, `foreman report`, `foreman run` output and `foreman help` print
+- [x] Plain `foreman status`, `foreman report`, `foreman run` output and `foreman help` print
       byte for byte what they printed before, compared against captures taken before the change
-- [ ] The control files and the jsonl of a run on the fake exec differ from before only by the
+- [x] The control files and the jsonl of a run on the fake exec differ from before only by the
       `model` field
-- [ ] `test/smoke-json.sh` covers all of the above
-- [ ] `test/bench.sh` shows no added process on any plain path
-- [ ] `test/smoke.sh` is unchanged and the full suite passes. The closing note records
+- [x] `test/smoke-json.sh` covers all of the above
+- [x] `test/bench.sh` shows no added process on any plain path
+- [x] `test/smoke.sh` is unchanged and the full suite passes. The closing note records
       `Full smoke suite: N passed in Mm Ss`
+
+## Closing note
+
+- Record: `foreman-record.cjs --model NAME` writes `model` (`""` without it); the loop passes
+  `--model "$FOREMAN_MODEL"` at both call sites (iteration and checkpoint turn), so a model from
+  `foreman.conf` or the environment is what lands. The verdict file does not change.
+- `status --json`: `readSpend` in `lib/foreman-json.cjs` builds `stats` in the same pass as
+  `spent_usd`. `iterations` counts iterations only (a checkpoint turn is a row in `runs`, with
+  `kind: "checkpoint"`, and is in the sums, as `report` totals it). The outcome words come from
+  `outcomeOf` in `foreman-report.cjs`: it now sits at the top of that file, which exports the rule when
+  it is `require`d and runs the report when it is run. One definition, and no new file in `lib/`
+  (`test/smoke.sh` copies `foreman-report.cjs` alone into a stand-in toolkit).
+- Plain output: goldens for `status`, `help`, `dry-run`, `report` unchanged; two new goldens
+  (`test/golden/run-fake-*`) taken on the pre-change tree hold a fake-exec run's output and record, whose
+  only difference is `model`. `test/bench.sh` spawns on `status`, `next`, `dry-run`: 116, 108, 182, as before.
+- Full smoke suite: 2741 passed in 2m 18s (1 failed: "convert ... CRLF kept", `test/smoke.sh:3609`,
+  pre-existing). `test/smoke-json.sh`: 322 passed, 0 failed. `test/smoke.sh` is unchanged.
