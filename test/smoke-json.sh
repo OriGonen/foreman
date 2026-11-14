@@ -185,6 +185,9 @@ fake_run_capture() {    # fake_run_capture BEHAVIOURS PREFIX : the run's output 
   local beh="$1" prefix="$2" repo="$WORK/$2-repo"
   copy_fixture "$WORK/template" "$repo" 3
   (cd "$repo" && FOREMAN_FAKE_BEHAVIOUR="$beh" FOREMAN_SHOW=never FOREMAN_COLOR=never "$FOREMAN" run batch 3 > "$WORK/$prefix.raw" 2>&1)
+  # The fake exec leaves a call counter in $TMPDIR; a later case counts those to see that a dry run
+  # never called it, so a case that runs for real takes its own away.
+  rm -f "$WORK"/foreman-fake-*.calls
   # What differs from one run to the next: the run's id and clock, the commits' ids, where the
   # temporary repository is.
   sed -E -e "s|$WORK|@WORK@|g" -e 's/[0-9]{8}T[0-9]{6}Z-[0-9]+/@RUN@/g' -e 's/[0-9]+\.[0-9]s/@S@/g' \
@@ -1026,6 +1029,7 @@ if case_is "run on the fake exec: the line carries the model the run started wit
   (cd "$repo" && FOREMAN_MODEL=claude-opus-5-5 FOREMAN_SHOW=never FOREMAN_COLOR=never "$FOREMAN" run batch 1 >/dev/null 2>&1)
   assert_eq "$(jv "$(sed -n 3p "$repo/batch/foreman-runs.jsonl")" 'j.model')" '"claude-opus-5-5"' "the model the environment sets"
   assert_eq "$(grep -c . "$repo/batch/foreman-runs.jsonl")" 3 "three lines were written (one per run)"
+  rm -f "$WORK"/foreman-fake-*.calls
 fi
 
 # ---------------------------------------------------------------------------
