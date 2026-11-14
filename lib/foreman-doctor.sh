@@ -236,7 +236,7 @@ _want_runner() {
   if ! tool=$(foreman_exec_required_tool "$mode"); then
     bad "FOREMAN_EXEC=$mode in ${2:-this repo} — no such execution mode"
     note "valid modes: $(foreman_exec_modes | tr '\n' ' ')"
-    _hint "Set FOREMAN_EXEC in ${2:-the batch's foreman.conf} to one of the valid modes"
+    _hint "Set FOREMAN_EXEC in ${2:-the foreman.conf of the batch} to one of the valid modes"
     return
   fi
   [ -n "$tool" ] || return
