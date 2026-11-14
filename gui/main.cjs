@@ -10,20 +10,19 @@
 //
 // With no repository given, the repository holding the current directory.
 const path = require('path');
+const { pathToFileURL } = require('url');
 const { app, BrowserWindow, ipcMain, shell, session, Menu, nativeTheme } = require('electron');
 const { findGitBash } = require('./bash.cjs');
 const { createForeman, findRepoRoot, ForemanError } = require('./foreman.cjs');
 const { createWatcher } = require('./watch.cjs');
-const M = require('./model.js');
+const { createOverview } = require('./overview.cjs');
 const { repoFromArgv, refuseNavigation, openWindowHandler, repoPath } = require('./guard.cjs');
 
 const PAGE = path.join(__dirname, 'index.html');
 
 let win = null;
-let ctx = null;            // { bash, repoRoot, foreman } once Git Bash and the repository are known
+let ctx = null;            // { repoRoot, overview } once Git Bash and the repository are known
 let watcher = null;
-let selected = null;       // the batch the window is on (repo-relative); only in memory
-let lastAll = null;
 
 function describe(e) {
   return { kind: e.kind || 'spawn', message: e.message || String(e), tried: e.tried || null };
@@ -39,40 +38,16 @@ async function setup() {
   const dir = path.resolve(repoFromArgv(process.argv, process.defaultApp) || process.cwd());
   const repoRoot = await findRepoRoot({ bash: found.bash, dir });
   const checkout = path.resolve(__dirname, '..');
-  ctx = { bash: found.bash, repoRoot, foreman: createForeman({ bash: found.bash, checkout, repoRoot }) };
+  const overview = createOverview({ foreman: createForeman({ bash: found.bash, checkout, repoRoot }), repoRoot });
+  ctx = { repoRoot, overview };
   watcher = createWatcher({
-    dirs: watchedDirs,
-    read: () => readOverview(selected),
-    onResult: push,
+    // A change to anything in a batch — a status line flipped in an editor, the loop landing a
+    // ticket — is a reason to read again.
+    dirs: async () => (await overview.dirs()).map((p) => repoPath(repoRoot, p)),
+    read: () => overview.refresh(),
+    onResult: (data) => { if (data) push(data); },          // null: the person moved on meanwhile
     onError: (e) => push({ ok: false, error: describe(e) }),
   });
-}
-
-// The batches' own directories. A change to anything in one — a status line flipped in an editor,
-// the loop landing a ticket — is a reason to read again.
-async function watchedDirs() {
-  if (!ctx || !lastAll) return [];
-  const paths = lastAll.batches.filter((b) => !b.finished || b.path === selected).map((b) => b.path);
-  return paths.map((p) => repoPath(ctx.repoRoot, p));
-}
-
-// Everything the overview needs, in one answer: every batch for the rail and the chosen batch's
-// status. If the chosen batch cannot be read but the list says it should be, that is thrown (the
-// watcher tries once more: the loop may have renamed it a moment ago); if the list itself says it
-// is broken, that is an answer.
-async function readOverview(wanted) {
-  const all = await ctx.foreman.statusAll();
-  lastAll = all;
-  selected = M.pickBatch(all, wanted);
-  const base = { ok: true, repoRoot: ctx.repoRoot, all, selected, status: null, statusError: null };
-  if (selected === null) return base;
-  try {
-    return { ...base, status: await ctx.foreman.status(selected) };
-  } catch (e) {
-    const entry = all.batches.find((b) => b.path === selected);
-    if (entry && entry.error) return { ...base, statusError: e.message };
-    throw e;
-  }
 }
 
 function push(data) {
@@ -80,16 +55,16 @@ function push(data) {
 }
 
 // Only our own page may ask main for anything.
+const PAGE_URL = pathToFileURL(PAGE).href.toLowerCase();
 function trusted(event) {
-  const url = event.senderFrame ? event.senderFrame.url : '';
-  return url.startsWith('file://') && decodeURIComponent(url).replace(/\\/g, '/').toLowerCase().endsWith('/gui/index.html');
+  return !!event.senderFrame && String(event.senderFrame.url).toLowerCase() === PAGE_URL;
 }
 
 ipcMain.handle('overview:load', async (event, batch) => {
   if (!trusted(event)) return { ok: false, error: describe(new Error('refused')) };
   try {
     if (!ctx) await setup();
-    const data = await readOverview(typeof batch === 'string' ? batch : null);
+    const data = await ctx.overview.load(typeof batch === 'string' ? batch : null);
     await watcher.start();
     return data;
   } catch (e) {

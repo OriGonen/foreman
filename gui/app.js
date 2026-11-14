@@ -204,7 +204,13 @@
 
   async function start(batch) {
     selecting = true;
-    try { data = await api.load(batch); } finally { selecting = false; }
+    try {
+      data = await api.load(batch);
+    } catch (e) {
+      data = { ok: false, error: { kind: 'spawn', message: String(e && e.message ? e.message : e) } };
+    } finally {
+      selecting = false;
+    }
     draw();
   }
 
