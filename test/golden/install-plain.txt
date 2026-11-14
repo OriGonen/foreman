@@ -1,0 +1,55 @@
+== install (exit 0)
+installed
+  ROOT/bin/foreman
+  ROOT/bin/foreman.cmd
+  -> ROOT/checkout/bin/foreman
+
+installed skill
+  ROOT/claude/skills/foreman-conf-commands
+  <- ROOT/checkout/skills/foreman-conf-commands
+
+installed skill
+  ROOT/claude/skills/foreman-human-followup-tickets
+  <- ROOT/checkout/skills/foreman-human-followup-tickets
+
+Open a new shell, then try it:
+  foreman version
+  cd <any git repo> && foreman doctor
+== install again (exit 0)
+installed
+  ROOT/bin/foreman
+  ROOT/bin/foreman.cmd
+  -> ROOT/checkout/bin/foreman
+
+installed skill
+  ROOT/claude/skills/foreman-conf-commands
+  <- ROOT/checkout/skills/foreman-conf-commands
+
+installed skill
+  ROOT/claude/skills/foreman-human-followup-tickets
+  <- ROOT/checkout/skills/foreman-human-followup-tickets
+
+Open a new shell, then try it:
+  foreman version
+  cd <any git repo> && foreman doctor
+== --uninstall (exit 0)
+removed  ROOT/bin/foreman
+removed  ROOT/bin/foreman.cmd
+removed  ROOT/claude/skills/foreman-conf-commands
+removed  ROOT/claude/skills/foreman-human-followup-tickets
+The toolkit itself is untouched at ROOT/checkout.
+== --uninstall with nothing left (exit 0)
+nothing to remove in ROOT/bin
+The toolkit itself is untouched at ROOT/checkout.
+== --no-skill (exit 0)
+installed
+  ROOT/bin/foreman
+  ROOT/bin/foreman.cmd
+  -> ROOT/checkout/bin/foreman
+
+Open a new shell, then try it:
+  foreman version
+  cd <any git repo> && foreman doctor
+== a foreign shim (exit 1)
+install: ROOT/bin/foreman already exists and was not written by this installer.
+         Move it aside, or re-run with --force.

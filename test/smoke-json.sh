@@ -1055,6 +1055,403 @@ if case_is "--json is for status, dry-run and report, for now: the others still 
 fi
 
 # ---------------------------------------------------------------------------
+# install.sh (ticket 12): the wizard, the app, the shortcut
+# ---------------------------------------------------------------------------
+
+# A throwaway copy of the checkout's installer (so the installed-or-not check reads a gui/ of its
+# own), with HOME, CLAUDE_CONFIG_DIR and the shim directory fresh. $1 names the setup under $WORK;
+# it sets IN_CHECKOUT, IN_HOME, IN_CONFIG, IN_BIN and IN_APPDATA.
+install_setup() {
+  IN_ROOT="$WORK/install-$1"
+  IN_CHECKOUT="$IN_ROOT/checkout"
+  IN_HOME="$IN_ROOT/home"
+  IN_CONFIG="$IN_ROOT/claude"
+  IN_BIN="$IN_ROOT/bin"
+  IN_APPDATA="$IN_ROOT/appdata"
+  IN_STUBS="$IN_ROOT/stubs"
+  rm -rf "$IN_ROOT"
+  mkdir -p "$IN_CHECKOUT/gui" "$IN_HOME" "$IN_CONFIG" "$IN_APPDATA/Microsoft/Windows/Start Menu/Programs" "$IN_STUBS"
+  cp -r "$FOREMAN_HOME/bin" "$FOREMAN_HOME/lib" "$FOREMAN_HOME/skills" "$FOREMAN_HOME/install.sh" "$IN_CHECKOUT/"
+  cp "$FOREMAN_HOME/gui/package.json" "$FOREMAN_HOME/gui/package-lock.json" "$FOREMAN_HOME/gui/icon.ico" "$IN_CHECKOUT/gui/"
+  IN_LNK="$IN_APPDATA/Microsoft/Windows/Start Menu/Programs/Foreman.lnk"
+}
+
+# Runs the copy's install.sh with a plain stdin and a captured stdout, so it is not a terminal.
+# The output keeps the paths it printed with the throwaway root swapped for ROOT.
+install_plain() {
+  OUT="$(cd "$IN_ROOT" && env -u WSL_DISTRO_NAME HOME="$IN_HOME" CLAUDE_CONFIG_DIR="$IN_CONFIG" \
+    FOREMAN_PROC_VERSION=/dev/null PATH="$IN_STUBS:$PATH" APPDATA="$IN_APPDATA" \
+    bash "$IN_CHECKOUT/install.sh" --to "$IN_BIN" "$@" 2>&1 </dev/null)"
+  ST=$?
+  OUT="${OUT//$IN_ROOT/ROOT}"
+}
+
+if case_is "golden: install.sh is byte for byte what it was when nothing asks"; then
+  : > "$WORK/install-plain.out"
+  golden_step() { printf '== %s (exit %s)\n%s\n' "$1" "$ST" "$OUT" >> "$WORK/install-plain.out"; }
+  install_setup golden
+  install_plain;              golden_step "install"
+  install_plain;              golden_step "install again"
+  install_plain --uninstall;  golden_step "--uninstall"
+  install_plain --uninstall;  golden_step "--uninstall with nothing left"
+  install_setup golden
+  install_plain --no-skill;   golden_step "--no-skill"
+  # A foreign `foreman` is refused, and nothing is written.
+  install_setup golden
+  mkdir -p "$IN_BIN"; printf 'not ours\n' > "$IN_BIN/foreman"
+  install_plain
+  golden_step "a foreign shim"
+  if [ "${FOREMAN_JSON_GOLDEN:-}" = write ]; then
+    cp "$WORK/install-plain.out" "$TEST_DIR/golden/install-plain.txt"
+    printf '  retook test/golden/install-plain.txt\n'
+  fi
+  cmp -s "$WORK/install-plain.out" "$TEST_DIR/golden/install-plain.txt" && pass || {
+    fail "install.sh's output differs from test/golden/install-plain.txt"
+    diff "$TEST_DIR/golden/install-plain.txt" "$WORK/install-plain.out" | head -20 >&2
+  }
+fi
+
+# Stubs on PATH: an `npm` that logs its arguments and directory and makes gui/node_modules/electron
+# (or fails, with FAKE_NPM_FAIL set), and a `powershell.exe` that logs its arguments and the
+# variables the shortcut is made from, and makes the .lnk at $FOREMAN_LNK.
+install_stubs() {
+  cat > "$IN_STUBS/npm" <<'STUB'
+#!/bin/bash
+printf 'npm %s | %s\n' "$*" "$PWD" >> "$FAKE_LOG"
+[ -z "${FAKE_NPM_FAIL:-}" ] || exit 1
+mkdir -p node_modules/electron/dist && : > node_modules/electron/dist/electron.exe
+STUB
+  cat > "$IN_STUBS/powershell.exe" <<'STUB'
+#!/bin/bash
+printf 'powershell %s\n' "$*" >> "$FAKE_LOG"
+printf 'LNK=%s\nTARGET=%s\nARGS=%s\nWORKDIR=%s\nICON=%s\n' "$FOREMAN_LNK" "$FOREMAN_TARGET" "$FOREMAN_ARGS" "$FOREMAN_WORKDIR" "$FOREMAN_ICON" >> "$FAKE_LOG"
+: > "$FOREMAN_LNK"
+STUB
+  chmod +x "$IN_STUBS/npm" "$IN_STUBS/powershell.exe"
+  FAKE_LOG="$IN_ROOT/fake.log"; : > "$FAKE_LOG"
+  export FAKE_LOG
+}
+
+# A PATH with the tools install.sh uses and no npm, for "npm is not installed".
+install_no_npm_path() {
+  local t
+  mkdir -p "$IN_ROOT/nonpm"
+  for t in bash grep cp rm mkdir cat chmod sed dirname awk git uname tr; do
+    ln -sf "$(command -v "$t")" "$IN_ROOT/nonpm/$t"
+  done
+}
+
+# install_plain's twin on a terminal: stdin and stdout are the pseudo-terminal `script` makes,
+# and $1 is typed at it. $2 is extra VAR=value settings; IN_TTY_SUFFIX is added to the command
+# line inside it (` </dev/null` makes stdin not a terminal, ` | cat` makes stdout not one).
+install_tty() {
+  local input="$1" envs="$2" cmd; shift 2
+  printf -v cmd '%q ' env -u COLORTERM -u WT_SESSION -u NO_COLOR -u CI -u COLUMNS -u FOREMAN_SHOW -u FOREMAN_COLOR \
+    -u WSL_DISTRO_NAME HOME="$IN_HOME" CLAUDE_CONFIG_DIR="$IN_CONFIG" FOREMAN_PROC_VERSION=/dev/null \
+    PATH="${IN_PATH:-$IN_STUBS:$PATH}" APPDATA="$IN_APPDATA" FAKE_LOG="$FAKE_LOG" TERM=xterm $envs \
+    bash "$IN_CHECKOUT/install.sh" --to "$IN_BIN" "$@"
+  OUT="$(printf '%b' "$input" | script -qec "bash -c $(printf '%q' "$cmd${IN_TTY_SUFFIX:-}")" /dev/null 2>/dev/null)"
+  ST=$?
+  OUT="${OUT//$'\r'/}"
+  OUT="${OUT//$IN_ROOT/ROOT}"
+  PLAIN="$(printf '%s' "$OUT" | sed $'s/\033\\[[0-9;]*[mK]//g')"    # the words, with no colour in them
+}
+
+install_calls() { grep -c '^npm ' "$FAKE_LOG" 2>/dev/null || true; }
+
+if case_is "install --gui: npm ci in gui/, then the shortcut through powershell.exe, without asking"; then
+  install_setup gui; install_stubs
+  install_plain --gui
+  assert_eq "$ST" 0 "--gui exits 0"
+  assert_eq "$(grep '^npm ' "$FAKE_LOG")" "npm ci | $IN_CHECKOUT/gui" "npm ci ran once, in the checkout's gui/"
+  assert_contains "$OUT" "installed the desktop app" "it says the app is installed"
+  assert_contains "$OUT" "installed shortcut" "and that the shortcut is"
+  assert_missing "$OUT" "What should this install" "it did not ask"
+  [ -e "$IN_LNK" ] && pass || fail "the shortcut is at %APPDATA%/Microsoft/Windows/Start Menu/Programs/Foreman.lnk"
+  assert_contains "$(grep '^powershell ' "$FAKE_LOG")" "-NoProfile" "powershell.exe -NoProfile"
+  assert_contains "$(grep '^powershell ' "$FAKE_LOG")" "WScript.Shell" "through WScript.Shell"
+  assert_eq "$(grep '^LNK=' "$FAKE_LOG")" "LNK=$IN_LNK" "the shortcut file"
+  assert_eq "$(grep '^TARGET=' "$FAKE_LOG")" "TARGET=$IN_CHECKOUT/gui/node_modules/electron/dist/electron.exe" "its target is the checkout's electron.exe"
+  assert_eq "$(grep '^ARGS=' "$FAKE_LOG")" "ARGS=\"$IN_CHECKOUT/gui\"" "its argument is the gui directory, quoted"
+  assert_eq "$(grep '^ICON=' "$FAKE_LOG")" "ICON=$IN_CHECKOUT/gui/icon.ico" "its icon is gui/icon.ico"
+  assert_eq "$(grep '^WORKDIR=' "$FAKE_LOG")" "WORKDIR=$IN_CHECKOUT" "and it starts in the checkout"
+  [ -e "$IN_BIN/foreman" ] && pass || fail "the CLI was installed too"
+  # The shortcut's values are not spliced into the PowerShell text.
+  assert_missing "$(grep '^powershell ' "$FAKE_LOG")" "$IN_CHECKOUT" "no path is in the PowerShell command"
+fi
+
+if case_is "install --gui: no npm says so and installs the CLI only; a failing npm is reported"; then
+  install_setup nonpm; install_stubs; install_no_npm_path
+  # install_plain puts the stubs first and the system PATH after, and the system PATH has npm: here
+  # PATH is only the tools install.sh uses.
+  OUT="$(cd "$IN_ROOT" && env -u WSL_DISTRO_NAME HOME="$IN_HOME" CLAUDE_CONFIG_DIR="$IN_CONFIG" FOREMAN_PROC_VERSION=/dev/null \
+    PATH="$IN_ROOT/nonpm" APPDATA="$IN_APPDATA" "$(command -v bash)" "$IN_CHECKOUT/install.sh" --to "$IN_BIN" --gui 2>&1 </dev/null)"
+  ST=$?
+  assert_eq "$ST" 0 "no npm is not a failure"
+  assert_contains "$OUT" "needs Node's npm" "it says the app needs Node's npm"
+  assert_contains "$OUT" "Installed the CLI only" "and that it installed the CLI only"
+  [ -e "$IN_BIN/foreman" ] && pass || fail "the CLI is installed"
+  [ ! -e "$IN_CHECKOUT/gui/node_modules" ] && pass || fail "no gui/node_modules"
+  [ ! -e "$IN_LNK" ] && pass || fail "no shortcut"
+
+  install_setup npmfail; install_stubs
+  FAKE_NPM_FAIL=1 install_plain --gui
+  assert_eq "$ST" 1 "a failing npm ci makes the installer exit 1"
+  assert_contains "$OUT" "npm ci failed" "and says so"
+  [ -e "$IN_BIN/foreman" ] && pass || fail "the CLI is installed all the same"
+  [ ! -e "$IN_LNK" ] && pass || fail "and no shortcut is written for an app that is not there"
+fi
+
+if case_is "install: --gui and --no-gui together are refused, and nothing is written"; then
+  install_setup both; install_stubs
+  install_plain --gui --no-gui
+  assert_eq "$ST" 1 "exits 1"
+  assert_contains "$OUT" "contradict" "says why"
+  [ ! -e "$IN_BIN" ] && pass || fail "nothing was written"
+  install_plain --gui --gui
+  assert_eq "$ST" 0 "the same flag twice is fine"
+fi
+
+if case_is "install: without a flag and off a terminal it asks nothing and installs no app"; then
+  install_setup noask; install_stubs
+  install_plain
+  assert_eq "$(install_calls)" 0 "npm did not run"
+  assert_missing "$OUT" "desktop" "the output does not mention the app"
+  [ ! -e "$IN_LNK" ] && pass || fail "no shortcut"
+fi
+
+if case_is "install --no-gui and --uninstall: the app and its shortcut go, and nothing else"; then
+  install_setup remove; install_stubs
+  install_plain --gui
+  # Things --uninstall must not touch: a batch, the env file, a credential.
+  mkdir -p "$IN_HOME/.config/foreman" "$IN_ROOT/repo/batch"
+  printf 'GH_TOKEN=secret\n' > "$IN_HOME/.config/foreman/env"
+  printf 'cred\n' > "$IN_HOME/.claude-credentials"
+  printf 'a ticket\n' > "$IN_ROOT/repo/batch/01-a.md"
+  printf '{"x":1}\n' > "$IN_ROOT/repo/batch/foreman-runs.jsonl"
+  install_plain --no-gui
+  assert_eq "$ST" 0 "--no-gui exits 0"
+  assert_contains "$OUT" "removed  ROOT/checkout/gui/node_modules" "--no-gui removes gui/node_modules"
+  assert_contains "$OUT" "removed  ROOT/appdata/Microsoft/Windows/Start Menu/Programs/Foreman.lnk" "and the shortcut"
+  [ ! -e "$IN_CHECKOUT/gui/node_modules" ] && pass || fail "gui/node_modules is gone"
+  [ ! -e "$IN_LNK" ] && pass || fail "the shortcut is gone"
+  [ -e "$IN_BIN/foreman" ] && pass || fail "the CLI is installed (--no-gui is 'CLI only')"
+  install_plain --no-gui
+  assert_missing "$OUT" "removed  ROOT/checkout/gui" "--no-gui again has nothing to remove, and says nothing about it"
+
+  install_plain --gui
+  install_plain --uninstall
+  assert_eq "$ST" 0 "--uninstall exits 0"
+  assert_contains "$OUT" "removed  ROOT/checkout/gui/node_modules" "--uninstall removes gui/node_modules"
+  assert_contains "$OUT" "Foreman.lnk" "and the shortcut"
+  [ ! -e "$IN_CHECKOUT/gui/node_modules" ] && [ ! -e "$IN_LNK" ] && [ ! -e "$IN_BIN/foreman" ] && pass || fail "everything is gone"
+  assert_eq "$(cat "$IN_HOME/.config/foreman/env")" "GH_TOKEN=secret" "the env file is untouched"
+  assert_eq "$(cat "$IN_HOME/.claude-credentials")" "cred" "a credential is untouched"
+  [ -e "$IN_ROOT/repo/batch/01-a.md" ] && [ -e "$IN_ROOT/repo/batch/foreman-runs.jsonl" ] && pass || fail "a batch is untouched"
+  [ -e "$IN_CHECKOUT/gui/package.json" ] && [ -e "$IN_CHECKOUT/gui/icon.ico" ] && pass || fail "the rest of gui/ is still there"
+fi
+
+if case_is "install: --help lists --gui and --no-gui, and a bad flag's usage does"; then
+  install_setup help
+  assert_contains "$(bash "$IN_CHECKOUT/install.sh" --help)" "--gui" "--help names --gui"
+  assert_contains "$(bash "$IN_CHECKOUT/install.sh" --help)" "--no-gui" "and --no-gui"
+  assert_contains "$(bash "$IN_CHECKOUT/install.sh" --bogus 2>&1)" "[--gui | --no-gui]" "and so does the usage line"
+fi
+
+# The wizard needs a terminal, which is made with `script`; not every machine has it.
+install_tty_ok() {
+  command -v script >/dev/null 2>&1 || return 1
+  install_setup probe; install_stubs
+  install_tty "\n" "" --no-skill
+  case "$OUT" in *Ready.*|*"Open a new shell"*) return 0 ;; *) return 1 ;; esac
+}
+
+if case_is "install wizard: asks only when stdin and stdout are both terminals"; then
+  if install_tty_ok; then
+    install_setup ask; install_stubs
+    install_tty "2\n" ""
+    assert_contains "$PLAIN" "What should this install?" "on a terminal it asks"
+    assert_contains "$PLAIN" "1  CLI only" "the first answer is CLI only"
+    assert_contains "$PLAIN" "2  CLI + desktop app" "the second is the app"
+    assert_contains "$PLAIN" "Choice [1/2]:" "with the default shown"
+    assert_eq "$(install_calls)" 1 "2 installs the app (npm ci once)"
+    assert_contains "$PLAIN" "installed shortcut" "and writes the shortcut"
+
+    install_setup ask1; install_stubs
+    install_tty "\n" ""
+    assert_contains "$PLAIN" "What should this install?" "it asks again in a fresh checkout"
+    assert_eq "$(install_calls)" 0 "Enter picks 1, CLI only"
+    [ -e "$IN_BIN/foreman" ] && pass || fail "and the CLI is installed"
+
+    install_setup ask1b; install_stubs
+    install_tty "1\n" ""
+    assert_eq "$(install_calls)" 0 "typing 1 is CLI only"
+
+    install_setup askjunk; install_stubs
+    install_tty "3\nx\n2\n" ""
+    assert_contains "$PLAIN" "Type 1 or 2" "anything else asks again"
+    assert_eq "$(install_calls)" 1 "and the answer that follows counts"
+
+    install_setup askeof; install_stubs
+    install_tty "" ""
+    assert_eq "$(install_calls)" 0 "no answer at all (end of input) is CLI only"
+    [ -e "$IN_BIN/foreman" ] && pass || fail "and the CLI is installed"
+
+    install_setup noin; install_stubs
+    IN_TTY_SUFFIX=" </dev/null" install_tty "" ""
+    assert_missing "$PLAIN" "What should this install" "stdin not a terminal: no question"
+    install_setup noout; install_stubs
+    IN_TTY_SUFFIX=" | cat" install_tty "2\n" ""
+    assert_missing "$PLAIN" "What should this install" "stdout not a terminal: no question"
+    assert_eq "$(install_calls)" 0 "and no app"
+    unset IN_TTY_SUFFIX
+
+    install_setup flagyes; install_stubs
+    install_tty "" "" --gui
+    assert_missing "$PLAIN" "What should this install" "--gui does not ask on a terminal"
+    assert_eq "$(install_calls)" 1 "and installs the app"
+    install_setup flagno; install_stubs
+    install_tty "" "" --no-gui
+    assert_missing "$PLAIN" "What should this install" "--no-gui does not ask on a terminal"
+    assert_eq "$(install_calls)" 0 "and installs no app"
+    install_setup refuse; install_stubs
+    mkdir -p "$IN_BIN"; printf 'not ours\n' > "$IN_BIN/foreman"
+    install_tty "" ""
+    assert_missing "$PLAIN" "What should this install" "a refusal comes before the question"
+  else
+    printf '  (no usable script(1): the wizard on a terminal is not run)\n'
+  fi
+fi
+
+if case_is "install wizard: a rerun offers only the piece that is missing"; then
+  if install_tty_ok; then
+    install_setup rerun; install_stubs
+    install_tty "\n" "" --no-gui
+    assert_missing "$PLAIN" "What should this install" "(setup) --no-gui asks nothing"
+    install_tty "n\n" ""
+    assert_contains "$PLAIN" "CLI installed" "a rerun with the CLI in place shows what is installed (take a2)"
+    assert_contains "$PLAIN" "desktop app" "and the app line"
+    assert_contains "$PLAIN" "not installed" "which is not installed"
+    assert_contains "$PLAIN" "Add the desktop app too?" "and asks about the app alone"
+    assert_missing "$PLAIN" "What should this install" "not the whole question"
+    assert_eq "$(install_calls)" 0 "n is CLI only"
+    install_tty "\n" ""
+    assert_eq "$(install_calls)" 0 "Enter is n"
+    install_tty "maybe\ny\n" ""
+    assert_contains "$PLAIN" "Type y or n" "anything but y or n asks again"
+    assert_eq "$(install_calls)" 1 "y installs the app"
+    [ -e "$IN_LNK" ] && pass || fail "with its shortcut"
+
+    install_tty "" ""
+    assert_missing "$PLAIN" "install?" "with everything installed it asks nothing"
+    assert_missing "$PLAIN" "Add the desktop app too" "not even the short question"
+    assert_eq "$(install_calls)" 1 "and runs npm no more"
+
+    # The shortcut is part of "installed", where one can be written: lose it and it is offered.
+    rm -f "$IN_LNK"
+    install_tty "n\n" ""
+    assert_contains "$PLAIN" "Add the desktop app too?" "with the shortcut gone the app is offered again"
+    # Without powershell.exe there is no shortcut to expect: electron alone is "installed".
+    rm -f "$IN_STUBS/powershell.exe"
+    install_tty "" ""
+    assert_missing "$PLAIN" "Add the desktop app too" "no powershell.exe: electron alone counts as installed"
+    # And with electron gone but a shortcut left, the app is offered.
+    install_stubs; : > "$IN_LNK"; rm -rf "$IN_CHECKOUT/gui/node_modules"
+    install_tty "n\n" ""
+    assert_contains "$PLAIN" "Add the desktop app too?" "no electron: the app is offered"
+  else
+    printf '  (no usable script(1): the rerun is not run)\n'
+  fi
+fi
+
+# The header: the picture, from the design's pixel map, drawn by lib/foreman-draw.cjs at each tier.
+HEADER_PIXELS='....................................
+...........ssseeesss................
+..........seeeeeeeees...............
+........sseerrrrrrreess.............
+........serraaaaaaarres.............
+.......serraaaaaaaaarres............
+......seeraaaayyyaaaarees...........
+......seraaayyyyyyyaaares...........
+......seraaayyyy###aaares...........
+......eeraayyyy#####aaree...........
+......eeraayy#########ree...........
+......eeraayyyyy###yaaree...........
+......seraaayyyy###aaares...........
+......seraaayy#######ares...........
+......seeraaa##y###a##ees...........
+.......serra##aa###ar##s............
+........serra##a###r##s.............
+........sseerrr#####ess.............
+..........seeee##e##s...............
+eeppprrrraaaaa##aaa##arrrrpppeesssss
+sseeepppprrrr##rrrrr##ppppeeessnnnnn
+nnssseeeepppp##ppppp##eeeesssnn.....
+..nnnsssseeeeee##eee###sssnnn.......
+.....nnnnsssssss##########..........'
+
+if case_is "install wizard: the header is the design's picture at 24-bit and 256 colours, and words elsewhere"; then
+  if install_tty_ok && command -v node >/dev/null 2>&1; then
+    header_rows() {    # header_rows TIER — the 12 rows lib/foreman-draw.cjs draws from the pixel map
+      HEADER_PIXELS="$HEADER_PIXELS" FOREMAN_HOME_UNDER_TEST="$FOREMAN_HOME" node -e '
+        const draw = require(process.env.FOREMAN_HOME_UNDER_TEST + "/lib/foreman-draw.cjs");
+        const key = { y: "sun", a: "amber", r: "rust", p: "post", e: "earth", s: "shade", n: "night", "#": "#0a0908", ".": null };
+        const pixels = process.env.HEADER_PIXELS.split("\n").map((r) => Array.from(r).map((c) => key[c]));
+        const tier = Number(process.argv[1]);
+        process.stdout.write(draw.encode(draw.halfBlocks(pixels, tier), tier));
+      ' "$1"
+    }
+    fresh_tty() { rm -rf "$IN_BIN"; install_tty "$@"; }    # the CLI not installed yet: the whole question
+    spaces17="$(printf '%17s' '')"
+    check_rows() {    # check_rows TIER LABEL — every row is a line of $OUT, rows 5 and 6 with the words after them
+      local tier="$1" label="$2" i=0 row
+      while IFS= read -r row; do
+        case "$i" in
+          4) case "$OUT" in *"$row$spaces17"*FOREMAN*) pass ;; *) fail "$label: row $i, with FOREMAN after it" ;; esac ;;
+          5) case "$OUT" in *"$row$spaces17"*) pass ;; *) fail "$label: row $i, with the words after it" ;; esac ;;
+          *) case "$OUT" in *$'\n'"$row"$'\n'*) pass ;; *) fail "$label: row $i" ;; esac ;;
+        esac
+        i=$((i + 1))
+      done < <(header_rows "$tier")
+      assert_eq "$i" 12 "$label: twelve rows"
+    }
+    install_setup art; install_stubs
+    ( cd "$IN_CHECKOUT" && git init -q && git add -A && git -c user.name=t -c user.email=t@t commit -qm c ) >/dev/null 2>&1
+    hash="$(git -C "$IN_CHECKOUT" rev-parse --short HEAD)"
+
+    fresh_tty "\n" "COLORTERM=truecolor COLUMNS=100"
+    check_rows 24 "24-bit"
+    fresh_tty "\n" "COLORTERM=truecolor COLUMNS=200"
+    check_rows 24 "200 columns"
+    assert_contains "$PLAIN" "from ROOT/checkout · $hash" "the words say where it is from and at which commit"
+    assert_contains "$PLAIN" "install" "and the title"
+    assert_contains "$PLAIN" "What should this install?" "and the question follows it"
+    fresh_tty "\n" "TERM=xterm-256color COLUMNS=100"
+    check_rows 256 "256-colour"
+    fresh_tty "\n" "COLORTERM=truecolor COLUMNS=80"
+    check_rows 24 "exactly 80 columns"
+
+    for case_env in "COLORTERM=truecolor COLUMNS=79" "TERM=xterm-256color COLUMNS=60" "TERM=xterm COLUMNS=120" "NO_COLOR=1 COLORTERM=truecolor COLUMNS=120" "COLORTERM=truecolor COLUMNS=120 CI=1" "COLORTERM=truecolor COLUMNS=120 FOREMAN_SHOW=never" "COLORTERM=truecolor COLUMNS=120 FOREMAN_COLOR=never"; do
+      fresh_tty "\n" "$case_env"
+      case "$OUT" in *"▀"*|*"▄"*|*"█"*) fail "no art for: $case_env" ;; *) pass ;; esac
+      assert_contains "$PLAIN" "FOREMAN  install" "the title is plain words for: $case_env"
+      assert_contains "$PLAIN" "from ROOT/checkout · $hash" "and where from, for: $case_env"
+      assert_contains "$PLAIN" "What should this install?" "and the question is still asked for: $case_env"
+    done
+    fresh_tty "\n" "NO_COLOR=1 COLORTERM=truecolor COLUMNS=120"
+    case "$OUT" in *$'\033'*) fail "no colour at all with NO_COLOR" ;; *) pass ;; esac
+    fresh_tty "\n" "TERM=xterm COLUMNS=120"
+    case "$OUT" in *$'\033[38;2'*|*$'\033[38;5'*) fail "16 colours use no palette shade" ;; *) pass ;; esac
+
+    # The long path is cut from the left to fit beside the picture, never wrapped.
+    fresh_tty "\n" "COLORTERM=truecolor COLUMNS=80"
+    case "$OUT" in *"…"*) pass ;; *) fail "a 80-column terminal cuts the long 'from' words" ;; esac
+  else
+    printf '  (no usable script(1) or no node: the header is not run)\n'
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 # The app's own logic (plain Node, no Electron)
 # ---------------------------------------------------------------------------
 
