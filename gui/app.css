@@ -192,3 +192,64 @@ svg .f-amber { fill: var(--amber); } svg .f-rust { fill: var(--rust); } svg .f-d
 svg .f-err { fill: var(--err); } svg .f-muted { fill: var(--muted); }
 svg .k-sunfill { stroke: var(--sunfill); } svg .k-post { stroke: var(--post); }
 svg .s-top { stop-color: var(--sky-top); } svg .s-bot { stop-color: var(--sky-bot); }
+
+/* the order's rows are buttons that open the ticket */
+.tlist button.t { width: 100%; box-sizing: border-box; border: 0; border-bottom: 1px solid var(--line); background: transparent; color: inherit; text-align: left; cursor: pointer; font: inherit; }
+.tlist button.t:last-child { border-bottom: 0; }
+.tlist button.t:hover { background: color-mix(in srgb, var(--shade) 55%, transparent); }
+.tlist button.t.next { background: color-mix(in srgb, var(--amber) 9%, transparent); }
+[hidden] { display: none !important; }
+
+/* the ticket page: facts on top, the ticket on the left, its handoff (or its stats) on the right */
+.chip.landed { color: var(--ok); background: color-mix(in srgb, var(--ok) 13%, transparent); }
+.main.ticket { overflow: hidden; }
+.ticketname { font-size: 16px; overflow-wrap: anywhere; }
+.facts { gap: 28px; padding: 10px 16px; flex-wrap: wrap; }
+.row.top.ticketcols { flex: 1; min-height: 0; gap: 14px; align-items: stretch; }
+.ticketcard { width: 46%; flex: none; min-height: 0; overflow: hidden; gap: 8px; box-sizing: border-box; }
+.sidecard { min-height: 0; min-width: 0; overflow: auto; gap: 10px; }
+.scroller { overflow: auto; min-height: 0; gap: 8px; }
+.notelabel { margin-top: 6px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--panel); }
+.seg button { padding: 3px 10px; font: 600 11.5px var(--ui); color: var(--muted); border: 0; border-right: 1px solid var(--line); background: transparent; cursor: pointer; }
+.seg button:last-child { border-right: 0; }
+.seg button.on { background: var(--shade); color: var(--text); box-shadow: inset 0 -2px 0 var(--amber); }
+
+/* the preview: a small fixed set of things, drawn as the elements app.js builds from the text */
+.md { font: 13px/1.6 var(--ui); color: var(--text); overflow-wrap: anywhere; }
+.md h1, .md h2, .md h3 { font: 600 17px var(--ui); margin: 0 0 8px; }
+.md h2 { font-size: 15px; margin-top: 10px; }
+.md h3 { font-size: 13.5px; margin-top: 8px; }
+.md p { margin: 0 0 8px; white-space: pre-line; }
+.md code { font: 12px var(--mono); background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; white-space: pre-wrap; }
+.md ul { list-style: none; margin: 0 0 8px; padding: 0; }
+.md li { display: flex; gap: 8px; margin: 3px 0; }
+.md li.d1 { margin-left: 18px; } .md li.d2 { margin-left: 36px; } .md li.d3 { margin-left: 54px; }
+.md li .bx { flex: none; width: 14px; height: 14px; margin-top: 3px; border: 1.5px solid var(--muted); border-radius: 3px; text-align: center; font: 700 10px/12px var(--mono); box-sizing: border-box; }
+.md li .bx.on { background: var(--ok); border-color: var(--ok); color: var(--panel); }
+.md li .dot { flex: none; width: 14px; text-align: center; color: var(--muted); }
+pre.src { font: 12px/1.6 var(--mono); margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text); }
+
+/* notes from progress.txt */
+.feed { font: 12px/1.6 var(--mono); color: var(--muted); }
+.noteentry { margin-bottom: 8px; }
+.notetitle { font: 600 12px var(--mono); color: var(--text); }
+.feed pre.said { color: var(--muted); }
+
+/* the handoff editor: the file's raw text, in the person's hands */
+.note { font-size: 12px; color: var(--muted); }
+.note.lock::before { content: "\1F512\FE0E  "; }
+.editor { flex: 1; min-height: 160px; width: 100%; box-sizing: border-box; resize: none; font: 12px/1.65 var(--mono); background: var(--panel-2);
+          border: 1px solid var(--amber); border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; color: var(--text); }
+.editor:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ask { gap: 8px; padding: 10px 14px; }
+pre.said.err { color: var(--err); }
+
+/* run stats of a ticket that landed */
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.stats .s { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--panel-2); min-width: 0; }
+.stats .s .v { font: 600 17px var(--ui); overflow-wrap: anywhere; }
+.stats .s .v.mono { font: 12.5px var(--mono); padding-top: 4px; }
+.stats .s .k { font: 600 10px var(--mono); letter-spacing: .1em; color: var(--muted); text-transform: uppercase; }
+.iters { overflow: auto; }
+.iters .t { grid-template-columns: 22px 34px 1fr auto auto; }

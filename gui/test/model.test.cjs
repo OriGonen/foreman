@@ -350,3 +350,185 @@ test('report: the app has no outcome logic: a word it does not know is shown as 
   assert.equal(i.tone, '');
   assert.deepEqual(M.reportIterations(reportSample()), [], 'no run asked for: no iterations');
 });
+
+// ---- the ticket page (`status --json`, plus the files main read) ----
+
+const { statsSample } = require('./sample.cjs');
+const part = (f) => f.parts.map((p) => p.text).join('');
+const fact = (page, label) => page.facts.find((f) => f.label === label);
+
+// 03 landed after running; 05 is next; 07 is human, 07a checks it.
+function withStats() {
+  const s = sample();
+  s.tickets[2].stats = statsSample();
+  return s;
+}
+
+test('ticketNotes: the entries whose heading starts with the ticket\'s number, and nothing for 07 in 07a\'s', () => {
+  const text = '# gui — notes\n\n## 07 — human ticket\n- waits\n\n## 07a — followup\n- reads\n\n## 08 — other\n- unrelated\n';
+  const t07 = { name: '07-try-it', number: '07', slug: 'try-it' };
+  const t07a = { name: '07a-followup', number: '07a', slug: 'followup' };
+  assert.deepEqual(M.ticketNotes(text, t07), [{ title: '07 — human ticket', text: '- waits' }]);
+  assert.deepEqual(M.ticketNotes(text, t07a), [{ title: '07a — followup', text: '- reads' }]);
+  assert.deepEqual(M.ticketNotes(text, { name: '09-none', number: '09', slug: 'none' }), []);
+});
+
+test('ticketNotes: an entry that names the ticket in full anywhere in it, as a path or with DONE_, belongs to it', () => {
+  const text = '## 16 — the model\n- ticket 03 should show models. See .scratch/gui/issues/DONE_03-ticket-page.md\n- 2026-10-03 is a date\n\n## 05 — report\n- plain, mentions 03 only as a number\n';
+  const t = { name: '03-ticket-page', number: '03', slug: 'ticket-page' };
+  assert.deepEqual(M.ticketNotes(text, t).map((n) => n.title), ['16 — the model']);
+});
+
+test('ticketNotes: a file with no headings is read a line at a time, by the number as a whole word', () => {
+  const text = '2026-10-21 · 06 · 2/5 progressed\n2026-10-21 · 07 waits on a person\n2026-10-06 · 07a — not this one\n\n2026-10-21 · 06 · landed';
+  assert.deepEqual(M.ticketNotes(text, { name: '06-x', number: '06', slug: 'x' }),
+    [{ title: null, text: '2026-10-21 · 06 · 2/5 progressed' }, { title: null, text: '2026-10-21 · 06 · landed' }]);
+  assert.deepEqual(M.ticketNotes(text, { name: '07-x', number: '07', slug: 'x' }).map((n) => n.text), ['2026-10-21 · 07 waits on a person']);
+});
+
+test('ticketNotes: nothing to read is no notes; the text before the first heading is no one\'s', () => {
+  const t = { name: '03-x', number: '03', slug: 'x' };
+  assert.deepEqual(M.ticketNotes(null, t), []);
+  assert.deepEqual(M.ticketNotes('', t), []);
+  assert.deepEqual(M.ticketNotes('03 mentioned in a preamble\n\n## 04 — x\n', t), []);
+});
+
+test('ticketNotes: markup in a note stays in it as characters, and the heading mark is the only thing taken off', () => {
+  const evil = '<script>alert(1)</script>';
+  const [n] = M.ticketNotes(`## 03 — ${evil}\n- ${evil}`, { name: '03-x', number: '03', slug: 'x' });
+  assert.equal(n.title, `03 — ${evil}`);
+  assert.equal(n.text, `- ${evil}`);
+});
+
+test('duration and tokens: how a run\'s time and size are worded', () => {
+  assert.equal(M.duration(1710000), '28m 30s');
+  assert.equal(M.duration(45000), '45s');
+  assert.equal(M.duration(0), '0s');
+  assert.equal(M.duration(3600000 + 125000), '1h 02m');
+  assert.equal(M.duration(null), '');
+  assert.equal(M.compact(310000), '310k');
+  assert.equal(M.compact(46000), '46k');
+  assert.equal(M.compact(1250000), '1.3M');
+  assert.equal(M.compact(842), '842');
+  assert.equal(M.compact(1500), '1.5k');
+  assert.equal(M.compact(null), '0');
+});
+
+test('ticketPage: a human ticket — its chip, the facts strip, and the handoff in the right column', () => {
+  const p = M.ticketPage(sample(), '07-try-it-on-a-real-repo', null);
+  assert.equal(p.name, '07 try-it-on-a-real-repo');
+  assert.deepEqual(p.chip, { cls: 'human', text: 'human' });
+  assert.equal(part(fact(p, 'Status')), 'ready-for-human');
+  assert.equal(part(fact(p, 'Blocked by')), 'nothing');
+  assert.equal(part(fact(p, 'Checked by')), '07a followup-try-the-followup-skill');
+  assert.equal(part(fact(p, 'Handoff')), '.scratch/b/handoff/07-try-it-on-a-real-repo.md');
+  assert.equal(fact(p, 'Checks'), undefined);
+  assert.equal(p.side.kind, 'handoff');
+  assert.equal(p.side.reminder, 'Record where a secret is stored (a password manager entry, an env var name), never its value.');
+  assert.equal(p.text, null);
+  assert.deepEqual(p.notes, []);
+});
+
+test('ticketPage: the facts say whether each blocker has landed, and a human blocker is called out', () => {
+  const s = sample();
+  assert.deepEqual(fact(M.ticketPage(s, '05-document-human-tickets', null), 'Blocked by').parts,
+    [{ text: '04', tone: '' }, { text: ' landed', tone: 'muted' }]);
+  const a = M.ticketPage(s, '07a-followup-try-the-followup-skill', null);
+  assert.deepEqual(fact(a, 'Blocked by').parts, [{ text: '07', tone: '' }, { text: ' human, not done', tone: 'rust' }]);
+  s.tickets[5].blocked_by = '09';
+  assert.deepEqual(fact(M.ticketPage(s, '06-doctor-human-warnings', null), 'Blocked by').parts, [{ text: '09', tone: '' }, { text: ' not landed yet', tone: 'muted' }]);
+  s.tickets[5].blocked_by = 'the CLI, once it is built';
+  assert.equal(part(fact(M.ticketPage(s, '06-doctor-human-warnings', null), 'Blocked by')), 'the CLI, once it is built');
+});
+
+test('ticketPage: an agent ticket that checks a human one — Checks, the followup chip, and what the loop knows', () => {
+  const p = M.ticketPage(sample(), '07a-followup-try-the-followup-skill', null);
+  assert.deepEqual(p.chip, { cls: 'followup', text: 'followup · checks 07' });
+  assert.equal(part(fact(p, 'Checks')), '07 try-it-on-a-real-repo');
+  assert.equal(fact(p, 'Handoff'), undefined);
+  assert.equal(p.side.kind, 'knows');
+  assert.deepEqual(p.side.rows, [['Iterations', 'none yet'], ['In flight', 'not known yet'], ['Sent back', 'no']]);
+});
+
+test('ticketPage: the next ticket has the chip next; a plain one has none', () => {
+  assert.deepEqual(M.ticketPage(sample(), '05-document-human-tickets', null).chip, { cls: 'next', text: 'next' });
+  assert.equal(M.ticketPage(sample(), '06-doctor-human-warnings', null).chip, null);
+});
+
+test('ticketPage: what the loop knows says what has been spent on a ticket that ran but did not land, and who sent it back', () => {
+  const s = sample();
+  s.tickets[4].stats = { ...statsSample(), iterations: 2, cost_usd: 1.64 };
+  s.tickets[4].spent_usd = 1.64;
+  s.next.sent_back_by = '07a-followup-try-the-followup-skill';
+  s.run = { in_flight: false };
+  const p = M.ticketPage(s, '05-document-human-tickets', null);
+  assert.deepEqual(p.side.rows, [['Iterations', '2 · $1.64'], ['In flight', 'no'], ['Sent back', 'by 07a-followup-try-the-followup-skill']]);
+  assert.equal(part(fact(p, 'Spend')), '$1.64 · 2 iterations');
+});
+
+test('ticketPage: a ticket that landed and ran shows its run stats, as the design\'s b3 words them', () => {
+  const p = M.ticketPage(withStats(), '03-stop-on-waiting-human', null);
+  assert.deepEqual(p.chip, { cls: 'landed', text: 'done' });
+  assert.equal(p.side.kind, 'stats');
+  assert.deepEqual(p.side.cards, [
+    { k: 'Cost', v: '$4.62', mono: false }, { k: 'Runtime', v: '28m 30s', mono: false },
+    { k: 'Model', v: 'claude-sonnet-5-5', mono: true }, { k: 'Iterations', v: '3', mono: false },
+    { k: 'Turns', v: '112', mono: false }, { k: 'Tokens in / out', v: '310k / 46k', mono: true },
+  ]);
+  assert.equal(part(fact(p, 'Status')), 'done');
+  assert.equal(fact(p, 'Status').parts[0].tone, 'ok');
+  assert.equal(part(fact(p, 'Spend')), '$3.08 · 3 iterations');
+});
+
+test('ticketPage: one row for each line of the record, with the CLI\'s outcome word, and a checkpoint turn marked as one', () => {
+  const rows = M.ticketPage(withStats(), '03-stop-on-waiting-human', null).side.iterations;
+  assert.deepEqual(rows.map((r) => [r.n, r.outcome, r.tone, r.meta]), [
+    ['1', 'progressed', '', '11m 15s · $1.64'],
+    ['2', 'stalled', 'rust', '8m 10s · $1.48'],
+    ['2', 'checkpoint', 'dim', '40s · $0.20'],
+    ['3', 'landed', 'ok', '8m 25s · $1.30'],
+  ]);
+  assert.equal(rows[0].label, 'run 20261021T091200Z-4411');
+  assert.equal(rows[2].label, 'run 20261021T091200Z-4411 · checkpoint turn');
+});
+
+test('ticketPage: several models are shown in the order they were used; none recorded is said, not guessed', () => {
+  const s = withStats();
+  s.tickets[2].stats.models = ['claude-sonnet-5-5', 'claude-opus-5-5'];
+  assert.equal(M.ticketPage(s, '03-stop-on-waiting-human', null).side.cards[2].v, 'claude-sonnet-5-5 → claude-opus-5-5');
+  s.tickets[2].stats.models = [];
+  assert.equal(M.ticketPage(s, '03-stop-on-waiting-human', null).side.cards[2].v, 'not recorded');
+});
+
+test('ticketPage: a ticket that landed and never ran says none yet; a human one that landed shows its handoff and no stats', () => {
+  const none = M.ticketPage(sample(), '02-handoff-file-path', null);
+  assert.equal(none.side.kind, 'nostats');
+  assert.equal(none.side.text, 'none yet');
+  const s = withStats();
+  s.tickets[6].done = true; s.tickets[6].state = 'done'; s.tickets[6].status = 'done';
+  s.tickets[6].stats = statsSample();
+  const human = M.ticketPage(s, '07-try-it-on-a-real-repo', null);
+  assert.equal(human.side.kind, 'handoff');
+  assert.equal(human.side.cards, undefined);
+});
+
+test('ticketPage: a human ticket with no Handoff: line says so instead of offering an editor', () => {
+  const s = sample();
+  s.tickets[6].handoff = null;
+  const p = M.ticketPage(s, '07-try-it-on-a-real-repo', null);
+  assert.equal(p.side.kind, 'handoff');
+  assert.equal(p.side.path, null);
+  assert.equal(fact(p, 'Handoff'), undefined);
+});
+
+test('ticketPage: the text and the notes come from what main read, the notes only the ticket\'s own', () => {
+  const doc = { file: 'x', text: '# 07\n- [ ] a', progress: '## 06 — other\n- no\n\n## 07 — mine\n- yes\n', handoff: null };
+  const p = M.ticketPage(sample(), '07-try-it-on-a-real-repo', doc);
+  assert.equal(p.text, '# 07\n- [ ] a');
+  assert.deepEqual(p.notes, [{ title: '07 — mine', text: '- yes' }]);
+});
+
+test('ticketPage: a ticket that is not in the batch (the loop renamed it, or it is gone) is null', () => {
+  assert.equal(M.ticketPage(sample(), 'nope', null), null);
+  assert.equal(M.ticketPage({ ...sample(), tickets: undefined }, '03-x', null), null);
+});

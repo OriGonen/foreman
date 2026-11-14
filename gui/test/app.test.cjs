@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { sample, dryRunSample, reportSample, reportByTicketSample, reportRunSample } = require('./sample.cjs');
+const { sample, statsSample, dryRunSample, reportSample, reportByTicketSample, reportRunSample } = require('./sample.cjs');
 
 // ---- the fake DOM: only what app.js and art.js use ----
 
@@ -45,10 +45,15 @@ class El {
   focus() { this.ownerDocument.activeElement = this; }
   all() { return this.children.flatMap((c) => (c instanceof El ? [c, ...c.all()] : [])); }
   matches(sel) {
-    const cls = /^\.([\w-]+)$/.exec(sel);
-    if (cls) return this.className.split(/\s+/).includes(cls[1]);
+    const compound = /^([a-z0-9]*)((?:\.[\w-]+)+)$/.exec(sel);      // pre.src, .bx.on
+    if (compound) {
+      const have = this.className.split(/\s+/);
+      return (compound[1] === '' || compound[1] === this.tagName) && compound[2].slice(1).split('.').every((c) => have.includes(c));
+    }
     const attr = /^\[([\w-]+)\]$/.exec(sel);
     if (attr) return attr[1] in this.attrs;
+    const eq = /^\[([\w-]+)="([^"]*)"\]$/.exec(sel);
+    if (eq) return this.attrs[eq[1]] === eq[2];
     throw new Error('fake DOM: selector ' + sel);
   }
   querySelectorAll(sel) { return this.all().filter((e) => e.matches(sel)); }
@@ -65,7 +70,7 @@ function boot(api) {
   const win = { document, foreman: api };
   win.window = win;
   vm.createContext(win);
-  for (const f of ['model.js', 'art.js', 'app.js']) {
+  for (const f of ['model.js', 'art.js', 'preview.js', 'app.js']) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), win, { filename: f });
   }
   return { app, document };
@@ -95,8 +100,8 @@ function reportAnswer(_batch, opts = {}) {
   return { ok: true, doc: opts.byTicket ? reportByTicketSample() : reportSample() };
 }
 
-function fakeApi(first, dry = { ok: true, doc: dryRunSample() }, report = reportAnswer) {
-  const calls = { load: [], open: [], dryRun: [], report: [] };
+function fakeApi(first, dry = { ok: true, doc: dryRunSample() }, report = reportAnswer, tk = {}) {
+  const calls = { load: [], open: [], dryRun: [], report: [], ticket: [], save: [] };
   let update = null;
   return {
     calls, push: (d) => update(d),
@@ -104,6 +109,8 @@ function fakeApi(first, dry = { ok: true, doc: dryRunSample() }, report = report
     dryRun: async (b) => { calls.dryRun.push(b); return typeof dry === 'function' ? dry(b) : dry; },
     report: async (b, opts) => { calls.report.push({ batch: b, opts }); return typeof report === 'function' ? report(b, opts) : report; },
     open: async (p) => { calls.open.push(p); return null; },
+    ticket: async (b, n) => { calls.ticket.push([b, n]); return tk.ticket ? tk.ticket(b, n) : { ok: false, error: { kind: 'exit', message: 'no ticket handler' } }; },
+    saveHandoff: async (b, n, text, base) => { calls.save.push({ batch: b, name: n, text, base }); return tk.save ? tk.save(b, n, text, base) : { ok: true, saved: true, text }; },
     onUpdate: (fn) => { update = fn; return () => {}; },
   };
 }
@@ -635,4 +642,454 @@ test('the rail\'s Report is disabled, and says why, when there is no batch to re
   const b = boot(fakeApi(empty));
   await tick();
   assert.equal(railItem(b.app, 'Report').disabled, true);
+});
+
+// ---- the ticket page (design 02: b, b1, b2, b3) ----
+
+const HUMAN = '07-try-it-on-a-real-repo';
+const HANDOFF = '.scratch/b/handoff/07-try-it-on-a-real-repo.md';
+const TICKET_TEXT = '# 07: try it on a real repo\n\n**Status:** ready-for-human\n\nRun a 3-ticket batch with `foreman run`.\n\n- [ ] The run stops at the human ticket\n- [x] A rerun stops again, free\n';
+
+function ticketDoc(name, over = {}) {
+  const human = name === HUMAN;
+  return {
+    name, file: `.scratch/b/issues/${name}.md`, text: TICKET_TEXT,
+    progress: '## 07 — human ticket\n- waits on a person\n\n## 08 — other\n- not this one\n',
+    handoff: human ? { path: HANDOFF, text: '## What I did\nran it\n', error: null } : null,
+    ...over,
+  };
+}
+// The api a ticket page needs: `docs` is what main would read, by ticket name; `disk` is that, mutable.
+function ticketApi(over = {}) {
+  const st = { docs: {}, saves: [], ...over };
+  const tk = {
+    ticket: (b, n) => (st.docs[n] ? { ok: true, doc: structuredClone(st.docs[n]) } : { ok: true, doc: ticketDoc(n) }),
+    save: over.save,
+  };
+  return { st, tk };
+}
+const rowFor = (app, name) => app.all().find((e) => e.tagName === 'button' && e.attrs['data-ticket'] === name);
+const editorOf = (app) => app.all().find((e) => e.tagName === 'textarea');
+const tags = (app) => new Set(app.all().map((e) => e.tagName));
+const sw = (app, label) => buttons(app).find((b) => b.textContent === label && b.attrs['aria-pressed'] !== undefined);
+
+async function openPage(name, { api = null, d = data(), tk = ticketApi().tk } = {}) {
+  const fake = api || fakeApi(d, undefined, undefined, tk);
+  const { app, document } = boot(fake);
+  await tick();
+  rowFor(app, name).click();
+  await tick();
+  return { app, document, api: fake };
+}
+
+test('a click on a ticket in the order opens its page, which reads that ticket once', async () => {
+  const { app, api, document } = await openPage(HUMAN);
+  assert.deepEqual(api.calls.ticket, [['.scratch/b', HUMAN]]);
+  assert.ok(text(app).includes('07 try-it-on-a-real-repo'));
+  assert.equal(document.title, 'Foreman — 07 try-it-on-a-real-repo');
+  assert.ok(buttonNamed(app, '← b'), 'a way back, named for the batch');
+  assert.ok(buttonNamed(app, 'Open ticket in editor'));
+});
+
+test('the facts strip: status, blocked by, checked by, handoff — as text', async () => {
+  const { app } = await openPage(HUMAN);
+  const strip = app.querySelector('.facts').textContent;
+  for (const want of ['Status', 'ready-for-human', 'Blocked by', 'nothing', 'Checked by', '07a followup-try-the-followup-skill', 'Handoff', HANDOFF]) {
+    assert.ok(strip.includes(want), want);
+  }
+});
+
+test('Preview is the default: a heading, bold, code, bullets and boxes, built as elements', async () => {
+  const { app } = await openPage(HUMAN);
+  const md = app.querySelector('.md');
+  assert.ok(md, 'the preview');
+  assert.ok(!app.querySelector('.src'), 'not the Markdown view');
+  const kinds = md.all().map((e) => e.tagName);
+  for (const k of ['h1', 'b', 'code', 'ul', 'li', 'p']) assert.ok(kinds.includes(k), k);
+  assert.equal(md.querySelector('.bx.on').textContent, '✓');
+  assert.equal(md.querySelectorAll('.bx').length, 2);
+  assert.equal(sw(app, 'Preview').attrs['aria-pressed'], 'true');
+  assert.equal(sw(app, 'Markdown').attrs['aria-pressed'], 'false');
+  assert.ok(md.textContent.includes('try it on a real repo'));
+  assert.ok(!md.textContent.includes('# 07'), 'the # is the heading, not text');
+});
+
+test('Markdown shows the file\'s own text in the mono font; the notes and the editor are the same in both', async () => {
+  const { app } = await openPage(HUMAN);
+  const editor = editorOf(app);
+  const notesBefore = app.querySelector('.notes').textContent;
+  sw(app, 'Markdown').click();
+  const src = app.querySelector('pre.src');
+  assert.ok(src, 'the Markdown view');
+  assert.equal(src.textContent, TICKET_TEXT, 'the text exactly');
+  assert.ok(!app.querySelector('.md'));
+  assert.equal(sw(app, 'Markdown').attrs['aria-pressed'], 'true');
+  assert.equal(app.querySelector('.notes').textContent, notesBefore);
+  assert.equal(editorOf(app), editor, 'the very same editor, with whatever is in it');
+  sw(app, 'Preview').click();
+  assert.ok(app.querySelector('.md'));
+});
+
+test('the notes are this ticket\'s own, from progress.txt, as text', async () => {
+  const { app } = await openPage(HUMAN);
+  const notes = app.querySelector('.notes').textContent;
+  assert.ok(notes.includes('07 — human ticket'));
+  assert.ok(notes.includes('- waits on a person'));
+  assert.ok(!notes.includes('not this one'));
+});
+
+test('a ticket nothing in progress.txt mentions says so', async () => {
+  const { app } = await openPage('06-doctor-human-warnings');
+  assert.ok(app.querySelector('.notes').textContent.includes('nothing mentions 06 yet'));
+});
+
+test('a <script>, an <img onerror> and a javascript: link in the ticket, the notes and the handoff are characters, in both views', async () => {
+  const evil = '<script>alert(1)</script><img src=x onerror="alert(2)">[x](javascript:alert(3))';
+  const doc = ticketDoc(HUMAN, {
+    text: `# ${evil}\n\n${evil}\n\n- ${evil}\n- [x] ${evil}\n\n\`${evil}\` **${evil}**\n`,
+    progress: `## 07 — ${evil}\n- ${evil}\n`,
+    handoff: { path: HANDOFF, text: evil, error: null },
+  });
+  const { tk } = ticketApi({ docs: { [HUMAN]: doc } });
+  const { app } = await openPage(HUMAN, { tk });
+  const check = (where) => {
+    assert.ok(text(app).includes(evil), where + ': the characters are there');
+    for (const bad of ['img', 'script', 'iframe', 'a', 'style', 'link', 'object']) assert.ok(!tags(app).has(bad), `${where}: no <${bad}>`);
+    for (const e of app.all()) assert.ok(!Object.keys(e.attrs).some((k) => /^on/i.test(k) || k === 'href' || k === 'src'), where + ': no handler, href or src');
+  };
+  check('preview');
+  assert.equal(editorOf(app).value, evil, 'the editor holds the handoff text as a value');
+  sw(app, 'Markdown').click();
+  check('markdown');
+});
+
+test('a human ticket: the handoff in an editor beside the ticket, with the reminder above it', async () => {
+  const { app } = await openPage(HUMAN);
+  const ed = editorOf(app);
+  assert.ok(ed, 'an editor');
+  assert.equal(ed.value, '## What I did\nran it\n');
+  const side = app.querySelector('.handoff');
+  const kids = side.all();
+  const note = kids.find((e) => e.className.includes('lock'));
+  assert.equal(note.textContent, 'Record where a secret is stored (a password manager entry, an env var name), never its value.');
+  assert.ok(kids.indexOf(note) < kids.indexOf(ed), 'the reminder is above the editor');
+  assert.equal(ed.attrs.title, HANDOFF, 'the editor says which file it is');
+  assert.ok(app.querySelector('.ticketcols').all().includes(ed), 'in the same row as the ticket');
+  assert.ok(!app.querySelector('.stats'));
+});
+
+test('Save is off until something is typed; then it sends the text and the text the editor was opened on, and says it saved', async () => {
+  const { app, api } = await openPage(HUMAN);
+  assert.equal(buttonNamed(app, 'Save handoff').disabled, true, 'nothing to save');
+  const ed = editorOf(app);
+  ed.value = '## What I did\nran it, twice\n';
+  for (const fn of ed.listeners.input || []) fn({ target: ed });
+  assert.equal(buttonNamed(app, 'Save handoff').disabled, false);
+  assert.ok(app.querySelector('.handoff').textContent.includes('unsaved'));
+  buttonNamed(app, 'Save handoff').click();
+  await tick();
+  assert.deepEqual(api.calls.save, [{ batch: '.scratch/b', name: HUMAN, text: '## What I did\nran it, twice\n', base: '## What I did\nran it\n' }]);
+  assert.ok(app.querySelector('.handoff').textContent.includes('saved'));
+  assert.ok(!app.querySelector('.handoff').textContent.includes('unsaved'));
+  assert.equal(buttonNamed(app, 'Save handoff').disabled, true, 'saved: nothing more to save');
+  assert.equal(editorOf(app), ed);
+  assert.equal(ed.value, '## What I did\nran it, twice\n');
+});
+
+test('after a save the file\'s own line endings are what the next save is based on, and the editor is not unsaved', async () => {
+  const { tk } = ticketApi({ save: (b, n, text) => ({ ok: true, saved: true, text: text.replace(/\n/g, '\r\n') }) });
+  const { app, api } = await openPage(HUMAN, { tk });
+  const ed = editorOf(app);
+  ed.value = 'a\nb\n';
+  for (const fn of ed.listeners.input) fn({});
+  buttonNamed(app, 'Save handoff').click();
+  await tick();
+  ed.value = 'a\nb\nc\n';
+  for (const fn of ed.listeners.input) fn({});
+  buttonNamed(app, 'Save handoff').click();
+  await tick();
+  assert.equal(api.calls.save[1].base, 'a\r\nb\r\n');
+});
+
+test('a refused save is shown as text, and what the person typed is still there', async () => {
+  const { tk } = ticketApi({ save: () => ({ ok: false, error: { kind: 'bad-handoff', message: 'refusing "../x.md": reaches out of the repository with ..' } }) });
+  const { app } = await openPage(HUMAN, { tk });
+  const ed = editorOf(app);
+  ed.value = 'mine';
+  for (const fn of ed.listeners.input) fn({});
+  buttonNamed(app, 'Save handoff').click();
+  await tick();
+  assert.ok(text(app).includes('refusing "../x.md": reaches out of the repository with ..'));
+  assert.equal(ed.value, 'mine');
+  assert.equal(buttonNamed(app, 'Save handoff').disabled, false, 'it can be tried again');
+});
+
+test('a handoff path the check refused: the refusal in place of the editor, as text', async () => {
+  const doc = ticketDoc(HUMAN, { handoff: { path: '../x.md', text: null, error: 'refusing "../x.md": reaches out of the repository with ..' } });
+  const { tk } = ticketApi({ docs: { [HUMAN]: doc } });
+  const { app } = await openPage(HUMAN, { tk });
+  assert.ok(!editorOf(app));
+  assert.ok(text(app).includes('reaches out of the repository'));
+  assert.ok(!buttonNamed(app, 'Save handoff') || buttonNamed(app, 'Save handoff').disabled);
+});
+
+test('a handoff file that is not there yet opens an empty editor, and says it is new', async () => {
+  const doc = ticketDoc(HUMAN, { handoff: { path: HANDOFF, text: null, error: null } });
+  const { tk } = ticketApi({ docs: { [HUMAN]: doc } });
+  const { app, api } = await openPage(HUMAN, { tk });
+  assert.equal(editorOf(app).value, '');
+  assert.ok(app.querySelector('.handoff').textContent.includes('not written yet'));
+  buttonNamed(app, 'Save handoff').click();
+  await tick();
+  assert.equal(api.calls.save[0].base, null);
+});
+
+test('the file changed on disk while the editor is clean: the editor shows the new text', async () => {
+  const st = ticketApi();
+  const { app, api } = await openPage(HUMAN, { tk: st.tk });
+  const ed = editorOf(app);
+  st.st.docs[HUMAN] = ticketDoc(HUMAN, { handoff: { path: HANDOFF, text: 'edited elsewhere\n', error: null }, text: '# 07 changed\n' });
+  api.push(data());
+  await tick();
+  assert.equal(api.calls.ticket.length, 2, 'the page was read again');
+  assert.equal(editorOf(app), ed);
+  assert.equal(ed.value, 'edited elsewhere\n');
+  assert.ok(app.querySelector('.md').textContent.includes('07 changed'));
+  assert.equal(buttonNamed(app, 'Save handoff').disabled, true);
+});
+
+test('the file changed on disk while the editor has unsaved changes: the draft stays, and the page says so', async () => {
+  const st = ticketApi();
+  const { app, api } = await openPage(HUMAN, { tk: st.tk });
+  const ed = editorOf(app);
+  ed.value = 'my draft';
+  for (const fn of ed.listeners.input) fn({});
+  st.st.docs[HUMAN] = ticketDoc(HUMAN, { handoff: { path: HANDOFF, text: 'edited elsewhere\n', error: null } });
+  api.push(data());
+  await tick();
+  assert.equal(ed.value, 'my draft', 'not touched');
+  assert.ok(app.querySelector('.handoff').textContent.includes('changed on disk'));
+  assert.equal(api.calls.save.length, 0);
+});
+
+test('Save of a file that changed asks first; Overwrite saves against what is on disk now', async () => {
+  let n = 0;
+  const { tk } = ticketApi({ save: (b, name, text, base) => (n++ === 0 ? { ok: true, saved: false, conflict: true, disk: 'theirs\n' } : { ok: true, saved: true, text }) });
+  const { app, api } = await openPage(HUMAN, { tk });
+  const ed = editorOf(app);
+  ed.value = 'mine';
+  for (const fn of ed.listeners.input) fn({});
+  buttonNamed(app, 'Save handoff').click();
+  await tick();
+  assert.ok(text(app).includes('changed on disk since you opened it'));
+  assert.ok(buttonNamed(app, 'Overwrite') && buttonNamed(app, 'Load from disk') && buttonNamed(app, 'Keep editing'));
+  assert.equal(api.calls.save.length, 1);
+  assert.equal(ed.value, 'mine');
+  buttonNamed(app, 'Overwrite').click();
+  await tick();
+  assert.deepEqual(api.calls.save[1], { batch: '.scratch/b', name: HUMAN, text: 'mine', base: 'theirs\n' });
+  assert.ok(!buttonNamed(app, 'Overwrite'), 'the question is answered');
+  assert.ok(app.querySelector('.handoff').textContent.includes('saved'));
+});
+
+test('Load from disk takes the file\'s text and drops the draft; Keep editing leaves the draft and the question closes', async () => {
+  const { tk } = ticketApi({ save: () => ({ ok: true, saved: false, conflict: true, disk: 'theirs\n' }) });
+  const { app, api } = await openPage(HUMAN, { tk });
+  const ed = editorOf(app);
+  ed.value = 'mine';
+  for (const fn of ed.listeners.input) fn({});
+  buttonNamed(app, 'Save handoff').click();
+  await tick();
+  buttonNamed(app, 'Keep editing').click();
+  assert.equal(ed.value, 'mine');
+  assert.ok(!buttonNamed(app, 'Overwrite'));
+  buttonNamed(app, 'Save handoff').click();
+  await tick();
+  buttonNamed(app, 'Load from disk').click();
+  assert.equal(ed.value, 'theirs\n');
+  assert.ok(!buttonNamed(app, 'Overwrite'));
+  assert.equal(buttonNamed(app, 'Save handoff').disabled, true);
+  assert.equal(api.calls.save.length, 2, 'neither wrote anything');
+});
+
+test('the editor, its text, its focus and its selection survive a redraw', async () => {
+  const { app, document, api } = await openPage(HUMAN);
+  const ed = editorOf(app);
+  ed.value = 'half-typed';
+  ed.selectionStart = 2; ed.selectionEnd = 5; ed.scrollTop = 33;
+  ed.focus();
+  api.push(data());
+  await tick();
+  assert.equal(editorOf(app), ed);
+  assert.equal(ed.value, 'half-typed');
+  assert.equal(document.activeElement, ed);
+  assert.equal(ed.selectionStart, 2);
+  assert.equal(ed.selectionEnd, 5);
+  assert.equal(ed.scrollTop, 33);
+});
+
+test('the ticket text keeps its scroll position across a redraw', async () => {
+  const { app, api } = await openPage(HUMAN);
+  app.querySelector('[data-scroll="ticket"]').scrollTop = 120;
+  api.push(data());
+  await tick();
+  assert.equal(app.querySelector('[data-scroll="ticket"]').scrollTop, 120);
+});
+
+test('an agent ticket that has not run: what the loop knows, and no editor', async () => {
+  const { app } = await openPage('06-doctor-human-warnings');
+  assert.ok(!editorOf(app));
+  const side = app.querySelector('.knows').textContent;
+  for (const want of ['What the loop knows', 'Iterations', 'none yet', 'In flight', 'Sent back']) assert.ok(side.includes(want), want);
+});
+
+test('a ticket that landed and ran: run stats from status --json, and an iteration row for each line', async () => {
+  const d = data();
+  d.status.tickets[2].stats = statsSample();
+  const { app } = await openPage('03-stop-on-waiting-human', { d });
+  const stats = app.querySelector('.stats').textContent;
+  for (const want of ['Cost', '$4.62', 'Runtime', '28m 30s', 'Model', 'claude-sonnet-5-5', 'Iterations', 'Turns', '112', 'Tokens in / out', '310k / 46k']) assert.ok(stats.includes(want), want);
+  const rows = app.querySelectorAll('.iterline');
+  assert.equal(rows.length, 4);
+  assert.ok(rows[1].textContent.includes('stalled'));
+  assert.ok(rows[2].textContent.includes('checkpoint turn'));
+  assert.ok(rows[3].textContent.includes('landed') && rows[3].textContent.includes('8m 25s · $1.30'));
+  assert.ok(!app.querySelector('.knows'));
+  assert.ok(!editorOf(app));
+});
+
+test('a ticket that landed and never ran says none yet, and a human one that landed shows its handoff, not stats', async () => {
+  const none = await openPage('02-handoff-file-path');
+  assert.ok(none.app.querySelector('.nostats').textContent.includes('none yet'));
+  const d = data();
+  d.status.tickets[6].done = true; d.status.tickets[6].state = 'done'; d.status.tickets[6].status = 'done';
+  d.status.tickets[6].stats = statsSample();
+  const human = await openPage(HUMAN, { d });
+  assert.ok(editorOf(human.app));
+  assert.ok(!human.app.querySelector('.stats'));
+});
+
+test('Open ticket in editor opens the ticket file; nothing on the page changes a status line', async () => {
+  const { app, api } = await openPage(HUMAN);
+  buttonNamed(app, 'Open ticket in editor').click();
+  assert.deepEqual(api.calls.open, ['.scratch/b/issues/07-try-it-on-a-real-repo.md']);
+  for (const b of buttons(app)) {
+    assert.ok(!/mark (it )?(as )?done|implemented|flip|set status/i.test(b.textContent), `no control: ${b.textContent}`);
+  }
+  assert.ok(text(app).includes('set the ticket\'s status line to implemented in your editor'), 'it says how, in words');
+});
+
+test('Back returns to the overview, and the order\'s rows are clickable again', async () => {
+  const { app } = await openPage(HUMAN);
+  buttonNamed(app, '← b').click();
+  assert.ok(app.querySelector('.tlist'));
+  assert.ok(!app.querySelector('.ticketcols'));
+});
+
+test('Fill in handoff on the overview opens the human ticket\'s page', async () => {
+  const api = fakeApi(data(), undefined, undefined, ticketApi().tk);
+  const { app } = boot(api);
+  await tick();
+  buttonNamed(app, 'Fill in handoff').click();
+  await tick();
+  assert.deepEqual(api.calls.ticket, [['.scratch/b', HUMAN]]);
+  assert.ok(editorOf(app));
+});
+
+test('leaving with unsaved changes asks first: Keep editing stays, Discard goes', async () => {
+  const { app } = await openPage(HUMAN);
+  const ed = editorOf(app);
+  ed.value = 'draft';
+  for (const fn of ed.listeners.input) fn({});
+  buttonNamed(app, '← b').click();
+  assert.ok(app.querySelector('.ticketcols'), 'still on the page');
+  assert.ok(text(app).includes('unsaved changes'));
+  buttonNamed(app, 'Keep editing').click();
+  assert.equal(editorOf(app).value, 'draft');
+  buttonNamed(app, '← b').click();
+  buttonNamed(app, 'Discard').click();
+  assert.ok(app.querySelector('.tlist'));
+});
+
+test('another batch in the rail, with unsaved changes, asks the same; a clean page just goes', async () => {
+  const api = fakeApi((b) => data({ selected: b || '.scratch/b' }), undefined, undefined, ticketApi().tk);
+  const { app } = boot(api);
+  await tick();
+  rowFor(app, HUMAN).click();
+  await tick();
+  const ed = editorOf(app);
+  ed.value = 'draft';
+  for (const fn of ed.listeners.input) fn({});
+  app.all().find((e) => e.attrs['data-batch'] === '.scratch/c').click();
+  await tick();
+  assert.ok(app.querySelector('.ticketcols'), 'still there');
+  assert.deepEqual(api.calls.load, [null]);
+  buttonNamed(app, 'Discard').click();
+  await tick();
+  assert.deepEqual(api.calls.load, [null, '.scratch/c']);
+  assert.ok(!app.querySelector('.ticketcols'));
+});
+
+test('while the ticket is being read the page says so; a failure is in foreman\'s words, with Try again and Back', async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  let fail = true;
+  const { tk } = ticketApi({ });
+  const wrapped = { ticket: async (b, n) => { await gate; return fail ? { ok: false, error: { kind: 'read', message: 'could not read x.md: gone' } } : tk.ticket(b, n); } };
+  const api = fakeApi(data(), undefined, undefined, wrapped);
+  const { app } = boot(api);
+  await tick();
+  rowFor(app, HUMAN).click();
+  assert.ok(text(app).includes('Reading the ticket…'));
+  release();
+  await tick();
+  assert.ok(text(app).includes('could not read x.md: gone'));
+  fail = false;
+  buttonNamed(app, 'Try again').click();
+  await tick();
+  assert.ok(editorOf(app));
+  assert.equal(api.calls.ticket.length, 2);
+});
+
+test('a read that comes back after the person went back is thrown away', async () => {
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const { tk } = ticketApi();
+  const api = fakeApi(data(), undefined, undefined, { ticket: async (b, n) => { await gate; return tk.ticket(b, n); } });
+  const { app } = boot(api);
+  await tick();
+  rowFor(app, HUMAN).click();
+  buttonNamed(app, 'Back').click();
+  release();
+  await tick();
+  assert.ok(app.querySelector('.tlist'), 'still on the overview');
+  assert.ok(!editorOf(app));
+});
+
+test('a ticket that is not in the batch any more says so, with the way back', async () => {
+  const { app, api } = await openPage(HUMAN);
+  const d = data();
+  d.status.tickets = d.status.tickets.filter((t) => t.name !== HUMAN);
+  api.push(d);
+  await tick();
+  assert.ok(text(app).includes('is not in this batch any more'));
+  assert.ok(buttonNamed(app, 'Back'));
+});
+
+test('a push for a different batch takes the window back to the overview', async () => {
+  const { app, api } = await openPage(HUMAN);
+  api.push(data({ selected: '.scratch/c', status: { ...sample(), batch: { path: '.scratch/c', name: 'c' } } }));
+  await tick();
+  assert.ok(app.querySelector('.tlist') || text(app).length > 0);
+  assert.ok(!app.querySelector('.ticketcols'));
+});
+
+test('on the ticket page the rail marks no tool; Report from there opens the report', async () => {
+  const { app, api } = await openPage('06-doctor-human-warnings');
+  const report = app.all().find((e) => e.attrs['data-tool'] === 'report');
+  assert.equal(report.attrs['aria-current'], 'false');
+  report.click();
+  await tick();
+  assert.equal(api.calls.report.length, 1);
+  assert.ok(!app.querySelector('.ticketcols'));
 });

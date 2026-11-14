@@ -16,6 +16,7 @@ const { findGitBash } = require('./bash.cjs');
 const { createForeman, findRepoRoot, ForemanError } = require('./foreman.cjs');
 const { createWatcher } = require('./watch.cjs');
 const { createOverview } = require('./overview.cjs');
+const { createTicketFiles } = require('./ticket.cjs');
 const { repoFromArgv, refuseNavigation, openWindowHandler, repoPath } = require('./guard.cjs');
 
 const PAGE = path.join(__dirname, 'index.html');
@@ -40,7 +41,9 @@ async function setup() {
   const checkout = path.resolve(__dirname, '..');
   const foreman = createForeman({ bash: found.bash, checkout, repoRoot });
   const overview = createOverview({ foreman, repoRoot });
-  ctx = { repoRoot, overview, foreman };
+  // A ticket page reads from what the overview already read, and saves against a fresh answer.
+  const tickets = createTicketFiles({ repoRoot, foreman, known: (b) => overview.statusOf(b) });
+  ctx = { repoRoot, overview, foreman, tickets };
   watcher = createWatcher({
     // A change to anything in a batch — a status line flipped in an editor, the loop landing a
     // ticket — is a reason to read again.
@@ -94,6 +97,31 @@ ipcMain.handle('report:load', async (event, batch, opts) => {
     if (!ctx) await setup();
     const o = opts && typeof opts === 'object' ? opts : {};
     return { ok: true, doc: await ctx.foreman.report(batch, { byTicket: o.byTicket === true, run: o.run === undefined ? null : o.run }) };
+  } catch (e) {
+    return { ok: false, error: describe(e) };
+  }
+});
+
+// A ticket's page: its text, the batch's progress.txt and, for a human ticket, its handoff file. The
+// page names a batch and a ticket; the file and the handoff path are found by main (ticket.cjs).
+ipcMain.handle('ticket:load', async (event, batch, name) => {
+  if (!trusted(event)) return { ok: false, error: describe(new Error('refused')) };
+  try {
+    if (!ctx) await setup();
+    return { ok: true, doc: await ctx.tickets.load(batch, name) };
+  } catch (e) {
+    return { ok: false, error: describe(e) };
+  }
+});
+
+// The one thing the app writes: the handoff file the ticket names, inside the repository. `base` is
+// the text the editor was opened on; if the file is not that any more, nothing is written and the
+// answer is { ok: true, saved: false, conflict: true, disk } for the person to decide.
+ipcMain.handle('ticket:save', async (event, batch, name, text, base) => {
+  if (!trusted(event)) return { ok: false, error: describe(new Error('refused')) };
+  try {
+    if (!ctx) await setup();
+    return { ok: true, ...(await ctx.tickets.save(batch, name, text, base === undefined ? null : base)) };
   } catch (e) {
     return { ok: false, error: describe(e) };
   }

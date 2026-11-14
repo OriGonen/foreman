@@ -74,4 +74,20 @@ const reportByTicketSample = () => structuredClone(REPORT_BY_TICKET);
 // The answer to `--run <id>`: the whole report, with the run added.
 const reportRunSample = () => ({ ...structuredClone(REPORT), run: structuredClone(REPORT_RUN) });
 
-module.exports = { sample, dryRunSample, reportSample, reportByTicketSample, reportRunSample, T };
+// What `status --json` adds to a ticket that ran (ticket 16): 03 of the sample, as design 02's b3 shows
+// it — three iterations in one run, the middle one a stall and a checkpoint turn after it.
+function statsSample() {
+  return {
+    iterations: 3, cost_usd: 4.62, duration_ms: 1710000, turns: 112,
+    tokens: { input: 310000, output: 46000, cache_read: 4100000, cache_creation: 380000 },
+    models: ['claude-sonnet-5-5'],
+    runs: [
+      { run: '20261021T091200Z-4411', kind: 'iteration', outcome: 'progressed', cost_usd: 1.64, duration_ms: 675000, started_at: '2026-10-21T09:12:00Z', finished_at: '2026-10-21T09:23:15Z' },
+      { run: '20261021T091200Z-4411', kind: 'iteration', outcome: 'stalled', cost_usd: 1.48, duration_ms: 490000, started_at: '2026-10-21T09:23:20Z', finished_at: '2026-10-21T09:31:30Z' },
+      { run: '20261021T091200Z-4411', kind: 'checkpoint', outcome: 'checkpoint', cost_usd: 0.2, duration_ms: 40000, started_at: '2026-10-21T09:31:31Z', finished_at: '2026-10-21T09:32:11Z' },
+      { run: '20261021T091200Z-4411', kind: 'iteration', outcome: 'landed', cost_usd: 1.3, duration_ms: 505000, started_at: '2026-10-21T09:32:20Z', finished_at: '2026-10-21T09:40:45Z' },
+    ],
+  };
+}
+
+module.exports = { statsSample, sample, dryRunSample, reportSample, reportByTicketSample, reportRunSample, T };

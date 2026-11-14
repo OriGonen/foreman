@@ -11,6 +11,7 @@ const M = require('./model.js');
 function createOverview({ foreman, repoRoot }) {
   let selected = null;
   let lastAll = null;
+  let lastStatus = null;     // { batch, status } of the latest read that got one
   let epoch = 0;             // changes whenever the person asks for something
 
   // The rail and the chosen batch's status. If the chosen batch cannot be read but the list says it
@@ -24,6 +25,7 @@ function createOverview({ foreman, repoRoot }) {
     if (pick === null) return data;
     try {
       data.status = await foreman.status(pick);
+      lastStatus = { batch: pick, status: data.status };
     } catch (e) {
       const entry = all.batches.find((b) => b.path === pick);
       if (!entry || !entry.error) throw e;
@@ -34,6 +36,10 @@ function createOverview({ foreman, repoRoot }) {
 
   return {
     get selected() { return selected; },
+
+    // What the last read said about `batch`, for a page that needs a ticket's facts (the ticket page)
+    // without asking foreman again; null if the last read was of another batch.
+    statusOf(batch) { return lastStatus && lastStatus.batch === batch ? lastStatus.status : null; },
 
     // The person asked: show `wanted` (null: the first batch worth showing).
     async load(wanted) {

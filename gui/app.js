@@ -6,6 +6,7 @@
   const api = window.foreman;
   const M = window.ForemanModel;
   const A = window.ForemanArt;
+  const P = window.ForemanPreview;
   const app = document.getElementById('app');
 
   // h('div', { cls: 'row', text: 'x', on: { click: fn }, attrs: { title: 't' } }, child, ...)
@@ -60,7 +61,7 @@
     const report = h('button', {
       cls: 'item' + (reporting ? ' on' : ''),
       attrs: { type: 'button', 'data-tool': 'report', 'aria-current': reporting ? 'page' : 'false' },
-      on: { click: openReport },
+      on: { click: () => leaving(openReport) },
     }, 'Report', span('free', 'free'));
     if (!data.selected) { report.disabled = true; report.title = 'There is no batch to report on.'; }
     const read = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -108,7 +109,7 @@
       ? ' is a human ticket. ' + hm.note
       : ' is a human ticket, and it is next: a run stops there until you mark it done.');
     return h('div', { cls: 'card warm row humanbar' }, chip({ cls: 'human', text: 'human' }), text,
-      button('Fill in handoff', { title: 'The ticket page and the handoff editor are a later ticket.' }));
+      button('Fill in handoff', { onClick: () => openTicket(ticketNameOf(hm.file)) }));
   }
 
   function warningsCard(warnings) {
@@ -117,12 +118,20 @@
     return card;
   }
 
+  // The name main finds a ticket by (`03-ticket-page`): the same through a DONE_ rename.
+  function ticketNameOf(file) {
+    const hit = data && data.status ? data.status.tickets.find((t) => t.file === file) : null;
+    return hit ? hit.name : String(file).split('/').pop().replace(/\.md$/i, '').replace(/^[A-Za-z]+_(?=\d)/, '');
+  }
+
   function orderList(rows) {
-    const list = h('div', { cls: 'card flush tlist', attrs: { role: 'list', 'aria-label': 'Order' } });
+    const list = h('div', { cls: 'card flush tlist', attrs: { 'aria-label': 'Order' } });
     for (const r of rows) {
-      list.append(h('div', { cls: 't ' + r.kind, attrs: { role: 'listitem', title: r.file } },
-        span('g ' + (r.kind === 'done' ? 'ok' : r.kind === 'next' ? 'acc' : r.glyph === '✋' ? 'rust' : 'dim'), r.glyph),
-        span('num', r.num), span('slug', r.slug), r.chip ? chip(r.chip) : span('', ''), span('meta', r.meta)));
+      const name = ticketNameOf(r.file);
+      list.append(h('button', {
+        cls: 't ' + r.kind, attrs: { type: 'button', title: r.file, 'data-ticket': name }, on: { click: () => openTicket(name) },
+      }, span('g ' + (r.kind === 'done' ? 'ok' : r.kind === 'next' ? 'acc' : r.glyph === '✋' ? 'rust' : 'dim'), r.glyph),
+      span('num', r.num), span('slug', r.slug), r.chip ? chip(r.chip) : span('', ''), span('meta', r.meta)));
     }
     return list;
   }
@@ -318,7 +327,7 @@
   async function openReport() {
     const batch = data && data.selected;
     if (!batch) return;
-    dryToken++; dry = null;
+    dryToken++; dry = null; tp = null;
     const by = rep && rep.batch === batch ? rep.by : 'run';          // Read again keeps the view
     view = 'report';
     rep = { batch, by, state: 'loading', docs: {}, runs: {}, open: new Set(), error: null, at: null };
@@ -393,6 +402,7 @@
     const batch = data && data.selected;
     if (!batch) return;
     const token = ++dryToken;
+    tp = null;
     view = 'dryrun';
     dry = { batch, state: 'loading' };
     draw();
@@ -409,6 +419,285 @@
     draw();
   }
 
+  // ---- the ticket page (design 02: b, b1, b2, b3) ----
+
+  // The ticket page is of one ticket of the selected batch, named as main finds it. Its files are read
+  // when it opens and again whenever the pushed overview says something changed. The handoff editor
+  // is one <textarea> kept for as long as the page is open, so a redraw never takes the person's
+  // text, caret or focus with it.
+  let tp = null;             // { batch, name, state: 'loading' | 'ready' | 'error', doc, error, readError, mode: 'preview' | 'markdown',
+                             //   editor, base, diskChanged, conflict: { disk }, saving, saveError, savedAt, leaving, seq, ui }
+
+  const norm = (v) => String(v).replace(/\r\n?/g, '\n');
+  const isDirty = (t) => !!t.editor && norm(t.editor.value) !== norm(t.base === null ? '' : t.base);
+  const asError = (e) => ({ kind: 'spawn', message: String(e && e.message ? e.message : e) });
+
+  // Run `next` now — or, if the handoff editor holds changes that are not saved, after the person has
+  // said they can go.
+  function leaving(next) {
+    if (view === 'ticket' && tp && isDirty(tp)) { tp.leaving = next; draw(); return; }
+    next();
+  }
+
+  function leaveTicket() {
+    tp = null;
+    view = 'overview';
+    draw();
+  }
+
+  async function openTicket(name) {
+    const batch = data && data.selected;
+    if (!batch || !name) return;
+    dryToken++; dry = null; rep = null;
+    view = 'ticket';
+    tp = {
+      batch, name, state: 'loading', doc: null, error: null, readError: null, mode: 'preview',
+      editor: null, base: null, diskChanged: false, conflict: null, saving: false, saveError: null,
+      savedAt: null, leaving: null, seq: 0, ui: null,
+    };
+    draw();
+    await readTicket();
+  }
+
+  // What main read, taken into the page. The editor follows the file when it has nothing unsaved; when
+  // it has, the draft stays and the page says the file moved (Save then asks, below).
+  function takeDoc(t, doc) {
+    t.doc = doc;
+    const hf = doc.handoff;
+    if (!hf || hf.error) return;
+    const disk = hf.text;
+    if (!t.editor) {
+      t.editor = h('textarea', { cls: 'editor', attrs: { spellcheck: 'false', 'aria-label': 'Handoff file', 'data-editor': 'handoff' } });
+      t.editor.addEventListener('input', () => syncEditor());
+      t.base = disk;
+      t.editor.value = disk === null ? '' : disk;
+      return;
+    }
+    if (disk === t.base) { t.diskChanged = false; return; }
+    if (!isDirty(t) || norm(t.editor.value) === norm(disk === null ? '' : disk)) {
+      t.base = disk;
+      if (norm(t.editor.value) !== norm(disk === null ? '' : disk)) t.editor.value = disk === null ? '' : disk;
+      t.diskChanged = false;
+      t.conflict = null;
+    } else {
+      t.diskChanged = true;
+    }
+  }
+
+  async function readTicket() {
+    const mine = tp;
+    const seq = ++mine.seq;
+    let answer;
+    try { answer = await api.ticket(mine.batch, mine.name); } catch (e) { answer = { ok: false, error: asError(e) }; }
+    if (tp !== mine || seq !== mine.seq) return;
+    if (answer && answer.ok) {
+      takeDoc(mine, answer.doc);
+      mine.state = 'ready';
+      mine.readError = null;
+    } else {
+      const error = (answer && answer.error) || { kind: 'spawn', message: 'No answer.' };
+      // A page already showing keeps what it has; the next change reads again.
+      if (mine.doc) mine.readError = error.message; else { mine.state = 'error'; mine.error = error; }
+    }
+    draw();
+  }
+
+  function retryTicket() {
+    tp.state = 'loading';
+    draw();
+    readTicket();
+  }
+
+  // Save the handoff. `base` is what the file must still be on disk for the write to go ahead: what
+  // the editor was opened on, or — after the person chose Overwrite — what is there now.
+  async function saveHandoff(base) {
+    const mine = tp;
+    if (!mine || !mine.editor || mine.saving) return;
+    const body = mine.editor.value;
+    mine.saving = true;
+    mine.saveError = null;
+    mine.conflict = null;
+    draw();
+    let answer;
+    try { answer = await api.saveHandoff(mine.batch, mine.name, body, base); } catch (e) { answer = { ok: false, error: asError(e) }; }
+    mine.saving = false;
+    if (tp !== mine) return;
+    if (!answer || !answer.ok) {
+      mine.saveError = ((answer && answer.error) || { message: 'No answer.' }).message;
+    } else if (answer.saved) {
+      mine.base = answer.text;           // as written, with the file's own line endings
+      mine.savedAt = new Date();
+      mine.diskChanged = false;
+    } else if (answer.conflict) {
+      mine.conflict = { disk: answer.disk };
+    }
+    draw();
+  }
+
+  // The words on the editor's card that change as the person types, set without redrawing it.
+  function syncEditor() {
+    const t = tp;
+    if (!t || !t.ui) return;
+    const dirty = isDirty(t);
+    let state = '';
+    if (t.saving) state = 'saving…';
+    else if (dirty) state = 'unsaved';
+    else if (t.base === null) state = 'not written yet';
+    else if (t.savedAt) state = 'saved ' + t.savedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    t.ui.state.textContent = state;
+    t.ui.save.disabled = t.saving || !(dirty || t.base === null);
+    t.ui.warn.hidden = !(t.diskChanged && dirty);
+  }
+
+  function inlineNodes(list) {
+    return list.map((n) => (n.type === 'bold' ? h('b', { text: n.text }) : n.type === 'code' ? h('code', { text: n.text }) : n.text));
+  }
+
+  // The Preview: the nodes preview.js made, as elements, every string through textContent.
+  function previewEl(source) {
+    const md = h('div', { cls: 'md' });
+    for (const node of P.preview(source)) {
+      if (node.type === 'heading') md.append(h('h' + Math.min(node.level, 3), {}, ...inlineNodes(node.children)));
+      else if (node.type === 'paragraph') md.append(h('p', {}, ...inlineNodes(node.children)));
+      else {
+        md.append(h('ul', {}, ...node.items.map((it) => h('li', { cls: 'd' + it.depth },
+          it.checked === null ? span('dot', '•') : span('bx' + (it.checked ? ' on' : ''), it.checked ? '✓' : ''),
+          h('span', {}, ...inlineNodes(it.children))))));
+      }
+    }
+    return md;
+  }
+
+  function factsStrip(page) {
+    const strip = h('div', { cls: 'card row facts' });
+    for (const f of page.facts) {
+      strip.append(h('div', { cls: f.label === 'Handoff' || f.label === 'Spend' ? 'grow' : '' },
+        h('div', { cls: 'label', text: f.label }),
+        h('div', { cls: 'mono wordy' }, ...f.parts.map((p) => (p.tone ? span(p.tone, p.text) : p.text)))));
+    }
+    return strip;
+  }
+
+  function ticketCard(page) {
+    const pick = (mode, label) => {
+      const b = h('button', { cls: tp.mode === mode ? 'on' : '', attrs: { type: 'button', 'aria-pressed': tp.mode === mode ? 'true' : 'false' }, on: { click: () => { tp.mode = mode; draw(); } } }, label);
+      return b;
+    };
+    const notes = h('div', { cls: 'feed notes' });
+    if (page.notes.length === 0) notes.append(h('div', { cls: 'dim', text: `nothing mentions ${page.num} yet` }));
+    for (const n of page.notes) {
+      notes.append(h('div', { cls: 'noteentry' },
+        n.title === null ? null : h('div', { cls: 'notetitle', text: n.title }),
+        h('pre', { cls: 'said', text: n.text })));
+    }
+    return h('div', { cls: 'card col ticketcard' },
+      h('div', { cls: 'row' }, h('div', { cls: 'label grow', text: 'Ticket' }),
+        h('span', { cls: 'seg', attrs: { role: 'group', 'aria-label': 'View' } }, pick('preview', 'Preview'), pick('markdown', 'Markdown'))),
+      h('div', { cls: 'col grow scroller', attrs: { 'data-scroll': 'ticket' } },
+        tp.mode === 'markdown' ? h('pre', { cls: 'src', text: page.text === null ? '' : page.text }) : previewEl(page.text === null ? '' : page.text),
+        h('div', { cls: 'label notelabel', text: 'Notes in progress.txt' }), notes));
+  }
+
+  function handoffCard(page) {
+    const t = tp;
+    const card = h('div', { cls: 'card col grow sidecard handoff' });
+    const state = span('mono small muted', '');
+    card.append(h('div', { cls: 'row' }, h('div', { cls: 'label grow', text: 'Handoff file' }), state));
+    if (!page.side.path) {
+      card.append(h('div', { cls: 'muted', text: 'This ticket has no Handoff: line, so there is no file to fill in.' }));
+      return card;
+    }
+    card.append(h('div', { cls: 'note lock', text: page.side.reminder }));
+    const hf = t.doc && t.doc.handoff;
+    if (!hf) { card.append(h('div', { cls: 'muted', text: 'Reading the handoff file…' })); return card; }
+    if (hf.error) {
+      card.append(h('pre', { cls: 'said err', text: hf.error }),
+        h('div', { cls: 'small muted', text: 'The app only writes the file the ticket names, and only inside this repository.' }));
+      return card;
+    }
+
+    // One question at a time: leaving with unsaved changes, else the file having changed under a save.
+    if (t.leaving) {
+      card.append(h('div', { cls: 'card warm col ask' },
+        h('div', { text: 'You have unsaved changes to the handoff. Leave and discard them?' }),
+        h('div', { cls: 'row' },
+          button('Discard', { onClick: () => { const go = t.leaving; t.leaving = null; t.editor = null; go(); } }),
+          button('Keep editing', { cls: 'quiet', onClick: () => { t.leaving = null; draw(); } }))));
+    } else if (t.conflict) {
+      card.append(h('div', { cls: 'card warm col ask' },
+        h('div', { text: t.conflict.disk === null
+          ? 'This file was removed from disk since you opened it. Nothing was saved.'
+          : 'This file changed on disk since you opened it. Nothing was saved.' }),
+        h('div', { cls: 'row' },
+          button('Overwrite', { cls: 'primary', onClick: () => saveHandoff(t.conflict.disk) }),
+          button('Load from disk', { onClick: () => {
+            const disk = t.conflict.disk;
+            t.editor.value = disk === null ? '' : disk;
+            t.base = disk; t.conflict = null; t.diskChanged = false;
+            draw();
+          } }),
+          button('Keep editing', { cls: 'quiet', onClick: () => { t.conflict = null; t.diskChanged = true; draw(); } }))));
+    }
+    const warn = h('div', { cls: 'small rust', text: 'The file changed on disk while you were editing. Save will ask before it overwrites.' });
+    const save = button('Save handoff', { cls: 'primary', onClick: () => saveHandoff(t.base) });
+    t.editor.title = page.side.path;
+    t.editor.setAttribute('title', page.side.path);
+    card.append(warn, t.editor);
+    if (t.saveError) card.append(h('pre', { cls: 'said err', text: t.saveError }));
+    card.append(h('div', { cls: 'row' },
+      h('span', { cls: 'small muted grow' }, 'When it\'s done, set the ticket\'s status line to ', span('mono', 'implemented'), ' in your editor; the overview updates by itself.'),
+      save));
+    t.ui = { state, save, warn };
+    syncEditor();
+    return card;
+  }
+
+  function statsCard(side) {
+    return h('div', { cls: 'card col grow sidecard' },
+      h('div', { cls: 'row' }, h('div', { cls: 'label grow', text: 'Run stats' }), span('mono small muted', 'from foreman-runs.jsonl')),
+      h('div', { cls: 'stats' }, ...side.cards.map((c) => h('div', { cls: 's' },
+        h('div', { cls: 'k', text: c.k }), h('div', { cls: 'v' + (c.mono ? ' mono' : ''), text: c.v })))),
+      h('div', { cls: 'label', text: 'Iterations' }),
+      h('div', { cls: 'card flush small tlist iters' }, ...side.iterations.map((r) => h('div', { cls: 't iterline', attrs: { title: r.label } },
+        span('g ' + (r.tone || 'acc'), r.glyph), span('num', r.n), span('slug', r.label),
+        span('chip ' + (r.tone === 'ok' ? 'landed' : r.tone === 'rust' ? 'human' : 'followup'), r.outcome), span('meta', r.meta)))));
+  }
+
+  function sideCard(page) {
+    const side = page.side;
+    if (side.kind === 'handoff') return handoffCard(page);
+    if (side.kind === 'stats') return statsCard(side);
+    if (side.kind === 'nostats') {
+      return h('div', { cls: 'card col grow sidecard nostats' }, h('div', { cls: 'label', text: 'Run stats' }),
+        h('div', { cls: 'muted', text: side.text }));
+    }
+    const kv = h('div', { cls: 'kv' });
+    for (const [k, v] of side.rows) kv.append(span('', k), span('', v));
+    return h('div', { cls: 'card col grow sidecard knows' }, h('div', { cls: 'label', text: 'What the loop knows' }), kv);
+  }
+
+  function ticketView(data) {
+    const t = tp;
+    const goBack = () => leaving(leaveTicket);
+    const backOnly = button('Back', { cls: 'quiet', onClick: goBack });
+    if (t.state === 'loading') return paneView('Reading the ticket…', 'foreman is reading the ticket and its notes. Nothing is sent.', backOnly);
+    if (t.state === 'error') return failureView(t.error, retryTicket, backOnly);
+
+    const page = M.ticketPage(data.status, t.name, t.doc);
+    if (!page) {
+      return paneView(`${t.name} is not in this batch any more.`, 'The loop may have renamed it or the batch moved. Go back to see the order as it is now.', backOnly);
+    }
+    const head = h('div', { cls: 'row' },
+      button('← ' + reportName(t.batch), { cls: 'quiet', onClick: goBack }),
+      page.chip ? chip(page.chip) : null,
+      h('span', { cls: 'mono grow ticketname', text: page.name }),
+      button('Open ticket in editor', { onClick: () => api.open(page.file) }));
+    const main = h('main', { cls: 'main ticket' }, head, factsStrip(page));
+    if (t.readError) main.append(h('div', { cls: 'small rust', text: 'Could not read the files again: ' + t.readError }));
+    main.append(h('div', { cls: 'row top ticketcols' }, ticketCard(page), sideCard(page)));
+    return main;
+  }
+
   // ---- drawing, keeping the person's place ----
 
   let data = null;
@@ -418,6 +707,10 @@
     const before = app.querySelector('.main');
     const scroll = before ? before.scrollTop : 0;
     const focused = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.batch : undefined;
+    // The ticket page's own places: how far each of its columns is scrolled, and the editor's caret.
+    const scrolls = Array.from(app.querySelectorAll('[data-scroll]')).map((e) => [e.dataset.scroll, e.scrollTop]);
+    const ed = tp && tp.editor;
+    const edAt = ed ? { focus: document.activeElement === ed, from: ed.selectionStart, to: ed.selectionEnd, top: ed.scrollTop } : null;
     app.replaceChildren();
 
     if (!data || !data.ok) {
@@ -427,10 +720,11 @@
       return;
     }
     app.classList.remove('solo');
-    // The dry run and the report are of the batch that was selected when they were asked for.
+    // The dry run, the report and a ticket's page are of the batch that was selected when they were asked for.
     if (view === 'dryrun' && (!dry || !data.status || dry.batch !== data.selected)) { dryToken++; view = 'overview'; dry = null; }
     if (view === 'report' && (!rep || rep.batch !== data.selected)) { view = 'overview'; rep = null; }
-    const rail = railView(data, (batch) => { if (!selecting) start(batch); });
+    if (view === 'ticket' && (!tp || tp.batch !== data.selected || !data.status)) { view = 'overview'; tp = null; }
+    const rail = railView(data, (batch) => { if (!selecting) leaving(() => start(batch)); });
     app.append(rail);
 
     if (data.all.batches.length === 0) {
@@ -439,6 +733,10 @@
     } else if (view === 'report') {
       app.append(reportView(data));
       document.title = 'Foreman — report · ' + rep.batch;
+    } else if (view === 'ticket') {
+      app.append(ticketView(data));
+      const page = tp.state === 'ready' ? M.ticketPage(data.status, tp.name, tp.doc) : null;
+      document.title = 'Foreman — ' + (page ? page.name : tp.name);
     } else if (data.status) {
       app.append(view === 'dryrun' ? dryRunView(data) : overviewView(data));
       document.title = (view === 'dryrun' ? 'Foreman — dry run · ' : 'Foreman — ') + data.status.batch.path;
@@ -449,6 +747,18 @@
 
     const main = app.querySelector('.main');
     if (main) main.scrollTop = scroll;
+    for (const [key, top] of scrolls) {
+      const el = app.querySelector(`[data-scroll="${key}"]`);
+      if (el) el.scrollTop = top;
+    }
+    if (edAt && tp && tp.editor === ed && ed.isConnected !== false) {
+      ed.scrollTop = edAt.top;
+      if (edAt.focus) {
+        ed.focus();
+        if (typeof ed.setSelectionRange === 'function') ed.setSelectionRange(edAt.from, edAt.to);
+        else { ed.selectionStart = edAt.from; ed.selectionEnd = edAt.to; }
+      }
+    }
     if (focused) {
       for (const b of app.querySelectorAll('[data-batch]')) if (b.dataset.batch === focused) b.focus();
     }
@@ -459,6 +769,7 @@
     view = 'overview';
     dry = null;
     rep = null;
+    tp = null;
     selecting = true;
     try {
       data = await api.load(batch);
@@ -470,6 +781,11 @@
     draw();
   }
 
-  api.onUpdate((fresh) => { data = fresh; draw(); });
+  // A file changed: the screen redraws from the new overview, and a ticket page reads its own files again.
+  api.onUpdate((fresh) => {
+    data = fresh;
+    draw();
+    if (view === 'ticket' && tp && fresh && fresh.ok && fresh.selected === tp.batch) readTicket();
+  });
   start(null);
 }());

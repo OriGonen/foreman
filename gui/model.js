@@ -288,6 +288,164 @@
     }));
   }
 
+  // ---- the ticket page (`foreman status --json`, and the files main read for it) ----
+
+  const REMINDER = 'Record where a secret is stored (a password manager entry, an env var name), never its value.';
+
+  // 1710000 -> "28m 30s". Seconds are rounded; an hour or more drops them.
+  function duration(ms) {
+    if (typeof ms !== 'number' || !isFinite(ms)) return '';
+    const total = Math.round(ms / 1000);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const sec = total % 60;
+    if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`;
+    return m > 0 ? `${m}m ${sec}s` : `${sec}s`;
+  }
+
+  // 310000 -> "310k", 1250000 -> "1.3M", 842 -> "842".
+  function compact(n) {
+    n = Number(n);
+    if (!isFinite(n) || n <= 0) return '0';
+    const trim = (v) => (v >= 10 ? String(Math.round(v)) : v.toFixed(1).replace(/\.0$/, ''));
+    if (n < 1000) return String(Math.round(n));
+    if (n < 999500) return trim(n / 1000) + 'k';
+    return trim(n / 1e6) + 'M';
+  }
+
+  const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  // The entries of progress.txt that are about one ticket. An entry is what follows a heading
+  // (`## 07 — what happened`); it belongs to the ticket when its heading starts with the ticket's
+  // number, or when anywhere in it the ticket is named in full (`07-try-it-on-a-real-repo`, with or
+  // without a path or `DONE_`). A file with no headings at all is read a line at a time, where a line
+  // that has the number as a word of its own is the ticket's. What comes before the first heading is
+  // nobody's. Everything stays as it was written, apart from the `#` marks on a heading.
+  function ticketNotes(progress, ticket) {
+    if (typeof progress !== 'string' || progress === '' || !ticket) return [];
+    const number = ticket.number ? escapeRe(String(ticket.number)) : null;
+    const named = ticket.name ? new RegExp(`(?<![A-Za-z0-9])(?:DONE_)?${escapeRe(ticket.name)}(?![A-Za-z0-9-])`, 'i') : null;
+    const headed = number ? new RegExp(`^(?:DONE_)?${number}(?![A-Za-z0-9])`, 'i') : null;
+    const word = number ? new RegExp(`(?<![A-Za-z0-9.\\-])${number}(?![A-Za-z0-9])`, 'i') : null;
+
+    const lines = progress.split(/\r\n|\r|\n/);
+    const heading = (l) => /^#{1,6}\s+(.*?)\s*$/.exec(l);
+    const out = [];
+    if (!lines.some((l) => heading(l))) {
+      for (const l of lines) {
+        if (l.trim() !== '' && ((named && named.test(l)) || (word && word.test(l)))) out.push({ title: null, text: l.trim() });
+      }
+      return out;
+    }
+    let cur = null;
+    const entries = [];
+    for (const l of lines) {
+      const h = heading(l);
+      if (h) { cur = { title: h[1], body: [] }; entries.push(cur); } else if (cur) cur.body.push(l);
+    }
+    for (const e of entries) {
+      const text = e.body.join('\n').replace(/^\s*\n/, '').trimEnd();
+      if ((headed && headed.test(e.title)) || (named && (named.test(e.title) || named.test(text)))) out.push({ title: e.title, text });
+    }
+    return out;
+  }
+
+  const GLYPH = { landed: ['✓', 'ok'], progressed: ['↗', ''], stalled: ['⏸', 'rust'], checkpoint: ['⋯', 'dim'], unproductive: ['✗', 'rust'] };
+
+  // Everything the ticket page draws, except the files' own text, which is passed on as it is. `doc`
+  // is what main read (ticket text, progress.txt, the handoff) or null while it is being read.
+  function ticketPage(status, name, doc) {
+    const tickets = status && status.tickets;
+    const t = Array.isArray(tickets) ? tickets.find((x) => x.name === name) : null;
+    if (!t) return null;
+    const plain = (text, tone = '') => ({ text, tone });
+    const human = t.human && !t.done;
+    const stats = t.stats || null;
+
+    let chip = null;
+    if (t.done) chip = { cls: 'landed', text: 'done' };
+    else if (human) chip = { cls: 'human', text: 'human' };
+    else if (t.state === 'next') chip = { cls: 'next', text: 'next' };
+    else if (t.checks) chip = { cls: 'followup', text: checksChip(t.checks) };
+
+    const labelOf = (x) => x.number + ' ' + x.slug;
+    const facts = [{ label: 'Status', parts: [plain(t.status, t.done ? 'ok' : '')] }];
+
+    const blocked = blockers(t.blocked_by, tickets);
+    const blockedParts = [];
+    if (blocked.length === 0) blockedParts.push(plain('nothing'));
+    for (const [i, b] of blocked.entries()) {
+      if (i > 0) blockedParts.push(plain(', '));
+      if (b.text !== undefined) { blockedParts.push(plain(b.text)); continue; }
+      const hit = tickets.find((x) => String(x.number).toLowerCase() === b.ref.toLowerCase());
+      blockedParts.push(plain(b.ref));
+      blockedParts.push(b.landed ? plain(' landed', 'muted')
+        : hit && hit.human ? plain(' human, not done', 'rust') : plain(' not landed yet', 'muted'));
+    }
+    facts.push({ label: 'Blocked by', parts: blockedParts });
+
+    if (t.checks) {
+      const ref = ticketRef(t.checks);
+      const hit = tickets.find((x) => String(x.number).toLowerCase() === ref.toLowerCase());
+      facts.push({ label: 'Checks', parts: [plain(hit ? labelOf(hit) : ref)] });
+    }
+    const checkedBy = t.number ? tickets.filter((x) => x.checks && ticketRef(x.checks).toLowerCase() === String(t.number).toLowerCase()) : [];
+    if (checkedBy.length) facts.push({ label: 'Checked by', parts: [plain(checkedBy.map(labelOf).join(', '))] });
+    if (t.handoff) facts.push({ label: 'Handoff', parts: [plain(t.handoff)] });
+    if (typeof t.spent_usd === 'number') {
+      const n = stats ? stats.iterations : null;
+      facts.push({ label: 'Spend', parts: [plain(usd(t.spent_usd) + (n === null ? '' : ` · ${n} ${n === 1 ? 'iteration' : 'iterations'}`))] });
+    }
+
+    let side;
+    if (t.human) {
+      side = { kind: 'handoff', path: t.handoff || null, reminder: REMINDER };
+    } else if (t.done && stats) {
+      const models = Array.isArray(stats.models) && stats.models.length ? stats.models.join(' → ') : 'not recorded';
+      const tk = stats.tokens || {};
+      let iteration = 0;
+      side = {
+        kind: 'stats',
+        cards: [
+          { k: 'Cost', v: usd(stats.cost_usd), mono: false },
+          { k: 'Runtime', v: duration(stats.duration_ms), mono: false },
+          { k: 'Model', v: models, mono: true },
+          { k: 'Iterations', v: count(stats.iterations), mono: false },
+          { k: 'Turns', v: count(stats.turns), mono: false },
+          { k: 'Tokens in / out', v: `${compact(tk.input)} / ${compact(tk.output)}`, mono: true },
+        ],
+        iterations: (stats.runs || []).map((r) => {
+          if (r.kind !== 'checkpoint') iteration++;
+          const [glyph, tone] = GLYPH[r.outcome] || ['·', ''];
+          return {
+            n: String(iteration || 1), glyph, tone, outcome: r.outcome,
+            label: 'run ' + (r.run || '(unknown)') + (r.kind === 'checkpoint' ? ' · checkpoint turn' : ''),
+            meta: [duration(r.duration_ms), usd(r.cost_usd)].filter(Boolean).join(' · '),
+          };
+        }),
+      };
+    } else if (t.done) {
+      side = { kind: 'nostats', text: 'none yet' };
+    } else {
+      const sentBack = status.next && status.next.file === t.file && status.next.sent_back_by;
+      side = {
+        kind: 'knows',
+        // `run` is null until the control directory exists, and then in flight or not is not known.
+        rows: [
+          ['Iterations', stats ? `${stats.iterations} · ${usd(stats.cost_usd)}` : 'none yet'],
+          ['In flight', status.run && status.run.in_flight === false ? 'no' : 'not known yet'],
+          ['Sent back', sentBack ? 'by ' + sentBack : 'no'],
+        ],
+      };
+    }
+
+    return {
+      name: labelOf(t), num: t.number || t.name, file: t.file, chip, facts, side,
+      text: doc && typeof doc.text === 'string' ? doc.text : null,
+      notes: doc ? ticketNotes(doc.progress, t) : [],
+    };
+  }
+
   // The rail: every batch in the repo, the finished (DONE_) ones last and dimmed.
   function rail(all, selected) {
     const entries = (all.batches || []).map((b) => {
@@ -323,5 +481,5 @@
     return list.length ? list[0].path : null;
   }
 
-  return { usd, ticketRef, checksChip, stakes, blockers, lastRun, overview, dryRun, report, reportIterations, ticketName, rail, pickBatch };
+  return { usd, ticketRef, checksChip, stakes, blockers, lastRun, overview, dryRun, report, reportIterations, ticketName, ticketNotes, ticketPage, duration, compact, rail, pickBatch };
 }));

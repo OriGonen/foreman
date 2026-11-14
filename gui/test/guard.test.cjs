@@ -79,7 +79,7 @@ test('index.html: scripts are files, there is no inline style and no event-handl
 });
 
 test('the page scripts never build HTML from text: ticket and CLI text only ever goes in with textContent', () => {
-  for (const f of ['app.js', 'art.js', 'model.js', 'preload.cjs']) {
+  for (const f of ['app.js', 'art.js', 'model.js', 'preview.js', 'preload.cjs']) {
     const src = read(f).replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
     for (const bad of ['innerHTML', 'outerHTML', 'insertAdjacentHTML', 'document.write', 'createContextualFragment',
       'DOMParser', 'eval(', 'new Function', "setAttribute('style'", 'setAttribute("style"', 'srcdoc']) {
@@ -122,7 +122,7 @@ test('app.css: dark is the default, light follows Windows, and every token is th
 test('the window\'s own files exist: everything index.html names, and everything the architecture lists for this ticket', () => {
   const html = read('index.html');
   for (const m of html.matchAll(/(?:src|href)="([^"]+)"/g)) assert.ok(fs.existsSync(here(m[1])), m[1]);
-  for (const f of ['main.cjs', 'preload.cjs', 'bash.cjs', 'foreman.cjs', 'watch.cjs', 'index.html', 'app.css', 'app.js', 'art.js', 'icon.ico']) {
+  for (const f of ['main.cjs', 'preload.cjs', 'bash.cjs', 'foreman.cjs', 'watch.cjs', 'ticket.cjs', 'preview.js', 'index.html', 'app.css', 'app.js', 'art.js', 'icon.ico']) {
     assert.ok(fs.existsSync(here(f)), f);
   }
 });
@@ -137,4 +137,14 @@ test('electron is the only dependency, pinned to an exact version, with no nativ
   for (const [name, p] of Object.entries(lock.packages)) {
     assert.ok(!p.hasInstallScript || name === 'node_modules/electron', `${name} has an install script`);
   }
+});
+
+test('the app writes one file, the handoff: nothing but ticket.cjs writes, creates or removes a file, and the page cannot', () => {
+  const writes = /\b(writeFile|writeFileSync|appendFile|appendFileSync|createWriteStream|mkdir|mkdirSync|rename|renameSync|unlink|unlinkSync|rm|rmSync|rmdir|rmdirSync|copyFile|copyFileSync|truncate|truncateSync)\b\s*\(/;
+  const strip = (f) => read(f).replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+  for (const f of fs.readdirSync(here('.')).filter((n) => /\.(cjs|js)$/.test(n))) {
+    if (f === 'ticket.cjs') continue;
+    assert.doesNotMatch(strip(f), writes, `${f} must not write files`);
+  }
+  assert.match(strip('ticket.cjs'), /writeFileSync/, 'ticket.cjs is where the handoff is written');
 });

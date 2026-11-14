@@ -117,3 +117,19 @@ test('dirs: every batch still being worked on, and the finished one the window i
   await o.load('.scratch/DONE_old');
   assert.deepEqual(await o.dirs(), ['.scratch/a', '.scratch/DONE_old', '.scratch/b']);
 });
+
+test('statusOf: the status the last read got for that batch, for the ticket page to use; null for any other', async () => {
+  const f = fake();
+  const o = make(f);
+  assert.equal(o.statusOf('.scratch/a'), null, 'nothing read yet');
+  const d = await o.load('.scratch/a');
+  assert.equal(o.statusOf('.scratch/a'), d.status);
+  assert.equal(o.statusOf('.scratch/b'), null);
+  const before = f.calls.length;
+  const r = await o.refresh();
+  assert.equal(o.statusOf('.scratch/a'), r.status, 'a refresh replaces it');
+  assert.ok(f.calls.length > before);
+  f.failStatus.add('.scratch/b');
+  await assert.rejects(o.load('.scratch/b'));
+  assert.equal(o.statusOf('.scratch/b'), null, 'a read that failed leaves none');
+});
