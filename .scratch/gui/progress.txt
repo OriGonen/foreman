@@ -12,3 +12,13 @@
 - Could not render any page (no browser in the sandbox): SVG/HTML checked for well-formedness and `node --check` only. A human should open the six pick pages once (ticket 15 covers the app, not these pages).
 - `bash test/smoke.sh`: 2741 passed, 1 failed ("convert ... CRLF kept", test/smoke.sh:3609) in 2m31s. Code is byte-identical to fb57c01, so the failure is pre-existing; left alone.
 - Left the ticket file un-renamed (no DONE_ prefix), as 01 was.
+
+
+## 02 — the app opens on a repo and shows the overview (implemented; by-hand Windows check still open)
+- Built: `status --json [--all]` (lib/foreman-json.cjs + loop facts), `gui/` shell (main, preload, guard, overview, bash, foreman, watch), page (index.html strict CSP, app.css tokens, app.js, art.js dome, model.js, icon.ico), `test/smoke-json.sh` + goldens.
+- Test-driven: model.js (stakes, dome, rows, rail, pickBatch incl. DONE_ rename), overview.cjs (load vs watcher-refresh race), findRepoRoot, guard (argv, repoPath, CSP/no-innerHTML static checks), bash/watch/foreman earlier. app.js runs under a fake DOM test.
+- Review: fixed a stale-read race (a watcher read overlapping a click moved the window back) by moving it into overview.cjs; trusted() now compares the exact page URL; golden help.txt keeps the checkout path as @FOREMAN_HOME@. Skipped: rail does not notice a brand-new batch dir until a click (only existing batches are watched).
+- Verified identical to pre-ticket tree: plain status + help (cmp), bench spawns (116 total both).
+- Full smoke suite: 2741 passed in 2m 21s, 1 failed: "convert ... CRLF kept" (test/smoke.sh:3609), pre-existing, fails on 1651230 too; left alone. `ui_color_tier` flaked once (pty), not again.
+- NOT verified: the window itself (no Electron/browser in the sandbox). A human must `npm install && npm start -- <repo>` in gui/ on Windows (ticket 02's by-hand box, then ticket 15). `run` in status --json is null until the control-directory ticket (08).
+- Later tickets: app.js `h()`/`button()` helpers and art.js `svg()` are the pattern to extend; disabled buttons name the ticket that enables them.
