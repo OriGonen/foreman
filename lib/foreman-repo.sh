@@ -129,11 +129,14 @@ foreman_batch_relpath() {
 # The prefix is read from the environment only: this runs before any batch's foreman.conf is
 # known, so a prefix set there cannot apply.
 #
+# A second argument of `all` keeps the finished batches in: `foreman status --json --all` lists
+# them too, last. Nothing else passes it.
+#
 # legacy: a ralph.conf makes a batch too, from before the rename (see foreman-legacy.sh).
 foreman_find_batches() {
   local root="${1:-.}" prefix="${FOREMAN_DONE_PREFIX-DONE_}"
   local -a skip_done=()
-  [ -z "$prefix" ] || skip_done=( -o -type d -name "${prefix//[\\*?[]/\\&}*" )
+  [ -z "$prefix" ] || [ "${2:-}" = all ] || skip_done=( -o -type d -name "${prefix//[\\*?[]/\\&}*" )
   (
     cd "$root" 2>/dev/null || return 1
     find . \
@@ -141,4 +144,13 @@ foreman_find_batches() {
       -o \( -name foreman.conf -o -name ralph.conf \) -print 2>/dev/null |
       sed 's|^\./||; s|/foreman\.conf$||; s|/ralph\.conf$||' | sort -u
   )
+}
+
+# foreman_mixed_path VAR PATH
+# VAR = PATH in the mixed form Windows programs and JSON can both carry: `C:/Projects/x` for
+# Git Bash's `/c/Projects/x`, with forward slashes. Anywhere without `cygpath` it is PATH as it is.
+foreman_mixed_path() {
+  local _mp="$2"
+  if command -v cygpath >/dev/null 2>&1; then _mp="$(cygpath -m "$2" 2>/dev/null)" || _mp="$2"; fi
+  printf -v "$1" '%s' "$_mp"
 }

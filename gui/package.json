@@ -1,0 +1,15 @@
+{
+  "name": "foreman-gui",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A Windows window onto foreman's files and loop. Runs from the git checkout; see .scratch/gui/spec.md.",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "electron": "45.3.1"
+  }
+}

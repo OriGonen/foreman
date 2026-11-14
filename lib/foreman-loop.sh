@@ -108,6 +108,9 @@ MODE=run
 MAX_ITERATIONS=1   # default: one iteration. --unlimited sets this to 0 (no cap).
 ADOPT_DIRTY=0      # --adopt-dirty: review and commit a dirty tree no marker vouches for.
 LIVE_FLAG=0        # --live was given, so the rerun commands this run prints carry it too.
+STATUS_JSON=0      # status --json: the batch as one JSON object, for a program (foreman-json.cjs).
+STATUS_ALL=0       # status --json --all: every batch in the repository, counts only.
+BATCH_ARG_GIVEN=0  # a batch was named on the command line (--all takes none).
 
 # The header comment above is the help text. Stop at the first non-comment line rather
 # than at a fixed line number, which drifts every time the header grows.
@@ -123,6 +126,8 @@ while [ $# -gt 0 ]; do
     # has. It has to be a real flag: the parser below rejects any unknown `-*`.
     --live)      export FOREMAN_STREAM=1; LIVE_FLAG=1 ;;
     --adopt-dirty) ADOPT_DIRTY=1 ;;
+    --json)      STATUS_JSON=1 ;;
+    --all)       STATUS_ALL=1 ;;
     --help|-h)   show_help; exit 0 ;;
     -*)          echo "Usage: ${FOREMAN_INVOKE:-foreman} run [<batch>] [<iterations>|--unlimited] [--live] [--adopt-dirty]" >&2; exit 1 ;;
     *)
@@ -130,6 +135,7 @@ while [ $# -gt 0 ]; do
         MAX_ITERATIONS="$1"
       elif [ -z "${FOREMAN_BATCH:-}" ] || [ "${FOREMAN_BATCH_FROM_ARG:-0}" = 0 ]; then
         export FOREMAN_BATCH="$1" FOREMAN_BATCH_FROM_ARG=1
+        BATCH_ARG_GIVEN=1
       else
         echo "foreman: more than one batch given ('$FOREMAN_BATCH' and '$1')" >&2
         exit 1
@@ -139,6 +145,46 @@ while [ $# -gt 0 ]; do
   shift
 done
 unset FOREMAN_BATCH_FROM_ARG
+
+# --json belongs to `status` for now, and --all to `status --json` with no batch named; anywhere
+# else they are the unknown flags they were before, and get the usage line they always got.
+if { [ "$STATUS_JSON" = 1 ] && [ "$MODE" != status ]; } ||
+   { [ "$STATUS_ALL" = 1 ] && { [ "$MODE" != status ] || [ "$STATUS_JSON" != 1 ] || [ "$BATCH_ARG_GIVEN" = 1 ]; }; }; then
+  echo "Usage: ${FOREMAN_INVOKE:-foreman} run [<batch>] [<iterations>|--unlimited] [--live] [--adopt-dirty]" >&2
+  exit 1
+fi
+
+# `status --json --all`: every batch in the repository, finished ones last, each with its counts.
+# It runs before any batch's config is loaded — it has no batch — and asks each batch's own
+# `status --json` (a batch's patterns and status line are its own) for the numbers. A batch that
+# cannot be read is listed with the message it gave, so one broken batch hides no other.
+if [ "$STATUS_ALL" = 1 ]; then
+  # shellcheck source=foreman-repo.sh
+  source "$FOREMAN_TOOL_DIR/foreman-repo.sh" || exit 1
+  foreman_repo_root REPO_ROOT || { echo "foreman: not inside a git repository" >&2; exit 1; }
+  cd "$REPO_ROOT" || exit 1
+  foreman_mixed_path _all_root "$REPO_ROOT"
+  _all_prefix="${FOREMAN_DONE_PREFIX-DONE_}"
+  _all_err="$(mktemp -d)" || exit 1
+  trap 'rm -rf "$_all_err"' EXIT
+  {
+    printf 'repo\t%s\n' "$_all_root"
+    # Unfinished batches first, then the renamed ones: the order the app lists them in.
+    for _all_pass in 0 1; do
+      while IFS= read -r _all_batch; do
+        [ -n "$_all_batch" ] || continue
+        _all_done=0
+        [ -z "$_all_prefix" ] || [[ "${_all_batch##*/}" != "$_all_prefix"* ]] || _all_done=1
+        [ "$_all_done" = "$_all_pass" ] || continue
+        _all_out="$(bash "$FOREMAN_TOOL_DIR/foreman-loop.sh" "$_all_batch" --status --json 2>"$_all_err/stderr")"
+        _all_code=$?
+        [ "$_all_code" = 0 ] || _all_out="$(tr '\n\t' '  ' < "$_all_err/stderr")"
+        printf 'batch\t%s\t%s\t%s\t%s\n' "$_all_batch" "$_all_done" "$_all_code" "$_all_out"
+      done < <(foreman_find_batches "$REPO_ROOT" all)
+    done
+  } | node "$FOREMAN_TOOL_DIR/foreman-json.cjs" status-all
+  exit "${PIPESTATUS[1]}"
+fi
 
 # shellcheck source=foreman-config.sh
 source "$FOREMAN_TOOL_DIR/foreman-config.sh" || exit 1
@@ -662,6 +708,47 @@ status_facts() {
   done < <(foreman_human_warnings)
 }
 
+# `status --json`: the same facts, plus the ones the plain output never needed (each ticket's file,
+# handoff and whether it landed), for foreman-json.cjs to put into an object — see its header for
+# the lines. Everything it says is worked out here, the way status_facts works it out; the node
+# side only adds what it reads from files. Needs the ticket snapshot held.
+status_json_facts() {
+  local counts ticket state humans=0 next="" until_count=0 stop="" pos=0 line done_t human_t checks_t root
+  counts=$(next_sh --count) || return 1
+  foreman_mixed_path root "$REPO_ROOT"
+  printf 'repo\t%s\nbatch\t%s\nname\t%s\nstatusline\t%s\ndoneprefix\t%s\nrunjsonl\t%s\nrunlog\t%s\ndone\t%s\ntotal\t%s\n' \
+    "$root" "$BATCH_DIR" "$BATCH_NAME" "$FOREMAN_STATUS_LINE" "$FOREMAN_DONE_PREFIX" \
+    "${RUN_JSONL//\\//}" "${RUN_LOG//\\//}" "${counts% *}" "${counts#* }"
+  while IFS= read -r ticket; do
+    [ -n "$ticket" ] || continue
+    foreman_ticket_status "$ticket"
+    done_t="$_FOREMAN_TICKET_DONE"; human_t="$_FOREMAN_TICKET_HUMAN"; checks_t="$_FOREMAN_TICKET_CHECKS"
+    state=todo
+    if [ "$done_t" = 1 ]; then
+      state=done
+    else
+      if [ -z "$next" ]; then next="$ticket"; state=next; fi
+      if [ "$human_t" = 1 ]; then
+        humans=$((humans + 1))
+        # The loop runs the tickets before the first human one, when that is not the next.
+        if [ -z "$stop" ] && [ "$state" != next ]; then stop="${ticket//\\//}"; until_count=$pos; fi
+      fi
+      pos=$((pos + 1))
+    fi
+    line="$(foreman_handoff_path "$ticket")"
+    printf 'ticket\t%s\t%s\t%s\t%s\t%s\t%s\n' "$state" "${ticket//\\//}" "$done_t" "$human_t" "$checks_t" "${line//\\//}"
+  done < <(next_sh --all)
+  printf 'humans\t%s\n' "$humans"
+  if [ -n "$stop" ]; then printf 'until\t%s\t%s\n' "$until_count" "$stop"; fi
+  if [ -n "$next" ] && foreman_ticket_needs_human "$next"; then
+    line="$(foreman_was_sent_back "$next")"
+    [ -z "$line" ] || printf 'sentback\t%s\n' "$line"
+  fi
+  while IFS= read -r line; do
+    [ -n "$line" ] && printf 'warning\t%s\n' "${line#warning: }"
+  done < <(foreman_human_warnings)
+}
+
 # Draws the picture, all or nothing: what the renderer prints before it fails is not printed, so the
 # plain text that follows is never preceded by half a picture. Fails when it cannot be drawn.
 status_picture() {
@@ -675,6 +762,11 @@ status_picture() {
 }
 
 if [ "$MODE" = "status" ]; then
+  if [ "$STATUS_JSON" = 1 ]; then
+    foreman_tickets_hold || exit 1
+    status_json_facts | node "$FOREMAN_TOOL_DIR/foreman-json.cjs" status
+    exit "${PIPESTATUS[1]}"
+  fi
   if ui_show 1 STATUS_TIER && ui_cols STATUS_COLS 1 && [ "$STATUS_COLS" -ge "$_status_min_cols" ] &&
     foreman_tickets_hold 2>/dev/null && status_picture; then
     exit 0

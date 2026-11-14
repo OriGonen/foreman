@@ -1,0 +1,25 @@
+foreman — a loop that implements one ticket per iteration, in whatever repository you are
+standing in. The toolkit is installed once per machine and holds no state of its own;
+everything that differs between batches lives in the batch directory.
+
+  foreman init    <batch> [--force] [--no-order] [--no-commands]   scaffold, fill in, order
+  foreman order   <batch>                have an agent (re-)order the tickets
+  foreman commands <batch>               have an agent fill in foreman.conf's check/test commands
+  foreman status  [batch]                what is left, what is next            (free)
+  foreman dry-run [batch]                the plan and the exact prompt         (free)
+  foreman run     [batch] [<n>|--unlimited] [--live] [--adopt-dirty]  one iteration by default
+  foreman next    [batch] [--list|--count|--all|--unordered]  the run order    (free)
+  foreman report  [batch] [--by-ticket|--failures] what it cost               (free)
+  foreman doctor  [--fix]                is this repo (and this machine) ready (free)
+  foreman convert [<project>] [--dry-run]  move a project from ralph to foreman
+  foreman help | foreman version
+
+<batch> is any directory in the current repository holding tickets and a foreman.conf.
+It may be omitted when exactly one directory in the repo has one.
+
+Everything after the subcommand is passed through untouched, so the environment still
+wins over a batch's foreman.conf:
+
+  FOREMAN_MAX_COST_USD=25 foreman run .scratch/my-batch
+
+See /c/Projects/foreman/README.md for the whole picture.
