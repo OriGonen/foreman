@@ -38,8 +38,9 @@ async function setup() {
   const dir = path.resolve(repoFromArgv(process.argv, process.defaultApp) || process.cwd());
   const repoRoot = await findRepoRoot({ bash: found.bash, dir });
   const checkout = path.resolve(__dirname, '..');
-  const overview = createOverview({ foreman: createForeman({ bash: found.bash, checkout, repoRoot }), repoRoot });
-  ctx = { repoRoot, overview };
+  const foreman = createForeman({ bash: found.bash, checkout, repoRoot });
+  const overview = createOverview({ foreman, repoRoot });
+  ctx = { repoRoot, overview, foreman };
   watcher = createWatcher({
     // A change to anything in a batch — a status line flipped in an editor, the loop landing a
     // ticket — is a reason to read again.
@@ -67,6 +68,18 @@ ipcMain.handle('overview:load', async (event, batch) => {
     const data = await ctx.overview.load(typeof batch === 'string' ? batch : null);
     await watcher.start();
     return data;
+  } catch (e) {
+    return { ok: false, error: describe(e) };
+  }
+});
+
+// A dry run is free: foreman prints what would run and the prompt, and sends nothing. The batch is
+// checked as a repo-relative path before it is given to the CLI (foreman.cjs checkBatchPath).
+ipcMain.handle('dryrun:load', async (event, batch) => {
+  if (!trusted(event)) return { ok: false, error: describe(new Error('refused')) };
+  try {
+    if (!ctx) await setup();
+    return { ok: true, doc: await ctx.foreman.dryRun(batch) };
   } catch (e) {
     return { ok: false, error: describe(e) };
   }

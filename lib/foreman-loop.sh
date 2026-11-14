@@ -108,7 +108,7 @@ MODE=run
 MAX_ITERATIONS=1   # default: one iteration. --unlimited sets this to 0 (no cap).
 ADOPT_DIRTY=0      # --adopt-dirty: review and commit a dirty tree no marker vouches for.
 LIVE_FLAG=0        # --live was given, so the rerun commands this run prints carry it too.
-STATUS_JSON=0      # status --json: the batch as one JSON object, for a program (foreman-json.cjs).
+STATUS_JSON=0      # --json (status or dry-run): the batch as one JSON object, for a program (foreman-json.cjs).
 STATUS_ALL=0       # status --json --all: every batch in the repository, counts only.
 BATCH_ARG_GIVEN=0  # a batch was named on the command line (--all takes none).
 
@@ -146,9 +146,9 @@ while [ $# -gt 0 ]; do
 done
 unset FOREMAN_BATCH_FROM_ARG
 
-# --json belongs to `status` for now, and --all to `status --json` with no batch named; anywhere
-# else they are the unknown flags they were before, and get the usage line they always got.
-if { [ "$STATUS_JSON" = 1 ] && [ "$MODE" != status ]; } ||
+# --json belongs to `status` and `dry-run`, and --all to `status --json` with no batch named;
+# anywhere else they are the unknown flags they were before, and get the usage line they always got.
+if { [ "$STATUS_JSON" = 1 ] && [ "$MODE" != status ] && [ "$MODE" != dry-run ]; } ||
    { [ "$STATUS_ALL" = 1 ] && { [ "$MODE" != status ] || [ "$STATUS_JSON" != 1 ] || [ "$BATCH_ARG_GIVEN" = 1 ]; }; }; then
   echo "Usage: ${FOREMAN_INVOKE:-foreman} run [<batch>] [<iterations>|--unlimited] [--live] [--adopt-dirty]" >&2
   exit 1
@@ -749,6 +749,64 @@ status_json_facts() {
   done < <(foreman_human_warnings)
 }
 
+# One line of text as one `key<TAB>value` line: backslash, newline, tab and carriage return become
+# `\\`, `\n`, `\t` and `\r`, and foreman-json.cjs turns them back. Only bash builtins, so nothing
+# starts. The prompt goes this way because it is the one value that must reach the app exactly as
+# the plain output prints it, blank lines and all.
+fact_escape() {    # fact_escape TEXT
+  local s="$1" bs='\' nl=$'\n' tab=$'\t' cr=$'\r'
+  s="${s//"$bs"/"$bs$bs"}"; s="${s//"$nl"/"${bs}n"}"; s="${s//"$tab"/"${bs}t"}"; s="${s//"$cr"/"${bs}r"}"
+  printf '%s' "$s"
+}
+
+# `dry-run --json`: the facts the plain dry-run prints, in the lines foreman-json.cjs reads (see its
+# header). The tickets still to do, each with what the run would do with it: `run` (the budget
+# reaches it, and no human ticket comes first), `stop` (the first human ticket, where a run stops;
+# `stopreach` says whether the iteration budget gets that far) or `later`. Nothing is sent and no
+# sandbox starts: this is as far as the plain dry-run goes, and it builds the same prompt. NEXT is
+# the ticket the prompt is for, empty when nothing is left. One iteration is one attempt at the next
+# ticket, so the reach is the best case: a ticket that does not land in one turn takes more.
+dry_run_json_facts() {    # dry_run_json_facts NEXT
+  local next="$1" counts ticket state line root ran=0 stopped=0 reach=0
+  counts=$(next_sh --count) || return 1
+  foreman_mixed_path root "$REPO_ROOT"
+  printf 'repo\t%s\nbatch\t%s\nname\t%s\nstatusline\t%s\ndoneprefix\t%s\ndone\t%s\ntotal\t%s\n' \
+    "$root" "$BATCH_DIR" "$BATCH_NAME" "$FOREMAN_STATUS_LINE" "$FOREMAN_DONE_PREFIX" "${counts% *}" "${counts#* }"
+  while IFS= read -r ticket; do
+    [ -n "$ticket" ] || continue
+    foreman_ticket_status "$ticket"
+    if [ "$stopped" = 1 ]; then
+      state=later
+    elif [ "$_FOREMAN_TICKET_HUMAN" = 1 ]; then
+      state=stop; stopped=1
+      if [ "$MAX_ITERATIONS" -le 0 ] || [ "$ran" -lt "$MAX_ITERATIONS" ]; then reach=1; fi
+    elif [ "$MAX_ITERATIONS" -gt 0 ] && [ "$ran" -ge "$MAX_ITERATIONS" ]; then
+      state=later
+    else
+      state=run; ran=$((ran + 1))
+    fi
+    line="$(foreman_handoff_path "$ticket")"
+    printf 'ticket\t%s\t%s\t0\t%s\t%s\t%s\n' "$state" "${ticket//\\//}" "$_FOREMAN_TICKET_HUMAN" "$_FOREMAN_TICKET_CHECKS" "${line//\\//}"
+  done < <(next_sh --list)
+  printf 'stopreach\t%s\n' "$reach"
+  printf 'exec\t%s\nperms\t%s\nmodel\t%s\neffort\t%s\n' "$(exec_describe)" "$FOREMAN_PERMISSION_MODE" "$FOREMAN_MODEL" "$FOREMAN_EFFORT"
+  if [ "$FOREMAN_STREAM" = 1 ]; then printf 'live\ton\n'; else printf 'live\toff\n'; fi
+  printf 'cost\t%s\nminutes\t%s\niterations\t%s\n' "$MAX_COST" "$MAX_MINUTES" "$MAX_ITERATIONS"
+  printf 'budgets\tcost=%s  time=%s  iterations=%s\n' "$(budget_label "$MAX_COST" '$')" "$(budget_label "$MAX_MINUTES" '' m)" "$(budget_label "$MAX_ITERATIONS")"
+  printf 'logjsonl\t%s\nlogrun\t%s\n' "${RUN_JSONL//\\//}" "${RUN_LOG//\\//}"
+  while IFS= read -r line; do
+    [ -n "$line" ] && printf 'warning\t%s\n' "${line#warning: }"
+  done < <(foreman_human_warnings)
+  if [ -n "$next" ] && ! foreman_ticket_needs_human "$next"; then
+    TICKET_FILE="$next"
+    BASE_REF=$(git rev-parse HEAD) || return 1
+    # shellcheck source=foreman-prompt.sh
+    source "$FOREMAN_TOOL_DIR/foreman-prompt.sh" || return 1
+    printf 'promptfor\t%s\n' "${next//\\//}"
+    printf 'prompt\t%s\n' "$(fact_escape "$FOREMAN_PROMPT")"
+  fi
+}
+
 # Draws the picture, all or nothing: what the renderer prints before it fails is not printed, so the
 # plain text that follows is never preceded by half a picture. Fails when it cannot be drawn.
 status_picture() {
@@ -894,6 +952,11 @@ fi
 next_ticket=$(next_sh)
 pick_status=$?
 if [ "$pick_status" -eq 1 ]; then
+  # `dry-run --json` still answers with its object: nothing would run, and there is no prompt.
+  if [ "$MODE" = dry-run ] && [ "$STATUS_JSON" = 1 ]; then
+    dry_run_json_facts "" | node "$FOREMAN_TOOL_DIR/foreman-json.cjs" dry-run
+    exit "${PIPESTATUS[1]}"
+  fi
   say "Nothing to do — every ticket in $BATCH_DIR is already done."
   # A batch finished by hand gets marked too, like the start-of-run sweep does for tickets.
   [ "$MODE" = "run" ] && mark_batch_done_on_disk
@@ -966,6 +1029,10 @@ dry_run_picture() {    # dry_run_picture NEXT_TICKET
 }
 
 if [ "$MODE" = "dry-run" ]; then
+  if [ "$STATUS_JSON" = 1 ]; then
+    dry_run_json_facts "$next_ticket" | node "$FOREMAN_TOOL_DIR/foreman-json.cjs" dry-run
+    exit "${PIPESTATUS[1]}"
+  fi
   if ui_show 1 DRYRUN_TIER && ui_cols DRYRUN_COLS 1 && [ "$DRYRUN_COLS" -ge "$_dryrun_min_cols" ] &&
     ui_rows DRYRUN_ROWS 1 && dry_run_picture "$next_ticket"; then
     exit 0

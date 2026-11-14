@@ -13,7 +13,7 @@
 // The paths given to foreman are repo-relative with forward slashes and the working directory is
 // the repo root, so a `C:\` path never reaches the CLI (spec: "Windows paths").
 //
-// Starting and stopping runs is a later ticket; this is the read side.
+// Starting and stopping runs is a later ticket; this is the read side (status, dry-run).
 const { execFile } = require('child_process');
 
 const SUPPORTED_JSON = 1;
@@ -115,6 +115,9 @@ function createForeman({ bash, checkout, repoRoot, run = defaultRun, env = proce
   return {
     status: (batch) => call('status', [checkBatchPath(batch), '--json']),
     statusAll: () => call('status', ['--json', '--all']),
+    // What a run would do, its settings and its exact prompt. Free: nothing is sent and no sandbox
+    // starts (the CLI says so; this only reads).
+    dryRun: (batch) => call('dry-run', [checkBatchPath(batch), '--json']),
   };
 }
 

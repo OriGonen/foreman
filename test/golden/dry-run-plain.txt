@@ -1,0 +1,142 @@
+Batch: batch
+Tickets done: 1 / 5  ·  human tickets remaining: 1
+
+Would run, in this order:
+  1  02-ticket.md
+  2  03-ticket.md   [HUMAN]
+  3  04-ticket.md   [CHECKS 03-ticket.md]
+  4  05-ticket.md   [CHECKS ghost.md]
+
+warning: batch/issues/05-ticket.md Checks: ghost.md, which is not a ticket in this batch
+
+Exec:    fake (no agent is run)
+Model:   claude-sonnet-5-5   Effort: high
+Perms:   acceptEdits
+Live:    off (json; add --live to watch the iteration)
+Budgets: cost=unlimited  time=unlimited  iterations=1
+Logs:    batch/foreman-runs.jsonl
+         batch/foreman-runs.log
+
+=== prompt that would be sent for batch/issues/02-ticket.md ===
+@batch/issues/02-ticket.md
+
+Implement the attached ticket, and only that ticket, to a high standard.
+
+The ticket was chosen for you by the loop: it is the first one in batch that has not
+landed yet. Do not pick a different one, do not start the next one, and do not
+implement a dependency you think is missing — if the ticket genuinely cannot proceed
+because something it depends on has not landed, stop and say so in batch/progress.txt
+rather than widening the scope.
+
+If the ticket cross-references sibling tickets by path, read the ones it names — they
+often record a decision this ticket has to honour, or a surface it shares. Each ticket's
+own '**Status:**' line is the source of truth for whether it has landed.
+
+## 1. Agree the seams before writing code
+
+Read the ticket and the code it touches. Then write out, in your response, a short list of:
+
+- the behaviours you will build test-first (the seams worth testing: pure logic, module
+  boundaries, anything with branching or edge cases), and
+- the parts you will just write directly (wiring, markup, config).
+
+That list is the contract for step 2. Do not test-drive everything, and do not skip
+test-driving the seams you named.
+
+## 2. Implement
+
+For each named seam, work test-first: write the failing test, watch it fail for the right
+reason, make it pass, then refactor. Write the rest directly.
+
+While working:
+
+- re-run the project's checks and the tests you are touching as you go, not just at the end.
+
+Stay inside the ticket's scope. If you find an unrelated problem, note it in
+batch/progress.txt rather than fixing it.
+
+Before you start any substantial piece of work — a large file, a long-running command, a
+wide read of the repository — ask whether you can finish *that* and still land the whole
+ticket in what is left of this turn. If you cannot, checkpoint what you already have first,
+using the handoff at the end of step 5, and let the next iteration continue from it.
+
+Ask it explicitly rather than waiting to notice. This turn has an output budget as well as
+a context window, and the output budget is invisible to you: when it runs out the turn
+simply ends, with the deliverable half-written, nothing committed, and no error anywhere to
+tell you that is what happened. You are expected to land this ticket well inside
+200000 tokens of context; past that with substantial work still remaining, stop
+adding to it and hand off.
+
+## 3. Verify
+
+Once the ticket is done, commit it as it stands — `wip: <ticket> — verifying` — before you
+run anything long. A long check is where a turn most often ends without warning, and the
+commit means it cannot take the work with it. Fixes and the landing commit in step 5 follow
+as further commits; do not amend or squash this one.
+
+Then run the project's full checks:
+
+- whatever this repo uses to type-check, lint and test (check package.json, Makefile, or
+  the contributing docs — and say in batch/progress.txt what you settled on).
+
+Run every one of them in the foreground and wait for it to finish. One command may run for
+up to 60 minutes in this session: give the Bash tool a `timeout` long enough for
+the check (at most 3600000 ms), and do not wrap the command in a shorter `timeout`
+of your own. Never background a check — no `&`, no `nohup`, no `run_in_background`. This
+session is a single non-interactive turn: nothing will ever wake you when a background
+command finishes, so a check you background is a check whose outcome you will never see, and
+the turn ends with the ticket neither verified nor landed.
+
+If a check cannot finish inside that limit even on its own, run it in parts that each can
+(per module, per task, per test directory) rather than backgrounding it, and add nothing to
+it that it does not need, such as a `clean`.
+
+They must pass. Fix real failures. Never delete a test, weaken an assertion, or skip a
+test to get green — if a test looks wrong, say so in batch/progress.txt and leave it
+failing.
+
+## 4. Review
+
+Review your own work since @SHA@ against the ticket, as a reviewer would: correctness
+first, then whether it actually does what the ticket asked. Apply the findings you agree with, re-run the checks from step 3
+afterwards, and record any finding you deliberately did not act on, with the reason, in
+batch/progress.txt.
+
+## 5. Land it
+
+All three steps below happen in this turn. Nothing you defer to "after the run finishes"
+ever happens: the turn is the run, and a ticket left unflipped or uncommitted stops the loop
+for a human instead of moving on.
+
+1. Set the ticket's '**Status:**' line to 'implemented' and check off its checklist
+   items. The loop reads that line to decide what runs next, so a ticket left unflipped
+   will be attempted again on the next iteration.
+2. Append to batch/progress.txt: a SHORT entry (aim for 5-10 lines, bullets not prose) —
+   the ticket, what you built, the seams you test-drove, review findings applied or
+   skipped, and anything the next iteration must know. This file is re-attached (as a
+   tail excerpt) to every future iteration's prompt, so verbosity here is a recurring
+   cost, not a one-off — skip detail that is already recoverable from the diff or the
+   ticket file itself.
+3. Commit everything to the current branch. Do not push.
+
+If you reach this point without having finished the ticket, you have not done what was
+asked — but do not compound it by leaving the work uncommitted, and do not flip the status
+line to hide it. Hand off instead:
+
+- commit what you have as `wip: <ticket> — <what remains>`;
+- leave the '**Status:**' line exactly as it is, so the loop knows the ticket has not
+  landed and gives it another iteration;
+- write a `Remaining:` list in batch/progress.txt — what is left, and where you got to.
+
+The next iteration starts from that commit and reads that list.
+
+## Where the last few iterations got to
+
+The most recent excerpt of batch/progress.txt (it is appended to every iteration, so the
+full history is not repeated here to keep prompts cheap). Each ticket's own
+'**Status:**' line, not this excerpt, is the source of truth for what has landed.
+
+<progress-excerpt>
+(nothing recorded yet — this is the first iteration.)
+</progress-excerpt>
+=== end prompt (nothing was sent; no sandbox was started) ===

@@ -12,6 +12,9 @@ contextBridge.exposeInMainWorld('foreman', {
     ipcRenderer.on('overview:update', listener);
     return () => ipcRenderer.removeListener('overview:update', listener);
   },
+  // What a run of that batch would do, its settings and its exact prompt: `foreman dry-run --json`.
+  // Free: nothing is sent. Answers { ok: true, doc } or { ok: false, error }.
+  dryRun: (batch) => ipcRenderer.invoke('dryrun:load', batch),
   // Open a repo-relative path (a ticket, a batch folder) with Windows' own default.
   open: (relativePath) => ipcRenderer.invoke('open', relativePath),
 });

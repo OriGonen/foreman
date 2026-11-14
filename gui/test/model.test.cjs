@@ -5,7 +5,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const M = require('../model.js');
 
-const { sample } = require('./sample.cjs');
+const { sample, dryRunSample } = require('./sample.cjs');
 
 test('stakes: one character per ticket, in order — landed, next, human, followup, to go', () => {
   assert.equal(M.stakes(sample().tickets), 'dddd>.hf..');
@@ -178,4 +178,84 @@ test('which batch to show after the loop renamed it to DONE_: follow it, and do 
 
 test('the title: the batch path, as the design shows it', () => {
   assert.equal(M.overview(sample()).title, '.scratch/b');
+});
+
+// ---- the dry run ----
+
+test('dry run: the tickets a run would take, in order, the first marked next, a followup says what it checks', () => {
+  const d = M.dryRun(dryRunSample());
+  assert.deepEqual(d.would.map((r) => [r.num, r.slug, r.kind, r.glyph]), [
+    ['05', 'document-human-tickets', 'next', '▶'],
+    ['06', 'doctor-human-warnings', 'todo', ''],
+  ]);
+  assert.equal(d.summary, '2 would run');
+  const f = dryRunSample();
+  f.would_run.tickets.push({ ...f.would_run.remaining[3] });
+  assert.deepEqual(M.dryRun(f).would[2].chip, { cls: 'followup', text: 'followup · checks 07' });
+});
+
+test('dry run: the human ticket the run stops at, and whether the budget gets that far', () => {
+  assert.equal(M.dryRun(dryRunSample()).stop.text, 'then the run stops at 07 try-it-on-a-real-repo, a human ticket');
+  const short = dryRunSample();
+  short.would_run.stops_at.reached = false;
+  assert.equal(M.dryRun(short).stop.text, 'the iteration budget ends the run before 07 try-it-on-a-real-repo, a human ticket');
+  const first = dryRunSample();
+  first.would_run.tickets = [];
+  assert.equal(M.dryRun(first).stop.text, 'the run stops at 07 try-it-on-a-real-repo, a human ticket', 'nothing before it, so not "then"');
+  const none = dryRunSample();
+  none.would_run.stops_at = null;
+  assert.equal(M.dryRun(none).stop, null);
+});
+
+test('dry run: the dome counts what has landed and marks every ticket still to do, as the overview does', () => {
+  const d = M.dryRun(dryRunSample());
+  assert.deepEqual([d.dome.landed, d.dome.total, d.dome.toGo, d.dome.p], [4, 10, 6, 0.4]);
+  assert.equal(d.dome.stakes, 'dddd>.hf..');
+  assert.equal(M.dryRun({ ...dryRunSample(), counts: { done: 0, total: 0 }, would_run: { tickets: [], remaining: [], stops_at: null } }).dome.p, 0);
+});
+
+test('dry run: the settings, in the order the terminal prints them, with unlimited for a budget that has no limit', () => {
+  const d = M.dryRun(dryRunSample());
+  assert.deepEqual(d.settings, [
+    ['exec', 'local'], ['perms', 'acceptEdits'], ['model', 'claude-sonnet-5-5'], ['effort', 'high'], ['live', 'off'],
+    ['budgets', 'cost $25 · time 90m · iterations unlimited'],
+    ['logs', ['.scratch/b/foreman-runs.jsonl', '.scratch/b/foreman-runs.log']],
+  ]);
+  const f = dryRunSample();
+  f.settings.live = true;
+  f.settings.budgets = { cost_usd: null, minutes: null, iterations: 1, text: '' };
+  const g = M.dryRun(f).settings;
+  assert.deepEqual(g.find((r) => r[0] === 'live'), ['live', 'on']);
+  assert.deepEqual(g.find((r) => r[0] === 'budgets'), ['budgets', 'cost unlimited · time unlimited · iterations 1']);
+});
+
+test('dry run: the prompt is the CLI\'s text, untouched, with one number a line and the count in the label', () => {
+  const doc = dryRunSample();
+  const d = M.dryRun(doc);
+  assert.equal(d.prompt.text, doc.prompt.text, 'not trimmed, not reflowed');
+  assert.equal(d.prompt.label, 'Prompt for 05 · 7 lines');
+  assert.equal(d.prompt.numbers, '1\n2\n3\n4\n5\n6\n7');
+  doc.prompt = { for: doc.prompt.for, text: 'one line', lines: 1 };
+  assert.equal(M.dryRun(doc).prompt.label, 'Prompt for 05 · 1 line');
+  assert.equal(M.dryRun(doc).prompt.numbers, '1');
+});
+
+test('dry run: no prompt when a human ticket is next, or nothing is left — and the screen says why', () => {
+  const human = dryRunSample();
+  human.prompt = null;
+  human.would_run.tickets = [];
+  human.would_run.remaining = human.would_run.remaining.slice(2);
+  assert.equal(M.dryRun(human).prompt, null);
+  assert.equal(M.dryRun(human).nothing, '07 try-it-on-a-real-repo is a human ticket, and it is next. A run stops there, so no prompt would be sent.');
+  const done = dryRunSample();
+  done.prompt = null;
+  done.would_run = { tickets: [], remaining: [], stops_at: null };
+  assert.equal(M.dryRun(done).nothing, 'Every ticket in this batch has landed. Nothing would run.');
+  assert.equal(M.dryRun(done).summary, 'nothing would run');
+});
+
+test('dry run: warnings are the CLI\'s own lines, unchanged', () => {
+  const doc = dryRunSample();
+  doc.warnings = ['batch/issues/05-ticket.md Checks: ghost.md, which is not a ticket in this batch'];
+  assert.deepEqual(M.dryRun(doc).warnings, doc.warnings);
 });

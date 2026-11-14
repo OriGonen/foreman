@@ -141,3 +141,30 @@ test('findRepoRoot: Git Bash that cannot start is a spawn error; an empty answer
   const empty = async () => ({ code: 0, stdout: '\n', stderr: '' });
   await assert.rejects(findRepoRoot({ bash: 'b', dir: 'd', run: empty }), (e) => e.kind === 'not-a-repo');
 });
+
+// ---- dry-run ----
+
+const dry = { foreman_json: 1, command: 'dry-run', batch: { path: 'b' }, prompt: null };
+
+test('dryRun runs bash on bin/foreman dry-run, from the repo root, the batch repo-relative and --json last', async () => {
+  const { f, calls } = setup({ code: 0, stdout: JSON.stringify(dry) + '\n', stderr: '' });
+  assert.deepEqual(await f.dryRun('.scratch/gui'), dry);
+  assert.deepEqual(calls[0].args, ['C:/tools/foreman/bin/foreman', 'dry-run', '.scratch/gui', '--json']);
+  assert.equal(calls[0].opts.cwd, 'C:/Projects/app');
+  assert.equal(calls[0].opts.env.SECRET_TOKEN, undefined, 'nothing the CLI does not need is passed on');
+});
+
+test('dryRun takes a batch path the same way status does, and refuses a flag or a path out of the repository', () => {
+  const { f, calls } = setup({ code: 0, stdout: JSON.stringify(dry), stderr: '' });
+  for (const bad of ['', '--all', '../up', 'C:/x', null, undefined]) {
+    assert.throws(() => f.dryRun(bad), (e) => e instanceof ForemanError && e.kind === 'bad-batch', String(bad));
+  }
+  assert.equal(calls.length, 0, 'nothing was run');
+});
+
+test('dryRun: the CLI\'s own words when it fails (a dirty tree), and a status answer is not a dry-run answer', async () => {
+  const dirty = setup({ code: 1, stdout: '', stderr: 'foreman: the working tree is dirty.\n' });
+  await assert.rejects(() => dirty.f.dryRun('b'), (e) => e.kind === 'exit' && e.message === 'foreman: the working tree is dirty.');
+  const wrong = setup({ code: 0, stdout: JSON.stringify(good), stderr: '' });
+  await assert.rejects(() => wrong.f.dryRun('b'), (e) => e.kind === 'version' && /asked for dry-run/.test(e.message));
+});

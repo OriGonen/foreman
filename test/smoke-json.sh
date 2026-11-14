@@ -162,7 +162,22 @@ if case_is "golden: plain status and help are byte for byte what they were"; the
   cmp -s "$WORK/help.out" "$TEST_DIR/golden/help.txt" && pass || fail "foreman help differs from test/golden/help.txt"
 fi
 
-if case_is "plain status starts no node; --json starts it once"; then
+if case_is "golden: plain dry-run is byte for byte what it was"; then
+  repo="$WORK/golden-dry-repo"
+  make_status_repo "$repo"
+  (cd "$repo" && FOREMAN_SHOW=never FOREMAN_COLOR=never "$FOREMAN" dry-run batch > "$WORK/dry.raw" 2>&1)
+  assert_eq "$?" 0 "dry-run exits 0"
+  # What differs from one fixture to the next: the commit the prompt names as its base, and where
+  # the temporary repository is. The capture keeps both as placeholders.
+  sed -e "s|$WORK|@WORK@|g" -e 's/[0-9a-f]\{40\}/@SHA@/g' "$WORK/dry.raw" > "$WORK/dry.out"
+  if [ "${FOREMAN_JSON_GOLDEN:-}" = write ]; then
+    cp "$WORK/dry.out" "$TEST_DIR/golden/dry-run-plain.txt"
+    printf '  retook test/golden/dry-run-plain.txt\n'
+  fi
+  cmp -s "$WORK/dry.out" "$TEST_DIR/golden/dry-run-plain.txt" && pass || fail "plain dry-run differs from test/golden/dry-run-plain.txt"
+fi
+
+if case_is "plain status and dry-run start no node; --json starts it once"; then
   # A shim `node` ahead of the real one on PATH logs every start. Plain status on a pipe starts
   # none (the picture is only drawn at a terminal), and that must stay so; the JSON path is the
   # only one allowed to start one.
@@ -181,6 +196,12 @@ EOF
   assert_eq "$(grep -c . "$WORK/node-calls")" 0 "plain status started no node"
   (cd "$repo" && PATH="$WORK/shim:$PATH" FOREMAN_SHOW=never "$FOREMAN" status batch --json >/dev/null 2>&1)
   assert_eq "$(grep -c . "$WORK/node-calls")" 1 "status --json started node once"
+  # The same for a dry run: nothing new on the plain path, one node on the JSON path.
+  : > "$WORK/node-calls"
+  (cd "$repo" && PATH="$WORK/shim:$PATH" FOREMAN_SHOW=never "$FOREMAN" dry-run batch >/dev/null 2>&1)
+  assert_eq "$(grep -c . "$WORK/node-calls")" 0 "plain dry-run started no node"
+  (cd "$repo" && PATH="$WORK/shim:$PATH" FOREMAN_SHOW=never "$FOREMAN" dry-run batch --json >/dev/null 2>&1)
+  assert_eq "$(grep -c . "$WORK/node-calls")" 1 "dry-run --json started node once"
 fi
 
 # ---------------------------------------------------------------------------
@@ -428,19 +449,239 @@ if case_is "status --json --all: outside a repository"; then
 fi
 
 # ---------------------------------------------------------------------------
+# foreman dry-run --json
+# ---------------------------------------------------------------------------
+
+# The lines the plain dry-run prints between its two marker lines: the prompt, exactly.
+plain_prompt() {    # plain_prompt PLAIN_OUTPUT
+  printf '%s\n' "$1" | awk '/^=== end prompt/ { on = 0 } on { print } /^=== prompt that would be sent/ { on = 1 }'
+}
+
+if case_is "dry-run --json: one object, versioned, naming its command"; then
+  repo="$WORK/dry-shape-repo"
+  make_status_repo "$repo"
+  run_foreman "$repo" dry-run batch --json
+  assert_eq "$ST" 0 "exits 0"
+  assert_eq "$ERR" "" "says nothing on stderr"
+  assert_eq "$(jv "$OUT" 'typeof j')" '"object"' "it parses, and is one object"
+  assert_eq "$(jv "$OUT" 'j.foreman_json')" 1 "foreman_json is 1"
+  assert_eq "$(jv "$OUT" 'j.command')" '"dry-run"' "it names its command"
+  assert_eq "$(printf '%s\n' "$OUT" | grep -c .)" 1 "on one line, so a reader can take it whole"
+  assert_eq "$(jv "$OUT" 'j.batch')" '{"path":"batch","name":"batch"}' "the batch"
+  assert_eq "$(jv "$OUT" 'j.counts')" '{"done":1,"total":5}' "the counts"
+  assert_eq "$(jv "$OUT" 'j.repo_root.length > 0')" true "the repo root is given"
+  assert_eq "$(jv "$OUT" 'Object.keys(j).join()')" \
+    '"foreman_json,command,repo_root,batch,counts,would_run,settings,warnings,prompt"' "the keys, in this order"
+fi
+
+if case_is "dry-run --json: its facts are the plain dry-run's"; then
+  repo="$WORK/dry-facts-repo"
+  make_status_repo "$repo"
+  run_foreman "$repo" dry-run batch
+  plain="$OUT"
+  run_foreman "$repo" dry-run batch --json
+  json="$OUT"
+  # What would run: the one ticket the default budget of one iteration reaches. The plain output
+  # marks the human ticket after it, and the json says the budget does not get that far.
+  assert_contains "$plain" "  1  02-ticket.md" "plain: the first ticket to run, to compare with"
+  assert_eq "$(jv "$json" 'j.would_run.tickets.map(t => t.file)')" '["batch/issues/02-ticket.md"]' "the one ticket the budget reaches"
+  assert_eq "$(jv "$json" 'j.would_run.tickets[0].title')" '"Second thing"' "with its title"
+  assert_eq "$(jv "$json" 'j.would_run.remaining.map(t => t.name + ":" + t.state)')" \
+    '["02-ticket:run","03-ticket:stop","04-ticket:later","05-ticket:later"]' "the four still to do, in the order the plain output lists them, with what a run does with each"
+  assert_contains "$plain" "  2  03-ticket.md   [HUMAN]" "plain marks 03 human"
+  assert_eq "$(jv "$json" 'j.would_run.stops_at.file')" '"batch/issues/03-ticket.md"' "JSON names the human ticket"
+  assert_eq "$(jv "$json" 'j.would_run.stops_at.handoff')" '"batch/handoff/03-handoff.md"' "and its handoff"
+  assert_eq "$(jv "$json" 'j.would_run.stops_at.reached')" false "one iteration does not get that far"
+  # The settings, line by line as the plain output prints them.
+  assert_contains "$plain" "Exec:    fake (no agent is run)" "plain: exec"
+  assert_eq "$(jv "$json" 'j.settings.exec')" '"fake (no agent is run)"' "exec matches"
+  assert_contains "$plain" "Model:   claude-sonnet-5-5   Effort: high" "plain: model and effort"
+  assert_eq "$(jv "$json" '[j.settings.model, j.settings.effort]')" '["claude-sonnet-5-5","high"]' "model and effort match"
+  assert_contains "$plain" "Perms:   acceptEdits" "plain: perms"
+  assert_eq "$(jv "$json" 'j.settings.perms')" '"acceptEdits"' "perms match"
+  assert_contains "$plain" "Live:    off" "plain: live"
+  assert_eq "$(jv "$json" 'j.settings.live')" false "live matches"
+  assert_contains "$plain" "Budgets: cost=unlimited  time=unlimited  iterations=1" "plain: budgets"
+  assert_eq "$(jv "$json" 'j.settings.budgets')" '{"cost_usd":null,"minutes":null,"iterations":1,"text":"cost=unlimited  time=unlimited  iterations=1"}' \
+    "budgets match: no limit is null, and the plain words are carried"
+  assert_contains "$plain" "Logs:    batch/foreman-runs.jsonl" "plain: the run record"
+  assert_eq "$(jv "$json" 'j.settings.logs')" '{"jsonl":"batch/foreman-runs.jsonl","log":"batch/foreman-runs.log"}' "logs match"
+  assert_contains "$plain" "warning: batch/issues/05-ticket.md Checks: ghost.md, which is not a ticket in this batch" "plain warns about 05"
+  assert_eq "$(jv "$json" 'j.warnings')" '["batch/issues/05-ticket.md Checks: ghost.md, which is not a ticket in this batch"]' "JSON carries the warning"
+  assert_contains "$plain" "=== prompt that would be sent for batch/issues/02-ticket.md ===" "plain: which ticket the prompt is for"
+  assert_eq "$(jv "$json" 'j.prompt.for')" '"batch/issues/02-ticket.md"' "the prompt is for the same ticket"
+fi
+
+if case_is "dry-run --json: the prompt is exactly the plain output's"; then
+  repo="$WORK/dry-prompt-repo"
+  make_status_repo "$repo"
+  run_foreman "$repo" dry-run batch
+  plain="$OUT"
+  run_foreman "$repo" dry-run batch --json
+  # Compared as files: a command substitution would drop trailing newlines, and what is held here is
+  # that nothing is lost, blank lines included.
+  plain_prompt "$plain" > "$WORK/prompt.plain"
+  printf '%s' "$OUT" | node -e '
+    let s = ""; process.stdin.on("data", d => s += d).on("end", () => {
+      const p = JSON.parse(s).prompt; process.stdout.write(p.text + "\n");
+      require("fs").writeFileSync(process.argv[1], String(p.lines));
+    });' "$WORK/prompt.lines" > "$WORK/prompt.json"
+  cmp -s "$WORK/prompt.plain" "$WORK/prompt.json" && pass || fail "the JSON prompt differs from the plain output between its markers"
+  assert_eq "$(cat "$WORK/prompt.lines")" "$(grep -c '' "$WORK/prompt.plain")" "lines is how many lines the plain output shows"
+  assert_contains "$(head -1 "$WORK/prompt.json")" "@batch/issues/02-ticket.md" "it starts with the attached ticket"
+  assert_contains "$(cat "$WORK/prompt.json")" "Commit everything to the current branch" "and has the adapter's commit note"
+fi
+
+if case_is "dry-run --json: the prompt survives backslashes, tabs, carriage returns and blank lines"; then
+  # The loop writes the prompt as one line; the module puts it back. Both ends, at the seam: the
+  # module on facts written by hand, then the whole CLI on a progress file full of awkward text
+  # (the progress excerpt is the one part of the prompt that is the user's own).
+  # `a`, a backslash and an n, `b`, a newline, `c`, a tab, `z`, a backslash: written as the loop writes it.
+  out="$(cd "$WORK" && printf 'batch\tb\nticket\trun\tb/issues/x.md\t0\t0\t\t\npromptfor\tb/issues/x.md\nprompt\t%s\n' \
+    'a\\nb\nc\tz\\' | node "$FOREMAN_HOME/lib/foreman-json.cjs" dry-run)"
+  assert_eq "$(jv "$out" 'j.prompt.text')" '"a\\nb\nc\tz\\"' "the escapes are undone in one pass, so a backslash then n stays two characters"
+  assert_eq "$(jv "$out" 'j.prompt.lines')" 2 "and the lines are counted as the plain output prints them"
+
+
+  repo="$WORK/dry-awkward-repo"
+  make_status_repo "$repo"
+  printf 'one\ttab\r\n\\n is not a newline\n\n\nlast\n' > "$repo/batch/progress.txt"
+  git -C "$repo" add -A >/dev/null && git -C "$repo" commit --quiet -m "a progress file with awkward text"
+  run_foreman "$repo" dry-run batch
+  plain="$OUT"
+  run_foreman "$repo" dry-run batch --json
+  plain_prompt "$plain" > "$WORK/awkward.plain"
+  printf '%s' "$OUT" | node -e '
+    let s = ""; process.stdin.on("data", d => s += d).on("end", () => process.stdout.write(JSON.parse(s).prompt.text + "\n"));' > "$WORK/awkward.json"
+  assert_contains "$(cat "$WORK/awkward.plain")" "is not a newline" "the awkward text is in the plain prompt"
+  cmp -s "$WORK/awkward.plain" "$WORK/awkward.json" && pass || fail "the awkward prompt is not what the plain output prints"
+fi
+
+if case_is "dry-run --json: the iteration budget decides how far it reaches, and a human ticket ends it"; then
+  repo="$WORK/dry-reach-repo"
+  make_status_repo "$repo"
+  # Unlimited: 02 runs, then the loop stops at 03, the human ticket, and 04 and 05 wait behind it.
+  run_foreman "$repo" dry-run batch --unlimited --json
+  assert_eq "$ST" 0 "exits 0"
+  assert_eq "$(jv "$OUT" 'j.would_run.tickets.map(t => t.name)')" '["02-ticket"]' "only 02 comes before the human ticket"
+  assert_eq "$(jv "$OUT" 'j.would_run.stops_at.name')" '"03-ticket"' "and the run stops at 03"
+  assert_eq "$(jv "$OUT" 'j.would_run.stops_at.reached')" true "which it reaches"
+  assert_eq "$(jv "$OUT" 'j.settings.budgets.iterations')" null "unlimited is null"
+  assert_contains "$(jv "$OUT" 'j.settings.budgets.text')" "iterations=unlimited" "in the plain words"
+  # Two iterations: still one ticket before the human one, and now there is a spare to reach it.
+  run_foreman "$repo" dry-run batch 2 --json
+  assert_eq "$(jv "$OUT" 'j.would_run.stops_at.reached')" true "two iterations reach the human ticket"
+  assert_eq "$(jv "$OUT" 'j.settings.budgets.iterations')" 2 "and say two"
+  # With the human ticket landed, the budget is what ends the run.
+  sed -i 's/^\*\*Status:\*\* ready-for-human/**Status:** done/' "$repo/batch/issues/03-ticket.md"
+  git -C "$repo" commit --quiet -am "03 landed"
+  run_foreman "$repo" dry-run batch 2 --json
+  assert_eq "$(jv "$OUT" 'j.would_run.tickets.map(t => t.name)')" '["02-ticket","04-ticket"]' "two iterations take two tickets"
+  assert_eq "$(jv "$OUT" 'j.would_run.remaining.map(t => t.name + ":" + t.state)')" '["02-ticket:run","04-ticket:run","05-ticket:later"]' "of the three still to do (03 has landed), the third waits"
+  assert_eq "$(jv "$OUT" 'j.would_run.stops_at')" null "no human ticket is left to stop at"
+  run_foreman "$repo" dry-run batch --unlimited --json
+  assert_eq "$(jv "$OUT" 'j.would_run.tickets.map(t => t.name)')" '["02-ticket","04-ticket","05-ticket"]' "unlimited takes them all"
+  assert_eq "$(jv "$OUT" 'j.would_run.tickets.find(t => t.number === "04").checks')" '"03-ticket.md"' "a followup says what it checks"
+fi
+
+if case_is "dry-run --json: the cost and time budgets, live and a setting from foreman.conf"; then
+  repo="$WORK/dry-settings-repo"
+  make_status_repo "$repo"
+  printf 'FOREMAN_MAX_COST_USD=25\nFOREMAN_MAX_MINUTES=90\nFOREMAN_EFFORT=low\nFOREMAN_BATCH_NAME="Pretty name"\n' >> "$repo/batch/foreman.conf"
+  git -C "$repo" commit --quiet -am "budgets"
+  run_foreman "$repo" dry-run batch --live
+  plain="$OUT"
+  run_foreman "$repo" dry-run batch --live --json
+  assert_contains "$plain" "Budgets: cost=\$25  time=90m  iterations=1" "plain: the budgets"
+  assert_eq "$(jv "$OUT" 'j.settings.budgets')" '{"cost_usd":25,"minutes":90,"iterations":1,"text":"cost=$25  time=90m  iterations=1"}' "the budgets as numbers"
+  assert_contains "$plain" "Live:    on" "plain: live is on"
+  assert_eq "$(jv "$OUT" 'j.settings.live')" true "live matches"
+  assert_eq "$(jv "$OUT" 'j.settings.effort')" '"low"' "the effort foreman.conf gives"
+  assert_eq "$(jv "$OUT" 'j.batch.name')" '"Pretty name"' "and the batch name"
+fi
+
+if case_is "dry-run --json: a human ticket next sends no prompt, and nothing left is still an object"; then
+  repo="$WORK/dry-human-repo"
+  make_status_repo "$repo"
+  sed -i 's/^\*\*Status:\*\* ready-for-agent/**Status:** done/' "$repo/batch/issues/02-ticket.md"
+  git -C "$repo" commit --quiet -am "02 landed"
+  run_foreman "$repo" dry-run batch
+  assert_contains "$OUT" "Would stop before batch/issues/03-ticket.md: it is a human ticket. No prompt would be sent." "plain says it would stop"
+  run_foreman "$repo" dry-run batch --json
+  assert_eq "$ST" 0 "exits 0, as the plain dry-run does"
+  assert_eq "$(jv "$OUT" 'j.prompt')" null "no prompt would be sent"
+  assert_eq "$(jv "$OUT" 'j.would_run.tickets')" '[]' "nothing would run"
+  assert_eq "$(jv "$OUT" 'j.would_run.stops_at.file')" '"batch/issues/03-ticket.md"' "it would stop at the human ticket"
+  assert_eq "$(jv "$OUT" 'j.would_run.stops_at.reached')" true "straight away"
+  assert_eq "$(jv "$OUT" 'j.would_run.stops_at.handoff')" '"batch/handoff/03-handoff.md"' "and says where its handoff is"
+
+  # Everything landed: the plain dry-run says so and exits 0; the JSON is an answer all the same.
+  sed -i 's/^\*\*Status:\*\* ready-for-[a-z]*/**Status:** done/' "$repo"/batch/issues/0[345]-ticket.md
+  git -C "$repo" commit --quiet -am "everything landed"
+  run_foreman "$repo" dry-run batch
+  assert_contains "$OUT" "Nothing to do" "plain says there is nothing to do"
+  assert_eq "$ST" 0 "and exits 0"
+  run_foreman "$repo" dry-run batch --json
+  assert_eq "$ST" 0 "the JSON exits 0 as well"
+  assert_eq "$(jv "$OUT" 'j.command')" '"dry-run"' "it is still an answer to dry-run"
+  assert_eq "$(jv "$OUT" 'j.would_run')" '{"tickets":[],"remaining":[],"stops_at":null}' "nothing would run"
+  assert_eq "$(jv "$OUT" 'j.prompt')" null "and there is no prompt"
+  assert_eq "$(jv "$OUT" 'j.counts')" '{"done":5,"total":5}' "5 of 5"
+fi
+
+if case_is "dry-run --json: sends nothing and starts no sandbox"; then
+  # The fake adapter is the one that records what it is asked: it appends every prompt to
+  # FOREMAN_FAKE_PROMPT_LOG and counts its calls in a file keyed on the loop's pid. Neither may
+  # exist after a dry run, with --json or without it.
+  repo="$WORK/dry-nothing-repo"
+  make_status_repo "$repo"
+  export FOREMAN_FAKE_PROMPT_LOG="$WORK/fake-prompts.log"
+  run_foreman "$repo" dry-run batch --json
+  assert_eq "$ST" 0 "exits 0"
+  assert_eq "$(jv "$OUT" 'j.prompt === null')" false "a prompt was built"
+  [ ! -e "$FOREMAN_FAKE_PROMPT_LOG" ] && pass || fail "the fake exec was handed a prompt"
+  assert_eq "$(ls "$WORK" | grep -c '^foreman-fake-.*\.calls$')" 0 "and was never called"
+  assert_eq "$(git -C "$repo" log --oneline | wc -l)" "2" "nothing was committed"
+  assert_eq "$(git -C "$repo" status --porcelain | wc -l)" "0" "and nothing was written to the tree"
+  # The control: a real run on the same repository does reach the adapter, so the checks above can fail.
+  run_foreman "$repo" run batch
+  [ -e "$FOREMAN_FAKE_PROMPT_LOG" ] && pass || fail "the control: a run did not call the fake exec, so this test proves nothing"
+  unset FOREMAN_FAKE_PROMPT_LOG
+fi
+
+if case_is "dry-run --json: a batch that cannot be read, a dirty tree: the plain dry-run's own message, no JSON"; then
+  repo="$WORK/dry-error-repo"
+  make_status_repo "$repo"
+  printf 'x\n' > "$repo/stray.txt"
+  run_foreman "$repo" dry-run batch
+  plain_st="$ST"; plain_err="$ERR"
+  run_foreman "$repo" dry-run batch --json
+  assert_eq "$ST" "$plain_st" "the same exit status"
+  assert_eq "$OUT" "" "no JSON is printed"
+  assert_eq "$ERR" "$plain_err" "and the same words on stderr"
+  assert_contains "$ERR" "working tree is dirty" "which say why"
+fi
+
+# ---------------------------------------------------------------------------
 # Flags that are not status's
 # ---------------------------------------------------------------------------
 
-if case_is "--json is for status only, for now: the others still refuse it as they did"; then
+if case_is "--json is for status and dry-run, for now: the others still refuse it as they did"; then
   repo="$WORK/json-others-repo"
   make_status_repo "$repo"
-  for cmd in run dry-run; do
-    run_foreman "$repo" "$cmd" batch --json
-    assert_eq "$ST" 1 "$cmd --json is refused"
-    assert_contains "$ERR" "Usage:" "$cmd --json says how it is used"
-  done
+  run_foreman "$repo" run batch --json
+  assert_eq "$ST" 1 "run --json is refused"
+  assert_contains "$ERR" "Usage:" "run --json says how it is used"
   run_foreman "$repo" status batch --json --bogus
   assert_eq "$ST" 1 "an unknown flag is still refused beside --json"
+  run_foreman "$repo" dry-run batch --json --bogus
+  assert_eq "$ST" 1 "and beside dry-run --json"
+  # --all is status's: a dry run is of one batch.
+  run_foreman "$repo" dry-run --json --all
+  assert_eq "$ST" 1 "dry-run --json --all is refused"
+  assert_contains "$ERR" "Usage:" "and says how it is used"
+  run_foreman "$repo" dry-run batch --all
+  assert_eq "$ST" 1 "--all without status --json is refused"
 fi
 
 # ---------------------------------------------------------------------------

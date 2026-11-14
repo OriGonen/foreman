@@ -1,5 +1,5 @@
 #!/bin/bash
-# Benchmark for `foreman status` (or `foreman next`) — a measuring instrument, not a test: it asserts nothing and
+# Benchmark for `foreman status` (or `foreman next`, or `foreman dry-run`) — a measuring instrument, not a test: it asserts nothing and
 # is not part of the smoke suite. It builds its own 3-ticket batch on the `fake` adapter,
 # times `foreman status` on it over several runs, then traces one call and breaks its spawns
 # down by command, so a change that removes a spawn can be shown to have done so.
@@ -8,6 +8,8 @@
 #   bash test/bench.sh 10         10 timed runs
 #   bash test/bench.sh next       the same for `foreman next batch --all`, the plain path of which
 #                                 must start no more processes than it did before it had a show
+#   bash test/bench.sh dry-run    the same for `foreman dry-run batch`: plain `dry-run` must start no
+#                                 more processes than it did before `--json` existed (ticket 04)
 #   bash test/bench.sh next 10    (a command, then the runs, in either order)
 #
 # Under Git Bash a run of `foreman status` takes tens of seconds, so the default takes a few
@@ -37,8 +39,9 @@ for arg in "$@"; do
     -h|--help) sed -n '2,/^set /p' "${BASH_SOURCE[0]}" | sed '$d; s/^# \{0,1\}//'; exit 0 ;;
     status) BENCH_ARGS=(status batch) ;;
     next)   BENCH_ARGS=(next batch --all) ;;
+    dry-run) BENCH_ARGS=(dry-run batch) ;;
     *) if [[ $arg =~ ^[1-9][0-9]*$ ]]; then RUNS="$arg"
-       else printf 'usage: bash test/bench.sh [status|next] [runs]\n' >&2; exit 2; fi ;;
+       else printf 'usage: bash test/bench.sh [status|next|dry-run] [runs]\n' >&2; exit 2; fi ;;
   esac
 done
 

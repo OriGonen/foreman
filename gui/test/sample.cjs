@@ -32,4 +32,35 @@ function sample() {
   };
 }
 
-module.exports = { sample, T };
+// A `dry-run --json` object for the same batch: 05 and 06 would run (no iteration limit), and the run
+// would stop at 07, the human ticket, with 07a, 08 and 09 behind it.
+function dryRunSample() {
+  const E = (number, slug, state, extra = {}) => ({
+    file: `.scratch/b/issues/${number}-${slug}.md`, name: `${number}-${slug}`, number, slug, title: slug,
+    human: false, checks: null, handoff: null, state, ...extra,
+  });
+  const remaining = [
+    E('05', 'document-human-tickets', 'run'),
+    E('06', 'doctor-human-warnings', 'run'),
+    E('07', 'try-it-on-a-real-repo', 'stop', { human: true, handoff: '.scratch/b/handoff/07-try-it-on-a-real-repo.md' }),
+    E('07a', 'followup-try-the-followup-skill', 'later', { checks: '07-try-it-on-a-real-repo.md' }),
+    E('08', 'readme-human-tickets-section', 'later'),
+    E('09', 'end-to-end-check', 'later'),
+  ];
+  const strip = ({ state, ...rest }) => rest;
+  const prompt = '@.scratch/b/issues/05-document-human-tickets.md\n\nImplement the attached ticket, and only that ticket,\nto a high standard.\n\n    indented <b>line</b>\n';
+  return {
+    foreman_json: 1, command: 'dry-run', repo_root: 'C:/Projects/app', batch: { path: '.scratch/b', name: 'b' },
+    counts: { done: 4, total: 10 },
+    would_run: { tickets: remaining.slice(0, 2).map(strip), remaining, stops_at: { ...strip(remaining[2]), reached: true } },
+    settings: {
+      exec: 'local', perms: 'acceptEdits', model: 'claude-sonnet-5-5', effort: 'high', live: false,
+      budgets: { cost_usd: 25, minutes: 90, iterations: null, text: 'cost=$25  time=90m  iterations=unlimited' },
+      logs: { jsonl: '.scratch/b/foreman-runs.jsonl', log: '.scratch/b/foreman-runs.log' },
+    },
+    warnings: [],
+    prompt: { for: remaining[0].file, text: prompt, lines: prompt.split('\n').length },
+  };
+}
+
+module.exports = { sample, dryRunSample, T };

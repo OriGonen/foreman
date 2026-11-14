@@ -127,6 +127,76 @@
     };
   }
 
+  // ---- the dry run (`foreman dry-run --json`) ----
+
+  const ticketLabel = (t) => (t.number ? t.number + ' ' + t.slug : t.name);
+
+  // A budget as the screen words it: the loop's own number, or "unlimited" for the null that means
+  // no limit.
+  const limit = (v, prefix = '', suffix = '') => (typeof v === 'number' ? prefix + v + suffix : 'unlimited');
+
+  // Everything the dry run screen draws. The CLI decided what would run and built the prompt; this
+  // only words it. The prompt is passed on exactly as it came.
+  function dryRun(doc) {
+    const wr = doc.would_run || { tickets: [], remaining: [], stops_at: null };
+    const s = doc.settings;
+    const done = doc.counts ? doc.counts.done : 0;
+    const total = doc.counts ? doc.counts.total : 0;
+
+    // One character a ticket, as the overview's dome takes them: the landed ones, then the rest in
+    // the order they are still to run, the first of which is next. The batch's file list is not in a
+    // dry run's answer, only its landed count, so the landed ones are drawn as a run of `d`.
+    const stakeOf = (t, i) => (i === 0 ? '>' : t.human ? 'h' : t.checks ? 'f' : '.');
+    const stakes = 'd'.repeat(done) + wr.remaining.map(stakeOf).join('');
+
+    const would = wr.tickets.map((t, i) => ({
+      file: t.file, num: t.number, slug: t.slug,
+      kind: i === 0 ? 'next' : 'todo', glyph: i === 0 ? '▶' : '',
+      chip: t.checks ? { cls: 'followup', text: checksChip(t.checks) } : null,
+    }));
+
+    const stop = wr.stops_at ? {
+      file: wr.stops_at.file, name: ticketLabel(wr.stops_at), handoff: wr.stops_at.handoff || null,
+      text: (wr.stops_at.reached ? (wr.tickets.length > 0 ? 'then the run stops at ' : 'the run stops at ')
+        : 'the iteration budget ends the run before ') + ticketLabel(wr.stops_at) + ', a human ticket',
+    } : null;
+
+    const settings = [
+      ['exec', s.exec], ['perms', s.perms], ['model', s.model], ['effort', s.effort],
+      ['live', s.live ? 'on' : 'off'],
+      ['budgets', `cost ${limit(s.budgets.cost_usd, '$')} · time ${limit(s.budgets.minutes, '', 'm')} · iterations ${limit(s.budgets.iterations)}`],
+      ['logs', [s.logs.jsonl, s.logs.log]],
+    ];
+
+    let prompt = null;
+    let nothing = null;
+    if (doc.prompt) {
+      const n = doc.prompt.lines;
+      const first = wr.tickets[0];
+      prompt = {
+        file: doc.prompt.for,
+        label: `Prompt for ${first ? first.number || first.name : ticketRef(doc.prompt.for)} · ${n} ${n === 1 ? 'line' : 'lines'}`,
+        text: doc.prompt.text,
+        numbers: Array.from({ length: n }, (_, i) => i + 1).join('\n'),
+      };
+    } else if (wr.stops_at && wr.remaining.length > 0 && wr.remaining[0].state === 'stop') {
+      nothing = `${ticketLabel(wr.stops_at)} is a human ticket, and it is next. A run stops there, so no prompt would be sent.`;
+    } else if (wr.remaining.length === 0) {
+      nothing = 'Every ticket in this batch has landed. Nothing would run.';
+    } else {
+      nothing = 'Nothing would run, so no prompt would be sent.';
+    }
+
+    return {
+      title: doc.batch.path,
+      dome: { landed: done, total, toGo: Math.max(total - done, 0), p: total > 0 ? done / total : 0, stakes },
+      summary: would.length === 0 ? 'nothing would run' : `${would.length} would run`,
+      would, stop, settings,
+      warnings: doc.warnings || [],
+      prompt, nothing,
+    };
+  }
+
   // The rail: every batch in the repo, the finished (DONE_) ones last and dimmed.
   function rail(all, selected) {
     const entries = (all.batches || []).map((b) => {
@@ -162,5 +232,5 @@
     return list.length ? list[0].path : null;
   }
 
-  return { usd, ticketRef, checksChip, stakes, blockers, lastRun, overview, rail, pickBatch };
+  return { usd, ticketRef, checksChip, stakes, blockers, lastRun, overview, dryRun, rail, pickBatch };
 }));
