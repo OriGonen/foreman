@@ -1,0 +1,26 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION @TITLE@
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ git                               │  ▲ .foreman-iter.bundle not ignored   ║
+║  ■ node                              │  ▲ .foreman-stall-marker not ignored  ║
+║  ■ awk                               │  ■ foreman-runs.jsonl ignored         ║
+║  ■ bash @V@ (4+ required)│  ▲ foreman-runs.log not ignored       ║
+║                                      │  ▲ .gitattributes does not keep       ║
+║                                      │    foreman.conf LF                    ║
+║                                      │    this repo rewrites line endings,   ║
+║                                      │    so a tracked foreman.conf would    ║
+║                                      │    come back CRLF                     ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ batch                           0 of 2 done                               ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ passed  ▲ --fix can do it                          ┌───────────────┐      ║
+║                                                       │  NOT PASSED   │      ║
+║  fix:  foreman doctor --fix                           │  4 to fix     │      ║
+║                                                       └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+4 thing(s) to fix. The repo files can be written for you:
+  foreman doctor --fix
+exit 1

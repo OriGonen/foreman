@@ -15,7 +15,7 @@
 # model.js) runs as the last case when node is there.
 #
 # Plain output is "unchanged" is checked against captures in test/golden/, taken on the same
-# fixture before the change they guard: status-plain.txt and help.txt. To retake one on purpose:
+# fixture before the change they guard: status-plain.txt, help.txt, dry-run-plain.txt and doctor-*.txt. To retake one on purpose:
 #   FOREMAN_JSON_GOLDEN=write bash test/smoke-json.sh golden
 set -uo pipefail
 
@@ -175,6 +175,51 @@ if case_is "golden: plain dry-run is byte for byte what it was"; then
     printf '  retook test/golden/dry-run-plain.txt\n'
   fi
   cmp -s "$WORK/dry.out" "$TEST_DIR/golden/dry-run-plain.txt" && pass || fail "plain dry-run differs from test/golden/dry-run-plain.txt"
+fi
+
+# `foreman doctor`, plain, in the three states a person meets it in: ready; with things it can write
+# (three ignore lines missing, and a repo that rewrites line endings with no .gitattributes line);
+# and `--fix`, which draws the same box, writes, and says so. The captures in test/golden/doctor-*.txt
+# were taken on the tree before `--json` was added. What a machine or a day decides is a placeholder:
+# the title line (the place, the date, the build) and the bash version's own padding.
+doctor_golden_repo() {    # doctor_golden_repo REPO ready|fixable
+  local repo="$1" state="$2"
+  copy_fixture "$WORK/template" "$repo" 2
+  if [ "$state" = fixable ]; then
+    printf '**/foreman-runs.jsonl\n' > "$repo/.gitignore"
+    printf '* text=auto\n' > "$repo/.gitattributes"
+    git -C "$repo" add -A >/dev/null
+    git -C "$repo" commit --quiet -m "a repo that needs doctor --fix"
+  fi
+}
+doctor_golden_run() {    # doctor_golden_run REPO [args] -> the output, normalised, in $WORK/doctor.out
+  local repo="$1"; shift
+  mkdir -p "$WORK/doctor-home"
+  (cd "$repo" && HOME="$WORK/doctor-home" FOREMAN_SHOW=never FOREMAN_COLOR=never "$FOREMAN" doctor "$@" 2>&1; echo "exit $?") |
+    sed -e "s|$WORK|@WORK@|g" -e 's/^\(║  SITE INSPECTION\).*/\1 @TITLE@/' \
+        -e 's/bash [0-9][0-9.]* (4+ required) *│/bash @V@ (4+ required)│/' > "$WORK/doctor.out"
+}
+
+if case_is "golden: plain doctor and doctor --fix are byte for byte what they were"; then
+  doctor_golden_repo "$WORK/golden-doctor-ready" ready
+  doctor_golden_run "$WORK/golden-doctor-ready"
+  cp "$WORK/doctor.out" "$WORK/doctor-ready.out"
+  doctor_golden_repo "$WORK/golden-doctor-fixable" fixable
+  doctor_golden_run "$WORK/golden-doctor-fixable"
+  cp "$WORK/doctor.out" "$WORK/doctor-fixable.out"
+  doctor_golden_repo "$WORK/golden-doctor-fix" fixable
+  doctor_golden_run "$WORK/golden-doctor-fix" --fix
+  { cat "$WORK/doctor.out"; echo '--- .gitignore'; cat "$WORK/golden-doctor-fix/.gitignore"
+    echo '--- .gitattributes'; cat "$WORK/golden-doctor-fix/.gitattributes"; } > "$WORK/doctor-fix.out"
+  if [ "${FOREMAN_JSON_GOLDEN:-}" = write ]; then
+    cp "$WORK/doctor-ready.out" "$TEST_DIR/golden/doctor-ready.txt"
+    cp "$WORK/doctor-fixable.out" "$TEST_DIR/golden/doctor-fixable.txt"
+    cp "$WORK/doctor-fix.out" "$TEST_DIR/golden/doctor-fix.txt"
+    printf '  retook test/golden/doctor-ready.txt, doctor-fixable.txt and doctor-fix.txt\n'
+  fi
+  cmp -s "$WORK/doctor-ready.out" "$TEST_DIR/golden/doctor-ready.txt" && pass || fail "plain doctor (ready) differs from test/golden/doctor-ready.txt"
+  cmp -s "$WORK/doctor-fixable.out" "$TEST_DIR/golden/doctor-fixable.txt" && pass || fail "plain doctor (fixable) differs from test/golden/doctor-fixable.txt"
+  cmp -s "$WORK/doctor-fix.out" "$TEST_DIR/golden/doctor-fix.txt" && pass || fail "doctor --fix differs from test/golden/doctor-fix.txt"
 fi
 
 # A run on the fake exec, in two shapes (a ticket that took two iterations and then another ticket;

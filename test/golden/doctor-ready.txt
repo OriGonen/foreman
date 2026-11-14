@@ -1,0 +1,22 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  SITE INSPECTION @TITLE@
+╟──────────────────────────────────────┬───────────────────────────────────────╢
+║  MACHINE                             │  REPOSITORY                           ║
+║  ■ git                               │  ■ .foreman-iter.bundle ignored       ║
+║  ■ node                              │  ■ .foreman-stall-marker ignored      ║
+║  ■ awk                               │  ■ foreman-runs.jsonl ignored         ║
+║  ■ bash @V@ (4+ required)│  ■ foreman-runs.log ignored           ║
+║                                      │  ■ .gitattributes not needed: this    ║
+║                                      │    repo keeps its line endings        ║
+╟──────────────────────────────────────┴───────────────────────────────────────╢
+║  BATCHES                                                                     ║
+║  ■ batch                           0 of 2 done                               ║
+╟──────────────────────────────────────────────────────────────────────────────╢
+║  ■ all 10 checks passed                               ┌───────────────┐      ║
+║                                                       │    PASSED     │      ║
+║  next: foreman run batch                              │ ready to run  │      ║
+║                                                       └───────────────┘      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+Ready.
+exit 0
