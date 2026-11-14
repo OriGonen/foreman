@@ -1514,6 +1514,194 @@ if case_is "install wizard: the header is the design's picture at 24-bit and 256
 fi
 
 # ---------------------------------------------------------------------------
+# foreman doctor --json
+# ---------------------------------------------------------------------------
+
+# Run `foreman doctor` with the arguments in $2.. in repo $1 and keep what it said (OUT, ERR, ST), in a
+# home of its own so nothing of the operator's is read.
+doctor_run() {
+  local repo="$1" t; shift
+  mkdir -p "$WORK/doctor-home" "$WORK/doctor-stubs"
+  # The runners a batch may ask for are there on every machine, so what the cases below say about the
+  # machine does not depend on which one this is.
+  for t in sbx claude; do
+    [ -e "$WORK/doctor-stubs/$t" ] || { printf '#!/bin/sh\nexit 0\n' > "$WORK/doctor-stubs/$t"; chmod +x "$WORK/doctor-stubs/$t"; }
+  done
+  OUT="$(cd "$repo" && PATH="$WORK/doctor-stubs:$PATH" HOME="$WORK/doctor-home" FOREMAN_SHOW=never FOREMAN_COLOR=never "$FOREMAN" doctor "$@" 2>"$WORK/stderr")"
+  ST=$?
+  ERR="$(cat "$WORK/stderr")"
+}
+
+if case_is "doctor --json: a ready repo is one object with the terminal's sections, all ok, and a next command"; then
+  repo="$WORK/dj-ready"
+  doctor_golden_repo "$repo" ready
+  doctor_run "$repo" --json
+  assert_eq "$ST" 0 "exits 0"
+  assert_eq "$ERR" "" "says nothing on stderr"
+  assert_eq "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" 1 "one line"
+  assert_eq "$(jv "$OUT" 'j.foreman_json')" 1 "foreman_json is 1"
+  assert_eq "$(jv "$OUT" 'j.command')" '"doctor"' "and says which command it answers"
+  assert_eq "$(jv "$OUT" 'j.sections.map(s => s.id).join()')" '"machine,repository,batches"' "sections, in the terminal's order, only those with something in them"
+  assert_eq "$(jv "$OUT" 'j.sections.map(s => s.title).join()')" '"Machine,Repository,Batches"' "each with its title"
+  assert_eq "$(jv "$OUT" 'j.sections[0].rows.slice(0, 3).map(r => r.label).join()')" '"git,node,awk"' "the machine's tools"
+  assert_eq "$(jv "$OUT" 'j.sections.every(s => s.rows.every(r => r.result === "ok"))')" true "every row is ok"
+  assert_eq "$(jv "$OUT" 'j.sections[1].rows[0].label')" '".foreman-iter.bundle ignored"' "a repository row, worded as the box words it"
+  assert_eq "$(jv "$OUT" 'j.sections[2].rows.map(r => [r.label, r.detail]).flat().join("|")')" '"batch|0 of 2 done"' "a batch is its name and how far it has got"
+  assert_eq "$(jv "$OUT" 'JSON.stringify(j.counts)')" '"{\"ok\":10,\"warn\":0,\"fail\":0}"' "the counts of rows"
+  assert_eq "$(jv "$OUT" 'JSON.stringify(j.verdict)')" '"{\"passed\":true,\"label\":\"PASSED\",\"detail\":\"ready to run\",\"fixable\":0,\"blockers\":0}"' "the verdict, in the sign's own words"
+  assert_eq "$(jv "$OUT" 'JSON.stringify(j.next)')" '"{\"label\":\"next\",\"command\":\"foreman run batch\"}"' "the next command"
+  assert_eq "$(jv "$OUT" 'j.plan.length')" 0 "nothing for --fix to write"
+  assert_eq "$(jv "$OUT" '"fix" in j')" false "and no fix report, as --fix was not asked for"
+  assert_eq "$(jv "$OUT" 'j.repo === j.repo.replace(/\\/g, "/") && /\/dj-ready$/.test(j.repo)')" true "the repository, in the mixed form with no backslash"
+  assert_eq "$(jv "$OUT" 'typeof j.rev + typeof j.date')" '"stringstring"' "the build and the date, as the title has them"
+  assert_eq "$(jv "$OUT" 'j.sections.every(s => s.rows.every(r => r.fix === null && r.auto === false))')" true "no row has a fix when nothing is wrong"
+fi
+
+if case_is "doctor --json: what --fix would write is listed, with a fix on each row it covers, and nothing is written"; then
+  repo="$WORK/dj-fixable"
+  doctor_golden_repo "$repo" fixable
+  doctor_run "$repo" --json
+  assert_eq "$ST" 0 "exits 0 even though the repo needs something: the verdict is in the object"
+  assert_eq "$(jv "$OUT" 'j.sections[1].rows.map(r => r.result).join()')" '"fail,fail,ok,fail,fail"' "the three missing ignore lines and the attributes line fail; the present one is ok"
+  assert_eq "$(jv "$OUT" 'j.sections[1].rows.filter(r => r.result === "fail").every(r => r.auto === true)')" true "each of them is something --fix writes"
+  assert_eq "$(jv "$OUT" 'j.sections[1].rows[0].fix')" '"foreman doctor --fix appends it to .gitignore"' "and says where"
+  assert_eq "$(jv "$OUT" 'j.sections[1].rows[4].fix')" '"foreman doctor --fix appends foreman.conf text eol=lf to .gitattributes"' "the attributes row, too"
+  assert_eq "$(jv "$OUT" 'j.sections[1].rows[4].notes[0]')" '"this repo rewrites line endings, so a tracked foreman.conf would come back CRLF"' "and the terminal's own note, kept as a note"
+  assert_eq "$(jv "$OUT" 'j.sections[1].rows[2].fix')" null "a row that passed has no fix"
+  assert_eq "$(jv "$OUT" 'JSON.stringify(j.counts)')" '"{\"ok\":6,\"warn\":0,\"fail\":4}"' "four to fix"
+  assert_eq "$(jv "$OUT" 'JSON.stringify(j.verdict)')" '"{\"passed\":false,\"label\":\"NOT PASSED\",\"detail\":\"4 to fix\",\"fixable\":4,\"blockers\":0}"' "the verdict, and its sign's words"
+  assert_eq "$(jv "$OUT" 'JSON.stringify(j.next)')" '"{\"label\":\"fix\",\"command\":\"foreman doctor --fix\"}"' "the next command is the fix"
+  assert_eq "$(jv "$OUT" 'j.plan.map(p => p.file).join()')" '".gitignore,.gitattributes"' "the plan names the files, in the order --fix writes them"
+  assert_eq "$(jv "$OUT" 'j.plan[0].text.startsWith("# Foreman: per-batch run state.") && j.plan[0].text.endsWith("**/foreman-runs.log\n")')" true "the .gitignore text is the whole block, newlines and all"
+  assert_eq "$(jv "$OUT" 'j.plan[1].text')" '"# Foreman: foreman.conf is sourced by bash, so a CRLF checkout would append a carriage return\n# to every value it sets — FOREMAN_EXEC would become \"sandbox<CR>\" and fail validation with\n# a message that looks like a lie.\nforeman.conf text eol=lf\n"' "the attributes text, exactly"
+  assert_eq "$(jv "$OUT" 'j.plan.every(p => typeof p.why === "string" && p.why.length > 0)')" true "each says why"
+  assert_eq "$(git -C "$repo" status --short | tr -d ' \n')" "" "nothing in the repository was written"
+fi
+
+if case_is "doctor --fix --json: writes what the plan said, reports it, and the sheet read again is clean"; then
+  repo="$WORK/dj-fix"
+  doctor_golden_repo "$repo" fixable
+  doctor_run "$repo" --json
+  plan="$OUT"
+  cp "$repo/.gitignore" "$WORK/dj-gitignore.before"; cp "$repo/.gitattributes" "$WORK/dj-gitattributes.before"
+  doctor_run "$repo" --fix --json
+  assert_eq "$ST" 0 "exits 0"
+  assert_eq "$ERR" "" "nothing on stderr"
+  assert_eq "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" 1 "still one line: the plain 'wrote' lines are not printed"
+  assert_eq "$(jv "$OUT" 'JSON.stringify(j.fix.appended)')" "$(jv "$plan" 'JSON.stringify(j.plan.map(p => ({ file: p.file, text: p.text })))')" "what it reports appended is what the plan said"
+  assert_eq "$(jv "$OUT" 'j.fix.remaining')" 0 "nothing is left to fix"
+  assert_eq "$(jv "$OUT" 'j.verdict.passed')" false "the sheet is the one it found, as the terminal's box is"
+  assert_eq "$(jv "$OUT" 'JSON.stringify(j.plan)')" "$(jv "$plan" 'JSON.stringify(j.plan)')" "and the plan is there too"
+  { cat "$WORK/dj-gitignore.before"; node -e 'process.stdout.write(JSON.parse(process.argv[1]).plan[0].text)' "$plan"; } > "$WORK/dj-gitignore.expect"
+  cmp -s "$WORK/dj-gitignore.expect" "$repo/.gitignore" && pass || fail ".gitignore is what it was plus exactly the text reported"
+  { cat "$WORK/dj-gitattributes.before"; node -e 'process.stdout.write(JSON.parse(process.argv[1]).plan[1].text)' "$plan"; } > "$WORK/dj-gitattributes.expect"
+  cmp -s "$WORK/dj-gitattributes.expect" "$repo/.gitattributes" && pass || fail ".gitattributes is what it was plus exactly the text reported"
+  doctor_run "$repo" --json
+  assert_eq "$(jv "$OUT" 'j.verdict.passed')" true "read again, it passes"
+  assert_eq "$(jv "$OUT" 'j.plan.length')" 0 "with nothing to write"
+  doctor_run "$repo" --fix --json
+  assert_eq "$(jv "$OUT" 'JSON.stringify(j.fix)')" '"{\"appended\":[],\"remaining\":0}"' "--fix with nothing to fix appends nothing"
+  doctor_run "$repo" --json --fix
+  assert_eq "$ST" 0 "the flags go in either order"
+  assert_eq "$(jv "$OUT" '"fix" in j')" true "and --fix is still understood"
+fi
+
+if case_is "doctor --json: what is wrong and cannot be written is a fail with its fix, a warning does not fail the verdict"; then
+  repo="$WORK/dj-bad"
+  doctor_golden_repo "$repo" ready
+  printf 'FOREMAN_EXEC=bogus\n' > "$repo/batch/foreman.conf"
+  mkdir -p "$repo/other"; printf 'FOREMAN_EXEC=local\n' > "$repo/other/foreman.conf"
+  git -C "$repo" add -A >/dev/null; git -C "$repo" commit --quiet -m "two bad batches"
+  doctor_run "$repo" --json
+  assert_eq "$ST" 0 "exits 0"
+  assert_eq "$(jv "$OUT" 'j.sections.find(s => s.id === "machine").rows.filter(r => r.result === "fail").some(r => /^FOREMAN_EXEC=bogus in /.test(r.label))')" true "a mode that does not exist is a fail on the machine"
+  assert_eq "$(jv "$OUT" 'j.sections[0].rows.find(r => r.result === "fail" && /bogus/.test(r.label)).fix.startsWith("Set FOREMAN_EXEC in ")')" true "with what to do about it"
+  assert_eq "$(jv "$OUT" 'j.sections[0].rows.find(r => r.result === "fail" && /bogus/.test(r.label)).notes[0].startsWith("valid modes: ")')" true "and the terminal's note of the valid modes"
+  assert_eq "$(jv "$OUT" 'j.sections.find(s => s.id === "batches").rows.filter(r => r.result === "fail").map(r => r.label).join("|")')" '"other/foreman.conf — FOREMAN_EXEC=local with no way for the agent to commit"' "a local batch that could never commit is a fail under batches"
+  assert_eq "$(jv "$OUT" 'j.sections.find(s => s.id === "batches").rows.find(r => r.result === "fail").fix')" '"Add to other/foreman.conf: FOREMAN_CLAUDE_ARGS=(--allowed-tools \"Bash(git add:*)\" \"Bash(git commit:*)\")"' "and the line to add"
+  assert_eq "$(jv "$OUT" 'j.sections.every(s => s.rows.filter(r => r.result === "fail").every(r => r.auto === false))')" true "none of these is something --fix writes"
+  assert_eq "$(jv "$OUT" 'j.verdict.passed')" false "not passed"
+  assert_eq "$(jv "$OUT" 'j.verdict.label + "|" + j.verdict.detail + "|" + j.verdict.blockers + "|" + j.verdict.fixable')" '"NOT PASSED|2 blockers|2|0"' "two blockers, as the sign would say"
+  assert_eq "$(jv "$OUT" 'j.next')" null "and no next command: nothing foreman can do for them"
+  assert_eq "$(jv "$OUT" 'j.plan.length')" 0 "nothing to write"
+  doctor_run "$repo" --fix --json
+  assert_eq "$(jv "$OUT" 'j.fix.remaining')" 2 "--fix leaves both, and says so"
+
+  # A skill copy that has drifted is a warning, and a warning is not a reason to fail.
+  repo="$WORK/dj-skill"
+  doctor_golden_repo "$repo" ready
+  skill_home="$WORK/dj-skill-home"; skill_config="$WORK/dj-skill-config"
+  mkdir -p "$skill_home" "$skill_config"
+  HOME="$skill_home" CLAUDE_CONFIG_DIR="$skill_config" bash "$FOREMAN_HOME/install.sh" --no-gui --to "$WORK/dj-skill-bin" >/dev/null 2>&1
+  skill_md="$(ls "$skill_config"/skills/*/SKILL.md | head -1)"
+  OUT="$(cd "$repo" && HOME="$skill_home" CLAUDE_CONFIG_DIR="$skill_config" FOREMAN_SHOW=never "$FOREMAN" doctor --json 2>&1)"
+  assert_eq "$(jv "$OUT" 'j.sections.find(s => s.id === "skill").rows.every(r => r.result === "ok")')" true "an installed copy that matches is ok"
+  printf '\n<!-- drift -->\n' >> "$skill_md"
+  OUT="$(cd "$repo" && HOME="$skill_home" CLAUDE_CONFIG_DIR="$skill_config" FOREMAN_SHOW=never "$FOREMAN" doctor --json 2>&1)"
+  assert_eq "$(jv "$OUT" 'j.sections.find(s => s.id === "skill").rows.filter(r => r.result === "warn").length')" 1 "one that drifted is a warning"
+  assert_eq "$(jv "$OUT" 'j.sections.find(s => s.id === "skill").rows.find(r => r.result === "warn").fix')" "\"run: bash $FOREMAN_HOME/install.sh\"" "with the command that brings it up to date"
+  assert_eq "$(jv "$OUT" 'j.sections.find(s => s.id === "skill").rows.find(r => r.result === "warn").notes.length')" 0 "which is not repeated as a note"
+  assert_eq "$(jv "$OUT" 'JSON.stringify([j.counts.warn, j.verdict.passed, j.verdict.detail])')" '"[1,true,\"ready to run\"]"' "the verdict still passes"
+fi
+
+if case_is "doctor --json: a repo with no batch says what to do, and the show cannot draw into the JSON"; then
+  repo="$WORK/dj-nobatch"
+  mkdir -p "$repo"; git -C "$repo" init --quiet
+  doctor_run "$repo" --json
+  assert_eq "$ST" 0 "exits 0"
+  assert_eq "$(jv "$OUT" 'j.sections.find(s => s.id === "batches").rows.length')" 0 "no batch row"
+  assert_eq "$(jv "$OUT" 'j.sections.find(s => s.id === "batches").info[0]')" '"none — no directory here has a foreman.conf."' "the sentence the terminal prints, as info"
+  assert_eq "$(jv "$OUT" 'j.sections.find(s => s.id === "batches").info[1]')" '"Create one:  foreman init <batch-dir>"' "and how to create one"
+  assert_eq "$(jv "$OUT" 'j.sections.every(s => s.rows.every(r => ["ok", "warn", "fail"].includes(r.result)))')" true "a row is only ever ok, warn or fail: those lines are not rows"
+  assert_eq "$(jv "$OUT" 'j.verdict.passed === (j.counts.fail === 0)')" true "the verdict is its rows' verdict"
+
+  # A terminal that would be drawn on: forced, wide, truecolour. A program still gets only the object.
+  OUT="$(cd "$repo" && HOME="$WORK/doctor-home" FOREMAN_SHOW=always COLORTERM=truecolor COLUMNS=120 "$FOREMAN" doctor --json 2>"$WORK/stderr")"
+  assert_eq "$(jv "$OUT" 'j.command')" '"doctor"' "forced show: still one JSON object"
+  assert_missing "$OUT" $'\033' "with no escape in it"
+  assert_eq "$(cat "$WORK/stderr")" "" "and nothing on stderr"
+
+  # Outside a repository there is nothing to inspect: an error on stderr, no JSON.
+  outside="$WORK/dj-outside"; mkdir -p "$outside"
+  OUT="$(cd "$outside" && GIT_CEILING_DIRECTORIES="$WORK" HOME="$WORK/doctor-home" FOREMAN_SHOW=never "$FOREMAN" doctor --json 2>"$WORK/stderr")"; ST=$?
+  assert_eq "$ST" 1 "outside a repository: exits 1"
+  assert_eq "$OUT" "" "prints no JSON"
+  assert_contains "$(cat "$WORK/stderr")" "not inside a git repository" "and says why"
+fi
+
+if case_is "doctor --json: a credential is set or unset, and no part of its value is in anything doctor prints"; then
+  repo="$WORK/dj-secret"
+  doctor_golden_repo "$repo" fixable
+  token="dckr_pat_Zq7Xk9Rw2mVbN4tY8cLp"
+  user="someone-Hn3Jd8Fs"
+  printf 'FOREMAN_DOCKER_USERNAME=%s\nFOREMAN_DOCKER_PAT=%s\n' "$user" "$token" > "$WORK/dj-secret-cred"
+  leaks() {    # leaks TEXT SECRET: 1 when any 4-character piece of SECRET is in TEXT
+    node -e '
+      const [text, secret] = process.argv.slice(1); let hit = 0;
+      for (let n = 4; n <= secret.length && !hit; n++) for (let i = 0; i + n <= secret.length; i++) if (text.includes(secret.slice(i, i + n))) { hit = 1; break; }
+      console.log(hit);' "$1" "$2"
+  }
+  for via in env file none; do
+    case "$via" in
+      env)  creds=(env FOREMAN_DOCKER_PAT="$token" FOREMAN_DOCKER_USERNAME="$user") ;;
+      file) creds=(env FOREMAN_CREDENTIALS_FILE="$WORK/dj-secret-cred") ;;
+      none) creds=(env) ;;
+    esac
+    for args in "--json" "--fix --json"; do
+      rm -rf "$WORK/dj-secret-run"; cp -R "$repo" "$WORK/dj-secret-run"
+      # shellcheck disable=SC2086
+      OUT="$(cd "$WORK/dj-secret-run" && "${creds[@]}" HOME="$WORK/doctor-home" FOREMAN_SHOW=never "$FOREMAN" doctor $args 2>"$WORK/stderr")"
+      want=set; [ "$via" = none ] && want=unset
+      assert_eq "$(jv "$OUT" 'JSON.stringify(j.credentials)')" "\"[{\\\"name\\\":\\\"FOREMAN_DOCKER_USERNAME\\\",\\\"state\\\":\\\"$want\\\"},{\\\"name\\\":\\\"FOREMAN_DOCKER_PAT\\\",\\\"state\\\":\\\"$want\\\"}]\"" "$via, $args: each credential is $want, by name"
+      assert_eq "$(leaks "$OUT$(cat "$WORK/stderr")" "$token")" 0 "$via, $args: no part of the token is in what doctor printed"
+      assert_eq "$(leaks "$OUT$(cat "$WORK/stderr")" "$user")" 0 "$via, $args: nor of the user name"
+    done
+  done
+  OUT="$(cd "$repo" && FOREMAN_DOCKER_PAT="$token" HOME="$WORK/doctor-home" FOREMAN_SHOW=never "$FOREMAN" doctor 2>&1)"
+  assert_eq "$(leaks "$OUT" "$token")" 0 "the plain doctor never printed it either"
+fi
+
+# ---------------------------------------------------------------------------
 # The app's own logic (plain Node, no Electron)
 # ---------------------------------------------------------------------------
 

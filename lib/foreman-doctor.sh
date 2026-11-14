@@ -3,6 +3,8 @@
 #
 #   foreman doctor          report; exit 0 if ready, 1 if something must be fixed
 #   foreman doctor --fix    also append the .gitignore / .gitattributes lines this repo needs
+#   foreman doctor --json   the same inspection as one JSON object, for a program (the app); with
+#                           --fix, it also reports what was appended and where. Never draws.
 #
 # Costs nothing and starts no sandbox. What it finds is drawn as a box, "the site inspection":
 # MACHINE and REPOSITORY side by side, then SKILL (when a copy is installed), BATCHES, and
@@ -32,11 +34,13 @@ FOREMAN_TOOL_DIR="${BASH_SOURCE[0]%/*}"; [ "$FOREMAN_TOOL_DIR" != "${BASH_SOURCE
 FOREMAN_TOOL_DIR="$(cd "${FOREMAN_TOOL_DIR:-/}" && pwd)"
 
 FIX=0
+JSON=0      # --json: the inspection as one object (foreman-json.cjs doctor), and never a picture
 while [ $# -gt 0 ]; do
   case "$1" in
     --fix)     FIX=1 ;;
+    --json)    JSON=1 ;;
     --help|-h) awk 'NR==1 { next } !/^#/ { exit } { sub(/^# ?/, ""); print }' "$0"; exit 0 ;;
-    *)         echo "Usage: foreman doctor [--fix]" >&2; exit 1 ;;
+    *)         echo "Usage: foreman doctor [--fix] [--json]" >&2; exit 1 ;;
   esac
   shift
 done
@@ -78,15 +82,37 @@ _fact() {    # _fact LINE
   _facts+=("$1")
   [ "$_live" -eq 0 ] || printf '%s\n' "$1" >&3 2>/dev/null || true
 }
+
+# With --json the same checks are also recorded for foreman-json.cjs (`_jfacts`), one `key<TAB>value`
+# fact to a line with each value escaped to one line. Alongside what the box says, each check can have
+# a `fix` (what to do about it), which the box never needed; `note_fix` is a note the box prints that
+# the object gives as the fix instead. Nothing here runs unless --json was asked for.
+_jfacts=()
+_jesc() {    # _jesc VAR TEXT: TEXT as one line, in VAR (backslash, newline, tab and CR escaped)
+  local s="$2" bs='\' nl=$'\n' tab=$'\t' cr=$'\r'
+  s="${s//"$bs"/"$bs$bs"}"; s="${s//"$nl"/"${bs}n"}"; s="${s//"$tab"/"${bs}t"}"; s="${s//"$cr"/"${bs}r"}"
+  printf -v "$1" '%s' "$s"
+}
+_jfact() {   # _jfact KEY VALUE...: one fact, each value escaped
+  [ "$JSON" -eq 1 ] || return 0
+  local line="$1" v; shift
+  for v in "$@"; do _jesc v "$v"; line+=$'\t'"$v"; done
+  _jfacts+=("$line")
+}
 _check() {   # _check STATE TEXT [DETAIL]
   _fact "check"$'\t'"$SECTION"$'\t'"$1"$'\t'"$2${3:+$'\t'$3}"
+  _jfact check "$SECTION" "$1" "$2" "${3:-}"
 }
+# What to do about the check before it.
+_hint() { _jfact fix "$*"; }
 ok()   { _check ok "$@"; }
 bad()  { _check miss "$*"; problems=$((problems + 1)); }
 # A miss that `doctor --fix` writes: it counts the same, and the box says so.
 fix()  { _check fix "$*"; problems=$((problems + 1)); }
 # More words for the check before it.
-note() { _fact "check"$'\t'"$SECTION"$'\tnote\t'"$*"; }
+note() { _fact "check"$'\t'"$SECTION"$'\tnote\t'"$*"; _jfact note "$*"; }
+# A note that is also the fix, so the object has it once, as the fix (which the caller gives to _hint).
+note_fix() { _fact "check"$'\t'"$SECTION"$'\tnote\t'"$*"; }
 # A line under its section with no mark of its own.
 info() { _check info "$*"; }
 # Like bad(), but never touches $problems — for something worth flagging that is not a
@@ -129,7 +155,7 @@ _doctor_min_cols=80
 _doctor_draw="$FOREMAN_TOOL_DIR/foreman-draw.cjs"
 _doctor_pid=""
 _doctor_restore_cursor() { printf '\033[?25h'; }
-if command -v ui_show >/dev/null 2>&1 && ui_show 1 _doctor_tier && ui_cols _doctor_cols 1 &&
+if [ "$JSON" -eq 0 ] && command -v ui_show >/dev/null 2>&1 && ui_show 1 _doctor_tier && ui_cols _doctor_cols 1 &&
    [ "$_doctor_cols" -ge "$_doctor_min_cols" ] && command -v node >/dev/null 2>&1 &&
    { [ "${BASH_VERSINFO[0]}" -gt 4 ] || { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -ge 4 ]; }; }; then
   # The renderer shows the cursor again on every way out it can take; this is for the ones it
@@ -147,12 +173,16 @@ _fact "repo"$'\t'"$REPO_ROOT"
 _fact "home"$'\t'"${HOME:-}"
 _fact "date"$'\t'"$_doctor_date"
 _fact "rev"$'\t'"$_doctor_rev"
+if [ "$JSON" -eq 1 ]; then
+  foreman_mixed_path _doctor_root "$REPO_ROOT"
+  _jfact repo "$_doctor_root"; _jfact date "$_doctor_date"; _jfact rev "$_doctor_rev"
+fi
 
 # ---------------------------------------------------------------------------
 # The machine
 # ---------------------------------------------------------------------------
 for tool in git node awk; do
-  if command -v "$tool" >/dev/null 2>&1; then ok "$tool"; else bad "$tool is not on PATH"; fi
+  if command -v "$tool" >/dev/null 2>&1; then ok "$tool"; else bad "$tool is not on PATH"; _hint "Install $tool and put it on PATH"; fi
 done
 
 # foreman-config.sh uses associative arrays and `compgen -v`, both of which need bash 4.
@@ -160,6 +190,7 @@ if [ "${BASH_VERSINFO[0]:-0}" -ge 4 ]; then
   ok "bash ${BASH_VERSION%%(*} (4+ required)"
 else
   bad "bash ${BASH_VERSION:-?} is too old — 4+ is required for associative arrays"
+  _hint "Install bash 4 or newer (Git for Windows includes one) and run foreman with it"
 fi
 
 # ---------------------------------------------------------------------------
@@ -205,6 +236,7 @@ _want_runner() {
   if ! tool=$(foreman_exec_required_tool "$mode"); then
     bad "FOREMAN_EXEC=$mode in ${2:-this repo} — no such execution mode"
     note "valid modes: $(foreman_exec_modes | tr '\n' ' ')"
+    _hint "Set FOREMAN_EXEC in ${2:-the batch's foreman.conf} to one of the valid modes"
     return
   fi
   [ -n "$tool" ] || return
@@ -229,7 +261,12 @@ while IFS=' ' read -r tool mode; do
     ok "$tool (required by FOREMAN_EXEC=$mode)"
   else
     bad "$tool is not on PATH, and FOREMAN_EXEC=$mode needs it"
-    [ "$tool" = sbx ] && note "set FOREMAN_EXEC=local in that batch's foreman.conf to run without one"
+    if [ "$tool" = sbx ]; then
+      note_fix "set FOREMAN_EXEC=local in that batch's foreman.conf to run without one"
+      _hint "Install sbx and put it on PATH, or set FOREMAN_EXEC=local in that batch's foreman.conf to run without one"
+    else
+      _hint "Install $tool and put it on PATH"
+    fi
   fi
 done <<< "$runners"
 
@@ -253,10 +290,11 @@ for _foreman_skill_md in "$FOREMAN_HOME"/skills/*/SKILL.md; do
   else
     _foreman_skill_drifted=1
     warn "$_foreman_skill_name — installed copy differs from $_foreman_skill_src"
+    _hint "run: bash $FOREMAN_HOME/install.sh"
   fi
 done
 if [ "$_foreman_skill_drifted" -eq 1 ]; then
-  note "run: bash $FOREMAN_HOME/install.sh"
+  note_fix "run: bash $FOREMAN_HOME/install.sh"
 fi
 
 # ---------------------------------------------------------------------------
@@ -305,6 +343,7 @@ for pat in '**/.foreman-iter.bundle' '**/.foreman-stall-marker' '**/foreman-runs
   else
     missing_ignore=$((missing_ignore + 1))
     fix "${pat#\*\*/} not ignored"
+    _hint "foreman doctor --fix appends it to .gitignore"
   fi
 done
 
@@ -319,6 +358,7 @@ if [ "$needs_attr" -eq 1 ]; then
   else
     fix ".gitattributes does not keep foreman.conf LF"
     note "this repo rewrites line endings, so a tracked foreman.conf would come back CRLF"
+    _hint "foreman doctor --fix appends foreman.conf text eol=lf to .gitattributes"
     needs_attr=2
   fi
 else
@@ -327,19 +367,41 @@ fi
 
 if [ "$missing_ignore" -gt 0 ] || [ "$needs_attr" -eq 2 ]; then fixable=1; fi
 
+# What `--fix` writes: the text, as the bytes appended to the file (printf adds the newline `read`
+# took off the end of the block). With --json the plan is given whether or not --fix was asked for,
+# so a program can show what it will do before it does it.
+if [ "$JSON" -eq 1 ]; then
+  [ "$missing_ignore" -eq 0 ] || _jfact plan .gitignore "$GITIGNORE_BLOCK"$'\n' \
+    "the repo does not ignore foreman's run state ($missing_ignore of 4 lines missing), so a run's files would show up as changes"
+  [ "$needs_attr" -ne 2 ] || _jfact plan .gitattributes "$GITATTRIBUTES_BLOCK"$'\n' \
+    "this repo rewrites line endings, and a foreman.conf with CRLF is read by bash with a carriage return on every value"
+fi
+
 # What `--fix` writes. It is done after the box is drawn, not in the middle of it: the box says what
-# was found, and what was written to put it right follows.
+# was found, and what was written to put it right follows. With --json nothing is printed: what was
+# appended, and where, goes into the object.
 _doctor_fix() {
   if [ "$missing_ignore" -gt 0 ]; then
-    printf '%s\n' "$GITIGNORE_BLOCK" >> .gitignore
-    echo "  wrote  .gitignore  (+$missing_ignore pattern(s))"
+    if [ "$JSON" -eq 1 ]; then
+      printf '%s\n' "$GITIGNORE_BLOCK" >> .gitignore 2>/dev/null || { echo "foreman doctor: could not write .gitignore" >&2; exit 1; }
+      _jfact appended .gitignore "$GITIGNORE_BLOCK"$'\n'
+    else
+      printf '%s\n' "$GITIGNORE_BLOCK" >> .gitignore
+      echo "  wrote  .gitignore  (+$missing_ignore pattern(s))"
+    fi
     problems=$((problems - missing_ignore))
   fi
   if [ "$needs_attr" -eq 2 ]; then
-    printf '%s\n' "$GITATTRIBUTES_BLOCK" >> .gitattributes
-    echo "  wrote  .gitattributes"
+    if [ "$JSON" -eq 1 ]; then
+      printf '%s\n' "$GITATTRIBUTES_BLOCK" >> .gitattributes 2>/dev/null || { echo "foreman doctor: could not write .gitattributes" >&2; exit 1; }
+      _jfact appended .gitattributes "$GITATTRIBUTES_BLOCK"$'\n'
+    else
+      printf '%s\n' "$GITATTRIBUTES_BLOCK" >> .gitattributes
+      echo "  wrote  .gitattributes"
+    fi
     problems=$((problems - 1))
   fi
+  [ "$JSON" -eq 0 ] || return 0
   echo "  Review the diff and commit it — these are the only files foreman asks a repo for."
   echo "  Commit before the next run: \`$FOREMAN_INVOKE run\` refuses to start on a dirty tree."
   echo
@@ -368,8 +430,9 @@ _check_can_commit() {
 
   bad "$conf — FOREMAN_EXEC=local with no way for the agent to commit"
   note "acceptEdits does not cover Bash, and \`claude --print\` cannot ask anyone."
-  note "Add to that file:"
-  note "  FOREMAN_CLAUDE_ARGS=(--allowed-tools \"Bash(git add:*)\" \"Bash(git commit:*)\")"
+  note_fix "Add to that file:"
+  note_fix "  FOREMAN_CLAUDE_ARGS=(--allowed-tools \"Bash(git add:*)\" \"Bash(git commit:*)\")"
+  _hint "Add to $conf: FOREMAN_CLAUDE_ARGS=(--allowed-tools \"Bash(git add:*)\" \"Bash(git commit:*)\")"
 }
 
 SECTION=batches
@@ -384,6 +447,7 @@ else
       ok "$b" "${counts% *} of ${counts#* } done"
     else
       warn "$b" "order unreadable — run: $FOREMAN_INVOKE status $b"
+      _hint "Run: $FOREMAN_INVOKE status $b, which says what is wrong with it"
     fi
     foreman_legacy_conf_path conf "$b" 2>/dev/null
     _check_can_commit "$conf" "$(_conf_value "$conf" FOREMAN_EXEC)"
@@ -395,30 +459,36 @@ fi
 # works for now (see foreman-legacy.sh) — and silent when there is nothing left.
 # ---------------------------------------------------------------------------
 _legacy_lines=()
+_legacy_fixes=()      # what to do about each (only --json says it; the line itself has always carried it)
 while IFS= read -r b; do
   [ -n "$b" ] && [ -f "$b/ralph.conf" ] || continue
   if [ -f "$b/foreman.conf" ]; then
     _legacy_lines+=("$b has both foreman.conf and ralph.conf — foreman.conf is used; delete ralph.conf")
+    _legacy_fixes+=("Delete $b/ralph.conf")
   else
     _legacy_lines+=("$b/ralph.conf — rename it:  git mv \"$b/ralph.conf\" \"$b/foreman.conf\"")
+    _legacy_fixes+=("git mv \"$b/ralph.conf\" \"$b/foreman.conf\"")
   fi
 done <<< "$batches"
 while IFS= read -r b; do
   [ -n "$b" ] || continue
   foreman_legacy_conf_path conf "$b" 2>/dev/null
   ! grep -qE '^[[:space:]]*RALPH_[A-Z_]+=' "$conf" 2>/dev/null ||
-    _legacy_lines+=("$conf sets RALPH_* knobs — rename each to FOREMAN_* (same name, new prefix)")
+    { _legacy_lines+=("$conf sets RALPH_* knobs — rename each to FOREMAN_* (same name, new prefix)")
+      _legacy_fixes+=("Rename each RALPH_* setting in $conf to FOREMAN_*"); }
 done <<< "$batches"
 _legacy_env=$(compgen -v RALPH_ 2>/dev/null | tr '\n' ' ')
-[ -z "$_legacy_env" ] || _legacy_lines+=("the environment sets ${_legacy_env% } — rename each to FOREMAN_*")
+[ -z "$_legacy_env" ] || { _legacy_lines+=("the environment sets ${_legacy_env% } — rename each to FOREMAN_*")
+                          _legacy_fixes+=("Rename each of them to FOREMAN_*"); }
 _legacy_skill="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/ralph-human-followup-tickets"
-[ ! -f "$_legacy_skill/.ralph-installed-from" ] ||
-  _legacy_lines+=("old skill copy at $_legacy_skill — run: bash $FOREMAN_HOME/install.sh (it removes it)")
+[ ! -f "$_legacy_skill/.ralph-installed-from" ] || { _legacy_lines+=("old skill copy at $_legacy_skill — run: bash $FOREMAN_HOME/install.sh (it removes it)")
+                                                    _legacy_fixes+=("run: bash $FOREMAN_HOME/install.sh"); }
 ! grep -qE '(^|/)\.?ralph-' .gitignore 2>/dev/null ||
-  _legacy_lines+=(".gitignore still lists ralph-* files; those lines can go once the foreman-* ones are in")
+  { _legacy_lines+=(".gitignore still lists ralph-* files; those lines can go once the foreman-* ones are in")
+    _legacy_fixes+=("Delete the ralph-* lines from .gitignore"); }
 if [ ${#_legacy_lines[@]} -gt 0 ]; then
   SECTION=rename
-  for _l in "${_legacy_lines[@]}"; do warn "$_l"; done
+  for _i in "${!_legacy_lines[@]}"; do warn "${_legacy_lines[$_i]}"; _hint "${_legacy_fixes[$_i]}"; done
   case "$runners" in *sbx*)
     _foreman_basename _legacy_repo "$PWD"
     note "the default sandbox is now foreman-$_legacy_repo; an old one can go:  sbx rm ralph-$_legacy_repo"
@@ -429,11 +499,33 @@ fi
 # The verdict. What to do next goes in the box; the renderer works out the rest from the checks.
 # ---------------------------------------------------------------------------
 if [ "$problems" -gt 0 ]; then
-  if [ "$fixable" -eq 1 ] && [ "$FIX" -eq 0 ]; then _fact "advice"$'\t'"fix:"$'\t'"$FOREMAN_INVOKE doctor --fix"; fi
+  if [ "$fixable" -eq 1 ] && [ "$FIX" -eq 0 ]; then _fact "advice"$'\t'"fix:"$'\t'"$FOREMAN_INVOKE doctor --fix"; _jfact advice fix "$FOREMAN_INVOKE doctor --fix"; fi
 elif [ -n "$batches" ]; then
   _fact "advice"$'\t'"next:"$'\t'"$FOREMAN_INVOKE run ${batches%%$'\n'*}"
+  _jfact advice next "$FOREMAN_INVOKE run ${batches%%$'\n'*}"
 else
   _fact "advice"$'\t'"next:"$'\t'"$FOREMAN_INVOKE init <batch-dir>"
+  _jfact advice next "$FOREMAN_INVOKE init <batch-dir>"
+fi
+
+# --json: the inspection as one object, in place of the box and the closing words. It is always
+# written when it could be made, whatever it found, and the exit is 0: what was found is in the
+# verdict, so a program that only wants to know reads that and one that asks for the exit status of a
+# doctor in a terminal has the plain command.
+if [ "$JSON" -eq 1 ]; then
+  [ "$fixable" -eq 1 ] && [ "$FIX" -eq 1 ] && _doctor_fix
+  if [ "$FIX" -eq 1 ]; then _jfact fixrun "$problems"; fi
+  # Whether each credential is there, and nothing of it: the value goes into a variable for the
+  # length of one test and is never passed on.
+  source "$FOREMAN_TOOL_DIR/foreman-credentials.sh" 2>/dev/null &&
+    for _doctor_cred in FOREMAN_DOCKER_USERNAME FOREMAN_DOCKER_PAT; do
+      _doctor_cred_value="$(foreman_credential "$_doctor_cred")"
+      if [ -n "$_doctor_cred_value" ]; then _jfact credential "$_doctor_cred" set; else _jfact credential "$_doctor_cred" unset; fi
+    done
+  unset _doctor_cred _doctor_cred_value
+  printf '%s\n' "${_jfacts[@]}" | node "$FOREMAN_TOOL_DIR/foreman-json.cjs" doctor || {
+    echo "foreman doctor: could not make the JSON (is node on PATH?)" >&2; exit 1; }
+  exit 0
 fi
 
 # On the show path the renderer has been drawing all along: closing its input is what tells it that

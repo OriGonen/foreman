@@ -72,3 +72,19 @@
 - Ticket 13: `foreman gui`/doctor should reuse "electron dir exists" (+ shortcut where writable); install.sh has its own copy of that check (`_foreman_app_installed`), as the order notes expected. Ticket 14 documents `--gui`/`--no-gui`.
 - Full smoke suite: 2741 passed in 2m 7s, 1 failed: "convert ... CRLF kept" (test/smoke.sh:3609), pre-existing. smoke-json.sh 503 passed. bin/, lib/, test/smoke.sh unchanged.
 - NOT verified: Windows itself (no powershell.exe/mintty here): the real .lnk, that it opens the app, `rm -rf` of node_modules on NTFS. A human runs the ticket's by-hand list in Git Bash's mintty.
+
+
+## 06 — doctor --json / --fix --json and the Doctor screen (WIP checkpoint; interrupted, not verified)
+- The diff holds two files: `lib/foreman-doctor.sh` (+132/-20) and `test/smoke-json.sh` (+188). No other file is touched. Nothing here has been run or checked.
+- lib/foreman-doctor.sh: `--json` flag (usage line and header comment updated); `_jfacts` array with `_jesc`/`_jfact`/`_hint`/`note_fix` helpers that record each check, a per-check `fix`, notes, repo/date/rev, a `plan` (what --fix would append, with a why), `appended`, `fixrun`, `advice`, and `credential` facts (`set`/`unset` only, read via `foreman_credential` from lib/foreman-credentials.sh). `_hint` calls are added on the failing/warning checks. The box is not drawn under `--json` (the draw condition gains `[ "$JSON" -eq 0 ]`). `_doctor_fix` has a JSON branch that appends without printing and reports what was appended. At the end the facts are piped to `node lib/foreman-json.cjs doctor`, then `exit 0`.
+- test/smoke-json.sh: a `doctor_run` helper and five cases: a ready repo, a fixable repo (plan, fixes, nothing written), `--fix --json` (appended == plan, file bytes compared, re-read passes, either flag order), bad batches / drifted skill warning, no batch / forced show / outside a repo, and a credential case using a fake token (`dckr_pat_Zq7...`) checking no 4-char piece of it or the user name appears in any output. These use `doctor_golden_repo`, which already exists (smoke-json.sh:185).
+- Noticed: `lib/foreman-json.cjs` has no `doctor` subcommand (grep for "doctor" finds nothing), so `foreman doctor --json` would fail with "could not make the JSON" until it is written. The shell side expects a one-line object with foreman_json, command, sections[{id,title,rows[{result,label,detail,fix,auto,notes}],info}], counts, verdict, next, plan, fix{appended,remaining}, credentials[{name,state}], repo, rev, date. No GUI work exists: no Doctor screen in gui/ (app.js, app.css, index.html, model.js untouched), no inspector animation, no rail entry, no Fix what it can button. No stubs or TODOs in the diff; both files end cleanly.
+- Remaining:
+  - write the `doctor` subcommand in lib/foreman-json.cjs (parse the fact lines into the object the tests describe)
+  - run the new smoke-json.sh cases; fix whatever fails
+  - confirm plain `foreman doctor`, `doctor --fix` and `foreman help` still match the captures taken before the change (commit d3dbe17)
+  - the Doctor screen in gui/: sections, row results and fixes, verdict stamp, next command, rail entry, Run again
+  - the CSS-only inspector animation (two stances, sweat drops, once per inspection incl. Run again, still under prefers-reduced-motion)
+  - Fix what it can: show what will be appended, then run `doctor --fix --json`; both actions marked free
+  - gui tests (model/app.js under the fake DOM) and the full smoke suite
+  - tick the ticket's acceptance boxes; the Status line is untouched
