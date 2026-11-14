@@ -74,17 +74,12 @@
 - NOT verified: Windows itself (no powershell.exe/mintty here): the real .lnk, that it opens the app, `rm -rf` of node_modules on NTFS. A human runs the ticket's by-hand list in Git Bash's mintty.
 
 
-## 06 — doctor --json / --fix --json and the Doctor screen (WIP checkpoint; interrupted, not verified)
-- The diff holds two files: `lib/foreman-doctor.sh` (+132/-20) and `test/smoke-json.sh` (+188). No other file is touched. Nothing here has been run or checked.
-- lib/foreman-doctor.sh: `--json` flag (usage line and header comment updated); `_jfacts` array with `_jesc`/`_jfact`/`_hint`/`note_fix` helpers that record each check, a per-check `fix`, notes, repo/date/rev, a `plan` (what --fix would append, with a why), `appended`, `fixrun`, `advice`, and `credential` facts (`set`/`unset` only, read via `foreman_credential` from lib/foreman-credentials.sh). `_hint` calls are added on the failing/warning checks. The box is not drawn under `--json` (the draw condition gains `[ "$JSON" -eq 0 ]`). `_doctor_fix` has a JSON branch that appends without printing and reports what was appended. At the end the facts are piped to `node lib/foreman-json.cjs doctor`, then `exit 0`.
-- test/smoke-json.sh: a `doctor_run` helper and five cases: a ready repo, a fixable repo (plan, fixes, nothing written), `--fix --json` (appended == plan, file bytes compared, re-read passes, either flag order), bad batches / drifted skill warning, no batch / forced show / outside a repo, and a credential case using a fake token (`dckr_pat_Zq7...`) checking no 4-char piece of it or the user name appears in any output. These use `doctor_golden_repo`, which already exists (smoke-json.sh:185).
-- Noticed: `lib/foreman-json.cjs` has no `doctor` subcommand (grep for "doctor" finds nothing), so `foreman doctor --json` would fail with "could not make the JSON" until it is written. The shell side expects a one-line object with foreman_json, command, sections[{id,title,rows[{result,label,detail,fix,auto,notes}],info}], counts, verdict, next, plan, fix{appended,remaining}, credentials[{name,state}], repo, rev, date. No GUI work exists: no Doctor screen in gui/ (app.js, app.css, index.html, model.js untouched), no inspector animation, no rail entry, no Fix what it can button. No stubs or TODOs in the diff; both files end cleanly.
-- Remaining:
-  - write the `doctor` subcommand in lib/foreman-json.cjs (parse the fact lines into the object the tests describe)
-  - run the new smoke-json.sh cases; fix whatever fails
-  - confirm plain `foreman doctor`, `doctor --fix` and `foreman help` still match the captures taken before the change (commit d3dbe17)
-  - the Doctor screen in gui/: sections, row results and fixes, verdict stamp, next command, rail entry, Run again
-  - the CSS-only inspector animation (two stances, sweat drops, once per inspection incl. Run again, still under prefers-reduced-motion)
-  - Fix what it can: show what will be appended, then run `doctor --fix --json`; both actions marked free
-  - gui tests (model/app.js under the fake DOM) and the full smoke suite
-  - tick the ticket's acceptance boxes; the Status line is untouched
+## 06 — doctor --json / --fix --json and the Doctor screen (implemented; by-hand Windows check still open)
+- Built: `foreman doctor --json` / `--fix --json` (lib/foreman-doctor.sh facts -> `foreman-json.cjs doctor`: sections, rows ok|warn|fail with label/detail/fix/auto/notes, counts, verdict, next, plan, fix{appended,remaining}, credentials set|unset only; exit 0, never draws). App: `doctor`/`doctorFix` in gui/foreman.cjs, IPC `doctor:load`/`doctor:fix`, `M.doctor` in model.js, `A.runner` in art.js, the screen in app.js, CSS in app.css. Doctor is in the rail above Report, free, and works with no batch.
+- Fix what it can: button -> panel with the lines and why per file ("Appends N lines to F. Nothing else is written."), then Append (free) -> `doctor --fix --json` -> sheet read again, with "Appended ..." and the dirty-tree reminder. A failed fix is shown, the plan stays.
+- Inspector: CSS only. The track is built when an inspection starts (run across and back 3s, once; legs swap 11 beats, drops drip) and drawn `.inspected` (stopped) when the sheet is in; reduced motion stops him. A watcher push while loading skips the redraw so the run is not restarted. A test greps app.js for timers.
+- The checkpoint's shell side had a syntax error (an apostrophe inside `${2:-the batch's ...}`); fixed. Its smoke-json cases then passed unchanged (golden plain doctor / --fix / help too).
+- Test-driven: foreman-json doctor via smoke-json.sh (602 pass); gui: foreman.cjs, M.doctor, the screen under the fake DOM (278 pass).
+- Review: no findings left to act on. Skipped: `--fix --json` verdict is the sheet as found (as the terminal's box is); the app re-reads for the new one.
+- Full smoke suite: 2741 passed in 2m 5s, 1 failed: "convert ... CRLF kept" (test/smoke.sh:3609), pre-existing. test/smoke.sh, bin/ unchanged.
+- NOT verified: the window (no Electron/browser here). A human compares the Doctor screen with designs/08-doctor.html in light and dark, including the run and reduced motion, and presses Fix what it can on a batch with a missing ignore line.
