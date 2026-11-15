@@ -196,11 +196,13 @@
 
     const cmd = command(batch, plan);
     const spendCap = costF.error ? null : costF.value;
-    const button = costF.error ? 'Start run' : (spendCap > 0 ? `Start run · up to ${usd(spendCap)}` : 'Start run · no spend cap');
+    const NEEDS_FIX = 'Starting from the app needs `doctor --fix`';
+    let button = costF.error ? 'Start run' : (spendCap > 0 ? `Start run · up to ${usd(spendCap)}` : 'Start run · no spend cap');
 
-    // Why Start is off, if it is — the first reason only.
+    // Why Start is off, if it is — the first reason only. Without the ignore line the button itself
+    // says so; the other reasons are said beside it.
     let blocked = null;
-    if (!facts.ignored) blocked = 'Starting from the app needs `doctor --fix`';
+    if (!facts.ignored) { blocked = NEEDS_FIX; button = NEEDS_FIX; }
     else if (facts.inFlight) blocked = 'A run is already in flight in this batch';
     else if (!it.ok) blocked = it.message;
     else if (costF.error) blocked = costF.error;

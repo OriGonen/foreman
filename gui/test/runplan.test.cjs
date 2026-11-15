@@ -180,6 +180,8 @@ test('a cap that is not a whole number of minutes or dollars with two decimals i
 test('Start is off, with the words, when the control directory is not ignored, a run is in flight, or nothing would run', () => {
   const f = facts({ ignored: false });
   assert.equal(R.view(f, base(f)).blocked, 'Starting from the app needs `doctor --fix`');
+  assert.equal(R.view(f, base(f)).button, 'Starting from the app needs `doctor --fix`', 'the disabled button itself reads it');
+  assert.match(R.view(facts({ inFlight: true }), base(f)).button, /^Start run · /, 'other reasons leave the button as it is');
   const g = facts({ inFlight: true });
   assert.match(R.view(g, base(g)).blocked, /already in flight/);
   const dry = dryRunSample();

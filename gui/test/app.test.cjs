@@ -1618,6 +1618,8 @@ test('without **/.foreman-run/ ignored, Start run is off and says why; so it is 
   assert.equal(startButton(off.app).disabled, true);
   assert.ok(text(off.app).includes('Starting from the app needs `doctor --fix`'));
   assert.equal(startButton(off.app).title, 'Starting from the app needs `doctor --fix`');
+  assert.equal(startButton(off.app).textContent, 'Starting from the app needs `doctor --fix`', 'the button reads it');
+  assert.equal(text(off.app).split('Starting from the app needs `doctor --fix`').length - 1, 1, 'said on the button, not again in a note beside it');
   const busy = await openConfirmation(fakeApi(data(), undefined, undefined, {}, {}, { confirm: () => ({ ok: true, doc: confirmFacts({ inFlight: true }) }) }));
   assert.equal(startButton(busy.app).disabled, true);
 });

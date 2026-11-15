@@ -1024,7 +1024,7 @@
       row('runs ', 'runs', ...v.command.prefix.map((p) => span('acc', p + ' ')), v.command.text));
     box.append(h('div', { cls: 'small muted', attrs: { style: 'font-family:var(--ui);margin-top:8px' }, text: "The run stops at whichever budget comes first. You can add or take away iterations while it runs. Closing this window doesn't stop it." }));
     for (const w of v.warnings) box.append(h('pre', { cls: 'said', text: w }));
-    if (v.blocked) box.append(h('div', { cls: 'small rust', attrs: { style: 'margin-top:8px', role: 'status' }, text: v.blocked }));
+    if (v.blocked && v.blocked !== v.button) box.append(h('div', { cls: 'small rust', attrs: { style: 'margin-top:8px', role: 'status' }, text: v.blocked }));
     if (c.startError) box.append(h('pre', { cls: 'said err', text: c.startError.message }));
     const go = h('button', { cls: 'btn primary', text: c.starting ? 'Starting…' : v.button, attrs: { type: 'button', 'data-start': 'go' } });
     if (v.blocked || c.starting) { go.disabled = true; go.title = v.blocked || 'Starting…'; } else go.addEventListener('click', () => startRun(v));
