@@ -944,6 +944,7 @@
 
   const RP = window.ForemanRunPlan;
   const RV = window.ForemanRunView;
+  const RE = window.ForemanRunEnd;
 
   // The confirmation is one question asked of one batch. Its facts are read when it opens (`dry-run
   // --json`, foreman.conf, whether the control directory is ignored); what the person types is kept here,
@@ -1146,6 +1147,7 @@
       cfToken++;
       cf = null;
       lv = newLive(c.batch);
+      lv.before = data && data.status && data.status.last_run ? data.status.last_run.id : null;
       lv.starting = { command: answer.command || v.command.full };
       lv.caps = caps;
       view = 'live';
@@ -1165,9 +1167,12 @@
 
   // ---- the live run (design 04: take a, and c for the compact view) ----
 
-  let lv = null;             // { batch, run, starting, exit, compact, caps, notice, error, asking, busy }
+  // batch is where the run is now (the loop renames a finished batch to DONE_), watched where the screen began;
+  // runId the run on screen, once it has been seen in flight; before the last run the batch had when the app
+  // started this one; exitInfo what the process the app started said; ended the scene (see "how a run ended").
+  let lv = null;             // { batch, watched, run, runId, before, starting, exit, exitInfo, ended, compact, caps, notice, error, asking, busy }
 
-  const newLive = (batch) => ({ batch, run: null, starting: null, exit: null, compact: false, caps: null, notice: null, error: null, asking: false, busy: false });
+  const newLive = (batch) => ({ batch, watched: batch, run: null, runId: null, before: null, starting: null, exit: null, exitInfo: null, ended: null, compact: false, caps: null, notice: null, error: null, asking: false, busy: false });
 
   function endLive() {
     const was = lv;
@@ -1269,8 +1274,19 @@
         h('button', { cls: 'btn quiet', text: 'Keep running', attrs: { type: 'button' }, on: { click: () => { l.asking = false; draw(); } } })));
   }
 
+  // The run's head: the dome, which run, where, how far, and a control at the top right.
+  function liveHead(s, data, control) {
+    return h('div', { cls: 'card row livehead' },
+      A.dome({ w: 150, p: s.dome.p, stakes: M.overview(data.status).dome.stakes }),
+      h('div', { cls: 'grow kv' },
+        span('', 'Run'), span('', s.run.id + (s.run.startedAt ? ' · started ' + s.run.startedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '')),
+        span('', 'Batch'), span('', s.batchPath), span('', 'Done'), span('', s.done), span('', 'Elapsed'), span('', s.elapsed)),
+      h('span', { attrs: { style: 'align-self:flex-start' } }, control));
+  }
+
   function liveView(data) {
     const l = lv;
+    if (l.ended) return endView(data);
     if (l.exit) {
       return paneView('The run ended before it began.', (l.exit.out || `foreman exited with ${l.exit.code}.`) + (l.exit.code !== null && l.exit.out ? `\n\n(exit ${l.exit.code})` : ''), button('Back', { onClick: leaveLive }));
     }
@@ -1298,12 +1314,7 @@
       return h('main', { cls: 'main compact' }, card);
     }
 
-    const head = h('div', { cls: 'card row livehead' },
-      A.dome({ w: 150, p: s.dome.p, stakes: M.overview(data.status).dome.stakes }),
-      h('div', { cls: 'grow kv' },
-        span('', 'Run'), span('', s.run.id + (s.run.startedAt ? ' · started ' + s.run.startedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '')),
-        span('', 'Batch'), span('', s.batchPath), span('', 'Done'), span('', s.done), span('', 'Elapsed'), span('', s.elapsed)),
-      h('span', { attrs: { style: 'align-self:flex-start' } }, viewSwitch(false)));
+    const head = liveHead(s, data, viewSwitch(false));
     const list = h('div', { cls: 'card flush tlist liverows', attrs: { 'aria-label': 'Iterations' } }, ...s.rows.map(liveRow));
     const main = h('main', { cls: 'main live' }, head, list);
     if (l.error) main.append(note('rust', l.error));
@@ -1313,13 +1324,20 @@
     return main;
   }
 
-  // A file of the batch changed and the overview is read again: is a run in flight there?
+  // A file of the batch changed and the overview is read again: is a run in flight there? And if the run
+  // that was on screen is not any more, how did it end?
   function syncLive(fresh) {
     const st = fresh && fresh.ok && fresh.status ? fresh.status : null;
     const inFlight = !!(st && st.run && st.run.in_flight);
+    // The loop renamed the batch to DONE_ as the run ended: the screen goes with it.
+    if (lv && fresh && fresh.ok && lv.batch !== fresh.selected && M.renamedTo(fresh.all, lv.batch) === fresh.selected) {
+      lv.batch = fresh.selected;
+      if (lv.ended) readEndRows(lv);
+    }
     if (inFlight) {
-      if (!lv || lv.batch !== fresh.selected) {
+      if (!lv || lv.batch !== fresh.selected || lv.ended) {
         lv = newLive(fresh.selected);
+        lv.runId = st.run.id || null;
         const mine = lv;
         Promise.resolve(api.runLoad(fresh.selected)).then((ans) => {
           if (lv === mine && ans && ans.ok && ans.run) { mine.run = ans.run; draw(); }
@@ -1327,11 +1345,130 @@
         view = 'live';
       } else {
         lv.starting = null;
+        lv.runId = st.run.id || lv.runId;
         if (view !== 'live' && view === 'overview') view = 'live';
       }
       return;
     }
-    if (lv && lv.batch === (fresh && fresh.selected) && !lv.starting && !lv.exit) endLive();
+    if (!st || !lv || lv.batch !== fresh.selected || lv.exit || lv.ended) return;
+    if (lv.runId || lv.run) {                       // it was running, and its pid is gone: the scene
+      beginEnd(lv);
+      if (view === 'overview') view = 'live';
+    }
+    else if (!lv.starting) endLive();               // nothing was ever seen of it
+  }
+
+  // ---- how a run ended (design 05, take b1) ----
+  //
+  // The scene replaces the run's list in the same window, and the compact view is left. Which scene, and its
+  // words and next steps, is runend.js's; this is the drawing and what the buttons do. Nothing here decides
+  // how a run ended.
+
+  function beginEnd(l) {
+    if (l.ended) return;
+    l.ended = { rows: null, state: 'loading', error: null, listing: false, token: 0 };
+    l.asking = false; l.notice = null; l.error = null; l.busy = false;
+    if (l.compact) { l.compact = false; try { api.compact(false); } catch (e) { /* the window is going away */ } }
+    readEndRows(l);
+  }
+
+  // The run's iterations as the CLI words them: for the scene's numbers, and for Show iterations.
+  async function readEndRows(l) {
+    const e = l.ended;
+    const mine = ++e.token;
+    const last = data && data.status && data.status.last_run;
+    const id = l.runId || (last ? last.id : null);
+    let answer;
+    if (!id) answer = { ok: false, error: { message: 'No run to read.' } };
+    else {
+      try { answer = await api.report(l.batch, { run: id }); } catch (x) { answer = { ok: false, error: asError(x) }; }
+    }
+    if (lv !== l || l.ended !== e || e.token !== mine) return;
+    const rows = answer && answer.ok && answer.doc && answer.doc.run && Array.isArray(answer.doc.run.iterations) ? answer.doc.run.iterations : null;
+    e.rows = rows || [];
+    e.state = rows ? 'ready' : 'error';
+    e.error = rows ? null : ((answer && answer.error) || { message: 'No answer.' }).message;
+    draw();
+  }
+
+  function endModel(l, d) {
+    const st = ST.choose(d);
+    const login = st && st.id === 'login-expired' ? d.conditions.login : null;
+    return RE.choose({ status: d.status, runId: l.runId, before: l.before, watched: l.watched, rows: l.ended.rows || [], exit: l.exitInfo, login });
+  }
+
+  async function openFileFromScene(file) {
+    const l = lv;
+    let said;
+    try { said = await api.open(file); } catch (e) { said = asError(e).message; }
+    if (said && lv === l) { l.error = said; draw(); }
+  }
+
+  // What each next step does. The ones that go to another screen leave the scene; Resume… keeps it under the
+  // confirmation, so Cancel comes back to it.
+  function endAction(a, l) {
+    const go = {
+      report: () => { endLive(); return openReport(); },
+      'dry-run': () => { endLive(); return openDryRun(); },
+      doctor: () => leaving(() => { endLive(); return openDoctor(); }),
+      resume: () => openConfirm({ resume: true }),
+      handoff: () => leaving(() => { const name = ticketNameOf(a.file); endLive(); return openTicket(name); }),
+      'open-file': () => openFileFromScene(a.file),
+      'open-log': () => openFileFromScene(a.file),
+      iterations: () => { l.ended.listing = true; draw(); },
+    }[a.do];
+    const b = button(a.label, { cls: a.primary ? 'primary' : a.do === 'iterations' || a.do === 'resume' && !a.primary ? 'quiet' : '', tag: a.tag || null, onClick: () => { l.error = null; return go(); } });
+    b.setAttribute('data-end-action', a.do);
+    return b;
+  }
+
+  // The run's list again, from the record: no running row, no bar. "Back to the scene" leaves it.
+  function endedList(l, d) {
+    const e = l.ended;
+    const prior = l.run && l.run.run ? l.run.run : {};
+    const rows = e.rows || [];
+    const ran = rows.reduce((m, r) => Math.max(m, r.kind === 'iteration' ? r.iteration || 0 : 0), 0);
+    const last = d.status && d.status.last_run;
+    const snap = {
+      batch: l.batch, next: null, control: null, iterations: rows, iterationsError: e.error, caps: l.caps || { cost: null, minutes: null },
+      run: { in_flight: false, id: l.runId || (last && last.id) || '', started_at: prior.started_at || (rows[0] && rows[0].started_at) || null, iteration: ran, budget: prior.budget, live: false, control_dir: null, pid: null },
+    };
+    const s = RV.screen(snap, { status: d.status, now: Date.now(), caps: l.caps, ended: true });
+    const list = h('div', { cls: 'card flush tlist liverows', attrs: { 'aria-label': 'Iterations' } }, ...s.rows.map(liveRow));
+    if (s.rows.length === 0) list.append(h('div', { cls: 't done' }, span('slug muted', e.state === 'loading' ? 'Reading the iterations…' : 'This run has no iterations in the record.')));
+    const main = h('main', { cls: 'main live', attrs: { 'data-view': 'iterations' } }, liveHead(s, d, button('Back to the scene', { cls: 'quiet', onClick: () => { e.listing = false; draw(); } })), list);
+    if (e.state === 'error' && e.error) main.append(h('div', { cls: 'small rust', text: e.error, attrs: { role: 'status' } }));
+    return main;
+  }
+
+  function endView(d) {
+    const l = lv;
+    const e = l.ended;
+    if (e.listing) return endedList(l, d);
+    const m = endModel(l, d);
+    const row = (actions) => h('div', { cls: 'row' }, ...actions.map((a) => endAction(a, l)));
+    const note = l.error ? h('div', { cls: 'small rust', text: l.error, attrs: { role: 'alert' } }) : null;
+    if (!m) {
+      return h('main', { cls: 'main pane end', attrs: { 'data-end': 'reading' } }, h('div', { cls: 'h2', text: 'The run has ended.' }),
+        h('div', { cls: 'sentence', text: 'Reading how it ended…' }), row([{ do: 'iterations', label: 'Show iterations' }]));
+    }
+    if (m.kind === 'text') {
+      return h('main', { cls: 'main pane end', attrs: { 'data-end': 'text' } }, h('div', { cls: 'h1', text: m.heading }),
+        h('pre', { cls: 'said', text: m.said }), row(m.actions), note,
+        button('Back', { cls: 'quiet', onClick: leaveLive }));
+    }
+    if (m.login) {
+      const state = ST.choose(d);
+      return h('main', { cls: 'main pane end', attrs: { 'data-end': 'login-expired' } }, stateView(state), row(m.actions), note);
+    }
+    return h('main', { cls: 'main pane end', attrs: { 'data-end': m.scene } },
+      h('div', { cls: 'cap', text: m.cap }),
+      A.endScene({ kind: m.art.kind, flags: m.art.flags, w: 400 }),
+      h('div', { cls: 'h2', text: m.heading }),
+      m.facts ? h('div', { cls: 'facts', text: m.facts }) : null,
+      m.sentence ? h('div', { cls: 'sentence', text: m.sentence }) : null,
+      m.message ? h('pre', { cls: 'said', text: m.message }) : null,
+      row(m.actions), note);
   }
 
   // ---- drawing, keeping the person's place ----
@@ -1359,7 +1496,7 @@
       return;
     }
     if (view === 'live' && (!lv || lv.batch !== data.selected)) view = 'overview';
-    const compactNow = view === 'live' && lv && lv.compact && lv.run && !lv.exit;
+    const compactNow = view === 'live' && data.status && lv && lv.compact && lv.run && !lv.exit && !lv.ended;
     if (compactNow) app.classList.add('solo'); else app.classList.remove('solo');
     // The dry run, the report and a ticket's page are of the batch that was selected when they were asked for.
     if (view === 'dryrun' && (!dry || !data.status || dry.batch !== data.selected)) { dryToken++; view = 'overview'; dry = null; }
@@ -1369,9 +1506,9 @@
     const rail = railView(data, (batch) => { if (!selecting) leaving(() => start(batch)); });
     if (!compactNow) app.append(rail);
 
-    if (view === 'live') {
+    if (view === 'live' && data.status) {
       app.append(liveView(data));
-      document.title = 'Foreman — running ' + String(lv.batch).split('/').pop();
+      document.title = lv.ended ? 'Foreman — run ended · ' + String(lv.batch).split('/').pop() : 'Foreman — running ' + String(lv.batch).split('/').pop();
     } else if (view === 'doctor') {
       app.append(doctorView());
       document.title = 'Foreman — doctor';
@@ -1465,17 +1602,32 @@
   if (typeof api.onRunUpdate === 'function') {
     api.onRunUpdate((u) => {
       if (!u || !lv || lv.batch !== u.batch) return;
-      if (u.run) { lv.run = u.run; lv.starting = null; draw(); }
+      if (u.run && !lv.ended) { lv.run = u.run; lv.starting = null; if (u.run.run && u.run.run.id) lv.runId = u.run.run.id; draw(); }
     });
   }
-  // A run the app started has ended. If it never reached "in flight", that was a preflight failure, and its
-  // own words are what the person needs.
+  // A run the app started has ended. Its status is read again, and if the log has an ending that is new since
+  // the app started it, that is the scene. If it never reached "in flight" and left no ending, that was a
+  // preflight failure, and its own words are what the person needs.
   if (typeof api.onRunExit === 'function') {
-    api.onRunExit((x) => {
-      if (!x || !lv || lv.batch !== x.batch || !lv.starting || lv.run) return;
-      lv.starting = null;
-      lv.exit = { code: x.code, out: x.out || '' };
-      if (lv.compact) { lv.compact = false; api.compact(false); }
+    api.onRunExit(async (x) => {
+      const l = lv;
+      if (!x || !l || l.watched !== x.batch) return;
+      l.exitInfo = { code: x.code, out: x.out || '' };
+      if (l.ended) { draw(); return; }
+      let fresh = null;
+      try { fresh = await api.load(l.batch); } catch (e) { fresh = null; }
+      if (lv !== l) return;
+      if (fresh && fresh.ok) { data = fresh; syncLive(fresh); }
+      if (lv === l && !l.ended && !l.exit) {
+        const told = fresh && fresh.ok && fresh.status
+          && RE.choose({ status: fresh.status, runId: l.runId, before: l.before, watched: l.watched, rows: [], exit: l.exitInfo, login: null });
+        if (told) beginEnd(l);
+        else if (!l.runId && !l.run) {
+          l.starting = null;
+          l.exit = { code: x.code, out: x.out || '' };
+          if (l.compact) { l.compact = false; api.compact(false); }
+        }
+      }
       draw();
     });
   }

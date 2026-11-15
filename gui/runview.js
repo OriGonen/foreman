@@ -54,6 +54,7 @@
   //   status    the batch's `status --json` (its counts, its next ticket, its run)
   //   now       Date.now(), so a test can say what time it is
   //   caps      { cost, minutes } the run was started with, when the app started it; else live.caps
+  //   ended     the run is over: its list is the record's, and no row is still running
   function screen(live, ctx) {
     const status = ctx.status || {};
     const run = live.run;
@@ -69,7 +70,7 @@
 
     const rows = live.iterations.map((r) => row(r, budget));
     let running = null;
-    if (iteration > finishedIter || rows.length === 0) {
+    if (!ctx.ended && (iteration > finishedIter || rows.length === 0)) {
       const t = live.next || status.next || null;
       const started = ctl && ctl.activity ? ctl.activity.epoch * 1000 : null;
       running = {
@@ -86,7 +87,9 @@
     const spent = live.iterations.reduce((s, r) => s + (typeof r.cost_usd === 'number' ? r.cost_usd : 0), 0);
     const spentShown = live.iterations.length === 0 && ctl && ctl.spent ? ctl.spent.spent : spent;
     const started = Date.parse(run.started_at);
-    const elapsed = isFinite(started) ? Math.max(0, now - started) : null;
+    // an ended run's time is what its iterations took (the clock does not run on after it)
+    const took = live.iterations.reduce((s, r) => s + (typeof r.duration_ms === 'number' ? r.duration_ms : 0), 0);
+    const elapsed = ctx.ended ? (live.iterations.length ? took : null) : isFinite(started) ? Math.max(0, now - started) : null;
     const counts = status.counts || { done: 0, total: 0 };
     const meter = (value, cap) => (cap ? Math.min(1, value / cap) : 0);
     const capText = (n, fmt) => (n ? ` / ${fmt(n)}` : ' · no cap');

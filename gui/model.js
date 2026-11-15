@@ -516,22 +516,31 @@
   // DONE_ name while the window was open, the finished batch in the same directory whose name is
   // the old one with something non-alphanumeric in front. Otherwise the first batch that is not
   // finished and can be read, else the first there is.
+  // The finished batch the loop renamed `wanted` to, or null: the one in the same directory whose name is
+  // the old one with something non-alphanumeric in front. null too when `wanted` is itself listed.
+  function renamedTo(all, wanted) {
+    const list = (all && all.batches) || [];
+    if (!wanted || list.some((b) => b.path === wanted)) return null;
+    const dir = wanted.includes('/') ? wanted.slice(0, wanted.lastIndexOf('/') + 1) : '';
+    const name = basename(wanted);
+    const moved = list.find((b) => b.finished && b.path.startsWith(dir)
+      && !b.path.slice(dir.length).includes('/')
+      && b.name.length > name.length && b.name.endsWith(name)
+      && /[^A-Za-z0-9]$/.test(b.name.slice(0, b.name.length - name.length)));
+    return moved ? moved.path : null;
+  }
+
   function pickBatch(all, wanted) {
     const list = all.batches || [];
     if (wanted) {
       if (list.some((b) => b.path === wanted)) return wanted;
-      const dir = wanted.includes('/') ? wanted.slice(0, wanted.lastIndexOf('/') + 1) : '';
-      const name = basename(wanted);
-      const moved = list.find((b) => b.finished && b.path.startsWith(dir)
-        && !b.path.slice(dir.length).includes('/')
-        && b.name.length > name.length && b.name.endsWith(name)
-        && /[^A-Za-z0-9]$/.test(b.name.slice(0, b.name.length - name.length)));
-      if (moved) return moved.path;
+      const moved = renamedTo(all, wanted);
+      if (moved) return moved;
     }
     const open = list.find((b) => !b.finished && !b.error);
     if (open) return open.path;
     return list.length ? list[0].path : null;
   }
 
-  return { usd, ticketRef, checksChip, stakes, blockers, lastRun, overview, dryRun, report, reportIterations, ticketName, ticketNotes, ticketPage, duration, compact, doctor, rail, pickBatch };
+  return { usd, ticketRef, checksChip, stakes, blockers, lastRun, overview, dryRun, report, reportIterations, ticketName, ticketNotes, ticketPage, duration, compact, doctor, rail, pickBatch, renamedTo };
 }));

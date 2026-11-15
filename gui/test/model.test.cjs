@@ -176,6 +176,18 @@ test('which batch to show after the loop renamed it to DONE_: follow it, and do 
   assert.equal(M.pickBatch(suffix, '.scratch/gui'), '.scratch/other');
 });
 
+test('renamedTo: the DONE_ name a batch moved to, for a run screen that is still on the old path', () => {
+  const b = (path, finished) => ({ path, name: path.split('/').pop(), finished, counts: null });
+  const all = { batches: [b('.scratch/DONE_gui', true), b('.scratch/gui2', false)] };
+  assert.equal(M.renamedTo(all, '.scratch/gui'), '.scratch/DONE_gui');
+  assert.equal(M.renamedTo(all, '.scratch/DONE_gui'), null, 'it is listed under that name: it did not move');
+  assert.equal(M.renamedTo(all, '.scratch/other'), null);
+  assert.equal(M.renamedTo({ batches: [b('.other/DONE_gui', true)] }, '.scratch/gui'), null, 'another directory');
+  assert.equal(M.renamedTo({ batches: [b('.scratch/DONE_xgui', true)] }, '.scratch/gui'), null, 'a suffix only');
+  assert.equal(M.renamedTo({ batches: [b('.scratch/DONE_gui', false)] }, '.scratch/gui'), null, 'not finished');
+  assert.equal(M.renamedTo(all, null), null);
+});
+
 test('the title: the batch path, as the design shows it', () => {
   assert.equal(M.overview(sample()).title, '.scratch/b');
 });

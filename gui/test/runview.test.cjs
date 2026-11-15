@@ -117,3 +117,19 @@ test('clock words', () => {
   assert.equal(V.mmss(144), '02:24');
   assert.equal(V.ticketName('b/issues/DONE_07a-followup-x.md'), '07a followup-x');
 });
+
+test('once the run has ended no row claims to be running, even when the loop never recorded its last iteration', () => {
+  const ended = V.screen(live({ run: runOf({ in_flight: false }), control: null }), ctx({ ended: true }));
+  assert.equal(ended.running, null);
+  assert.ok(ended.rows.every((r) => r.kind === 'done'));
+  assert.equal(ended.rows.length, 4);
+  const none = V.screen(live({ iterations: [], run: runOf({ iteration: 0, in_flight: false }), control: null }), ctx({ ended: true }));
+  assert.equal(none.rows.length, 0, 'a run that ended before its first iteration has an empty list, not "starting…"');
+  const going = V.screen(live(), ctx());
+  assert.ok(going.running, 'while it runs it still does');
+});
+
+test('an ended run\'s rows are numbered by the budget it was started with', () => {
+  const s = V.screen(live({ run: runOf({ in_flight: false, budget: 3 }), control: null }), ctx({ ended: true }));
+  assert.equal(s.rows[0].num, '1/3');
+});

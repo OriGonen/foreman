@@ -71,7 +71,7 @@ function boot(api) {
   win.addEventListener = (type, fn) => { (win.listeners[type] = win.listeners[type] || []).push(fn); };
   win.window = win;
   vm.createContext(win);
-  for (const f of ['model.js', 'states.js', 'runplan.js', 'runview.js', 'art.js', 'preview.js', 'app.js']) {
+  for (const f of ['model.js', 'states.js', 'runplan.js', 'runview.js', 'runend.js', 'art.js', 'preview.js', 'app.js']) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), win, { filename: f });
   }
   return { app, document, window: win };
@@ -1747,11 +1747,11 @@ test('Compact view shrinks the window to the small layout and Full view puts it 
   assert.ok(app.all().some((e) => e.attrs['data-row']));
 
   buttonNamed(app, 'Compact view').click();
-  api.push(data({ status: { ...sample(), run: { in_flight: false, id: null, started_at: null, iteration: null, budget: null, live: null, control_dir: null, pid: null } } }));
+  api.push(endedData('complete', 0));
   await tick();
   assert.deepEqual(api.calls.compact, [true, false, true, false], 'the run ended: back to the full window by itself');
   assert.ok(!byAttr(app, 'data-view', 'compact'));
-  assert.ok(text(app).includes('Dry run'), 'the overview is back');
+  assert.ok(byAttr(app, 'data-end', 'done'), 'the end scene has the room');
 });
 
 test('a run that ends is left: the screen follows the files, not a timer', async () => {
@@ -1768,11 +1768,265 @@ test('a run that ended before it began shows the CLI\'s own words', async () => 
   startButton(app).click();
   await tick();
   api.pushExit({ batch: '.scratch/b', code: 1, signal: null, out: 'preflight: the working tree is dirty.\nCommit or set aside first.' });
+  await tick();
   assert.ok(text(app).includes('The run ended before it began.'));
   assert.ok(text(app).includes('preflight: the working tree is dirty.'));
   buttonNamed(app, 'Back').click();
   await tick();
   assert.ok(text(app).includes('Dry run'), 'back on the overview');
+});
+
+// ---- how a run ended (ticket 11) ----
+
+// The overview answer after the run that IN_FLIGHT describes ended, with the footer the loop wrote.
+function endedData(end, exit, reason = null, over = {}) {
+  const d = data(over.data || {});
+  d.status = { ...d.status, run: { in_flight: false, id: null, started_at: null, iteration: null, budget: null, live: null, control_dir: null, pid: null },
+    last_run: { id: IN_FLIGHT.id, end, exit, reason }, ...(over.status || {}) };
+  return d;
+}
+const sceneOf = (app) => app.querySelector('[data-end]');
+const endSvg = (app) => app.all().find((e) => e.tagName === 'svg' && e.className === 'scene');
+const kindOfScene = (app) => sceneOf(app).dataset.end;
+const endButton = (app, what) => byAttr(app, 'data-end-action', what);
+
+// a run is on the live screen; then the loop finishes it
+async function endRun(end, exit, reason, over = {}, rn = {}) {
+  const live = await openLive({}, rn);
+  live.api.push(endedData(end, exit, reason, over));
+  await tick();
+  return live;
+}
+
+test('the run ends and the scene replaces the list in the same window, with the CLI\'s report of the run asked for', async () => {
+  const { app, api } = await endRun('paused', 10, 'iteration budget reached');
+  assert.equal(kindOfScene(app), 'paused');
+  assert.ok(endSvg(app), 'the sunrise');
+  assert.ok(!app.all().some((e) => e.attrs['data-row']), 'the list is gone');
+  assert.ok(!byAttr(app, 'data-key', '+'), 'and the run bar');
+  assert.ok(api.calls.report.some((c) => c.batch === '.scratch/b' && c.opts.run === IN_FLIGHT.id), 'the iterations of that run are read for the numbers and for Show iterations');
+});
+
+test('exit 10: paused, the loop\'s reason and the next ticket; Resume… costs money and opens the confirmation; Dry run is free', async () => {
+  const { app, api, document } = await endRun('paused', 10, 'iteration budget reached');
+  const t = text(sceneOf(app));
+  for (const want of ['exit 10 · paused', 'Paused — iteration budget reached', 'next up: 05 document-human-tickets', 'Nothing is lost', 'Resume…', 'costs money', 'Dry run', 'free', 'Show iterations']) assert.ok(t.includes(want), want);
+  assert.equal(document.title, 'Foreman — run ended · b');
+  endButton(app, 'resume').click();
+  await tick(); await tick();
+  assert.equal(api.calls.confirm.length, 1, 'the same confirmation as Start run');
+  assert.ok(text(app).includes('Resume a run'));
+  assert.equal(api.calls.start.length, 0, 'and nothing is started by asking');
+  endButton(app, 'dry-run').click();
+  await tick(); await tick();
+  assert.deepEqual(api.calls.dryRun, ['.scratch/b']);
+});
+
+test('exit 0: done, a flag for each landed ticket, the facts of the run, and the report', async () => {
+  const { app, api } = await endRun('complete', 0, null, { status: { counts: { done: 6, total: 6 } } });
+  assert.equal(kindOfScene(app), 'done');
+  const t = text(sceneOf(app));
+  for (const want of ['exit 0 · batch done', 'The batch is done', '6 of 6 landed', '3 iterations', '$4.25', 'Report', 'free']) assert.ok(t.includes(want), want);
+  assert.equal(endSvg(app).all().filter((e) => e.className === 'flag f-sil').length, 6, 'one flag for each landed ticket');
+  endButton(app, 'report').click();
+  await tick(); await tick();
+  assert.ok(api.calls.report.some((c) => c.opts && !c.opts.run), 'the report of the batch');
+  assert.ok(text(app).includes('Report') && !sceneOf(app), 'the scene is left for the report');
+});
+
+test('exit 20: needs a human, the # reason: line as it is, the ticket, the log and the doctor', async () => {
+  const reason = 'the review turn found changes outside the ticket\'s scope <script>x</script>';
+  const { app, api } = await endRun('needs_human', 20, reason);
+  assert.equal(kindOfScene(app), 'problem');
+  const t = text(sceneOf(app));
+  for (const want of ['exit 20 · needs a human', 'It needs you to look', reason, 'Open ticket', 'Open the log', 'Doctor', 'Resume…']) assert.ok(t.includes(want), want);
+  assert.ok(!app.all().some((e) => e.tagName === 'script'), 'text, never markup');
+  endButton(app, 'open-file').click();
+  await tick();
+  assert.deepEqual(api.calls.open, ['batch/issues/04-fourth.md']);
+  endButton(app, 'open-log').click();
+  await tick();
+  assert.deepEqual(api.calls.open, ['batch/issues/04-fourth.md', '.scratch/b/foreman-runs.log']);
+  endButton(app, 'doctor').click();
+  await tick(); await tick();
+  assert.equal(api.calls.doctor, 1);
+});
+
+test('exit 20: a file that will not open is said, and the scene stays', async () => {
+  const live = await openLive();
+  live.api.open = async () => 'The file is not there.';
+  live.api.push(endedData('needs_human', 20, 'x'));
+  await tick();
+  endButton(live.app, 'open-log').click();
+  await tick();
+  assert.ok(text(live.app).includes('The file is not there.'));
+  assert.equal(kindOfScene(live.app), 'problem');
+});
+
+test('exit 20 where the login expired shows ticket 07\'s login-expired state in the scene\'s place, with Show iterations', async () => {
+  const live = await openLive();
+  const d = endedData('needs_human', 20, 'the agent could not authenticate');
+  d.conditions = { login: { batch: '.scratch/b', runId: IN_FLIGHT.id, exit: 20, message: 'the agent could not authenticate' }, runners: null };
+  live.api.push(d);
+  await tick();
+  assert.equal(kindOfScene(live.app), 'login-expired');
+  assert.ok(byAttr(live.app, 'data-state', 'login-expired'));
+  assert.ok(text(live.app).includes('auth_failed'));
+  assert.ok(!endSvg(live.app), 'not the sunrise');
+  assert.ok(endButton(live.app, 'iterations'));
+  assert.ok(buttonNamed(live.app, 'Resume…'), 'the state\'s own Resume…');
+});
+
+test('exit 30: waiting on a human, the human ticket, Fill in handoff opens its page and Open ticket in editor opens the file', async () => {
+  const { app, api } = await endRun('waiting_on_human', 30, '07-try-it-on-a-real-repo.md is a human ticket');
+  assert.equal(kindOfScene(app), 'human');
+  const t = text(sceneOf(app));
+  for (const want of ['exit 30 · waiting on a human', 'Waiting on you: 07 try-it-on-a-real-repo', 'is a human ticket', 'Fill in handoff', 'Open ticket in editor', 'Resume…', 'costs money']) assert.ok(t.includes(want), want);
+  assert.ok(!endSvg(app).all().some((e) => e.className === 'flag f-sil'));
+  endButton(app, 'open-file').click();
+  await tick();
+  assert.deepEqual(api.calls.open, ['.scratch/b/issues/07-try-it-on-a-real-repo.md']);
+  api.ticket = async (b, n) => { api.calls.ticket.push([b, n]); return { ok: false, error: { kind: 'exit', message: 'no ticket handler' } }; };
+  endButton(app, 'handoff').click();
+  await tick(); await tick();
+  assert.equal(api.calls.ticket[0][1], '07-try-it-on-a-real-repo', 'the ticket page of the human ticket');
+});
+
+test('exit 10 and exit 30 draw the same sun; exit 20 and exit 0 differ', async () => {
+  const sun = async (end, exit) => {
+    const { app } = await endRun(end, exit, 'r');
+    return endSvg(app).all().filter((e) => e.tagName === 'circle').map((e) => [e.className, e.attrs.cx, e.attrs.cy, e.attrs.r].join()).join('|');
+  };
+  const paused = await sun('paused', 10);
+  assert.equal(await sun('waiting_on_human', 30), paused);
+  assert.notEqual(await sun('needs_human', 20), paused);
+  assert.notEqual(await sun('complete', 0), paused);
+});
+
+test('Show iterations brings the run\'s list back, with the CLI\'s outcome words, and Back to the scene returns', async () => {
+  const { app } = await endRun('paused', 10, 'iteration budget reached');
+  endButton(app, 'iterations').click();
+  assert.ok(byAttr(app, 'data-view', 'iterations'));
+  const t = text(app);
+  for (const want of ['progressed', 'landed', 'unproductive', 'checkpoint turn', '15m00s · $2.00', '1/5', 'Back to the scene']) assert.ok(t.includes(want), want);
+  assert.equal(app.all().filter((e) => e.attrs['data-row'] === 'done').length, 4);
+  assert.ok(!app.all().some((e) => e.attrs['data-row'] === 'running'), 'nothing is running any more');
+  assert.ok(!byAttr(app, 'data-key', '+'), 'no run bar');
+  buttonNamed(app, 'Back to the scene').click();
+  assert.equal(kindOfScene(app), 'paused');
+});
+
+test('every scene has Show iterations', async () => {
+  for (const [end, exit] of [['complete', 0], ['paused', 10], ['needs_human', 20], ['waiting_on_human', 30]]) {
+    const { app } = await endRun(end, exit, 'r');
+    assert.ok(endButton(app, 'iterations'), `exit ${exit}`);
+  }
+});
+
+test('a batch the loop renamed to DONE_ as the run ended is found again, and its scene says done', async () => {
+  const live = await openLive();
+  const d = endedData('complete', 0, null, { status: { counts: { done: 10, total: 10 }, batch: { path: '.scratch/DONE_b', name: 'DONE_b' } } });
+  d.selected = '.scratch/DONE_b';
+  d.all = { batches: [{ path: '.scratch/DONE_b', name: 'DONE_b', finished: true, counts: null, human_remaining: null, next: null, error: null }, d.all.batches[1]] };
+  live.api.push(d);
+  await tick();
+  assert.equal(kindOfScene(live.app), 'done');
+  assert.ok(text(sceneOf(live.app)).includes('10 of 10 landed · now .scratch/DONE_b'), text(sceneOf(live.app)));
+  assert.ok(live.api.calls.report.some((c) => c.batch === '.scratch/DONE_b' && c.opts.run === IN_FLIGHT.id), 'its iterations are read from where it is now');
+});
+
+test('the scene is left when another run begins in the batch, from a terminal', async () => {
+  const { app, api } = await endRun('paused', 10, 'x');
+  api.push(dataRunning());
+  await tick();
+  assert.ok(!sceneOf(app) || kindOfScene(app) !== 'paused');
+  assert.ok(app.all().some((e) => e.attrs['data-row']), 'the live list');
+});
+
+test('a run whose footer is not its own is not told as an ending', async () => {
+  const live = await openLive();
+  const d = endedData('complete', 0);
+  d.status.last_run = { id: 'someone-elses', end: 'complete', exit: 0, reason: null };
+  live.api.push(d);
+  await tick();
+  assert.equal(kindOfScene(live.app), 'reading', 'no scene from another run\'s footer');
+  assert.ok(text(live.app).includes('The run has ended.'));
+  assert.ok(endButton(live.app, 'iterations'));
+});
+
+test('a run with no closing line is shown as text with what the process said', async () => {
+  let current = dataRunning();
+  const api = fakeApi(() => current, undefined, undefined, {}, {}, { load: () => ({ ok: true, run: liveSnap() }) });
+  const { app } = boot(api);
+  await tick();
+  current = endedData(null, null);
+  api.push(current);
+  await tick();
+  assert.equal(kindOfScene(app), 'text');
+  assert.ok(text(app).includes('without a closing line'));
+  buttonNamed(app, 'Back').click();
+  await tick();
+  assert.ok(text(app).includes('Dry run'), 'back on the overview');
+  assert.ok(!sceneOf(app));
+});
+
+test('a run the app started that ended before it was ever seen in flight still gets its scene, from the footer that is new', async () => {
+  let loads = 0;
+  const first = data();
+  const after = endedData('paused', 10, 'time cap reached');
+  const api = fakeApi((b) => (loads++ === 0 ? first : after));
+  const { app } = boot(api);
+  await tick();
+  buttonNamed(app, 'Start run…').click();
+  await tick();
+  startButton(app).click();
+  await tick();
+  api.pushExit({ batch: '.scratch/b', code: 10, signal: null, out: '' });
+  await tick(); await tick();
+  assert.equal(kindOfScene(app), 'paused');
+  assert.ok(text(sceneOf(app)).includes('Paused — time cap reached'));
+});
+
+test('exit 1: the CLI\'s own text from out, and a way back', async () => {
+  const { app, api } = await openConfirmation();
+  startButton(app).click();
+  await tick();
+  api.pushExit({ batch: '.scratch/b', code: 1, signal: null, out: 'foreman: the working tree has uncommitted changes' });
+  await tick();
+  assert.ok(text(app).includes('foreman: the working tree has uncommitted changes'));
+  assert.ok(text(app).includes('(exit 1)'));
+  assert.ok(!endSvg(app), 'no scene for a run that never began');
+});
+
+test('Resume… from a scene starts a run that replaces the scene with the live screen', async () => {
+  const { app, api } = await endRun('paused', 10, 'x');
+  endButton(app, 'resume').click();
+  await tick(); await tick();
+  startButton(app).click();
+  await tick();
+  assert.equal(api.calls.start.length, 1);
+  assert.ok(text(app).includes('Starting the run…'));
+  assert.ok(!sceneOf(app));
+});
+
+test('Cancel on the confirmation opened from a scene comes back to the scene', async () => {
+  const { app } = await endRun('paused', 10, 'x');
+  endButton(app, 'resume').click();
+  await tick(); await tick();
+  buttonNamed(app, 'Cancel').click();
+  await tick();
+  assert.equal(kindOfScene(app), 'paused');
+});
+
+test('the scene needs a readable status: an unreadable batch does not end the run screen', async () => {
+  const live = await openLive();
+  live.api.push(data({ status: null, statusError: 'foreman: boom' }));
+  await tick();
+  assert.ok(!sceneOf(live.app), 'no scene from a status that could not be read');
+  assert.ok(text(live.app).includes('foreman: boom'), 'the unreadable batch is told as it is');
+  live.api.push(endedData('paused', 10, 'x'));
+  await tick();
+  assert.equal(kindOfScene(live.app), 'paused', 'and once it reads again, the run that ended in the meantime is told');
 });
 
 // ---- the six states (ticket 07) ----
