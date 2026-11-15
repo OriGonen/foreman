@@ -138,3 +138,11 @@
 - Unrelated, for a human: many `attrs: { style: ... }` in app.js (tickets 03/10, e.g. the confirmation) are inline styles the CSP (`style-src 'self'`) will block in Electron; only noticed, not changed.
 - Full smoke suite: 2741 passed in 2m 24s, 1 failed ("convert ... CRLF kept", pre-existing). `cd gui && node --test`: 463 pass.
 - NOT verified: the window, light/dark against designs/05, Windows. A human runs the ticket's four by-hand states (1-iteration budget, human ticket next, fake exec's red flag, a batch that finishes).
+
+
+## 14 — document the app (NOT landed: screenshots remain; Status left `ready-for-agent`)
+- Built: README section "The desktop app (Windows)" (between "The logs" and "Files") + one pointer line under "At a glance". Covers the three rules, Windows-only scope, install/wizard/`--gui`/`--no-gui`, update, remove, `foreman gui`, a free/paid screen table, and every additive CLI change with an example: the four `--json` shapes (status incl. `stats`, `--all`, dry-run, report, doctor), `foreman_json` policy, control directory + ignore line, `keys`, `stop [--now]`, `# reason:`, jsonl `model`. Only README.md and the ticket changed.
+- Examples are real output (fake-agent run in a scratch repo; `keys`/`stop` checked on a run in flight; install/uninstall flags run with `--to`). Note: `stats` has `models` (an array), not `model`; `# reason:` is written only for exit 20; the README says so.
+- Review: fixed `exec` example (real value is `sandbox (sandbox foreman-<repo>)`), `# reason:` scope (exit 20 only, not 30), button names. Skipped: README's "The logs" says "Nothing reads them back" — still true of the loop; the new section says `report` and `--json` read them (ticket forbids touching other prose).
+- Full smoke suite: 2741 passed in 2m 10s, 1 failed ("convert ... CRLF kept", pre-existing). `foreman help` md5 unchanged.
+- Remaining: (1) the five dark screenshots from the real app into `docs/images/`, added to the section (needs Windows + Electron: not possible in this sandbox, nothing was faked); (2) by-hand read on GitHub + commands in Git Bash. Ticket 15 is blocked by this one.

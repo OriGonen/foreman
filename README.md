@@ -1023,7 +1023,7 @@ gets that far.
                                 { "file": ".scratch/site/issues/02-footer.md", "state": "later" },
                                 { "file": ".scratch/site/issues/03-review.md", "state": "stop" } ],
                  "stops_at": { "file": ".scratch/site/issues/03-review.md", "reached": false } },
-  "settings": { "exec": "sandbox", "perms": "acceptEdits", "model": "claude-sonnet-5-5", "effort": "high",
+  "settings": { "exec": "sandbox (sandbox foreman-site)", "perms": "acceptEdits", "model": "claude-sonnet-5-5", "effort": "high",
                 "live": false,
                 "budgets": { "cost_usd": null, "minutes": null, "iterations": 1, "text": "cost=unlimited  time=unlimited  iterations=1" },
                 "logs": { "jsonl": ".scratch/site/foreman-runs.jsonl", "log": ".scratch/site/foreman-runs.log" } },
