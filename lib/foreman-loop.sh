@@ -1265,6 +1265,17 @@ on_interrupt() {
 }
 trap on_interrupt INT TERM
 
+# `foreman stop --now` (foreman-control.sh) is Ctrl-C from outside the terminal. It sends the loop
+# SIGINT, which is the path above, and also leaves a `stop` file in the control directory, for the
+# runs a signal cannot reach: a loop started by a script's `&` ignores SIGINT from its birth and can
+# never trap it, and the signal between a detached MSYS tree and the loop is not something to rest
+# a stop on. The file is read where the loop is in control — after the agent's turn and before the
+# next one — and goes through the same on_interrupt, so the footer, the exit code and the stall marker
+# are Ctrl-C's. One file test, no process, and nothing without a file.
+check_stop_file() {
+  [ "$PAUSE_REQUESTED" -eq 1 ] || [ ! -e "$RUN_CTL_DIR/stop" ] || on_interrupt
+}
+
 _foreman_dirname _jsonl_dir "$RUN_JSONL"
 _foreman_dirname _log_dir "$RUN_LOG"
 mkdir -p "$_jsonl_dir" "$_log_dir"
@@ -1494,6 +1505,7 @@ review_rejection_reasons() {    # review_rejection_reasons PAYLOAD_FILE
 }
 
 while true; do
+  check_stop_file
   if [ "$PAUSE_REQUESTED" -eq 1 ]; then
     FINAL_STATUS="$EXIT_PAUSED"
     break
@@ -1774,6 +1786,7 @@ while true; do
   exec_run "$FOREMAN_PROMPT" "$TICKET_FILE" </dev/null |
     node "$FOREMAN_TOOL_DIR/foreman-stream.cjs" ${STREAM_ARGS+"${STREAM_ARGS[@]}"} > "$PAYLOAD_FILE"
   agent_status=${PIPESTATUS[0]}
+  check_stop_file
   result=$(cat "$PAYLOAD_FILE")
   # The live view's row goes blank until the next agent starts, rather than showing a clock
   # still counting on a command that has finished.

@@ -24,6 +24,10 @@
 #              it before the limit, so nothing vouches for the tree)
 #     interrupt-dirty  Ctrl-C part-way through the ticket: writes an uncommitted file,
 #              then sends the loop SIGINT, as the terminal would. The same pause.
+#     hang-dirty  writes an uncommitted file, then waits on `sleep $FOREMAN_FAKE_HANG` (default 600) as an
+#              agent mid-turn does, until something ends it: `foreman stop --now`'s tests
+#     stop-file-dirty  writes an uncommitted file, then leaves a `stop` file in the run's control
+#              directory, as `foreman stop --now` does, and ends the turn cleanly
 #     session-limit  the same event as the CLI words it today — valid JSON whose reply is
 #              "You've hit your session limit · resets 4:50pm (...)", with no epoch and no
 #              "usage limit reached" anywhere. The loop should pause on this too.
@@ -309,6 +313,17 @@ exec_run() {
       kill -INT $$
       printf 'claude: interrupted\n'
       return 130
+      ;;
+    hang-dirty)
+      printf 'half-written by the fake adapter (call %s)\n' "$call" >> .foreman-fake-leftover
+      sleep "${FOREMAN_FAKE_HANG:-600}"
+      printf 'claude: stopped\n'
+      return 130
+      ;;
+    stop-file-dirty)
+      printf 'half-written by the fake adapter (call %s)\n' "$call" >> .foreman-fake-leftover
+      : > "$RUN_CTL_DIR/stop"
+      _fake_payload success false "stopped from outside"
       ;;
     session-limit)
       # The same 5-hour window, as the current CLI actually words it under --print: no epoch

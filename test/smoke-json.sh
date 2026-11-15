@@ -2003,8 +2003,114 @@ if case_is "foreman stop: the run finishes the iteration in flight and ends with
   assert_eq "$ST" 1 "no run in flight: exits 1"
   assert_contains "$ERR" "foreman stop: no run in flight in batch" "in one line, saying so"
   run_foreman "$repo" stop --now batch
-  assert_eq "$ST" 1 "stop --now: not here yet, exits 1"
-  assert_contains "$ERR" "--now is not available yet" "and says so"
+  assert_eq "$ST" 1 "stop --now with no run in flight: exits 1"
+  assert_contains "$ERR" "foreman stop: no run in flight in batch" "and says so, as stop does"
+  run_foreman "$repo" stop --soon batch
+  assert_eq "$ST" 1 "an unknown option: exits 1"
+  assert_contains "$ERR" "Usage: foreman stop [<batch>] [--now]" "with the usage"
+fi
+
+# A run started the way the desktop app starts it: its own session (`detached`), no console
+# (`windowsHide`), stdin ignored, output to a file. $WORK/det.st holds its exit status once it is over.
+# The run's own SIGINT is the default one, as it is under the app (a `&` in a script would ignore it).
+DET_ENV=()
+det_run() {    # det_run REPO RUN-ARGS...
+  local repo="$1"; shift
+  rm -f "$WORK/det.st" "$WORK/det.out"
+  env FOREMAN_SHOW=never FOREMAN_COLOR=never ${DET_ENV[@]+"${DET_ENV[@]}"} \
+    node -e '
+      const { spawn } = require("child_process"), fs = require("fs");
+      const [repo, foreman, st, out, ...args] = process.argv.slice(1);
+      const fd = fs.openSync(out, "w");
+      const p = spawn(foreman, ["run", ...args], { cwd: repo, detached: true, windowsHide: true, stdio: ["ignore", fd, fd] });
+      p.on("exit", (code, sig) => fs.writeFileSync(st, String(code === null ? 128 : code) + "\n"));
+    ' "$repo" "$FOREMAN" "$WORK/det.st" "$WORK/det.out" "$@" &
+  DET_PID=$!
+}
+det_wait() {
+  wait_until 60 test -s "$WORK/det.st"
+  DET_ST="$(cat "$WORK/det.st" 2>/dev/null)"
+  DET_OUT="$(cat "$WORK/det.out" 2>/dev/null)"
+  wait "$DET_PID" 2>/dev/null
+  rm -f "$WORK"/foreman-fake-*.calls
+}
+# Whether anything is left of a hung agent: its `sleep`, tagged by the length of the wait.
+agent_left() { pgrep -f "sleep $1\$" >/dev/null 2>&1; }
+feed_left() { pgrep -f "foreman-stream.cjs.*$1" >/dev/null 2>&1; }
+
+if case_is "foreman stop --now: a detached run in the middle of a turn ends as Ctrl-C ends it, and the next run reviews it"; then
+  # What Ctrl-C leaves, for the footer to be compared against.
+  repo="$WORK/now-int"; ctl_repo "$repo" 2
+  run_foreman_env "$repo" "FOREMAN_FAKE_BEHAVIOUR=interrupt-dirty" run batch --unlimited
+  assert_eq "$ST" 10 "Ctrl-C: paused"
+  int_footer="$(printf '%s\n' "$OUT" | sed -n '/^PAUSED:/,$p')"
+  int_warn="$(printf '%s\n' "$ERR" | grep -c 'Interrupt received')"
+
+  repo="$WORK/now-run"; ctl_repo "$repo" 2
+  ctl="$repo/batch/.foreman-run"
+  DET_ENV=(FOREMAN_FAKE_BEHAVIOUR=hang-dirty FOREMAN_FAKE_HANG=731 FOREMAN_STOP_GRACE=3)
+  det_run "$repo" batch --unlimited
+  wait_until 30 test -f "$repo/.foreman-fake-leftover" && pass || fail "the agent is mid-turn, with work in the tree"
+  agent_left 731 && pass || fail "the agent's process is running"
+  base="$(git -C "$repo" rev-parse HEAD)"
+
+  run_foreman "$repo" stop --now
+  assert_eq "$ST" 0 "stop --now: exits 0 once the run is over"
+  assert_contains "$OUT$ERR" "foreman stop: stopped the run in batch" "and says so"
+  det_wait
+  assert_eq "$DET_ST" 10 "the run's exit code is Ctrl-C's: paused, 10"
+  assert_contains "$DET_OUT" "PAUSED: interrupted (Ctrl-C)" "the footer says it was interrupted"
+  assert_contains "$DET_OUT" "Interrupt received" "the loop's own INT handling ran"
+  assert_eq "$(printf '%s\n' "$DET_OUT" | grep -c 'Interrupt received')" "$int_warn" "once, as Ctrl-C prints it"
+  assert_contains "$DET_OUT" "the rerun has an agent review it and commits it as wip" "the footer promises the review"
+  stop_footer="$(printf '%s\n' "$DET_OUT" | sed -n '/^PAUSED:/,$p')"
+  assert_eq "${stop_footer//batch\/foreman-runs/X}" "${int_footer//batch\/foreman-runs/X}" "from PAUSED on, the footer is Ctrl-C's word for word"
+  [ -f "$repo/batch/.foreman-stall-marker" ] && pass || fail "the stall marker stays"
+  assert_contains "$(cat "$repo/batch/.foreman-stall-marker")" "$base" "and it names the base the turn began from"
+  assert_contains "$(cat "$repo/.foreman-fake-leftover")" "half-written" "the work tree keeps the ticket's uncommitted work"
+  assert_eq "$(ls -A "$ctl" 2>/dev/null)" "" "the control directory is gone"
+  agent_left 731 && fail "no agent process is left" || pass
+  feed_left "$WORK" && fail "no feed process is left" || pass
+  assert_eq "$(grep -c . "$repo/batch/foreman-runs.jsonl")" 1 "the interrupted iteration is recorded"
+
+  # The next run opens with a review turn, as after Ctrl-C.
+  log="$WORK/now-prompts.txt"
+  FOREMAN_FAKE_PROMPT_LOG="$log" FOREMAN_FAKE_BEHAVIOUR=land run_foreman "$repo" run batch --unlimited
+  assert_eq "$ST" 0 "the next run finishes the batch"
+  assert_contains "$OUT" "reviewed and salvaged by a checkpoint turn" "after a review turn"
+  first="$(awk '/^===== fake prompt checkpoint /{f=1;next} /^===== fake prompt /{f=0} f' "$log")"
+  assert_contains "$first" "REVIEW CHECKPOINT TURN" "which was the review turn, not the stall's"
+  assert_eq "$(git -C "$repo" status --porcelain)" "" "and the tree ends clean"
+fi
+
+if case_is "foreman stop --now: a run whose SIGINT is ignored is stopped by the stop file and by ending its agent"; then
+  # A loop started by `&` from a script cannot trap INT at all, so the signal does nothing. The
+  # stop file is what the loop checks when its agent is gone, and the agent is ended from outside.
+  repo="$WORK/now-ign"; ctl_repo "$repo" 2
+  ctl="$repo/batch/.foreman-run"
+  BG_ENV=(FOREMAN_FAKE_BEHAVIOUR=hang-dirty FOREMAN_FAKE_HANG=732 FOREMAN_STOP_GRACE=2); bg_run "$repo" batch --unlimited
+  wait_until 30 test -f "$repo/.foreman-fake-leftover" && pass || fail "the agent is mid-turn"
+  run_foreman "$repo" stop --now batch
+  assert_eq "$ST" 0 "exits 0"
+  bg_wait
+  assert_eq "$BG_ST" 10 "the run is paused, as by Ctrl-C"
+  assert_contains "$BG_OUT" "PAUSED: interrupted (Ctrl-C)" "with the same footer"
+  [ -f "$repo/batch/.foreman-stall-marker" ] && pass || fail "the stall marker stays"
+  agent_left 732 && fail "no agent process is left" || pass
+fi
+
+if case_is "a stop file in the control directory pauses the run as Ctrl-C does, and nothing else sees it"; then
+  repo="$WORK/now-file"; ctl_repo "$repo" 3
+  run_foreman_env "$repo" "FOREMAN_FAKE_BEHAVIOUR=stop-file-dirty" run batch --unlimited
+  assert_eq "$ST" 10 "paused"
+  assert_contains "$OUT" "PAUSED: interrupted (Ctrl-C)" "as Ctrl-C"
+  assert_contains "$ERR" "Interrupt received" "the same words"
+  [ -f "$repo/batch/.foreman-stall-marker" ] && pass || fail "the stall marker stays"
+  assert_eq "$(ls -A "$repo/batch/.foreman-run" 2>/dev/null)" "" "the control directory is cleared, the stop file with it"
+  # Not the next run: a leftover stop file is cleared with the directory.
+  mkdir -p "$repo/batch/.foreman-run"; : > "$repo/batch/.foreman-run/stop"
+  run_foreman_env "$repo" "FOREMAN_FAKE_BEHAVIOUR=land" run batch --unlimited
+  assert_eq "$ST" 0 "a stop file left by a dead run does not stop the next"
 fi
 
 if case_is "# reason: a stop for a human gives its one-line reason in the log, for a red flag and for a login that expired"; then
