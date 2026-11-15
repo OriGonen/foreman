@@ -60,8 +60,10 @@ async function setup() {
   const conditions = createConditions({
     foreman, readConf, env: process.env,
     onChange: async (batch) => {
-      if (!lastOverview || lastOverview.selected !== batch || !ctx || ctx.conditions !== conditions) return;
-      push(await conditions.decorate(lastOverview, { fresh: false }));
+      const base = lastOverview;
+      if (!base || base.selected !== batch || !ctx || ctx.conditions !== conditions) return;
+      const shown = await conditions.decorate(base, { fresh: false });
+      if (lastOverview === base) push(shown);       // not if a newer overview went out while this was reading
     },
   });
   ctx = { repoRoot, overview, foreman, tickets, runner, live, conditions };

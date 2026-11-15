@@ -380,4 +380,3 @@ pre.said.err { color: var(--err); }
 .card.state { display: flex; flex-direction: row; align-items: center; gap: 18px; padding: 14px 18px; text-align: left; }
 .card.state .text { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1; }
 .card.state pre.said { max-width: none; }
-.card.state .scene { flex: none; }
