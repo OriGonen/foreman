@@ -7,6 +7,7 @@
   const M = window.ForemanModel;
   const A = window.ForemanArt;
   const P = window.ForemanPreview;
+  const ST = window.ForemanStates;
   const app = document.getElementById('app');
 
   // h('div', { cls: 'row', text: 'x', on: { click: fn }, attrs: { title: 't' } }, child, ...)
@@ -143,13 +144,23 @@
     return list;
   }
 
+  // Start run… — off, with the CLI's own reason as its title, when the batch's runner is missing (the state
+  // above the overview says it in full). Dry run, the report and the status all still work.
+  function startButton(data) {
+    const why = ST.startBlock(data);
+    return button('Start run…', {
+      cls: 'primary', tag: { cls: 'paid', text: 'costs money' },
+      onClick: why ? null : () => openConfirm(), title: why || null,
+    });
+  }
+
   function overviewView(data) {
     const o = M.overview(data.status);
     const head = h('div', { cls: 'row' },
       h('div', { cls: 'grow' }, h('div', { cls: 'label', text: 'Batch' }), h('div', { cls: 'h1 mono title', text: o.title })),
       button('Open folder', { cls: 'quiet', onClick: () => api.open(data.status.batch.path) }),
       button('Dry run', { tag: { cls: 'free', text: 'free' }, onClick: openDryRun }),
-      button('Start run…', { cls: 'primary', tag: { cls: 'paid', text: 'costs money' }, onClick: () => openConfirm() }));
+      startButton(data));
 
     const dome = h('div', { cls: 'card domecard' },
       A.dome({ w: 190, p: o.dome.p, stakes: o.dome.stakes }),
@@ -158,7 +169,8 @@
         h('div', { cls: 'muted', text: `landed · ${o.dome.toGo} to go` }),
         o.spent ? h('div', { cls: 'small dim mono', text: o.spent }) : null));
 
-    const main = h('main', { cls: 'main' }, head,
+    const state = ST.choose(data);
+    const main = h('main', { cls: 'main' }, head, state ? stateView(state) : null,
       h('div', { cls: 'row top wrap' }, dome, nextCard(o)));
     if (o.human) main.append(humanCard(o));
     if (o.warnings.length) main.append(warningsCard(o.warnings));
@@ -188,6 +200,74 @@
     return paneView(sentence, error.message + tried, button('Try again', { onClick: retry }), ...more);
   }
 
+  // ---- the six states (design 09, take a) ----
+  //
+  // A picture, one sentence, the CLI's own message and one button. What the button does is named by the state
+  // (states.js) and done here. A line under the button says so when it could not.
+  let stateNote = null;      // { id, text } — what a state's button could not do
+  let copied = false;        // the init command is on the clipboard
+
+  async function chooseFolder() {
+    let answer;
+    try { answer = await api.chooseFolder(); } catch (e) { answer = { ok: false, error: asError(e) }; }
+    if (answer && answer.ok) { if (answer.chosen) start(null); return; }
+    stateNote = { id: 'not-a-repo', text: ((answer && answer.error) || { message: 'No answer.' }).message };
+    draw();
+  }
+  async function copyCommand() {
+    let ok = false;
+    try { ok = (await api.copyInitCommand()) === true; } catch { ok = false; }
+    copied = ok;
+    stateNote = ok ? null : { id: 'no-batch', text: 'Could not reach the clipboard. Select the command above and copy it.' };
+    draw();
+  }
+  async function openFile(state) {
+    let said;
+    try { said = await api.open(state.action.file); } catch (e) { said = asError(e).message; }
+    stateNote = said ? { id: state.id, text: said } : null;
+    if (said) draw();
+  }
+
+  function stateAction(state) {
+    const a = state.action;
+    const label = a.do === 'copy-command' && copied ? 'Copied' : a.label;
+    const doIt = {
+      'choose-folder': chooseFolder,
+      'copy-command': copyCommand,
+      'look-again': () => start(null),
+      doctor: () => leaving(openDoctor),
+      resume: () => openConfirm({ resume: true }),
+      'open-file': () => openFile(state),
+    }[a.do];
+    return button(label, { cls: a.do === 'resume' ? 'primary' : '', tag: a.tag || null, onClick: () => { stateNote = null; return doIt(); } });
+  }
+
+  function stateArt(art) {
+    return art.kind === 'inspector' ? A.inspector({ w: 64, sign: art.sign }) : A.dome({ w: 130, p: art.p, stakes: art.stakes });
+  }
+
+  function stateView(state) {
+    const lines = [];
+    if (state.detail && state.detail.kind === 'path') lines.push(h('div', { cls: 'where', text: state.detail.text }));
+    if (state.detail && state.detail.kind === 'command') lines.push(h('div', { cls: 'where command', text: state.detail.text }));
+    const tried = state.detail && state.detail.kind === 'tried'
+      ? h('pre', { cls: 'tried', text: 'looked in:\n  ' + state.detail.lines.join('\n  ') }) : null;
+    const note = stateNote && stateNote.id === state.id ? h('div', { cls: 'stnote', text: stateNote.text, attrs: { role: 'alert' } }) : null;
+    const text = [
+      h('div', { cls: 'cap', text: state.cap }),
+      h('div', { cls: 'h2', text: state.heading }),
+      h('div', { cls: 'sentence', text: state.sentence }),
+      state.message ? h('pre', { cls: 'said', text: state.message }) : null,
+      ...lines, tried,
+    ];
+    const attrs = { 'data-state': state.id };
+    if (state.whole) {
+      return h('main', { cls: 'main pane state', attrs }, ...text.slice(0, 1), stateArt(state.art), ...text.slice(1), stateAction(state), note);
+    }
+    return h('div', { cls: 'card state', attrs }, stateArt(state.art),
+      h('div', { cls: 'text' }, ...text, h('div', { cls: 'row' }, stateAction(state)), note));
+  }
+
   // ---- the dry run (design 06, take a) ----
 
   function dryRunView(data) {
@@ -203,7 +283,7 @@
       span('small muted', 'no prompt is sent · no sandbox starts'),
       span('small dim mono', 'read ' + read),
       button('Run again', { onClick: openDryRun }),
-      button('Start run…', { cls: 'primary', tag: { cls: 'paid', text: 'costs money' }, onClick: () => openConfirm() }));
+      startButton(data));
 
     const would = h('div', { cls: 'card col' },
       h('div', { cls: 'row' }, A.dome({ w: 80, p: d.dome.p, stakes: d.dome.stakes }),
@@ -1273,7 +1353,8 @@
 
     if (!data || !data.ok) {
       app.classList.add('solo');
-      app.append(failureView(data ? data.error : { kind: 'spawn', message: 'Waiting for foreman…' }));
+      const stood = ST.choose(data);
+      app.append(stood ? stateView(stood) : failureView(data ? data.error : { kind: 'spawn', message: 'Waiting for foreman…' }));
       document.title = 'Foreman';
       return;
     }
@@ -1295,7 +1376,7 @@
       app.append(doctorView());
       document.title = 'Foreman — doctor';
     } else if (data.all.batches.length === 0) {
-      app.append(paneView('No batch here.', 'A batch is a directory with a foreman.conf in it.\n' + data.repoRoot));
+      app.append(stateView(ST.choose(data)));
       document.title = 'Foreman — ' + data.repoRoot;
     } else if (view === 'report') {
       app.append(reportView(data));
@@ -1308,7 +1389,8 @@
       app.append(view === 'dryrun' ? dryRunView(data) : overviewView(data));
       document.title = (view === 'dryrun' ? 'Foreman — dry run · ' : 'Foreman — ') + data.status.batch.path;
     } else {
-      app.append(paneView('This batch cannot be read.', data.statusError || '', button('Try again', { onClick: () => start(data.selected) })));
+      const stood = ST.choose(data);
+      app.append(stood ? stateView(stood) : paneView('This batch cannot be read.', data.statusError || '', button('Try again', { onClick: () => start(data.selected) })));
       document.title = 'Foreman — ' + (data.selected || data.repoRoot);
     }
 

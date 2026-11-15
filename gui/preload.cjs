@@ -65,6 +65,11 @@ contextBridge.exposeInMainWorld('foreman', {
   },
   // Compact view: resize the window to the small layout (true) or put the previous size back (false).
   compact: (on) => ipcRenderer.invoke('window:compact', on === true),
+  // "Not a git repo": a folder picker. Answers { ok: true, chosen: true } once main has taken the folder (the page
+  // then loads again), { ok: true, chosen: false } when cancelled. Nothing is remembered after the app closes.
+  chooseFolder: () => ipcRenderer.invoke('repo:choose'),
+  // "No batch": put the `foreman init` command on the clipboard. Answers true.
+  copyInitCommand: () => ipcRenderer.invoke('clipboard:init'),
   // Open a repo-relative path (a ticket, a batch folder) with Windows' own default.
   open: (relativePath) => ipcRenderer.invoke('open', relativePath),
 });

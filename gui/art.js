@@ -100,5 +100,34 @@
     return el;
   }
 
-  root.ForemanArt = { dome, runner };
+  // The inspector standing with his clipboard, for the states that need a person to look at something: a
+  // sign over his shoulder (`stop`, the red FIX). A port of the design's `person(el, 'inspector')`
+  // (designs/09-empty-and-error.html), the shapes the same and the colours classes of app.css.
+  //   inspector({ w: 64, sign: 'stop' }) -> <svg>
+  function inspector({ w = 64, sign = null } = {}) {
+    const h = Math.round(w * 1.5);
+    const kids = [];
+    if (sign === 'stop') {
+      kids.push(svg('rect', { x: 2, y: 2, width: 30, height: 20, rx: 3, class: 'f-err' }));
+      const t = svg('text', { x: 17, y: 16, 'text-anchor': 'middle', 'font-size': 9, 'font-family': 'Consolas,monospace', 'font-weight': 700, class: 'f-panel' });
+      t.textContent = 'FIX';
+      kids.push(t);
+    }
+    kids.push(
+      svg('path', { d: 'M22 30 a14 14 0 0 1 28 0z', class: 'f-amber' }),
+      svg('rect', { x: 18, y: 29, width: 36, height: 4, rx: 2, class: 'f-amber' }),
+      svg('circle', { cx: 36, cy: 40, r: 9, class: 'f-sun' }),
+      svg('path', { d: 'M22 54 q14 -6 28 0 l4 34 h-36z', class: 'f-rust' }),
+      svg('path', { d: 'M30 52 h12 v36 h-12z', class: 'f-amber', opacity: 0.85 }),
+      svg('path', { d: 'M24 88 l-2 28 h8 l4 -24 l4 24 h8 l-2 -28z', class: 'f-earth' }),
+      svg('path', { d: 'M50 58 l10 8', class: 'k-rust', 'stroke-width': 6, 'stroke-linecap': 'round' }),
+      svg('rect', { x: 46, y: 54, width: 22, height: 30, rx: 2, class: 'f-panel k-post', 'stroke-width': 2 }),
+      svg('rect', { x: 51, y: 51, width: 12, height: 5, rx: 1, class: 'f-post' }),
+      svg('path', { d: 'M51 63 h12 M51 69 h12 M51 75 h8', class: 'k-muted', 'stroke-width': 1.6 }),
+      svg('rect', { x: 0, y: 116, width: 80, height: 3, rx: 1.5, class: 'f-earth' }),
+    );
+    return svg('svg', { xmlns: NS, width: w, height: h, viewBox: '0 0 80 120', 'aria-hidden': 'true' }, kids);
+  }
+
+  root.ForemanArt = { dome, runner, inspector };
 }(window));

@@ -71,7 +71,7 @@ function boot(api) {
   win.addEventListener = (type, fn) => { (win.listeners[type] = win.listeners[type] || []).push(fn); };
   win.window = win;
   vm.createContext(win);
-  for (const f of ['model.js', 'runplan.js', 'runview.js', 'art.js', 'preview.js', 'app.js']) {
+  for (const f of ['model.js', 'states.js', 'runplan.js', 'runview.js', 'art.js', 'preview.js', 'app.js']) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), win, { filename: f });
   }
   return { app, document, window: win };
@@ -264,11 +264,11 @@ test('Git Bash missing: the sentence, what was looked at, and a button that trie
   const { app } = boot(api);
   await tick();
   const t = text(app);
-  assert.ok(t.includes('Git Bash was not found.'));
+  assert.ok(t.includes("Git Bash wasn't found"));
   assert.ok(t.includes('foreman runs in Git Bash.'));
   assert.ok(t.includes('C:\\a\\bash.exe (FOREMAN_BASH)') && t.includes('git.exe on PATH (not found)'));
   assert.ok(app.className.includes('solo'));
-  buttonNamed(app, 'Try again').click();
+  buttonNamed(app, 'Look again').click();
   await tick();
   assert.equal(api.calls.load.length, 2);
 });
@@ -283,12 +283,12 @@ test('an error from foreman is shown in its own words', async () => {
 test('a repository with no batch says what a batch is; a batch that cannot be read says why, with the rail still there', async () => {
   const { app } = boot(fakeApi(data({ all: { batches: [] }, selected: null, status: null })));
   await tick();
-  assert.ok(text(app).includes('No batch here.') && text(app).includes('foreman.conf'));
+  assert.ok(text(app).includes('No batch in this repo yet') && text(app).includes('foreman init .scratch/<name>'));
 
   const broken = data({ status: null, statusError: 'order.md lists a ticket that does not exist' });
   const b = boot(fakeApi(broken));
   await tick();
-  assert.ok(text(b.app).includes('This batch cannot be read.'));
+  assert.ok(text(b.app).includes("foreman can't read this batch"));
   assert.ok(text(b.app).includes('order.md lists a ticket that does not exist'));
   assert.ok(b.app.all().some((e) => e.attrs['data-batch'] === '.scratch/c'), 'the rail is still there');
 });
@@ -1362,7 +1362,7 @@ test('no batch: the Doctor still opens, which is what it is for, and says what t
   const api = fakeApi(none, undefined, undefined, undefined, { doctor: { ok: true, doc } });
   const b = boot(api);
   await tick();
-  assert.ok(text(b.app).includes('No batch here.'));
+  assert.ok(text(b.app).includes('No batch in this repo yet'));
   const entry = railItem(b.app, 'Doctor');
   assert.equal(entry.disabled, false, 'not greyed out');
   entry.click();
@@ -1773,4 +1773,217 @@ test('a run that ended before it began shows the CLI\'s own words', async () => 
   buttonNamed(app, 'Back').click();
   await tick();
   assert.ok(text(app).includes('Dry run'), 'back on the overview');
+});
+
+// ---- the six states (ticket 07) ----
+
+const stateOf = (app) => app.querySelector('[data-state]');
+const withStateApi = (first, extra = {}) => {
+  const api = fakeApi(first);
+  api.calls.choose = 0; api.calls.copy = 0;
+  api.chooseFolder = async () => { api.calls.choose++; return extra.choose ? extra.choose() : { ok: true, chosen: false }; };
+  api.copyInitCommand = async () => { api.calls.copy++; return extra.copy === undefined ? true : extra.copy; };
+  if (extra.open) api.open = async (p) => { api.calls.open.push(p); return extra.open(p); };
+  return api;
+};
+const RUNNER = { batch: '.scratch/b', tool: 'sbx', mode: 'sandbox', message: 'sbx is not on PATH, and FOREMAN_EXEC=sandbox needs it', fix: 'Install sbx and put it on PATH' };
+const LOGIN = { batch: '.scratch/b', runId: '20261021T091200Z-4411', exit: 20, message: '06-x.md was not attempted: the agent could not authenticate' };
+
+test('with no condition holding the app shows the overview and no state', async () => {
+  const { app } = boot(withStateApi(data({ conditions: { login: null, runners: null } })));
+  await tick();
+  assert.equal(stateOf(app), null);
+  assert.ok(text(app).includes('landed · 6 to go'));
+});
+
+test('not a git repo: git\'s words and the folder, and Choose a folder… opens the picker and loads again on the folder chosen', async () => {
+  const err = { ok: false, error: { kind: 'not-a-repo', message: 'fatal: not a git repository', dir: 'C:\\Users\\me\\Downloads', tried: null } };
+  const api = withStateApi(err, { choose: () => ({ ok: true, chosen: true }) });
+  const { app } = boot(api);
+  await tick();
+  const t = text(stateOf(app));
+  for (const want of ['not a git repo', "This folder isn't a git repository", 'fatal: not a git repository', 'C:\\Users\\me\\Downloads']) assert.ok(t.includes(want), want);
+  assert.ok(app.className.includes('solo'));
+  assert.equal(app.all().filter((e) => e.tagName === 'svg').length, 1, 'one picture');
+  buttonNamed(app, 'Choose a folder…').click();
+  await tick(); await tick();
+  assert.equal(api.calls.choose, 1);
+  assert.equal(api.calls.load.length, 2, 'the app reads again, on the folder main took');
+});
+
+test('not a git repo: cancelling the picker changes nothing', async () => {
+  const api = withStateApi({ ok: false, error: { kind: 'not-a-repo', message: 'fatal: x', dir: 'C:\\x' } });
+  const { app } = boot(api);
+  await tick();
+  buttonNamed(app, 'Choose a folder…').click();
+  await tick(); await tick();
+  assert.equal(api.calls.load.length, 1);
+  assert.ok(text(stateOf(app)).includes('fatal: x'));
+});
+
+test('not a git repo: a picker that fails says so under the button', async () => {
+  const api = withStateApi({ ok: false, error: { kind: 'not-a-repo', message: 'fatal: x' } }, { choose: () => ({ ok: false, error: { message: 'no window' } }) });
+  const { app } = boot(api);
+  await tick();
+  buttonNamed(app, 'Choose a folder…').click();
+  await tick(); await tick();
+  assert.ok(text(stateOf(app)).includes('no window'));
+});
+
+test('no batch: the foreman init command, and Copy command asks main to copy it and says it did', async () => {
+  const api = withStateApi(data({ all: { batches: [] }, selected: null, status: null }));
+  const { app } = boot(api);
+  await tick();
+  assert.ok(text(stateOf(app)).includes('foreman init .scratch/<name>'));
+  assert.ok(app.all().some((e) => e.attrs['data-tool'] === 'doctor'), 'the rail is still there');
+  buttonNamed(app, 'Copy command').click();
+  await tick(); await tick();
+  assert.equal(api.calls.copy, 1);
+  assert.ok(buttonNamed(app, 'Copied'));
+});
+
+test('no batch: a clipboard that cannot be reached is said, and the button stays', async () => {
+  const api = withStateApi(data({ all: { batches: [] }, selected: null, status: null }), { copy: false });
+  const { app } = boot(api);
+  await tick();
+  buttonNamed(app, 'Copy command').click();
+  await tick(); await tick();
+  assert.ok(text(stateOf(app)).includes('Could not reach the clipboard'));
+  assert.ok(buttonNamed(app, 'Copy command'));
+});
+
+test('Git Bash missing: every path it tried, as text, in the CLI\'s order', async () => {
+  const tried = ['C:\\a\\bash.exe (FOREMAN_BASH)', 'git.exe on PATH (not found)', 'C:\\Program Files\\Git\\bin\\bash.exe'];
+  const { app } = boot(withStateApi({ ok: false, error: { kind: 'git-bash-missing', message: 'foreman runs in Git Bash, and none was found.', tried } }));
+  await tick();
+  const t = text(stateOf(app));
+  let at = -1;
+  for (const p of tried) { const i = t.indexOf(p); assert.ok(i > at, p); at = i; }
+});
+
+test('claude / sbx missing: the scene is above the overview; Start run… is off with the reason, and dry run, report and the status still work', async () => {
+  const api = withStateApi(data({ conditions: { login: null, runners: RUNNER } }));
+  const { app } = boot(api);
+  await tick();
+  const card = stateOf(app);
+  assert.equal(card.dataset.state, 'runner-missing');
+  const t = text(card);
+  for (const want of ["sbx isn't installed", 'FOREMAN_EXEC=sandbox', 'Runs are off', 'sbx is not on PATH, and FOREMAN_EXEC=sandbox needs it', 'Install sbx and put it on PATH']) assert.ok(t.includes(want), want);
+  assert.ok(text(app).includes('landed · 6 to go'), 'the status is still there');
+  const start = buttonNamed(app, 'Start run…');
+  assert.equal(start.disabled, true);
+  assert.equal(start.title, RUNNER.message);
+  const dry = buttonNamed(app, 'Dry run');
+  assert.equal(dry.disabled, false);
+  assert.equal(railItem(app, 'Report').disabled, false);
+  dry.click();
+  await tick(); await tick();
+  assert.equal(api.calls.dryRun.length, 1);
+  const again = buttonNamed(app, 'Start run…');
+  assert.equal(again.disabled, true, 'and so is the dry run screen\'s');
+  assert.equal(api.calls.confirm.length, 0);
+});
+
+test('claude / sbx missing: the Doctor button opens the Doctor', async () => {
+  const api = withStateApi(data({ conditions: { login: null, runners: RUNNER } }));
+  const { app } = boot(api);
+  await tick();
+  buttonNamed(stateOf(app), 'Doctor').click();
+  await tick(); await tick();
+  assert.equal(api.calls.doctor, 1);
+  assert.ok(text(app).includes('PASSED') || text(app).includes('NOT PASSED'));
+});
+
+test('claude / sbx missing: it turns up after the overview is drawn, and a later push without it takes it away', async () => {
+  const api = withStateApi(data({ conditions: { login: null, runners: null } }));
+  const { app } = boot(api);
+  await tick();
+  assert.equal(stateOf(app), null);
+  assert.equal(buttonNamed(app, 'Start run…').disabled, false);
+  api.push(data({ conditions: { login: null, runners: RUNNER } }));
+  assert.equal(stateOf(app).dataset.state, 'runner-missing');
+  assert.equal(buttonNamed(app, 'Start run…').disabled, true);
+  api.push(data({ conditions: { login: null, runners: null } }));
+  assert.equal(stateOf(app), null);
+  assert.equal(buttonNamed(app, 'Start run…').disabled, false);
+});
+
+test('login expired: exit 20 and auth_failed, the loop\'s reason, and Resume… marked costs money, through the confirmation', async () => {
+  const api = withStateApi(data({ conditions: { login: LOGIN, runners: null } }));
+  const { app } = boot(api);
+  await tick();
+  const card = stateOf(app);
+  assert.equal(card.dataset.state, 'login-expired');
+  const t = text(card);
+  for (const want of ["The agent's login has expired", '20261021T091200Z-4411', 'exit 20', 'auth_failed', '06-x.md was not attempted: the agent could not authenticate', 'costs money']) assert.ok(t.includes(want), want);
+  const resume = buttonNamed(card, 'Resume…');
+  assert.equal(resume.disabled, false);
+  assert.equal(api.calls.start.length, 0);
+  resume.click();
+  await tick(); await tick();
+  assert.equal(api.calls.confirm.length, 1, 'it goes through the run confirmation');
+  assert.ok(text(app).includes('Resume a run'));
+  assert.equal(api.calls.start.length, 0, 'and starts nothing by itself');
+});
+
+test('login expired is gone while a run is in flight', async () => {
+  const d = data({ conditions: { login: LOGIN, runners: null } });
+  d.status.run = { ...IN_FLIGHT };
+  const { app } = boot(withStateApi(d));
+  await tick();
+  assert.equal(stateOf(app), null);
+});
+
+test('batch unreadable: the CLI\'s stderr as text, the rail, and a button that opens the file it names', async () => {
+  const said = 'foreman-next.sh: .scratch/b/order.md lists a ticket that does not exist: .scratch/b/issues/03-nope.md';
+  const api = withStateApi(data({ status: null, statusError: said }));
+  const { app } = boot(api);
+  await tick();
+  assert.ok(text(stateOf(app)).includes(said));
+  assert.ok(app.all().some((e) => e.attrs['data-batch'] === '.scratch/c'), 'the rail is still there');
+  buttonNamed(app, 'Open order.md in editor').click();
+  await tick();
+  assert.deepEqual(api.calls.open, ['.scratch/b/order.md']);
+});
+
+test('batch unreadable: a file that will not open is said under the button', async () => {
+  const api = withStateApi(data({ status: null, statusError: 'x .scratch/b/order.md y' }), { open: () => 'no program is associated' });
+  const { app } = boot(api);
+  await tick();
+  buttonNamed(app, 'Open order.md in editor').click();
+  await tick(); await tick();
+  assert.ok(text(stateOf(app)).includes('no program is associated'));
+});
+
+test('every state\'s words from the CLI are drawn as characters, never as markup', async () => {
+  const evil = '<img src=x onerror=alert(1)><script>alert(2)</script>';
+  for (const first of [
+    { ok: false, error: { kind: 'not-a-repo', message: evil, dir: evil } },
+    { ok: false, error: { kind: 'git-bash-missing', message: evil, tried: [evil] } },
+    data({ status: null, statusError: evil }),
+    data({ conditions: { login: { ...LOGIN, message: evil }, runners: null } }),
+    data({ conditions: { login: null, runners: { ...RUNNER, message: evil, fix: evil } } }),
+  ]) {
+    const { app } = boot(withStateApi(first));
+    await tick();
+    assert.ok(text(stateOf(app)).includes(evil));
+    const tags = new Set(app.all().map((e) => e.tagName));
+    for (const bad of ['img', 'script', 'iframe', 'a']) assert.ok(!tags.has(bad), `no <${bad}>`);
+  }
+});
+
+test('the picture of each state is one svg, and the whole-pane ones fill the main area', async () => {
+  for (const [first, whole] of [
+    [{ ok: false, error: { kind: 'not-a-repo', message: 'x' } }, true],
+    [{ ok: false, error: { kind: 'git-bash-missing', message: 'x', tried: [] } }, true],
+    [data({ all: { batches: [] }, selected: null, status: null }), true],
+    [data({ status: null, statusError: 'x' }), true],
+    [data({ conditions: { login: LOGIN, runners: null } }), false],
+  ]) {
+    const { app } = boot(withStateApi(first));
+    await tick();
+    const st = stateOf(app);
+    assert.ok(st.all().some((e) => e.tagName === 'svg'));
+    assert.equal(st.tagName === 'main', whole);
+  }
 });

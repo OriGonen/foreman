@@ -12,7 +12,7 @@
 const fs = require('fs');
 const path = require('path');
 const { pathToFileURL } = require('url');
-const { app, BrowserWindow, ipcMain, shell, session, Menu, nativeTheme } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, session, Menu, nativeTheme, dialog, clipboard } = require('electron');
 const { findGitBash } = require('./bash.cjs');
 const { createForeman, findRepoRoot, ForemanError } = require('./foreman.cjs');
 const { createWatcher } = require('./watch.cjs');
@@ -21,6 +21,8 @@ const { createTicketFiles } = require('./ticket.cjs');
 const { createRunner } = require('./runner.cjs');
 const { createLive, onlyControlFiles } = require('./live.cjs');
 const { checkBatchPath } = require('./foreman.cjs');
+const { createConditions } = require('./conditions.cjs');
+const { INIT_COMMAND } = require('./states.js');
 const { repoFromArgv, refuseNavigation, openWindowHandler, repoPath } = require('./guard.cjs');
 
 const PAGE = path.join(__dirname, 'index.html');
@@ -29,10 +31,12 @@ let win = null;
 let ctx = null;            // { repoRoot, overview } once Git Bash and the repository are known
 let watcher = null;
 let fullBounds = null;     // the window's size and place before the compact view; gone when the app closes
+let chosenDir = null;      // the folder picked in "not a git repo", for this window's life only; nothing is stored
+let lastOverview = null;   // the overview last sent, to send again when a slower read (the doctor) has news
 
 
 function describe(e) {
-  return { kind: e.kind || 'spawn', message: e.message || String(e), tried: e.tried || null };
+  return { kind: e.kind || 'spawn', message: e.message || String(e), tried: e.tried || null, dir: e.dir || null };
 }
 
 async function setup() {
@@ -42,7 +46,7 @@ async function setup() {
       'foreman runs in Git Bash, and none was found. Install Git for Windows (https://gitforwindows.org), or set FOREMAN_BASH to its bash.exe.',
       { tried: found.tried });
   }
-  const dir = path.resolve(repoFromArgv(process.argv, process.defaultApp) || process.cwd());
+  const dir = path.resolve(chosenDir || repoFromArgv(process.argv, process.defaultApp) || process.cwd());
   const repoRoot = await findRepoRoot({ bash: found.bash, dir });
   const checkout = path.resolve(__dirname, '..');
   const foreman = createForeman({ bash: found.bash, checkout, repoRoot });
@@ -51,7 +55,16 @@ async function setup() {
   const tickets = createTicketFiles({ repoRoot, foreman, known: (b) => overview.statusOf(b) });
   const runner = createRunner({ bash: found.bash, checkout, repoRoot });
   const live = createLive({ repoRoot, foreman });
-  ctx = { repoRoot, overview, foreman, tickets, runner, live };
+  // The two states that need a second read (a runner missing, a login expired). The doctor is read behind
+  // the overview, and the window is sent the overview again when it has news.
+  const conditions = createConditions({
+    foreman, readConf, env: process.env,
+    onChange: async (batch) => {
+      if (!lastOverview || lastOverview.selected !== batch || !ctx || ctx.conditions !== conditions) return;
+      push(await conditions.decorate(lastOverview, { fresh: false }));
+    },
+  });
+  ctx = { repoRoot, overview, foreman, tickets, runner, live, conditions };
   watcher = createWatcher({
     // A change to anything in a batch — a status line flipped in an editor, the loop landing a
     // ticket — is a reason to read again. A change only to a run's feed, activity or budget is a
@@ -65,7 +78,7 @@ async function setup() {
       }
       const data = await overview.refresh();
       if (!data) return null;
-      return { overview: data, run: await liveOf(data, true) };
+      return { overview: await ctx.conditions.decorate(data, { fresh: false }), run: await liveOf(data, true) };
     },
     onResult: (r) => {                                       // null: the person moved on meanwhile
       if (!r) return;
@@ -83,6 +96,7 @@ async function liveOf(data, record) {
 }
 
 function push(data) {
+  if (data && data.ok) lastOverview = data;
   if (win && !win.isDestroyed()) win.webContents.send('overview:update', data);
 }
 function pushRun(batch, run) {
@@ -101,10 +115,38 @@ ipcMain.handle('overview:load', async (event, batch) => {
     if (!ctx) await setup();
     const data = await ctx.overview.load(typeof batch === 'string' ? batch : null);
     await watcher.start();
-    return data;
+    const shown = await ctx.conditions.decorate(data, { fresh: true });
+    if (shown && shown.ok) lastOverview = shown;
+    return shown;
   } catch (e) {
     return { ok: false, error: describe(e) };
   }
+});
+
+// "Not a git repo": pick the folder that holds the repo. The window is then opened on it afresh — what it
+// was reading is let go, the folder is a variable and nothing more, and the page asks to load again.
+// Cancelling the picker changes nothing.
+ipcMain.handle('repo:choose', async (event) => {
+  if (!trusted(event) || !win || win.isDestroyed()) return { ok: false, error: describe(new Error('refused')) };
+  try {
+    const picked = await dialog.showOpenDialog(win, { properties: ['openDirectory'], title: 'Choose the folder that holds your repository' });
+    if (picked.canceled || !picked.filePaths || picked.filePaths.length === 0) return { ok: true, chosen: false };
+    if (watcher) { watcher.stop(); watcher = null; }
+    ctx = null;
+    lastOverview = null;
+    chosenDir = picked.filePaths[0];
+    return { ok: true, chosen: true };
+  } catch (e) {
+    return { ok: false, error: describe(e) };
+  }
+});
+
+// "No batch": the command the state shows, put on the clipboard. The text is the app's constant, not
+// anything the page sends.
+ipcMain.handle('clipboard:init', (event) => {
+  if (!trusted(event)) return false;
+  clipboard.writeText(INIT_COMMAND);
+  return true;
 });
 
 // A dry run is free: foreman prints what would run and the prompt, and sends nothing. The batch is
