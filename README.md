@@ -41,6 +41,8 @@ foreman run .scratch/my-batch --unlimited # until done or a budget stops it
 
 Everything marked *(free)* makes no model call and starts no sandbox.
 
+On Windows there is also [a desktop app](#the-desktop-app-windows): `foreman gui`, plus `--json` on the read-only commands, `foreman keys` and `foreman stop`.
+
 ## What it looks like
 
 <table>
@@ -853,6 +855,289 @@ foreman report .scratch/my-batch --failures   # only what went wrong
 ```
 
 That tool is manual and is never invoked by the loop.
+
+## The desktop app (Windows)
+
+An optional window onto the same loop, for people on Windows who would rather look at a
+batch than run `foreman status` again. It reads the same files the CLI reads, and it starts the
+same `foreman run`. Nothing in this section is needed to use foreman: with the app not installed,
+every command prints what it printed before.
+
+It has three rules.
+
+- **The files are the truth.** The app keeps nothing of its own: no database, no settings file,
+  no remembered caps, not even its window size. What it shows comes from the ticket status
+  lines, `order.md`, `foreman.conf`, `progress.txt`, `foreman-runs.jsonl`, `foreman-runs.log`
+  and a running loop's control directory (below). Close it mid-run and reopen it, and it shows
+  what the files say.
+- **One loop.** The app never decides what runs next, whether a budget is spent or whether a
+  ticket landed. It asks the CLI (`--json`, below) and shows the answer. A run it starts is a
+  plain `foreman run`, started detached, so it outlives the window the way a run in a closed
+  terminal tab would.
+- **The terminal is unchanged.** Every addition below is new: new flags, two new commands, a
+  directory and a few lines in files. No existing command's output changes by a byte, and
+  `foreman help` is as it was.
+
+It never shows a secret (the doctor screen says `set` or `unset`, and never a value), never runs a
+loop of its own, and never writes `foreman.conf`. The one file of yours it edits is a human
+ticket's handoff file, from the ticket page, when you press Save.
+
+It is **Windows only**: the shortcut, the window and the way it stops a run are all Windows.
+The CLI is not affected on any other system, and has no use for the app there.
+
+### Install, update, remove
+
+```bash
+bash install.sh                # at a terminal, asks once: CLI only, or CLI and the desktop app
+bash install.sh --gui          # also install the app, without asking
+bash install.sh --no-gui       # CLI only, and remove the app if it is there, without asking
+```
+
+The question is the **wizard**. It is asked only when both stdin and stdout are terminals and
+the app is not already installed; a pipe, CI and a script's capture are never asked, and get the
+CLI as they always did. `--gui` runs `npm ci` in the checkout's `gui/` (about 250 MB, Electron is
+the app's one dependency) and writes a Start-menu shortcut, `Foreman`. The app has no installer
+of its own: it runs from the checkout, like the rest of foreman.
+
+**Update** it the way you update the CLI:
+
+```bash
+cd ~/tools/foreman && git pull && bash install.sh
+```
+
+The app's code is in the checkout, so the pull is the update. `foreman doctor` says
+`desktop app installed · in sync` on a machine that has it, or `out of date: rerun install.sh`
+when a pull changed the app's dependencies; `bash install.sh --gui` brings them up to date.
+
+**Remove** it with `bash install.sh --no-gui` (the app and its shortcut; the CLI stays), or
+`bash install.sh --uninstall` (everything `install.sh` put on the machine). Removing `gui/` would
+leave foreman exactly as it was before the app. Close the app first: Windows will not delete
+`electron.exe` while it runs.
+
+### `foreman gui`
+
+```bash
+foreman gui              # the app, on the repository you are standing in
+foreman gui path/to/dir  # on the repository that holds that directory
+```
+
+It opens the app detached and returns at once. A directory outside any repository is not an
+error: the app opens on a "not a git repo" screen and lets you pick a folder. Without the app
+installed it says so, exits 1, and, at a terminal, offers to install it (`Install it now? [y/N]`).
+
+### What each screen is, and what it costs
+
+| Screen | What it does | Cost |
+|---|---|---|
+| Overview | the batch as a dome with the sun as high as the share of tickets landed, the next ticket, the human ticket waiting, then the order with each ticket's spend (`foreman status`) | free |
+| Ticket | the ticket and its handoff file side by side; a finished ticket shows its runs, runtime, tokens and model | free |
+| Dry run | what would run, how far the budget reaches, the settings and the exact prompt (`foreman dry-run`) | free |
+| Report | the bill, by run or by ticket (`foreman report`) | free |
+| Doctor | the checks, and **Fix what it can…**, which shows what `foreman doctor --fix` would append before it does | free |
+| **Save handoff** | writes the handoff file in the batch | free |
+| `+`, `-`, `L` in a run, **Stop after this one**, **Stop now…** | `foreman keys`, `foreman stop` | free |
+| **Start run…** and **Resume…** | `foreman run`: a confirmation first, which shows the bill (the cap, if one is set, and what the run could reach) | **paid** |
+
+Only starting or resuming a run spends money, and the app always shows the confirmation before it
+does. A cap edited in the confirmation (spend, time) is passed to that one run as an environment
+variable, as `FOREMAN_MAX_COST_USD=10 foreman run <batch>` would be; the app never writes it into
+`foreman.conf`, and the next confirmation starts again from the file. **Stop after this one**
+lets the iteration in flight finish (and be paid for); **Stop now…** asks first.
+
+Start run needs the control directory to be in the batch (below). Without it the button reads
+"Starting from the app needs `doctor --fix`", and the overview says "Steering needs `doctor --fix`".
+
+### What it added to the CLI
+
+Everything the app does goes through these. They are ordinary commands: use them in scripts.
+
+#### `--json`
+
+`foreman status`, `dry-run`, `report` and `doctor` take `--json`, which prints one JSON object on
+one line instead of the picture or the text. No colour, no show, and (like every command) free.
+Every object has `foreman_json`, the version of the shape, and `command`. **`foreman_json` is
+bumped only on an incompatible change**; adding a key is not one, so read what you need and
+ignore the rest. Paths are repo-relative with forward slashes. The repository root is in the
+mixed form (`C:/x`).
+
+**`foreman status --json [<batch>] [--all]`**: the batch, its tickets in order, what is next,
+where a run stops for a human, and the last and the running run. Shortened:
+
+```json
+{
+  "foreman_json": 1, "command": "status",
+  "repo_root": "C:/Projects/site", "batch": { "path": ".scratch/site", "name": "site" },
+  "counts": { "done": 2, "total": 3 },
+  "next": { "file": ".scratch/site/issues/03-review.md", "human": true, "handoff": null, "sent_back_by": null },
+  "human_remaining": 1,
+  "run_until": { "tickets": 0, "stop": ".scratch/site/issues/03-review.md", "text": "…" },
+  "warnings": [], "spent_usd": 0.02, "runs": 1,
+  "tickets": [ { "file": ".scratch/site/issues/DONE_01-header.md", "number": "01", "title": "Build the header",
+                 "status": "implemented", "state": "done", "done": true, "human": false,
+                 "blocked_by": null, "checks": null, "handoff": null, "spent_usd": 0.01, "stats": { "…": "…" } } ],
+  "last_run": { "id": "20261115T184823Z-550774", "end": "waiting_on_human", "exit": 30,
+                "reason": ".scratch/site/issues/03-review.md" },
+  "run": { "in_flight": true, "id": "20261115T185055Z-553755", "started_at": "2026-11-15T18:50:55Z",
+           "iteration": 1, "budget": 2, "live": false, "control_dir": ".scratch/site/.foreman-run",
+           "pid": { "msys": 553755, "windows": 553755 } }
+}
+```
+
+A ticket that has run also has `stats`: its iterations, `cost_usd`, `duration_ms` (summed), `turns`,
+`tokens`, `models` (each model the record names, in the order first seen) and `runs`, one row per
+iteration with its run id, the outcome word `foreman report` uses (`landed`, …), cost and duration:
+
+```json
+"stats": { "iterations": 1, "cost_usd": 0.01, "duration_ms": 1200, "turns": 3,
+           "tokens": { "input": 1000, "output": 200, "cache_read": 5000, "cache_creation": 300 },
+           "models": ["claude-sonnet-5-5"],
+           "runs": [ { "run": "20261115T184823Z-550774", "kind": "iteration", "outcome": "landed",
+                       "cost_usd": 0.01, "duration_ms": 1200,
+                       "started_at": "2026-11-15T18:48:23Z", "finished_at": "2026-11-15T18:48:24.196Z" } ] }
+```
+
+`last_run.end` is `complete` (exit 0), `paused` (10), `needs_human` (20) or `waiting_on_human` (30);
+`reason` is the stop's own words: the budget that was reached (10), the human ticket (30) or the `# reason:` line (20, below). `run.in_flight` is true while
+the loop's pid is alive; the rest of `run` is read from its control directory, and is all `null`
+when no run is in flight. `--all` lists every
+batch in the repository with its counts only:
+
+```json
+{ "foreman_json": 1, "command": "status", "all": true, "repo_root": "C:/Projects/site",
+  "batches": [ { "path": ".scratch/site", "name": "site", "finished": false,
+                 "counts": { "done": 2, "total": 3 }, "human_remaining": 1,
+                 "next": ".scratch/site/issues/03-review.md", "error": null } ] }
+```
+
+**`foreman dry-run --json [<batch>]`**: what a run would do, the settings `dry-run` prints, and the
+exact prompt. Nothing is sent and no sandbox starts (free, like `dry-run`). `would_run.tickets` is
+what the iteration budget reaches; `remaining` is every ticket still to do, each with a `state` of
+`run`, `later` or `stop` (the first human ticket); `stops_at.reached` says whether the budget
+gets that far.
+
+```json
+{ "foreman_json": 1, "command": "dry-run", "batch": { "path": ".scratch/site", "name": "site" },
+  "counts": { "done": 0, "total": 3 },
+  "would_run": { "tickets": [ { "file": ".scratch/site/issues/01-header.md", "title": "Build the header", "human": false } ],
+                 "remaining": [ { "file": ".scratch/site/issues/01-header.md", "state": "run" },
+                                { "file": ".scratch/site/issues/02-footer.md", "state": "later" },
+                                { "file": ".scratch/site/issues/03-review.md", "state": "stop" } ],
+                 "stops_at": { "file": ".scratch/site/issues/03-review.md", "reached": false } },
+  "settings": { "exec": "sandbox", "perms": "acceptEdits", "model": "claude-sonnet-5-5", "effort": "high",
+                "live": false,
+                "budgets": { "cost_usd": null, "minutes": null, "iterations": 1, "text": "cost=unlimited  time=unlimited  iterations=1" },
+                "logs": { "jsonl": ".scratch/site/foreman-runs.jsonl", "log": ".scratch/site/foreman-runs.log" } },
+  "warnings": [],
+  "prompt": { "for": ".scratch/site/issues/01-header.md", "text": "@.scratch/site/issues/01-header.md\n\nImplement the attached ticket…" } }
+```
+
+(Entries are shortened here; the real ones also carry `name`, `number`, `slug`, `checks` and
+`handoff`.) `prompt` is `null` when the next ticket is a human one.
+
+**`foreman report --json [<batch>] [--run <id>] [--by-ticket]`**: the totals and the rows
+`foreman report` shows, from the same code. Rows are per run, or per ticket with `--by-ticket`;
+`--run <id>` adds a `run` object with each iteration's outcome word.
+
+```json
+{ "foreman_json": 1, "command": "report", "batch": { "path": ".scratch/site", "name": "site" },
+  "log": ".scratch/site/foreman-runs.jsonl", "by": "run",
+  "totals": { "runs": 1, "iterations": 2, "landed": 2, "progressed": 0, "stalled": 0, "unproductive": 0,
+              "checkpoints": 0, "limit_hits": 0, "unreadable": 0,
+              "tokens": { "input": 2000, "output": 400, "cache_read": 10000, "cache_write": 600, "billed": 2400 },
+              "cost_usd": 0.02, "minutes": 0.04, "turns": 6,
+              "per_iteration": { "cost_usd": 0.01, "billed_tokens": 1200 } },
+  "rows": [ { "id": "20261115T184823Z-550774", "started_at": "2026-11-15T18:48:23Z", "iterations": 2,
+              "landed": 2, "cost_usd": 0.02, "minutes": 0.04, "turns": 6 } ] }
+```
+
+**`foreman doctor --json`**: each section's rows, the verdict and the next command. A row's `result`
+is `ok`, `warn` or `fail`. **Credentials appear only as `"set"` or `"unset"`**: a value, or part
+of one, is never in it. `doctor --fix --json` adds a `fix` object saying what it appended.
+
+```json
+{ "foreman_json": 1, "command": "doctor", "repo": "C:/Projects/site", "rev": "90410b2", "date": "15 Nov 2026",
+  "sections": [ { "id": "repository", "title": "Repository", "rows": [
+      { "result": "fail", "label": "foreman-runs.log not ignored", "detail": "",
+        "fix": "foreman doctor --fix appends it to .gitignore", "auto": true, "notes": [] } ], "info": [] } ],
+  "counts": { "ok": 9, "warn": 0, "fail": 1 },
+  "verdict": { "passed": false, "label": "NOT PASSED", "detail": "1 to fix", "fixable": 1, "blockers": 0 },
+  "next": { "label": "next", "command": "foreman doctor --fix" },
+  "credentials": [ { "name": "FOREMAN_DOCKER_USERNAME", "state": "unset" }, { "name": "FOREMAN_DOCKER_PAT", "state": "unset" } ] }
+```
+
+#### The control directory
+
+A running loop keeps its live budget, live switch, iteration and the rest in a **control
+directory**. In a terminal it is a temporary directory only that terminal's keys can reach. When
+the repository ignores `**/.foreman-run/`, it is `<batch>/.foreman-run/` instead, and that is what
+lets another process (the app, `foreman keys`, `foreman stop`) steer the run. It holds today's
+files (`budget`, `live`, `iteration`, `screen`, `activity`, `foot`, `spent`) and three new ones:
+
+| file | holds |
+|---|---|
+| `pid` | the loop's MSYS pid and Windows pid |
+| `run` | the run id and when it started |
+| `feed` | the tool-call lines `--live` shows, one per line, truncated at each iteration, written only while live is on |
+
+The loop removes it when the run ends (and before any `DONE_` rename), except `out`: the output
+of a run the app started. It is disposable and never a record of anything, like the stall marker.
+
+The ignore line is `**/.foreman-run/`, with a comment above it. `foreman doctor` checks for it,
+`doctor --fix` appends it, and `foreman init` writes it, **only when the app is installed**. On a
+machine without the app, `doctor`, `init` and `--fix` behave and print exactly as before. Without
+the line the run keeps the temporary directory: the app can show it but cannot steer it, and
+`keys` and `stop` say so.
+
+#### `foreman keys`
+
+```bash
+foreman keys .scratch/site + +     # two more iterations, as pressing + twice in the run's terminal
+foreman keys .scratch/site -       # one fewer; never below the iteration already running
+foreman keys .scratch/site L       # the live view, on or off
+```
+
+Applies keys to the batch's running loop as if they were pressed in its terminal. It is free.
+With no run in flight, or the control directory not in the batch, it prints one line and exits 1:
+
+```text
+foreman keys: no run in flight in .scratch/site, or its control directory is not in the batch (that needs **/.foreman-run/ in .gitignore)
+```
+
+#### `foreman stop`
+
+```bash
+foreman stop .scratch/site         # finish this iteration, then pause
+foreman stop .scratch/site --now   # end the run at once, as Ctrl-C in its terminal does
+```
+
+Without `--now` it sets the budget to the iteration in flight, exactly as pressing `-` down to it
+would: the run finishes that iteration and pauses (exit 10, "budget reached"). With `--now` it does
+what Ctrl-C does, for a run that has no terminal to press it in: the loop's own interrupt handling
+runs, the stall marker stays, and the next run's review turn picks the ticket up. The ticket's
+uncommitted work is kept. `stop --now` waits until the loop has finished (60 seconds at most,
+`FOREMAN_STOP_WAIT`) and, if it has not, says so and does not kill it. Both are free, and both need
+the control directory in the batch, like `keys`.
+
+#### `# reason:`
+
+A run that stops because it needs a human (exit 20) has always told the terminal why: a red flag,
+an expired login, attempts spent, a dirty tree. It now also writes that line to `foreman-runs.log`,
+right after `# stopped: needs a human`:
+
+```text
+# stopped: needs a human
+# reason: .scratch/site/issues/02-footer.md was not attempted: the agent could not authenticate (its login has expired or was revoked). Retrying cannot help, so the run stops here.
+```
+
+It is a new line in a log file, not in any command's output, and `status --json` returns it as
+`last_run.reason`.
+
+#### `model` in `foreman-runs.jsonl`
+
+Each line of the record now has a `model` field, the model that iteration ran on (a checkpoint
+turn's line too). Older lines have none. It is what `status --json` sums into a ticket's
+`stats.models`. The loop still never reads the record: only `report` and the `--json` flags do,
+to show you what a run cost.
 
 ## Files
 
