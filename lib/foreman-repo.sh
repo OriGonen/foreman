@@ -165,6 +165,14 @@ foreman_app_installed() {
   [ -e "$_FOREMAN_REPO_SH_DIR/../gui/node_modules/electron" ]
 }
 
+# Whether what is installed is what this checkout asks for: success unless `gui/package-lock.json` is
+# newer than `gui/node_modules`, which `npm ci` (install.sh --gui) makes anew each time it runs. A
+# checkout with no lockfile has nothing newer to be out of step with. Only meaningful once
+# foreman_app_installed says yes; doctor's MACHINE line is its one reader. Two stats, no process.
+foreman_app_in_sync() {
+  ! [ "$_FOREMAN_REPO_SH_DIR/../gui/package-lock.json" -nt "$_FOREMAN_REPO_SH_DIR/../gui/node_modules" ]
+}
+
 # The one line the desktop app needs in .gitignore, and the comment that goes with it: a run's control
 # directory lives in its batch when the repository ignores this, and that is what lets the app (and
 # `foreman keys`) steer a run. `foreman doctor` checks for it and `--fix` appends it, `foreman init`

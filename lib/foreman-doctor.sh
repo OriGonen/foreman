@@ -216,6 +216,7 @@ for _foreman_skill_md in "$FOREMAN_HOME"/skills/*/SKILL.md; do
   _foreman_skill_name="${_foreman_skill_md%/SKILL.md}"; _foreman_skill_name="${_foreman_skill_name##*/}"
   [ ! -f "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/$_foreman_skill_name/$_foreman_skill_marker" ] || _expect=$((_expect + 1))
 done
+foreman_app_installed && _expect=$((_expect + 1))    # the desktop app's line
 _fact "expect"$'\t'"$_expect"
 
 # The last assignment of a scalar FOREMAN_* in a conf, unquoted. doctor deliberately does not
@@ -269,6 +270,18 @@ while IFS=' ' read -r tool mode; do
     fi
   fi
 done <<< "$runners"
+
+# The desktop app, when it is installed (and nothing at all when it is not, so a machine without it
+# gets the doctor it always had): either what the checkout asks for, or behind it. Behind is a
+# warning, never a failure — the app still works, and only install.sh --gui brings it up to date.
+if foreman_app_installed; then
+  if foreman_app_in_sync; then
+    ok "desktop app installed · in sync"
+  else
+    warn "desktop app installed · out of date: rerun install.sh"
+    _hint "run: bash $FOREMAN_HOME/install.sh --gui"
+  fi
+fi
 
 # ---------------------------------------------------------------------------
 # The installed skill copies, one per skill install.sh put on this machine. Free (no

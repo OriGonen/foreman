@@ -148,6 +148,7 @@ case "$cmd" in
   next)      exec bash "$LIB/foreman-next.sh" "$@" ;;
   report)    report "$@" ;;
   doctor)    exec bash "$LIB/foreman-doctor.sh" "$@" ;;
+  gui)       exec bash "$LIB/foreman-gui.sh" "$@" ;;
   keys|stop) exec bash "$LIB/foreman-control.sh" "$cmd" "$@" ;;
   convert)   convert "$@" ;;
   help|--help|-h)        usage_show; usage; exit 0 ;;

@@ -2176,6 +2176,195 @@ if case_is "golden: foreman help is unchanged by keys and stop, which are comman
 fi
 
 # ---------------------------------------------------------------------------
+# foreman gui, and doctor's desktop-app line
+# ---------------------------------------------------------------------------
+
+# A toolkit with a stub desktop app, or without one: a copy of bin/ and lib/ (the app is looked for
+# beside them, as foreman_app_installed does), an install.sh that only logs, and for `app` a stub
+# electron.exe that records how it was started — its arguments, directory, whether it was handed a
+# terminal, and its session — and then stays a while, as the real one does.
+gui_toolkit() {    # gui_toolkit NAME app|noapp : the copy's foreman in $GUI_FOREMAN, its directory in $GUI_TK
+  GUI_TK="$WORK/gui-$1"
+  mkdir -p "$GUI_TK/gui" && cp -R "$FOREMAN_HOME/bin" "$FOREMAN_HOME/lib" "$GUI_TK/"
+  cat > "$GUI_TK/gui/stub-electron.sh" <<'STUB'
+#!/bin/bash
+{
+  echo "ARGS=$*"; echo "CWD=$PWD"
+  for fd in 0 1 2; do if [ -t "$fd" ]; then echo "TTY$fd=yes"; else echo "TTY$fd=no"; fi; done
+  echo "SID=$(ps -o sid= -p $$ | tr -d ' ')"; echo "AS_NODE=${ELECTRON_RUN_AS_NODE:-unset}"; echo "END"
+} > "$FAKE_LOG.tmp" && mv "$FAKE_LOG.tmp" "$FAKE_LOG"
+sleep "${FAKE_SLEEP:-0}"
+STUB
+  cat > "$GUI_TK/install.sh" <<'STUB'
+#!/bin/bash
+echo "INSTALL $*" >> "$FAKE_LOG.install"
+[ "${FAKE_INSTALL_STATUS:-0}" -eq 0 ] || exit "$FAKE_INSTALL_STATUS"
+d="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/gui/node_modules/electron/dist"
+mkdir -p "$d" && cp "$(dirname "${BASH_SOURCE[0]}")/gui/stub-electron.sh" "$d/electron.exe" && chmod +x "$d/electron.exe"
+STUB
+  if [ "$2" = app ]; then
+    mkdir -p "$GUI_TK/gui/node_modules/electron/dist"
+    cp "$GUI_TK/gui/stub-electron.sh" "$GUI_TK/gui/node_modules/electron/dist/electron.exe"
+    chmod +x "$GUI_TK/gui/node_modules/electron/dist/electron.exe"
+  fi
+  GUI_FOREMAN="$GUI_TK/bin/foreman"
+}
+# The stub's record, once it has written it (it is started detached, so there is no waiting on it).
+gui_stub_started() { grep -qx END "$FAKE_LOG" 2>/dev/null; }
+gui_log() { sed -n "s/^$1=//p" "$FAKE_LOG"; }
+now_ms() { date +%s%3N; }
+
+if case_is "foreman gui: starts electron.exe on the gui directory and the repo, detached, and returns at once"; then
+  gui_toolkit app app
+  repo="$WORK/gui-repo"; copy_fixture "$WORK/template" "$repo" 2
+  mkdir -p "$repo/batch/deeper"
+  repo_top="$(git -C "$repo" rev-parse --show-toplevel)"
+  export FAKE_LOG="$WORK/gui-stub.log"; rm -f "$FAKE_LOG"
+  t0="$(now_ms)"
+  # Its output is captured: a process that kept the terminal's stdout open would hold this until it exits.
+  OUT="$(cd "$repo/batch/deeper" && FAKE_SLEEP=6 ELECTRON_RUN_AS_NODE=1 "$GUI_FOREMAN" gui 2>&1 < /dev/null)"; ST=$?
+  t1="$(now_ms)"
+  assert_eq "$ST" 0 "exit 0"
+  assert_eq "$OUT" "" "it prints nothing when it works"
+  [ $((t1 - t0)) -lt 2500 ] && pass || fail "foreman gui returned after $((t1 - t0)) ms while the app was still running"
+  wait_until 5 gui_stub_started && pass || fail "the stub electron.exe never started"
+  assert_eq "$(gui_log ARGS)" "$GUI_TK/gui $repo_top" "electron.exe gets the gui directory and the repo root, not the directory it was run from"
+  assert_eq "$(gui_log TTY0)$(gui_log TTY1)$(gui_log TTY2)" "nonono" "the app is handed no terminal"
+  assert_eq "$(gui_log AS_NODE)" "unset" "a ELECTRON_RUN_AS_NODE left by another tool does not turn electron into node"
+  caller_sid="$(ps -o sid= -p $$ | tr -d ' ')"
+  [ -n "$(gui_log SID)" ] && [ "$(gui_log SID)" != "$caller_sid" ] && pass || fail "the app is in its own session (it was in $(gui_log SID), the caller's is $caller_sid)"
+
+  # An explicit directory: the repo that holds it, wherever the shell is.
+  rm -f "$FAKE_LOG"
+  OUT="$(cd "$WORK" && "$GUI_FOREMAN" gui "$repo/batch" 2>&1 < /dev/null)"; ST=$?
+  assert_eq "$ST" 0 "gui <dir>: exit 0"
+  wait_until 5 gui_stub_started && pass || fail "gui <dir>: the stub never started"
+  assert_eq "$(gui_log ARGS)" "$GUI_TK/gui $repo_top" "gui <dir>: the repo that holds the directory"
+
+  # Outside any repo it opens anyway, on the directory, for the app to say what is wrong with it.
+  outside="$WORK/gui-outside"; mkdir -p "$outside"
+  rm -f "$FAKE_LOG"
+  OUT="$(cd "$outside" && GIT_CEILING_DIRECTORIES="$WORK" "$GUI_FOREMAN" gui 2>&1 < /dev/null)"; ST=$?
+  assert_eq "$ST" 0 "outside a repo: exit 0"
+  wait_until 5 gui_stub_started && pass || fail "outside a repo: the stub never started"
+  assert_eq "$(gui_log ARGS)" "$GUI_TK/gui $outside" "outside a repo: the app gets the directory, so it can show 'not a git repo'"
+
+  # A directory that is not there is refused, and nothing is started.
+  rm -f "$FAKE_LOG"
+  OUT="$(cd "$repo" && "$GUI_FOREMAN" gui "$WORK/no-such-dir" 2>&1 < /dev/null)"; ST=$?
+  assert_eq "$ST" 1 "a missing directory: exit 1"
+  assert_contains "$OUT" "no-such-dir" "a missing directory: names it"
+  sleep 0.3; [ ! -e "$FAKE_LOG" ] && pass || fail "a missing directory: nothing is started"
+  # Too many arguments, or an option nobody knows.
+  OUT="$(cd "$repo" && "$GUI_FOREMAN" gui a b 2>&1 < /dev/null)"; assert_eq "$?" 1 "two directories: exit 1"
+  assert_contains "$OUT" "Usage: foreman gui [<dir>]" "two directories: the usage"
+  OUT="$(cd "$repo" && "$GUI_FOREMAN" gui --nope 2>&1 < /dev/null)"; assert_eq "$?" 1 "an unknown option: exit 1"
+  unset FAKE_LOG
+fi
+
+if case_is "foreman gui: with no app it says so and exits 1 without a terminal, and at one it offers to install it"; then
+  gui_toolkit noapp noapp
+  repo="$WORK/gui-noapp-repo"; copy_fixture "$WORK/template" "$repo" 2
+  repo_top="$(git -C "$repo" rev-parse --show-toplevel)"
+  export FAKE_LOG="$WORK/gui-noapp.log"; rm -f "$FAKE_LOG" "$FAKE_LOG.install"
+  OUT="$(cd "$repo" && "$GUI_FOREMAN" gui 2>&1 < /dev/null)"; ST=$?
+  assert_eq "$ST" 1 "no terminal: exit 1"
+  assert_eq "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" 1 "no terminal: one line"
+  assert_contains "$OUT" "desktop app is not installed" "no terminal: says so"
+  assert_contains "$OUT" "install.sh --gui" "no terminal: and how to install it"
+  assert_missing "$OUT" "[y/N]" "no terminal: asks nothing"
+  # A terminal on only one side is not a conversation either.
+  OUT="$(cd "$repo" && "$GUI_FOREMAN" gui 2>&1 < /dev/null | cat)"
+  assert_missing "$OUT" "[y/N]" "stdout piped: asks nothing"
+  [ ! -e "$FAKE_LOG.install" ] && pass || fail "nothing is installed without a yes"
+
+  have_script=0; command -v script >/dev/null 2>&1 && have_script=1
+  # (The pty stays open half a second after foreman returns: script ends the session the moment its
+  # command does, and kills an app that has only just been forked — a terminal does not.)
+  at_tty() {    # at_tty ANSWER DIR : foreman gui under a pty, ANSWER typed at the prompt; output in $OUT, status in $ST
+    (cd "$2" && printf '%s' "$1" | script -qec "'$GUI_FOREMAN' gui; st=\$?; sleep 0.5; exit \$st" /dev/null > "$WORK/tty.out" 2>&1; exit "${PIPESTATUS[1]}"); ST=$?
+    OUT="$(tr -d '\r' < "$WORK/tty.out")"
+  }
+  if [ "$have_script" -eq 1 ]; then
+    # The default is no.
+    at_tty $'\n' "$repo"
+    assert_contains "$OUT" "[y/N]" "terminal: asks"
+    assert_eq "$ST" 1 "terminal, Enter: exit 1"
+    assert_contains "$OUT" "desktop app is not installed" "terminal: the same line first"
+    [ ! -e "$FAKE_LOG.install" ] && pass || fail "terminal, Enter: nothing is installed"
+    at_tty $'n\n' "$repo"
+    [ ! -e "$FAKE_LOG.install" ] && pass || fail "terminal, n: nothing is installed"
+    sleep 0.3; [ ! -e "$FAKE_LOG" ] && pass || fail "terminal, n: nothing is started"
+
+    # A failed install is a failure, and the app is not started.
+    FAKE_INSTALL_STATUS=3 at_tty $'y\n' "$repo"
+    assert_eq "$(cat "$FAKE_LOG.install")" "INSTALL --gui" "terminal, y: runs install.sh --gui"
+    assert_eq "$ST" 3 "a failed install: the installer's own exit code"
+    sleep 0.3; [ ! -e "$FAKE_LOG" ] && pass || fail "a failed install starts nothing"
+    rm -f "$FAKE_LOG.install"
+
+    # Yes installs, and then opens the app, as the person asked.
+    FAKE_SLEEP=0 at_tty $'y\n' "$repo"
+    assert_eq "$(cat "$FAKE_LOG.install")" "INSTALL --gui" "terminal, y: install.sh --gui, once"
+    assert_eq "$ST" 0 "terminal, y: exit 0"
+    wait_until 5 gui_stub_started && pass || fail "terminal, y: the app opens once it is installed"
+    assert_eq "$(gui_log ARGS)" "$GUI_TK/gui $repo_top" "terminal, y: on the repo"
+  else
+    printf '  (script is not on PATH: the terminal cases are skipped)\n'
+  fi
+  # A half install — electron's directory without its executable — is the same as none.
+  gui_toolkit half noapp; mkdir -p "$GUI_TK/gui/node_modules/electron"
+  OUT="$(cd "$repo" && "$GUI_FOREMAN" gui 2>&1 < /dev/null)"; ST=$?
+  assert_eq "$ST" 1 "an electron with no executable: exit 1"
+  assert_contains "$OUT" "install.sh --gui" "an electron with no executable: says how to repair it"
+  unset FAKE_LOG
+fi
+
+if case_is "doctor: the desktop app's line is in MACHINE only when the app is installed, in sync or out of date"; then
+  mkdir -p "$WORK/doctor-home"
+  repo="$WORK/gui-doctor"; doctor_golden_repo "$repo" ready
+  gui_doctor() {    # gui_doctor TOOLKIT_FOREMAN [args] : doctor in $repo, in $OUT
+    OUT="$(cd "$repo" && HOME="$WORK/doctor-home" FOREMAN_SHOW=never FOREMAN_COLOR=never "$1" doctor "${@:2}" 2>"$WORK/stderr")"; ST=$?
+  }
+  json_row() { jv "$OUT" "JSON.stringify(j.sections.find(s => s.id === 'machine').rows.filter(r => /desktop app/.test(r.label)).map(r => [r.result, r.label, r.fix, r.auto]))"; }
+
+  # No app: not a word, in either form.
+  gui_toolkit none noapp
+  gui_doctor "$GUI_FOREMAN"
+  assert_missing "$OUT" "desktop app" "no app: plain doctor says nothing of it"
+  gui_doctor "$GUI_FOREMAN" --json
+  assert_eq "$(json_row)" '"[]"' "no app: doctor --json has no such row"
+
+  # In sync: a lockfile that is not newer than node_modules (or no lockfile at all).
+  gui_toolkit sync app
+  gui_doctor "$GUI_FOREMAN"
+  assert_contains "$OUT" "desktop app installed · in sync" "installed, no lockfile: in sync"
+  : > "$GUI_TK/gui/package-lock.json"
+  touch -d '2 days ago' "$GUI_TK/gui/package-lock.json"; touch -d '1 day ago' "$GUI_TK/gui/node_modules"
+  gui_doctor "$GUI_FOREMAN"
+  assert_contains "$OUT" "desktop app installed · in sync" "lockfile older than node_modules: in sync"
+  # MACHINE is where the line is: in the left column, beside REPOSITORY's rows.
+  assert_contains "$(printf '%s\n' "$OUT" | grep 'desktop app' | head -1)" "│" "the row sits in the MACHINE column, beside REPOSITORY's"
+  gui_doctor "$GUI_FOREMAN" --json
+  assert_eq "$(json_row)" '"[[\"ok\",\"desktop app installed · in sync\",null,false]]"' "--json: an ok row in machine"
+
+  # Out of date: the lockfile changed after node_modules was made. A warning, never a failure.
+  gui_doctor "$FOREMAN_APP" --json; verdict_before="$(jv "$OUT" 'j.verdict.passed')"
+  touch "$GUI_TK/gui/package-lock.json"
+  touch -d '3 days ago' "$GUI_TK/gui/node_modules"
+  gui_doctor "$GUI_FOREMAN"
+  # (The box wraps a long row at its column, so the words are looked for as the box breaks them.)
+  assert_contains "$OUT" "desktop app installed · out of" "lockfile newer than node_modules: out of date"
+  assert_contains "$OUT" "date: rerun install.sh" "...and says what to rerun"
+  gui_doctor "$GUI_FOREMAN" --json
+  assert_contains "$(json_row)" 'warn' "--json: a warn row"
+  assert_contains "$(json_row)" 'out of date: rerun install.sh' "--json: the row's words"
+  assert_contains "$(json_row)" 'install.sh --gui' "--json: its fix reruns the installer with --gui"
+  assert_eq "$(jv "$OUT" 'j.verdict.passed')" "$verdict_before" "a stale app does not change the verdict"
+  assert_eq "$(jv "$OUT" 'j.counts.warn')" 1 "it is one warning"
+fi
+
+# ---------------------------------------------------------------------------
 # The app's own logic (plain Node, no Electron)
 # ---------------------------------------------------------------------------
 
