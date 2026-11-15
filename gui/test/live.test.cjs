@@ -118,3 +118,17 @@ test('a run whose control directory is not known has no control files, and still
   assert.equal(out.control, null);
   assert.equal(out.iterations.length, 4);
 });
+
+test('which changes are only a run\'s control files: the feed and the budget are, the pid and the record are not', () => {
+  const { onlyControlFiles } = require('../live.cjs');
+  const c = (...names) => names.map((name) => ({ dir: 'b', name }));
+  assert.equal(onlyControlFiles(c('.foreman-run/feed', '.foreman-run/activity', '.foreman-run/budget', '.foreman-run/out')), true);
+  assert.equal(onlyControlFiles(c('.foreman-run/feed', 'foreman-runs.jsonl')), false, 'one that is not decides it');
+  assert.equal(onlyControlFiles(c('.foreman-run/pid')), false, 'a run began or ended');
+  assert.equal(onlyControlFiles(c('.foreman-run/run')), false);
+  assert.equal(onlyControlFiles(c('issues/01-a.md')), false);
+  assert.equal(onlyControlFiles(c('.foreman-run')), false, 'the directory itself appearing or going');
+  assert.equal(onlyControlFiles([{ dir: 'b', name: null }]), false, 'a change with no name is anything');
+  assert.equal(onlyControlFiles([]), false);
+  assert.equal(onlyControlFiles(null), false);
+});

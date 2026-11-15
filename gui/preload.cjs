@@ -36,6 +36,35 @@ contextBridge.exposeInMainWorld('foreman', {
   // { ok: true, saved: false, conflict: true, disk } when the file is not `base` any more (nothing
   // was written; saving again with base = disk overwrites), or { ok: false, error }.
   saveHandoff: (batch, name, text, base) => ipcRenderer.invoke('ticket:save', batch, name, text, base === undefined ? null : base),
+  // ---- starting, watching and steering a run ----
+  // What the confirmation says: `dry-run --json`, whether `**/.foreman-run/` is ignored, whether a run is
+  // already going, the batch's foreman.conf and the caps the app's environment carries. Free.
+  // Answers { ok: true, doc } or { ok: false, error }.
+  runConfirm: (batch) => ipcRenderer.invoke('run:confirm', batch),
+  // Start a run — the only call that costs money. `request` is { iterations: n | null, live, caps: { cost,
+  // minutes } } with a cap present only when edited for this run. Answers { ok: true, pid, command } once
+  // the process exists (not when it ends) or { ok: false, error }.
+  runStart: (batch, request) => ipcRenderer.invoke('run:start', batch, request),
+  // The live screen's data for a run in flight (null if none): its control files, iterations and caps.
+  runLoad: (batch) => ipcRenderer.invoke('run:load', batch),
+  // Press + - L as the run's terminal keys do (foreman keys). Answers with the live data read back.
+  runKeys: (batch, keys) => ipcRenderer.invoke('run:keys', batch, keys),
+  // foreman stop (after this iteration) or, with now, foreman stop --now (waits for the run to end).
+  runStop: (batch, now) => ipcRenderer.invoke('run:stop', batch, now === true),
+  // Called with { batch, run } whenever a file of the run changes; run is null when it has ended.
+  onRunUpdate: (callback) => {
+    const listener = (_event, data) => callback(data);
+    ipcRenderer.on('run:update', listener);
+    return () => ipcRenderer.removeListener('run:update', listener);
+  },
+  // Called with { batch, code, signal, out } when a run the app started has ended (out: what it said).
+  onRunExit: (callback) => {
+    const listener = (_event, data) => callback(data);
+    ipcRenderer.on('run:exit', listener);
+    return () => ipcRenderer.removeListener('run:exit', listener);
+  },
+  // Compact view: resize the window to the small layout (true) or put the previous size back (false).
+  compact: (on) => ipcRenderer.invoke('window:compact', on === true),
   // Open a repo-relative path (a ticket, a batch folder) with Windows' own default.
   open: (relativePath) => ipcRenderer.invoke('open', relativePath),
 });

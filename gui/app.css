@@ -304,3 +304,65 @@ pre.said.err { color: var(--err); }
 .dfixbtn { align-self: flex-start; }
 .stamp { flex: none; border: 3px double currentColor; padding: 6px 16px; transform: rotate(-4deg); text-align: center; font: 700 16px var(--mono); letter-spacing: .12em; }
 .stamp .sub { font: 600 11px var(--mono); letter-spacing: .04em; }
+
+/* ---- starting a run: the confirmation (design 03, take c) ---- */
+.scrim { position: fixed; inset: 0; background: var(--scrim); z-index: 5; }
+.modal { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 520px; max-width: calc(100vw - 32px); max-height: calc(100vh - 32px); overflow: auto; z-index: 6; box-shadow: 0 18px 50px rgba(0,0,0,.4); }
+.modal .bill { padding-bottom: 16px; border-bottom: 1px solid var(--line); border-radius: 8px; }
+.modal .bill::after { display: none; }
+.modal .bill .line > .muted { white-space: nowrap; }
+.modal .bill .line > .val { text-align: right; min-width: 0; overflow-wrap: anywhere; }
+.help { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 15px; height: 15px; padding: 0; border-radius: 50%; border: 1px solid var(--muted);
+        color: var(--muted); font: 700 10px/1 var(--ui); background: transparent; vertical-align: 1px; cursor: pointer; margin-left: 4px; }
+.help.open { background: var(--amber); border-color: var(--amber); color: var(--on-accent); }
+.helpwrap { position: relative; display: inline-block; }
+.pop { position: absolute; z-index: 7; left: -4px; top: 22px; width: 270px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--amber); background: var(--panel); color: var(--text);
+       font: 12px/1.5 var(--ui); box-shadow: 0 10px 30px rgba(0,0,0,.35); text-align: left; white-space: normal; text-transform: none; letter-spacing: 0; }
+.pop b { display: block; margin-bottom: 2px; }
+.pop .dim { display: block; margin-top: 4px; font: 11px var(--mono); }
+.tiles { display: flex; gap: 8px; font-family: var(--ui); }
+.tiles .tile { flex: 1; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px 9px; text-align: center; background: var(--panel-2); min-width: 0; }
+.tiles .tile.edit { border-color: var(--amber); background: color-mix(in srgb, var(--amber) 8%, var(--panel)); }
+.tiles .tile .lab { font: 600 10.5px var(--mono); letter-spacing: .1em; color: var(--muted); text-transform: uppercase; display: flex; gap: 5px; justify-content: center; align-items: center; }
+.tiles .tile .src { font: 10.5px var(--mono); color: var(--dim); margin-top: 3px; }
+.tiles .tile.wide { display: flex; align-items: center; gap: 14px; text-align: left; padding: 8px 12px; }
+.tiles .tile.wide .lab { justify-content: flex-start; }
+.tiles .tile.bad { border-color: var(--err); }
+.field { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--amber); border-radius: 6px; padding: 1px 8px; background: var(--panel-2); color: var(--text); font: 600 20px var(--ui); }
+.field input { width: 5.5em; border: 0; background: transparent; color: inherit; font: inherit; text-align: center; outline: none; padding: 2px 0; }
+.field:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+.field small { font: 12px var(--mono); color: var(--muted); }
+.field.iters input { width: 2.6em; font-size: 24px; }
+.field.none input { color: var(--rust); font-size: 16px; }
+.btn.sq { width: 28px; padding: 6px 0; justify-content: center; font-family: var(--mono); }
+.btn.danger { border-color: color-mix(in srgb, var(--err) 60%, var(--line)); color: var(--err); }
+.moreline { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; font-size: 12px; }
+.moreline .btn { padding: 2px 8px 2px 0; color: var(--text); }
+.morepanel { margin-top: 4px; padding: 10px 12px; background: var(--panel-2); font-family: var(--mono); border: 1px solid var(--line); border-radius: 10px; }
+.morepanel .tiles .tile { background: var(--panel); }
+.morepanel .tiles .tile.edit { background: color-mix(in srgb, var(--amber) 8%, var(--panel)); }
+.linkish { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; font: inherit; cursor: pointer; }
+.fielderr { color: var(--err); font: 11px var(--ui); margin-top: 3px; }
+.checkbox { display: inline-flex; align-items: center; gap: 6px; }
+.checkbox input { accent-color: var(--amber); }
+
+/* ---- the live run (design 04, takes a and c) ---- */
+.main.live { gap: 12px; }
+.livehead { gap: 18px; padding: 10px 16px; align-items: center; }
+.livehead .kv { grid-template-columns: max-content 1fr max-content 1fr; }
+.liverows { flex: 1; overflow: auto; min-height: 0; }
+.tlist .t.running { align-items: start; background: color-mix(in srgb, var(--amber) 9%, transparent); }
+.tlist .t .g.spin { display: inline-block; }
+.tlist .t .g.muted { color: var(--muted); } .tlist .t .g.err { color: var(--err); }
+.liverows .feed { margin-top: 4px; }
+.feed .ln { display: grid; grid-template-columns: 46px 52px 1fr; gap: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.feed .ln .tm { color: var(--dim); } .feed .ln .tool { color: var(--accent); }
+.runbar { display: flex; align-items: center; gap: 12px; padding: 10px 14px; white-space: nowrap; background: var(--panel); border-top: 1px solid var(--line); margin: auto -24px -18px; flex-wrap: wrap; }
+.runbar .grp { display: flex; align-items: center; gap: 8px; }
+.runbar .meter { width: 56px; }
+.runbar .grp.stack { flex-direction: column; align-items: stretch; gap: 4px; }
+.runbar .grp.stack .meter { width: auto; }
+.runbar .btn .k { font: 11px var(--mono); color: var(--dim); }
+.runbar .why { flex-basis: 100%; }
+.main.compact { align-items: center; justify-content: center; background: var(--panel-2); }
+.compactcard { width: 360px; max-width: 100%; gap: 12px; }

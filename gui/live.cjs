@@ -101,4 +101,16 @@ function createLive({ repoRoot, foreman, fs = nodeFs, env = process.env }) {
   };
 }
 
-module.exports = { createLive, readControl, parseFeed, capsFromConf };
+// Of everything that can change in a watched batch, the files a run's control directory keeps while it
+// goes (the feed, the activity line, the budget...) are the many, and cost nothing to read: main reads
+// them from disk, with no process. The ones that say a run began or ended (`pid`, `run`) and anything
+// outside the directory (a ticket, the record, the log) are a reason to ask foreman again. `changes` is
+// what watch.cjs hands its read: [{ dir, name }].
+const CONTROL = /^\.foreman-run\//;
+const CONTROL_STARTS_OR_ENDS = /^\.foreman-run\/(pid|run)$/;
+function onlyControlFiles(changes) {
+  return Array.isArray(changes) && changes.length > 0
+    && changes.every((c) => c && typeof c.name === 'string' && CONTROL.test(c.name) && !CONTROL_STARTS_OR_ENDS.test(c.name));
+}
+
+module.exports = { onlyControlFiles, createLive, readControl, parseFeed, capsFromConf };

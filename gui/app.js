@@ -149,7 +149,7 @@
       h('div', { cls: 'grow' }, h('div', { cls: 'label', text: 'Batch' }), h('div', { cls: 'h1 mono title', text: o.title })),
       button('Open folder', { cls: 'quiet', onClick: () => api.open(data.status.batch.path) }),
       button('Dry run', { tag: { cls: 'free', text: 'free' }, onClick: openDryRun }),
-      button('Start run…', { cls: 'primary', tag: { cls: 'paid', text: 'costs money' } }));
+      button('Start run…', { cls: 'primary', tag: { cls: 'paid', text: 'costs money' }, onClick: () => openConfirm() }));
 
     const dome = h('div', { cls: 'card domecard' },
       A.dome({ w: 190, p: o.dome.p, stakes: o.dome.stakes }),
@@ -203,7 +203,7 @@
       span('small muted', 'no prompt is sent · no sandbox starts'),
       span('small dim mono', 'read ' + read),
       button('Run again', { onClick: openDryRun }),
-      button('Start run…', { cls: 'primary', tag: { cls: 'paid', text: 'costs money' }, title: 'Starting a run is a later ticket.' }));
+      button('Start run…', { cls: 'primary', tag: { cls: 'paid', text: 'costs money' }, onClick: () => openConfirm() }));
 
     const would = h('div', { cls: 'card col' },
       h('div', { cls: 'row' }, A.dome({ w: 80, p: d.dome.p, stakes: d.dome.stakes }),
@@ -860,6 +860,400 @@
     return main;
   }
 
+  // ---- starting a run: the confirmation (design 03, take c) ----
+
+  const RP = window.ForemanRunPlan;
+  const RV = window.ForemanRunView;
+
+  // The confirmation is one question asked of one batch. Its facts are read when it opens (`dry-run
+  // --json`, foreman.conf, whether the control directory is ignored); what the person types is kept here,
+  // for this one confirmation, and is gone when it closes: nothing is remembered, nothing is written. The
+  // three inputs are kept for as long as it is open, so a redraw never takes the caret or the focus.
+  let cf = null;             // { batch, resume, state: 'loading' | 'ready' | 'error', facts, edits, more, help, error, starting, startError, inputs, token }
+  let cfToken = 0;
+
+  function closeConfirm() {
+    cfToken++;
+    cf = null;
+    draw();
+  }
+
+  async function openConfirm(opts) {
+    const batch = data && data.selected;
+    if (!batch || cf) return;
+    const token = ++cfToken;
+    cf = { batch, resume: !!(opts && opts.resume), state: 'loading', facts: null, edits: null, more: false, help: null, focusOpened: null, refocus: null, error: null, starting: false, startError: null, inputs: null, token };
+    draw();
+    let answer;
+    try { answer = await api.runConfirm(batch); } catch (e) { answer = { ok: false, error: asError(e) }; }
+    if (!cf || cf.token !== token) return;
+    if (answer && answer.ok) {
+      cf.facts = answer.doc;
+      cf.edits = RP.start(answer.doc);
+      cf.state = 'ready';
+      cf.inputs = makeInputs();
+    } else {
+      cf.state = 'error';
+      cf.error = (answer && answer.error) || { kind: 'spawn', message: 'No answer.' };
+    }
+    draw();
+  }
+
+  function makeInputs() {
+    const mk = (key, label, value) => {
+      const i = h('input', { attrs: { type: 'text', inputmode: key === 'iterations' ? 'numeric' : 'decimal', autocomplete: 'off', spellcheck: 'false', 'aria-label': label, 'data-field': key } });
+      i.value = value;
+      i.addEventListener('input', () => { cf.edits[key] = i.value; draw(); });
+      return i;
+    };
+    const f = cf.facts.dry.settings.budgets;
+    return {
+      iterations: mk('iterations', 'Iterations', cf.edits.iterations === 'unlimited' ? '' : cf.edits.iterations),
+      cost: mk('cost', 'Spend cap in dollars', f.cost_usd ? Number(f.cost_usd).toFixed(2) : ''),
+      minutes: mk('minutes', 'Time cap in minutes', f.minutes ? String(f.minutes) : ''),
+    };
+  }
+
+  // Put a cap back to what the file says: no edit, and the field shows the file's value again.
+  function resetCap(key) {
+    cf.edits[key] = null;
+    const f = cf.facts.dry.settings.budgets;
+    cf.inputs[key].value = key === 'cost' ? (f.cost_usd ? Number(f.cost_usd).toFixed(2) : '') : (f.minutes ? String(f.minutes) : '');
+    draw();
+  }
+
+  function stepIterations(by) {
+    const cur = RP.checkIterations(cf.edits.iterations);
+    const n = cur.ok && cur.value !== null ? cur.value : 1;
+    const next = Math.min(RP.MAX_ITERATIONS, Math.max(1, n + by));
+    cf.edits.iterations = String(next);
+    cf.inputs.iterations.value = String(next);
+    draw();
+  }
+
+  function setUnlimited(on) {
+    cf.edits.iterations = on ? 'unlimited' : '1';
+    cf.inputs.iterations.value = on ? '' : '1';
+    draw();
+  }
+
+  // A ? beside a field: a plain-text popover on click or keyboard focus. Esc or a click elsewhere closes it.
+  function helpButton(key) {
+    const open = cf.help === key;
+    const b = h('button', { cls: 'help' + (open ? ' open' : ''), text: '?', attrs: { type: 'button', 'aria-label': 'What ' + key + ' means', 'aria-expanded': open ? 'true' : 'false', 'data-help': key } });
+    b.addEventListener('focus', () => { if (cf && cf.help !== key) { cf.help = key; cf.focusOpened = key; cf.refocus = key; draw(); } });
+    b.addEventListener('click', () => {
+      if (!cf) return;
+      if (cf.focusOpened === key) { cf.focusOpened = null; return; }      // the click that came with the focus
+      cf.help = cf.help === key ? null : key;
+      cf.refocus = key;
+      draw();
+    });
+    const wrap = h('span', { cls: 'helpwrap' }, b);
+    if (open) {
+      const t = RP.HELP[key];
+      const pop = h('div', { cls: 'pop', attrs: { role: 'tooltip', 'data-pop': key } }, h('b', { text: t.title }), h('span', { text: t.body }));
+      if (t.note) pop.append(h('span', { cls: 'dim', text: t.note }));
+      wrap.append(pop);
+    }
+    return wrap;
+  }
+
+  function capTile(v, c, key, helpKey, label, unit) {
+    const field = h('span', { cls: 'field' + (c.unset && !c.changed && !c.error ? ' none' : '') }, key === 'cost' ? span('', '$') : null, cf.inputs[key], unit ? h('small', { text: unit }) : null);
+    cf.inputs[key].setAttribute('placeholder', 'none set');
+    const tile = h('div', { cls: 'tile edit' + (c.error ? ' bad' : '') },
+      h('div', { cls: 'lab' }, label, helpButton(helpKey)),
+      h('div', { cls: 'row', attrs: { style: 'justify-content:center;margin-top:4px' } }, field));
+    if (c.error) tile.append(h('div', { cls: 'fielderr', text: c.error, attrs: { role: 'alert' } }));
+    if (c.changed || c.error) {
+      const note = h('div', { cls: 'src' });
+      if (c.changed) {
+        note.append(span(c.rust ? 'rust' : 'acc', c.rust ? (c.value === 0 ? 'this run only · no cap' : 'this run only · above the file') : 'this run only'), ' · ');
+      }
+      note.append(h('button', { cls: 'linkish', text: 'reset: ' + c.reset, attrs: { type: 'button', 'data-reset': key }, on: { click: () => resetCap(key) } }));
+      tile.append(note);
+    }
+    tile.append(h('div', { cls: 'src', text: c.name }));
+    tile.append(h('div', { cls: 'src ' + (c.unset && !c.changed ? 'rust' : ''), text: c.unset ? 'none set · ' + c.source.text : (c.changed ? 'the file has ' + (c.reset) : c.source.text) }));
+    return tile;
+  }
+
+  function confirmBody() {
+    const c = cf;
+    const v = RP.view(c.facts, c.edits, { resume: c.resume });
+    const row = (label, helpKey, ...value) => h('div', { cls: 'line' },
+      h('span', { cls: 'muted' }, label, helpKey ? helpButton(helpKey) : null), h('span', { cls: 'val' }, ...value));
+    const box = h('div', { cls: 'bill', attrs: { role: 'dialog', 'aria-modal': 'true', 'aria-label': v.title } });
+    box.append(
+      h('div', { cls: 'row', attrs: { style: 'margin-bottom:8px' } }, h('span', { cls: 'label grow', text: v.title }), span('paid', 'costs money')),
+      row('batch ', null, v.batch),
+      row('starts at ', 'starts at', v.startsAt),
+      row('can reach ', 'can reach', ...v.reach.map((p) => (p.tone ? span(p.tone, p.text) : p.text))),
+      h('div', { cls: 'rule' }));
+
+    // The one budget up front, and the one editable field.
+    const it = v.iterations;
+    c.inputs.iterations.hidden = it.unlimited;
+    const stepper = h('div', { cls: 'row', attrs: { style: 'gap:6px;margin-left:auto' } },
+      h('button', { cls: 'btn sq', text: '−', attrs: { type: 'button', 'aria-label': 'One fewer iteration', 'data-step': 'down' }, on: { click: () => stepIterations(-1) } }),
+      h('span', { cls: 'field iters' }, it.unlimited ? h('b', { text: '∞', attrs: { style: 'padding:0 10px' } }) : null, c.inputs.iterations),
+      h('button', { cls: 'btn sq', text: '+', attrs: { type: 'button', 'aria-label': 'One more iteration', 'data-step': 'up' }, on: { click: () => stepIterations(1) } }),
+      h('button', { cls: 'btn quiet', text: it.unlimited ? 'set a number' : 'unlimited', attrs: { type: 'button', 'data-unlimited': 'toggle', style: 'padding:1px 6px;font-size:11px' }, on: { click: () => setUnlimited(!it.unlimited) } }));
+    stepper.querySelector('[data-step="up"]').disabled = it.unlimited;
+    box.append(h('div', { cls: 'tiles' }, h('div', { cls: 'tile edit wide' + (it.error ? ' bad' : '') },
+      h('div', { cls: 'col', attrs: { style: 'gap:3px' } }, h('div', { cls: 'lab' }, 'iterations', helpButton('iterations')), h('div', { cls: 'src', text: 'argument · 1–∞' })), stepper)));
+    if (it.error) box.append(h('div', { cls: 'fielderr', text: it.error, attrs: { role: 'alert' } }));
+
+    // More settings: closed at first.
+    box.append(h('div', { cls: 'moreline' },
+      h('button', { cls: 'btn quiet', text: 'More settings ' + (c.more ? '▾' : '▸'), attrs: { type: 'button', 'aria-expanded': c.more ? 'true' : 'false', 'data-more': 'toggle' }, on: { click: () => { c.more = !c.more; draw(); } } }),
+      span('dim small', c.more ? 'for this run only' : 'spend cap · time cap · live view · model')));
+    if (c.more) {
+      box.append(h('div', { cls: 'morepanel' },
+        h('div', { cls: 'tiles' }, capTile(v, v.cost, 'cost', 'spend cap', 'spend cap', ''), capTile(v, v.minutes, 'minutes', 'time cap', 'time cap', 'min')),
+        h('div', { cls: 'line', attrs: { style: 'margin-top:8px' } }, h('span', { cls: 'muted' }, 'live tool calls', helpButton('live tool calls')),
+          h('label', { cls: 'checkbox' },
+            (() => { const k = h('input', { attrs: { type: 'checkbox', 'data-field': 'live', 'aria-label': 'Live tool calls' } }); k.checked = v.live; k.addEventListener('change', () => { c.edits.live = !!k.checked; draw(); }); return k; })(),
+            v.live ? 'on' : 'off')),
+        h('div', { cls: 'line' }, h('span', { cls: 'muted' }, 'model', helpButton('model')), h('span', { cls: 'val' }, v.model + ' ', span('dim', v.modelSource))),
+        h('div', { cls: 'small dim', attrs: { style: 'font-family:var(--ui);margin-top:4px' }, text: 'Changes here apply to this run only. foreman.conf is not edited, and the app remembers nothing.' })));
+    }
+
+    box.append(h('div', { cls: 'rule' }),
+      row('runs ', 'runs', ...v.command.prefix.map((p) => span('acc', p + ' ')), v.command.text));
+    box.append(h('div', { cls: 'small muted', attrs: { style: 'font-family:var(--ui);margin-top:8px' }, text: "The run stops at whichever budget comes first. You can add or take away iterations while it runs. Closing this window doesn't stop it." }));
+    for (const w of v.warnings) box.append(h('pre', { cls: 'said', text: w }));
+    if (v.blocked) box.append(h('div', { cls: 'small rust', attrs: { style: 'margin-top:8px', role: 'status' }, text: v.blocked }));
+    if (c.startError) box.append(h('pre', { cls: 'said err', text: c.startError.message }));
+    const go = h('button', { cls: 'btn primary', text: c.starting ? 'Starting…' : v.button, attrs: { type: 'button', 'data-start': 'go' } });
+    if (v.blocked || c.starting) { go.disabled = true; go.title = v.blocked || 'Starting…'; } else go.addEventListener('click', () => startRun(v));
+    box.append(h('div', { cls: 'row', attrs: { style: 'margin-top:14px;justify-content:flex-end' } },
+      h('button', { cls: 'btn', text: 'Cancel', attrs: { type: 'button' }, on: { click: () => { if (!c.starting) closeConfirm(); } } }), go));
+    return box;
+  }
+
+  function confirmView() {
+    const c = cf;
+    const shell = (content) => h('div', {}, h('div', { cls: 'scrim' }), h('div', { cls: 'modal' }, content));
+    const bill = (...kids) => h('div', { cls: 'bill' }, ...kids);
+    if (c.state === 'loading') {
+      return shell(bill(h('div', { cls: 'label', text: c.resume ? 'Resume a run' : 'Start a run' }), h('div', { cls: 'muted', text: 'Reading what a run would do. Nothing is sent.' }),
+        h('div', { cls: 'row', attrs: { style: 'margin-top:12px;justify-content:flex-end' } }, button('Cancel', { onClick: closeConfirm }))));
+    }
+    if (c.state === 'error') {
+      return shell(bill(h('div', { cls: 'label', text: 'Could not read what a run would do' }), h('pre', { cls: 'said', text: c.error.message }),
+        h('div', { cls: 'row', attrs: { style: 'margin-top:12px;justify-content:flex-end' } }, button('Close', { onClick: closeConfirm }))));
+    }
+    return shell(confirmBody());
+  }
+
+  // The one place a run is started. What the person edited is sent as a request; main checks it again.
+  async function startRun(v) {
+    const c = cf;
+    if (!c || c.starting || v.blocked) return;
+    c.starting = true;
+    c.startError = null;
+    draw();
+    let answer;
+    try {
+      answer = await api.runStart(c.batch, { iterations: v.plan.iterations, live: v.plan.live, caps: v.plan.caps });
+    } catch (e) { answer = { ok: false, error: asError(e) }; }
+    if (cf !== c) return;
+    c.starting = false;
+    if (answer && answer.ok) {
+      const caps = { cost: v.cost.value > 0 ? v.cost.value : null, minutes: v.minutes.value > 0 ? v.minutes.value : null };
+      cfToken++;
+      cf = null;
+      lv = newLive(c.batch);
+      lv.starting = { command: answer.command || v.command.full };
+      lv.caps = caps;
+      view = 'live';
+      dryToken++; dry = null; rep = null; tp = null; drToken++; dr = null;
+    } else {
+      c.startError = (answer && answer.error) || { message: 'No answer.' };
+    }
+    draw();
+  }
+
+  function insideClass(el, cls) {
+    for (let e = el; e; e = e.parentElement || e.parent) {
+      if (typeof e.className === 'string' && e.className.split(/\s+/).includes(cls)) return true;
+    }
+    return false;
+  }
+
+  // ---- the live run (design 04: take a, and c for the compact view) ----
+
+  let lv = null;             // { batch, run, starting, exit, compact, caps, notice, error, asking, busy }
+
+  const newLive = (batch) => ({ batch, run: null, starting: null, exit: null, compact: false, caps: null, notice: null, error: null, asking: false, busy: false });
+
+  function endLive() {
+    const was = lv;
+    lv = null;
+    if (was && was.compact) { try { api.compact(false); } catch (e) { /* the window is going away */ } }
+    if (view === 'live') view = 'overview';
+  }
+
+  function setCompact(on) {
+    if (!lv) return;
+    lv.compact = on;
+    api.compact(on);
+    draw();
+  }
+
+  // + - L: foreman keys; the bar shows what the control directory says afterwards.
+  async function pressKey(key) {
+    const l = lv;
+    if (!l || l.busy) return;
+    l.busy = true; l.error = null; l.notice = null;
+    draw();
+    let answer;
+    try { answer = await api.runKeys(l.batch, key); } catch (e) { answer = { ok: false, error: asError(e) }; }
+    l.busy = false;
+    if (lv !== l) return;
+    if (answer && answer.ok) { if (answer.run) l.run = answer.run; } else l.error = ((answer && answer.error) || { message: 'No answer.' }).message;
+    draw();
+  }
+
+  async function stopRun(now) {
+    const l = lv;
+    if (!l || l.busy) return;
+    l.busy = true; l.error = null; l.asking = false;
+    l.notice = now ? 'Stopping now…' : 'Stopping after this iteration…';
+    draw();
+    let answer;
+    try { answer = await api.runStop(l.batch, now); } catch (e) { answer = { ok: false, error: asError(e) }; }
+    l.busy = false;
+    if (lv !== l) return;
+    if (answer && answer.ok) l.notice = now ? 'Stopped.' : 'The run will stop after this iteration.';
+    else { l.notice = null; l.error = ((answer && answer.error) || { message: 'No answer.' }).message; }
+    draw();
+  }
+
+  function leaveLive() {
+    const batch = lv ? lv.batch : null;
+    endLive();
+    if (batch) start(batch); else draw();
+  }
+
+  const viewSwitch = (compact) => {
+    const pick = (label, on, go) => h('button', { cls: on ? 'on' : '', text: label, attrs: { type: 'button', 'aria-pressed': on ? 'true' : 'false' }, on: { click: () => { if (!on) go(); } } });
+    return h('span', { cls: 'seg', attrs: { role: 'group', 'aria-label': 'View', title: compact ? 'Switch to the full view' : 'Switch to the compact view' } },
+      pick('Full view', !compact, () => setCompact(false)), pick('Compact view', compact, () => setCompact(true)));
+  };
+
+  function liveRow(r) {
+    if (r.kind === 'running') {
+      const body = h('div', { attrs: { style: 'min-width:0' } }, h('div', { cls: 'slug', text: r.label }));
+      if (r.feed.length) {
+        const feed = h('div', { cls: 'feed', attrs: { 'data-feed': 'run' } });
+        for (const f of r.feed) feed.append(h('div', { cls: 'ln' }, span('tm', f.tm), span('tool', f.tool.toLowerCase()), span('', f.text)));
+        body.append(feed);
+      } else if (r.activity) body.append(h('div', { cls: 'feed' }, h('div', { text: r.activity })));
+      else if (r.feedOff) body.append(h('div', { cls: 'feed dim', text: 'live view is off · press L for the tool calls' }));
+      return h('div', { cls: 't running', attrs: { 'data-row': 'running' } }, span('g acc spin', r.glyph), span('num', r.num), body, chip(r.chip), span('meta', r.meta));
+    }
+    return h('div', { cls: 't done', attrs: { 'data-row': 'done', title: r.flags.join(' · ') } }, span('g ' + r.tone, r.glyph), span('num', r.num), span('slug', r.label), chip(r.chip), span('meta', r.meta));
+  }
+
+  function runBar(s, l) {
+    const off = !s.steerable || l.busy;
+    const why = s.bar.disabledWhy;
+    const key = (label, k, tip, disabled) => {
+      const b = h('button', { cls: 'btn sq', text: label, attrs: { type: 'button', 'aria-label': tip, 'data-key': k }, on: { click: () => pressKey(k) } });
+      if (off || disabled) { b.disabled = true; b.title = why || tip; }
+      return b;
+    };
+    const meter = (m) => { const mt = h('span', { cls: 'meter' + (m.hot ? ' hot' : '') }, h('i')); mt.firstChild.style.width = Math.round(m.frac * 100) + '%'; return mt; };
+    const live = h('button', { cls: 'btn', attrs: { type: 'button', 'data-key': 'L', 'aria-pressed': s.bar.live ? 'true' : 'false' }, on: { click: () => pressKey('L') } }, span('k', 'L'), ' Live ' + (s.bar.live ? 'on' : 'off'));
+    const after = h('button', { cls: 'btn', text: 'Stop after this one', attrs: { type: 'button', title: 'Stop after this iteration', 'data-stop': 'after' }, on: { click: () => stopRun(false) } });
+    const now = h('button', { cls: 'btn danger', text: 'Stop now…', attrs: { type: 'button', 'data-stop': 'now' }, on: { click: () => { l.asking = true; draw(); } } });
+    for (const b of [live, after, now]) if (off) { b.disabled = true; b.title = why || b.title || ''; }
+    const bar = h('div', { cls: 'runbar', attrs: { 'aria-label': 'Run controls' } },
+      h('div', { cls: 'grp' }, span('label', 'Iteration'), h('b', { cls: 'mono', text: s.bar.iteration }), key('−', '-', 'One fewer iteration', s.bar.minusOff), key('+', '+', 'One more iteration', s.bar.plusOff)),
+      h('div', { cls: 'grp stack' }, h('div', {}, span('label', 'Spent'), ' ', span('mono', s.bar.spent.text)), meter(s.bar.spent)),
+      h('div', { cls: 'grp stack' }, h('div', {}, span('label', 'Time'), ' ', span('mono', s.bar.time.text)), meter(s.bar.time)),
+      h('div', { cls: 'grp' }, live),
+      h('div', { cls: 'grp', attrs: { style: 'margin-left:auto' } }, after, now));
+    if (why) bar.append(h('div', { cls: 'small rust why', text: why }));
+    return bar;
+  }
+
+  function stopAsk(l) {
+    return h('div', { cls: 'card warm col ask', attrs: { role: 'alertdialog', 'aria-label': 'Stop now' } },
+      h('div', { text: "Stop now? The ticket's uncommitted work is kept, and the next run reviews it." }),
+      h('div', { cls: 'row' },
+        h('button', { cls: 'btn danger', text: 'Stop now', attrs: { type: 'button', 'data-stop': 'confirm' }, on: { click: () => stopRun(true) } }),
+        h('button', { cls: 'btn quiet', text: 'Keep running', attrs: { type: 'button' }, on: { click: () => { l.asking = false; draw(); } } })));
+  }
+
+  function liveView(data) {
+    const l = lv;
+    if (l.exit) {
+      return paneView('The run ended before it began.', (l.exit.out || `foreman exited with ${l.exit.code}.`) + (l.exit.code !== null && l.exit.out ? `\n\n(exit ${l.exit.code})` : ''), button('Back', { onClick: leaveLive }));
+    }
+    if (!l.run) {
+      return paneView('Starting the run…', (l.starting ? l.starting.command + '\n\n' : '') + 'foreman is getting ready. Closing this window does not stop it.', viewSwitch(false));
+    }
+    const s = RV.screen(l.run, { status: data.status, now: Date.now(), caps: l.caps });
+    const note = (cls, text) => h('div', { cls: 'small ' + cls, text, attrs: { role: 'status' } });
+
+    if (l.compact) {
+      const c = s.compact;
+      const meter = (m) => { const mt = h('span', { cls: 'meter grow' + (m.hot ? ' hot' : '') }, h('i')); mt.firstChild.style.width = Math.round(m.frac * 100) + '%'; return mt; };
+      const off = !s.steerable || l.busy;
+      const small = (label, k, tip, dis) => { const b = h('button', { cls: 'btn sq', text: label, attrs: { type: 'button', 'aria-label': tip, 'data-key': k }, on: { click: () => pressKey(k) } }); if (off || dis) { b.disabled = true; b.title = s.bar.disabledWhy || tip; } return b; };
+      const after = h('button', { cls: 'btn', text: 'Stop after this one', attrs: { type: 'button', 'data-stop': 'after' }, on: { click: () => stopRun(false) } });
+      if (off) { after.disabled = true; after.title = s.bar.disabledWhy || ''; }
+      const card = h('div', { cls: 'card col compactcard', attrs: { 'data-view': 'compact' } },
+        h('div', { cls: 'row', attrs: { style: 'align-items:flex-start' } }, A.dome({ w: 90, p: s.dome.p, stakes: '' }),
+          h('div', { cls: 'grow' }, h('div', { cls: 'mono', text: s.batch }), h('div', { cls: 'small muted', text: c.progress })), viewSwitch(true)),
+        h('div', { cls: 'mono small' }, span('acc', '⠹ '), c.line, c.activity ? h('div', { cls: 'muted', attrs: { style: 'padding-left:16px' }, text: c.activity }) : null),
+        h('div', { cls: 'row small' }, span('label', 'Spent'), meter(s.bar.spent), span('mono', s.bar.spent.text.replace(' / ', '/'))),
+        h('div', { cls: 'row small' }, span('label', 'Time'), meter(s.bar.time), span('mono', s.bar.time.text.replace(' / ', '/'))),
+        l.error ? note('rust', l.error) : null, l.notice ? note('muted', l.notice) : null,
+        h('div', { cls: 'row' }, small('−', '-', 'One fewer iteration', s.bar.minusOff), small('+', '+', 'One more iteration', s.bar.plusOff), h('span', { cls: 'grow' }), after));
+      return h('main', { cls: 'main compact' }, card);
+    }
+
+    const head = h('div', { cls: 'card row livehead' },
+      A.dome({ w: 150, p: s.dome.p, stakes: M.overview(data.status).dome.stakes }),
+      h('div', { cls: 'grow kv' },
+        span('', 'Run'), span('', s.run.id + (s.run.startedAt ? ' · started ' + s.run.startedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '')),
+        span('', 'Batch'), span('', s.batchPath), span('', 'Done'), span('', s.done), span('', 'Elapsed'), span('', s.elapsed)),
+      h('span', { attrs: { style: 'align-self:flex-start' } }, viewSwitch(false)));
+    const list = h('div', { cls: 'card flush tlist liverows', attrs: { 'aria-label': 'Iterations' } }, ...s.rows.map(liveRow));
+    const main = h('main', { cls: 'main live' }, head, list);
+    if (l.error) main.append(note('rust', l.error));
+    if (l.notice) main.append(note('muted', l.notice));
+    if (l.asking) main.append(stopAsk(l));
+    main.append(runBar(s, l));
+    return main;
+  }
+
+  // A file of the batch changed and the overview is read again: is a run in flight there?
+  function syncLive(fresh) {
+    const st = fresh && fresh.ok && fresh.status ? fresh.status : null;
+    const inFlight = !!(st && st.run && st.run.in_flight);
+    if (inFlight) {
+      if (!lv || lv.batch !== fresh.selected) {
+        lv = newLive(fresh.selected);
+        const mine = lv;
+        Promise.resolve(api.runLoad(fresh.selected)).then((ans) => {
+          if (lv === mine && ans && ans.ok && ans.run) { mine.run = ans.run; draw(); }
+        }, () => {});
+        view = 'live';
+      } else {
+        lv.starting = null;
+        if (view !== 'live' && view === 'overview') view = 'live';
+      }
+      return;
+    }
+    if (lv && lv.batch === (fresh && fresh.selected) && !lv.starting && !lv.exit) endLive();
+  }
+
   // ---- drawing, keeping the person's place ----
 
   let data = null;
@@ -871,6 +1265,8 @@
     const focused = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.batch : undefined;
     // The ticket page's own places: how far each of its columns is scrolled, and the editor's caret.
     const scrolls = Array.from(app.querySelectorAll('[data-scroll]')).map((e) => [e.dataset.scroll, e.scrollTop]);
+    const fieldFocus = cf && cf.inputs && document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.field : undefined;
+    const fieldAt = fieldFocus && cf.inputs[fieldFocus] === document.activeElement ? { from: document.activeElement.selectionStart, to: document.activeElement.selectionEnd } : null;
     const ed = tp && tp.editor;
     const edAt = ed ? { focus: document.activeElement === ed, from: ed.selectionStart, to: ed.selectionEnd, top: ed.scrollTop } : null;
     app.replaceChildren();
@@ -881,16 +1277,21 @@
       document.title = 'Foreman';
       return;
     }
-    app.classList.remove('solo');
+    if (view === 'live' && (!lv || lv.batch !== data.selected)) view = 'overview';
+    const compactNow = view === 'live' && lv && lv.compact && lv.run && !lv.exit;
+    if (compactNow) app.classList.add('solo'); else app.classList.remove('solo');
     // The dry run, the report and a ticket's page are of the batch that was selected when they were asked for.
     if (view === 'dryrun' && (!dry || !data.status || dry.batch !== data.selected)) { dryToken++; view = 'overview'; dry = null; }
     if (view === 'report' && (!rep || rep.batch !== data.selected)) { view = 'overview'; rep = null; }
     if (view === 'doctor' && !dr) view = 'overview';
     if (view === 'ticket' && (!tp || tp.batch !== data.selected || !data.status)) { view = 'overview'; tp = null; }
     const rail = railView(data, (batch) => { if (!selecting) leaving(() => start(batch)); });
-    app.append(rail);
+    if (!compactNow) app.append(rail);
 
-    if (view === 'doctor') {
+    if (view === 'live') {
+      app.append(liveView(data));
+      document.title = 'Foreman — running ' + String(lv.batch).split('/').pop();
+    } else if (view === 'doctor') {
       app.append(doctorView());
       document.title = 'Foreman — doctor';
     } else if (data.all.batches.length === 0) {
@@ -911,6 +1312,7 @@
       document.title = 'Foreman — ' + (data.selected || data.repoRoot);
     }
 
+    if (cf) app.append(confirmView());
     const main = app.querySelector('.main');
     if (main) main.scrollTop = scroll;
     for (const [key, top] of scrolls) {
@@ -928,6 +1330,16 @@
     if (focused) {
       for (const b of app.querySelectorAll('[data-batch]')) if (b.dataset.batch === focused) b.focus();
     }
+    // The confirmation's inputs live as long as it does: the caret goes back where it was, and so does
+    // the focus on a ? that was just opened.
+    if (fieldFocus && cf && cf.inputs && cf.inputs[fieldFocus] && cf.inputs[fieldFocus].isConnected !== false) {
+      cf.inputs[fieldFocus].focus();
+      if (fieldAt && typeof cf.inputs[fieldFocus].setSelectionRange === 'function') cf.inputs[fieldFocus].setSelectionRange(fieldAt.from, fieldAt.to);
+    } else if (cf && cf.refocus) {
+      const key = cf.refocus;
+      cf.refocus = null;
+      for (const b of app.querySelectorAll(`[data-help="${key}"]`)) b.focus();
+    }
   }
 
   async function start(batch) {
@@ -938,6 +1350,7 @@
     rep = null;
     tp = null;
     selecting = true;
+    cfToken++; cf = null;
     try {
       data = await api.load(batch);
     } catch (e) {
@@ -945,6 +1358,7 @@
     } finally {
       selecting = false;
     }
+    syncLive(data);
     draw();
   }
 
@@ -954,8 +1368,38 @@
   if (typeof window.addEventListener === 'function') {
     window.addEventListener('focus', () => { if (view === 'ticket' && tp && tp.state !== 'loading') readTicket(); });
   }
+  // Esc closes what is open on the confirmation: the popover first, then the confirmation itself. A click
+  // anywhere that is not a ? or its popover closes the popover.
+  if (typeof window.addEventListener === 'function') {
+    window.addEventListener('keydown', (e) => {
+      if (!cf || e.key !== 'Escape') return;
+      if (cf.help) { cf.help = null; draw(); } else if (!cf.starting) closeConfirm();
+    });
+    window.addEventListener('click', (e) => {
+      if (cf && cf.help && !insideClass(e.target, 'helpwrap')) { cf.help = null; draw(); }
+    });
+  }
+  // A file of the run changed (its feed, its budget, the record): the live screen is rebuilt from what main read.
+  if (typeof api.onRunUpdate === 'function') {
+    api.onRunUpdate((u) => {
+      if (!u || !lv || lv.batch !== u.batch) return;
+      if (u.run) { lv.run = u.run; lv.starting = null; draw(); }
+    });
+  }
+  // A run the app started has ended. If it never reached "in flight", that was a preflight failure, and its
+  // own words are what the person needs.
+  if (typeof api.onRunExit === 'function') {
+    api.onRunExit((x) => {
+      if (!x || !lv || lv.batch !== x.batch || !lv.starting || lv.run) return;
+      lv.starting = null;
+      lv.exit = { code: x.code, out: x.out || '' };
+      if (lv.compact) { lv.compact = false; api.compact(false); }
+      draw();
+    });
+  }
   api.onUpdate((fresh) => {
     data = fresh;
+    syncLive(fresh);
     // Not while the inspector is running: building the track again would start the run over.
     if (!(view === 'doctor' && dr && dr.state === 'loading')) draw();
     if (view === 'ticket' && tp && fresh && fresh.ok && fresh.selected === tp.batch) readTicket();

@@ -9,6 +9,7 @@
 //   npm start -- C:\Projects\app        (in gui/)   opens on that repository
 //
 // With no repository given, the repository holding the current directory.
+const fs = require('fs');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const { app, BrowserWindow, ipcMain, shell, session, Menu, nativeTheme } = require('electron');
@@ -17,6 +18,9 @@ const { createForeman, findRepoRoot, ForemanError } = require('./foreman.cjs');
 const { createWatcher } = require('./watch.cjs');
 const { createOverview } = require('./overview.cjs');
 const { createTicketFiles } = require('./ticket.cjs');
+const { createRunner } = require('./runner.cjs');
+const { createLive, onlyControlFiles } = require('./live.cjs');
+const { checkBatchPath } = require('./foreman.cjs');
 const { repoFromArgv, refuseNavigation, openWindowHandler, repoPath } = require('./guard.cjs');
 
 const PAGE = path.join(__dirname, 'index.html');
@@ -24,6 +28,8 @@ const PAGE = path.join(__dirname, 'index.html');
 let win = null;
 let ctx = null;            // { repoRoot, overview } once Git Bash and the repository are known
 let watcher = null;
+let fullBounds = null;     // the window's size and place before the compact view; gone when the app closes
+
 
 function describe(e) {
   return { kind: e.kind || 'spawn', message: e.message || String(e), tried: e.tried || null };
@@ -43,19 +49,44 @@ async function setup() {
   const overview = createOverview({ foreman, repoRoot });
   // A ticket page reads from what the overview already read, and saves against a fresh answer.
   const tickets = createTicketFiles({ repoRoot, foreman, known: (b) => overview.statusOf(b) });
-  ctx = { repoRoot, overview, foreman, tickets };
+  const runner = createRunner({ bash: found.bash, checkout, repoRoot });
+  const live = createLive({ repoRoot, foreman });
+  ctx = { repoRoot, overview, foreman, tickets, runner, live };
   watcher = createWatcher({
     // A change to anything in a batch — a status line flipped in an editor, the loop landing a
-    // ticket — is a reason to read again.
+    // ticket — is a reason to read again. A change only to a run's feed, activity or budget is a
+    // reason to read the control directory again, and nothing else.
     dirs: async () => (await overview.dirs()).map((p) => repoPath(repoRoot, p)),
-    read: () => overview.refresh(),
-    onResult: (data) => { if (data) push(data); },          // null: the person moved on meanwhile
+    read: async (changes) => {
+      const batch = overview.selected;
+      const known = batch ? overview.statusOf(batch) : null;
+      if (known && known.run && known.run.in_flight && onlyControlFiles(changes)) {
+        return { overview: null, run: await ctx.live.read({ batch, run: known.run, next: known.next, record: false }) };
+      }
+      const data = await overview.refresh();
+      if (!data) return null;
+      return { overview: data, run: await liveOf(data, true) };
+    },
+    onResult: (r) => {                                       // null: the person moved on meanwhile
+      if (!r) return;
+      if (r.overview) push(r.overview);
+      pushRun(r.overview ? r.overview.selected : overview.selected, r.run);
+    },
     onError: (e) => push({ ok: false, error: describe(e) }),
   });
 }
 
+// The live screen's data for the batch an overview answer is of, or null when no run is in flight there.
+async function liveOf(data, record) {
+  if (!data || !data.ok || !data.status || !data.status.run || !data.status.run.in_flight) { ctx.live.forget(); return null; }
+  return ctx.live.read({ batch: data.selected, run: data.status.run, next: data.status.next, record });
+}
+
 function push(data) {
   if (win && !win.isDestroyed()) win.webContents.send('overview:update', data);
+}
+function pushRun(batch, run) {
+  if (win && !win.isDestroyed()) win.webContents.send('run:update', { batch, run });
 }
 
 // Only our own page may ask main for anything.
@@ -148,6 +179,106 @@ ipcMain.handle('ticket:save', async (event, batch, name, text, base) => {
   } catch (e) {
     return { ok: false, error: describe(e) };
   }
+});
+
+// ---- starting, watching and steering a run (ticket 10) ----
+//
+// The confirmation's facts: what a run would do (`dry-run --json`, free), whether the repository ignores
+// the control directory, whether a run is already going, the batch's foreman.conf and the caps the
+// app's own environment carries (for "where it is set"). The page words them (runplan.js).
+function readConf(batch) {
+  try { return fs.readFileSync(`${ctx.repoRoot}/${checkBatchPath(batch)}/foreman.conf`, 'utf8'); } catch { return ''; }
+}
+
+ipcMain.handle('run:confirm', async (event, batch) => {
+  if (!trusted(event)) return { ok: false, error: describe(new Error('refused')) };
+  try {
+    if (!ctx) await setup();
+    checkBatchPath(batch);
+    const [dry, ignored] = await Promise.all([ctx.foreman.dryRun(batch), ctx.foreman.controlIgnored(batch)]);
+    const known = ctx.overview.statusOf(batch);
+    const env = { FOREMAN_MAX_COST_USD: process.env.FOREMAN_MAX_COST_USD, FOREMAN_MAX_MINUTES: process.env.FOREMAN_MAX_MINUTES };
+    return { ok: true, doc: { dry, ignored, inFlight: !!(known && known.run && known.run.in_flight), confText: readConf(batch), env } };
+  } catch (e) {
+    return { ok: false, error: describe(e) };
+  }
+});
+
+// The one place a run is started. The request is checked again here (runplan.js), the control
+// directory and the run in flight are asked afresh, and the process is detached: the window closing
+// does not stop it.
+ipcMain.handle('run:start', async (event, batch, request) => {
+  if (!trusted(event)) return { ok: false, error: describe(new Error('refused')) };
+  try {
+    if (!ctx) await setup();
+    checkBatchPath(batch);
+    if (!(await ctx.foreman.controlIgnored(batch))) {
+      throw new ForemanError('not-ignored', 'Starting from the app needs `doctor --fix`: the repository does not ignore **/.foreman-run/.');
+    }
+    const status = await ctx.foreman.status(batch);
+    if (status.run && status.run.in_flight) throw new ForemanError('in-flight', 'A run is already in flight in this batch.');
+    const started = await ctx.runner.start(batch, request, ({ code, signal }) => {
+      if (win && !win.isDestroyed()) win.webContents.send('run:exit', { batch, code, signal, out: ctx.runner.readOut(batch) });
+    });
+    return { ok: true, ...started };
+  } catch (e) {
+    return { ok: false, error: describe(e) };
+  }
+});
+
+ipcMain.handle('run:load', async (event, batch) => {
+  if (!trusted(event)) return { ok: false, error: describe(new Error('refused')) };
+  try {
+    if (!ctx) await setup();
+    const known = ctx.overview.statusOf(checkBatchPath(batch));
+    const run = known && known.run && known.run.in_flight
+      ? await ctx.live.read({ batch, run: known.run, next: known.next, record: true }) : null;
+    return { ok: true, run };
+  } catch (e) {
+    return { ok: false, error: describe(e) };
+  }
+});
+
+// `+` / `-` / `L`: foreman keys, which writes the control files as the terminal's keys do. What the
+// bar then shows is read back from the control directory.
+ipcMain.handle('run:keys', async (event, batch, keys) => {
+  if (!trusted(event)) return { ok: false, error: describe(new Error('refused')) };
+  try {
+    if (!ctx) await setup();
+    await ctx.foreman.keys(batch, keys);
+    const known = ctx.overview.statusOf(batch);
+    const run = known && known.run && known.run.in_flight
+      ? await ctx.live.read({ batch, run: known.run, next: known.next, record: false }) : null;
+    return { ok: true, run };
+  } catch (e) {
+    return { ok: false, error: describe(e) };
+  }
+});
+
+ipcMain.handle('run:stop', async (event, batch, now) => {
+  if (!trusted(event)) return { ok: false, error: describe(new Error('refused')) };
+  try {
+    if (!ctx) await setup();
+    return { ok: true, said: (await ctx.foreman.stop(batch, { now: now === true })).stdout };
+  } catch (e) {
+    return { ok: false, error: describe(e) };
+  }
+});
+
+// The compact view is a small window, and Full view puts the old size and place back. Neither is
+// remembered after the app closes.
+ipcMain.handle('window:compact', (event, on) => {
+  if (!trusted(event) || !win || win.isDestroyed()) return false;
+  if (on === true && fullBounds === null) {
+    fullBounds = win.getBounds();
+    win.setMinimumSize(360, 240);
+    win.setSize(440, 300);
+  } else if (on !== true && fullBounds !== null) {
+    win.setMinimumSize(720, 480);
+    win.setBounds(fullBounds);
+    fullBounds = null;
+  }
+  return true;
 });
 
 ipcMain.handle('open', async (event, relativePath) => {

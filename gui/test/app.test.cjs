@@ -71,10 +71,32 @@ function boot(api) {
   win.addEventListener = (type, fn) => { (win.listeners[type] = win.listeners[type] || []).push(fn); };
   win.window = win;
   vm.createContext(win);
-  for (const f of ['model.js', 'art.js', 'preview.js', 'app.js']) {
+  for (const f of ['model.js', 'runplan.js', 'runview.js', 'art.js', 'preview.js', 'app.js']) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), win, { filename: f });
   }
   return { app, document, window: win };
+}
+
+// What main answers `run:confirm` with: the dry run, foreman.conf as it is, no environment caps, the control
+// directory ignored and no run in flight.
+function confirmFacts(over = {}) {
+  return { dry: dryRunSample(), confText: 'FOREMAN_MAX_COST_USD=25\nFOREMAN_MAX_MINUTES=90\n', env: {}, ignored: true, inFlight: false, ...over };
+}
+
+// A run in flight, as `status --json` reports it and as main's live read answers.
+const IN_FLIGHT = { in_flight: true, id: '20261022T140533Z-9020', started_at: '2026-10-22T14:05:33Z', iteration: 4, budget: 5, live: true, control_dir: '.scratch/b/.foreman-run', pid: { msys: 1, windows: 1 } };
+function liveSnap(over = {}) {
+  const status = sample();
+  return {
+    batch: '.scratch/b', run: IN_FLIGHT, next: status.next,
+    control: { budget: 5, iteration: 4, live: true, activity: null, feed: [{ tm: '02:10', tool: 'Bash', text: 'bash test/smoke.sh <b>x</b>' }], spent: null },
+    iterations: reportRunSample().run.iterations, iterationsError: null, caps: { cost: 25, minutes: 90 }, at: Date.now(), ...over,
+  };
+}
+function dataRunning(over = {}) {
+  const d = data(over);
+  d.status = { ...d.status, run: IN_FLIGHT };
+  return d;
 }
 
 const tick = () => new Promise((r) => setImmediate(r));
@@ -101,11 +123,19 @@ function reportAnswer(_batch, opts = {}) {
   return { ok: true, doc: opts.byTicket ? reportByTicketSample() : reportSample() };
 }
 
-function fakeApi(first, dry = { ok: true, doc: dryRunSample() }, report = reportAnswer, tk = {}, dr = {}) {
-  const calls = { load: [], open: [], dryRun: [], report: [], ticket: [], save: [], doctor: 0, doctorFix: 0 };
-  let update = null;
+function fakeApi(first, dry = { ok: true, doc: dryRunSample() }, report = reportAnswer, tk = {}, dr = {}, rn = {}) {
+  const calls = { load: [], open: [], dryRun: [], report: [], ticket: [], save: [], doctor: 0, doctorFix: 0, confirm: [], start: [], runLoad: [], keys: [], stop: [], compact: [] };
+  let update = null, runUpdate = null, runExit = null;
   return {
-    calls, push: (d) => update(d),
+    calls, push: (d) => update(d), pushRun: (u) => runUpdate(u), pushExit: (x) => runExit(x),
+    runConfirm: async (b) => { calls.confirm.push(b); return rn.confirm ? rn.confirm(b) : { ok: true, doc: confirmFacts() }; },
+    runStart: async (b, req) => { calls.start.push({ batch: b, req }); return rn.start ? rn.start(b, req) : { ok: true, pid: 4242, command: 'foreman run' }; },
+    runLoad: async (b) => { calls.runLoad.push(b); return rn.load ? rn.load(b) : { ok: true, run: null }; },
+    runKeys: async (b, k) => { calls.keys.push([b, k]); return rn.keys ? rn.keys(b, k) : { ok: true, run: null }; },
+    runStop: async (b, now) => { calls.stop.push([b, now]); return rn.stop ? rn.stop(b, now) : { ok: true, said: '' }; },
+    compact: async (on) => { calls.compact.push(on); return true; },
+    onRunUpdate: (fn) => { runUpdate = fn; return () => {}; },
+    onRunExit: (fn) => { runExit = fn; return () => {}; },
     load: async (b) => { calls.load.push(b); return typeof first === 'function' ? first(b) : first; },
     dryRun: async (b) => { calls.dryRun.push(b); return typeof dry === 'function' ? dry(b) : dry; },
     report: async (b, opts) => { calls.report.push({ batch: b, opts }); return typeof report === 'function' ? report(b, opts) : report; },
@@ -136,7 +166,7 @@ test('the overview shows the dome, the next ticket, the human ticket, the note a
   assert.ok(app.all().filter((e) => e.tagName === 'rect').length >= 10, 'the dome has its stakes');
 });
 
-test('free actions are marked free, paid ones say they cost money, and what is not built yet is disabled, not dead', async () => {
+test('free actions are marked free, and paid ones say they cost money', async () => {
   const { app } = boot(fakeApi(data()));
   await tick();
   const dry = buttonNamed(app, 'Dry run');
@@ -144,8 +174,7 @@ test('free actions are marked free, paid ones say they cost money, and what is n
   assert.ok(dry.textContent.includes('free'));
   assert.ok(start.textContent.includes('costs money'));
   assert.equal(dry.disabled, false, 'the dry run is built');
-  assert.equal(start.disabled, true);
-  assert.ok(start.title.length > 0, 'a disabled button says why');
+  assert.equal(start.disabled, false, 'starting a run is built: it opens the confirmation');
   assert.equal(buttonNamed(app, 'Open ticket').disabled, false);
   assert.equal(buttonNamed(app, 'Open folder').disabled, false);
 });
@@ -300,7 +329,7 @@ test('Dry run on the overview asks for that batch\'s dry run and shows the scree
   assert.equal(document.title, 'Foreman — dry run · .scratch/b');
   assert.ok(app.all().some((e) => e.className.split(' ').includes('free')), 'the free mark is on the screen');
   assert.ok(buttonNamed(app, 'Start run…').textContent.includes('costs money'));
-  assert.equal(buttonNamed(app, 'Start run…').disabled, true, 'starting a run is a later ticket');
+  assert.equal(buttonNamed(app, 'Start run…').disabled, false, 'the confirmation opens from here too');
   assert.ok(app.all().some((e) => e.attrs['data-batch'] === '.scratch/c'), 'the rail is still there');
 });
 
@@ -1401,4 +1430,345 @@ test('what the sheet says is text: a label, a fix and a line to append with mark
   assert.ok(!app.all().some((e) => e.tagName === 'img' || e.tagName === 'script'));
   buttonNamed(app, 'Fix what it can').click();
   assert.ok(text(app).includes('<b>bold</b>') && !app.all().some((e) => e.tagName === 'b' && e.textContent === 'bold'));
+});
+
+// ---- starting a run: the confirmation (ticket 10) ----
+
+const fire = (el, type, ev = {}) => { for (const fn of el.listeners[type] || []) fn({ target: el, ...ev }); };
+const typeInto = (el, v) => { el.value = v; fire(el, 'input'); };
+const field = (app, key) => app.all().find((e) => e.attrs['data-field'] === key);
+const byAttr = (app, k, v) => app.all().find((e) => e.attrs[k] === v);
+const winFire = (window, type, ev) => (window.listeners[type] || []).forEach((fn) => fn(ev));
+async function openConfirmation(api = fakeApi(data())) {
+  const b = boot(api);
+  await tick();
+  buttonNamed(b.app, 'Start run…').click();
+  await tick();
+  return { ...b, api };
+}
+const startButton = (app) => byAttr(app, 'data-start', 'go');
+
+test('Start run… opens the confirmation: where it starts, how far it can reach, the one budget, the exact command and one button', async () => {
+  const { app, api } = await openConfirmation();
+  assert.deepEqual(api.calls.confirm, ['.scratch/b'], 'its facts are asked of main, which asks dry-run --json');
+  const t = text(app);
+  for (const want of ['Start a run', 'costs money', '.scratch/b', '05 document-human-tickets', '05 → 06', 'then stops at ', '07 (human)',
+    'iterations', 'More settings ▸', 'foreman run .scratch/b --unlimited --live', 'Cancel', 'Start run · up to $25.00']) {
+    assert.ok(t.includes(want), `the confirmation shows ${JSON.stringify(want)}`);
+  }
+  assert.ok(app.all().some((e) => e.className === 'rust' && e.textContent === '07 (human)'), 'the human stop is in rust');
+  assert.equal(startButton(app).disabled, false);
+  assert.equal(api.calls.start.length, 0, 'nothing is started by opening it');
+});
+
+test('up front the spend cap and the time cap are not shown, and the iteration count is the one editable field', async () => {
+  const { app } = await openConfirmation();
+  const t = text(app);
+  for (const hidden of ['FOREMAN_MAX_COST_USD', 'FOREMAN_MAX_MINUTES', 'live tool calls', 'claude-sonnet-5-5', 'set in foreman.conf']) {
+    assert.ok(!t.includes(hidden), `${hidden} is behind More settings`);
+  }
+  for (const k of ['spend cap', 'time cap', 'live tool calls', 'model']) assert.ok(!byAttr(app, 'data-help', k), `no ? for ${k} up front`);
+  assert.ok(t.includes('spend cap · time cap · live view · model'), 'the closed line says what is behind it');
+  assert.deepEqual(app.all().filter((e) => e.tagName === 'input').map((e) => e.attrs['data-field']), ['iterations']);
+  assert.equal(byAttr(app, 'data-more', 'toggle').attrs['aria-expanded'], 'false');
+});
+
+test('More settings holds the caps with where each is set, none set in rust, the live view, and the model that cannot be edited', async () => {
+  const dry = dryRunSample();
+  dry.settings.budgets.minutes = null;
+  const { app } = await openConfirmation(fakeApi(data(), undefined, undefined, {}, {}, { confirm: () => ({ ok: true, doc: confirmFacts({ dry, confText: 'FOREMAN_MAX_COST_USD=25\n' }) }) }));
+  byAttr(app, 'data-more', 'toggle').click();
+  const t = text(app);
+  for (const want of ['spend cap', 'FOREMAN_MAX_COST_USD', 'set in foreman.conf', 'time cap', 'FOREMAN_MAX_MINUTES', 'none set', 'not set · 0 = no cap', 'live tool calls', 'claude-sonnet-5-5 · exec local · acceptEdits']) {
+    assert.ok(t.includes(want), `More settings shows ${JSON.stringify(want)}`);
+  }
+  assert.ok(app.all().some((e) => /\brust\b/.test(e.className) && e.textContent.startsWith('none set')), 'an unset cap says none set, in rust');
+  assert.deepEqual(app.all().filter((e) => e.tagName === 'input').map((e) => e.attrs['data-field']).sort(), ['cost', 'iterations', 'live', 'minutes']);
+  assert.ok(!app.all().some((e) => e.tagName === 'input' && e.attrs['aria-label'] === 'Model'), 'the model is shown, not edited');
+});
+
+test('a cap edited for this run says so, has a way back, is a prefix of the command, drives the button, and is sent as an edit only', async () => {
+  const { app, api } = await openConfirmation();
+  byAttr(app, 'data-more', 'toggle').click();
+  assert.ok(!text(app).includes('this run only ·'), 'unchanged: no note');
+  typeInto(field(app, 'cost'), '10');
+  let t = text(app);
+  assert.ok(t.includes('Start run · up to $10.00'));
+  assert.ok(t.includes('FOREMAN_MAX_COST_USD=10 foreman run .scratch/b --unlimited --live'));
+  assert.ok(t.includes('this run only') && t.includes('reset: $25.00'));
+  assert.ok(app.all().some((e) => e.className === 'acc' && e.textContent === 'FOREMAN_MAX_COST_USD=10 '), 'the prefix is drawn apart');
+
+  typeInto(field(app, 'minutes'), '120');
+  assert.ok(app.all().some((e) => /rust/.test(e.className) && e.textContent.startsWith('this run only · above the file')), 'a cap raised above the file\'s is marked in rust');
+  byAttr(app, 'data-reset', 'cost').click();
+  assert.ok(!text(app).includes('FOREMAN_MAX_COST_USD=10'), 'reset puts the file\'s value back');
+  assert.equal(field(app, 'cost').value, '25.00');
+  assert.ok(text(app).includes('FOREMAN_MAX_MINUTES=120 foreman run'), 'the other edit stays');
+
+  startButton(app).click();
+  await tick();
+  assert.deepEqual(JSON.parse(JSON.stringify(api.calls.start)), [{ batch: '.scratch/b', req: { iterations: null, live: true, caps: { cost: null, minutes: '120' } } }]);
+});
+
+test('a cap set to 0 where the file has one is in rust, and the button says no spend cap', async () => {
+  const { app } = await openConfirmation();
+  byAttr(app, 'data-more', 'toggle').click();
+  typeInto(field(app, 'cost'), '0');
+  assert.ok(text(app).includes('Start run · no spend cap'));
+  assert.ok(app.all().some((e) => /rust/.test(e.className) && e.textContent.startsWith('this run only · no cap')));
+  assert.ok(text(app).includes('FOREMAN_MAX_COST_USD=0 foreman run'));
+});
+
+test('a cap that is not a whole number of minutes or dollars is refused on the field as text, and Start stays off until fixed', async () => {
+  const { app, api } = await openConfirmation();
+  byAttr(app, 'data-more', 'toggle').click();
+  typeInto(field(app, 'minutes'), '1.5');
+  assert.ok(app.all().some((e) => e.attrs.role === 'alert' && /whole number/.test(e.textContent)), 'the field says what is wrong');
+  assert.equal(startButton(app).disabled, true);
+  startButton(app).click();
+  await tick();
+  assert.equal(api.calls.start.length, 0, 'a disabled Start starts nothing');
+  typeInto(field(app, 'cost'), '10.999');
+  assert.ok(app.all().some((e) => e.attrs.role === 'alert' && /two decimals/.test(e.textContent)));
+  typeInto(field(app, 'minutes'), '45');
+  typeInto(field(app, 'cost'), '10.5');
+  assert.equal(startButton(app).disabled, false, 'fixed');
+});
+
+test('the iterations: − and + step, unlimited is --unlimited, a number is the argument, --live follows the live field', async () => {
+  const { app, api } = await openConfirmation();
+  assert.ok(text(app).includes('foreman run .scratch/b --unlimited --live'), 'the dry run says unlimited');
+  byAttr(app, 'data-unlimited', 'toggle').click();
+  assert.ok(text(app).includes('foreman run .scratch/b 1 --live'));
+  byAttr(app, 'data-step', 'up').click();
+  byAttr(app, 'data-step', 'up').click();
+  assert.equal(field(app, 'iterations').value, '3');
+  assert.ok(text(app).includes('foreman run .scratch/b 3 --live'));
+  byAttr(app, 'data-step', 'down').click();
+  byAttr(app, 'data-step', 'down').click();
+  byAttr(app, 'data-step', 'down').click();
+  assert.equal(field(app, 'iterations').value, '1', 'never below 1');
+  typeInto(field(app, 'iterations'), '0');
+  assert.equal(startButton(app).disabled, true);
+  typeInto(field(app, 'iterations'), '4');
+  byAttr(app, 'data-more', 'toggle').click();
+  field(app, 'live').checked = false; fire(field(app, 'live'), 'change');
+  assert.ok(text(app).includes('foreman run .scratch/b 4') && !text(app).includes('4 --live'));
+  startButton(app).click();
+  await tick();
+  assert.deepEqual(JSON.parse(JSON.stringify(api.calls.start[0].req)), { iterations: 4, live: false, caps: { cost: null, minutes: null } });
+});
+
+test('every field has a ? that opens a plain-text popover on click or focus and closes on Esc or a click elsewhere', async () => {
+  const { app, window } = await openConfirmation();
+  for (const k of ['starts at', 'can reach', 'iterations', 'runs']) assert.ok(byAttr(app, 'data-help', k), `a ? for ${k}`);
+  byAttr(app, 'data-more', 'toggle').click();
+  for (const k of ['spend cap', 'time cap', 'live tool calls', 'model']) assert.ok(byAttr(app, 'data-help', k), `a ? for ${k}`);
+
+  byAttr(app, 'data-help', 'time cap').click();
+  const pop = byAttr(app, 'data-pop', 'time cap');
+  assert.ok(pop, 'it opens on click');
+  assert.ok(pop.textContent.includes('the whole run may take') && pop.textContent.includes('not each iteration'), 'the time cap\'s says it is for the whole run');
+  assert.equal(byAttr(app, 'data-help', 'time cap').attrs['aria-expanded'], 'true');
+  assert.ok(!app.all().some((e) => e.attrs['data-pop'] === 'iterations'), 'one at a time');
+  winFire(window, 'keydown', { key: 'Escape' });
+  assert.ok(!byAttr(app, 'data-pop', 'time cap'), 'Esc closes the popover');
+  assert.ok(text(app).includes('Start a run'), 'and only the popover');
+
+  byAttr(app, 'data-help', 'spend cap').click();
+  assert.ok(byAttr(app, 'data-pop', 'spend cap').textContent.includes('a little over'));
+  winFire(window, 'click', { target: byAttr(app, 'data-field', 'cost') });
+  assert.ok(!byAttr(app, 'data-pop', 'spend cap'), 'a click elsewhere closes it');
+  byAttr(app, 'data-help', 'spend cap').click();
+  winFire(window, 'click', { target: byAttr(app, 'data-pop', 'spend cap') });
+  assert.ok(byAttr(app, 'data-pop', 'spend cap'), 'a click inside it does not');
+
+  fire(byAttr(app, 'data-help', 'iterations'), 'focus');
+  assert.ok(byAttr(app, 'data-pop', 'iterations'), 'keyboard focus opens it');
+  byAttr(app, 'data-help', 'iterations').click();
+  assert.ok(byAttr(app, 'data-pop', 'iterations'), 'the click that came with the focus does not close it again');
+  assert.ok(!app.all().some((e) => e.tagName === 'pre' && e.textContent.includes('Iterations')), 'text, not markup');
+});
+
+test('Esc and Cancel close the confirmation and start nothing', async () => {
+  const a = await openConfirmation();
+  winFire(a.window, 'keydown', { key: 'Escape' });
+  assert.ok(!text(a.app).includes('Start a run'));
+  assert.equal(a.api.calls.start.length, 0);
+  buttonNamed(a.app, 'Start run…').click();
+  await tick();
+  buttonNamed(a.app, 'Cancel').click();
+  assert.ok(!text(a.app).includes('Start a run'));
+  assert.equal(a.api.calls.start.length, 0);
+});
+
+test('the dry run screen\'s Start run… opens the same confirmation', async () => {
+  const api = fakeApi(data());
+  const { app } = boot(api);
+  await tick();
+  buttonNamed(app, 'Dry run').click();
+  await tick();
+  buttonNamed(app, 'Start run…').click();
+  await tick();
+  assert.ok(text(app).includes('Start a run'));
+});
+
+test('without **/.foreman-run/ ignored, Start run is off and says why; so it is while a run is in flight', async () => {
+  const off = await openConfirmation(fakeApi(data(), undefined, undefined, {}, {}, { confirm: () => ({ ok: true, doc: confirmFacts({ ignored: false }) }) }));
+  assert.equal(startButton(off.app).disabled, true);
+  assert.ok(text(off.app).includes('Starting from the app needs `doctor --fix`'));
+  assert.equal(startButton(off.app).title, 'Starting from the app needs `doctor --fix`');
+  const busy = await openConfirmation(fakeApi(data(), undefined, undefined, {}, {}, { confirm: () => ({ ok: true, doc: confirmFacts({ inFlight: true }) }) }));
+  assert.equal(startButton(busy.app).disabled, true);
+});
+
+test('a dry run that fails is shown as the CLI\'s own words, with a way out', async () => {
+  const { app } = await openConfirmation(fakeApi(data(), undefined, undefined, {}, {}, { confirm: () => ({ ok: false, error: { kind: 'exit', message: 'preflight: the working tree is dirty.' } }) }));
+  assert.ok(text(app).includes('preflight: the working tree is dirty.'));
+  buttonNamed(app, 'Close').click();
+  assert.ok(!text(app).includes('preflight'));
+});
+
+test('Start run is the only control that starts a run: nothing else in the app calls runStart, and both entry points say costs money', async () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  assert.equal((src.match(/api\.runStart\(/g) || []).length, 1, 'one call site');
+  const { app } = boot(fakeApi(data()));
+  await tick();
+  const paid = buttons(app).filter((b) => b.textContent.includes('costs money'));
+  assert.deepEqual(paid.map((b) => b.textContent.split('costs')[0]), ['Start run…']);
+});
+
+test('starting shows the live screen while the run comes up, and a start that fails stays on the confirmation with the CLI\'s words', async () => {
+  const fail = await openConfirmation(fakeApi(data(), undefined, undefined, {}, {}, { start: () => ({ ok: false, error: { kind: 'in-flight', message: 'A run is already in flight in this batch.' } }) }));
+  startButton(fail.app).click();
+  await tick();
+  assert.ok(text(fail.app).includes('A run is already in flight in this batch.'));
+  assert.ok(text(fail.app).includes('Start a run'), 'still there to fix or cancel');
+
+  const { app, api } = await openConfirmation();
+  startButton(app).click();
+  await tick();
+  assert.equal(api.calls.start.length, 1);
+  assert.ok(text(app).includes('Starting the run…'));
+  assert.ok(!text(app).includes('Start a run'), 'the confirmation is gone');
+});
+
+// ---- the live run ----
+
+async function openLive(over = {}, rn = {}) {
+  const api = fakeApi(over.data || dataRunning(), undefined, undefined, {}, {}, { load: () => ({ ok: true, run: liveSnap(over.snap) }), ...rn });
+  const b = boot(api);
+  await tick();
+  return { ...b, api };
+}
+
+test('reattaching: a run in flight shows the live screen, with its iterations in order, their outcomes and costs, and the budget', async () => {
+  const { app, api, document } = await openLive();
+  assert.deepEqual(api.calls.runLoad, ['.scratch/b']);
+  const t = text(app);
+  for (const want of ['20261022T140533Z-9020', '.scratch/b', 'progressed', 'landed', 'unproductive', 'checkpoint turn', '15m00s · $2.00', '4/5', 'running', 'Iteration', '4 of 5', '$4.25 / $25', 'Stop after this one', 'Stop now…']) {
+    assert.ok(t.includes(want), `the live screen shows ${JSON.stringify(want)}`);
+  }
+  assert.equal(app.all().filter((e) => e.attrs['data-row'] === 'done').length, 4);
+  assert.equal(app.all().filter((e) => e.attrs['data-row'] === 'running').length, 1);
+  assert.equal(document.title, 'Foreman — running b');
+  const feed = app.all().find((e) => e.attrs['data-feed'] === 'run');
+  assert.ok(feed.textContent.includes('bash test/smoke.sh <b>x</b>'), 'the feed is text: the tag is shown, not run');
+});
+
+test('the same run, reopened, shows the same iterations and the same budget', async () => {
+  const a = await openLive();
+  const b = await openLive();
+  const rows = (app) => app.all().filter((e) => e.attrs['data-row']).map((e) => e.textContent);
+  assert.deepEqual(rows(a.app), rows(b.app));
+  assert.ok(text(a.app).includes('4 of 5') && text(b.app).includes('4 of 5'));
+});
+
+test('+ − L call foreman keys, and the bar shows the budget main read back from the control directory', async () => {
+  let budget = 5;
+  const { app, api } = await openLive({}, { keys: (_b, k) => { if (k === '+') budget++; return { ok: true, run: liveSnap({ control: { budget, iteration: 4, live: true, activity: null, feed: [], spent: null } }) }; } });
+  byAttr(app, 'data-key', '+').click();
+  await tick();
+  assert.deepEqual(api.calls.keys, [['.scratch/b', '+']]);
+  assert.ok(text(app).includes('4 of 6'), 'the new budget');
+  byAttr(app, 'data-key', 'L').click();
+  await tick();
+  byAttr(app, 'data-key', '-').click();
+  await tick();
+  assert.deepEqual(api.calls.keys.map((c) => c[1]), ['+', 'L', '-']);
+});
+
+test('a key that foreman refuses is shown, not swallowed', async () => {
+  const { app } = await openLive({}, { keys: () => ({ ok: false, error: { kind: 'exit', message: 'foreman keys: no run in flight in batch .scratch/b' } }) });
+  byAttr(app, 'data-key', '+').click();
+  await tick();
+  assert.ok(text(app).includes('foreman keys: no run in flight'));
+});
+
+test('Stop after this one calls foreman stop; Stop now… asks first, with the words, and only then calls stop --now', async () => {
+  const { app, api } = await openLive();
+  byAttr(app, 'data-stop', 'after').click();
+  await tick();
+  assert.deepEqual(api.calls.stop, [['.scratch/b', false]]);
+  assert.ok(text(app).includes('The run will stop after this iteration.'));
+
+  byAttr(app, 'data-stop', 'now').click();
+  assert.ok(text(app).includes("The ticket's uncommitted work is kept, and the next run reviews it"));
+  assert.equal(api.calls.stop.length, 1, 'asking is not stopping');
+  buttonNamed(app, 'Keep running').click();
+  assert.ok(!text(app).includes('uncommitted work'));
+  byAttr(app, 'data-stop', 'now').click();
+  byAttr(app, 'data-stop', 'confirm').click();
+  await tick();
+  assert.deepEqual(api.calls.stop[1], ['.scratch/b', true]);
+});
+
+test('when the run\'s control directory is not in the batch the bar is off and says what to do', async () => {
+  const { app } = await openLive({ snap: { run: { ...IN_FLIGHT, control_dir: null }, control: null } });
+  assert.ok(text(app).includes('Steering needs `doctor --fix`'));
+  for (const sel of [['data-key', '+'], ['data-key', '-'], ['data-key', 'L'], ['data-stop', 'after'], ['data-stop', 'now']]) {
+    assert.equal(byAttr(app, sel[0], sel[1]).disabled, true, sel.join('='));
+  }
+});
+
+test('Compact view shrinks the window to the small layout and Full view puts it back; the run ending does too', async () => {
+  const { app, api } = await openLive();
+  buttonNamed(app, 'Compact view').click();
+  assert.deepEqual(api.calls.compact, [true]);
+  assert.ok(byAttr(app, 'data-view', 'compact'), 'the compact card');
+  assert.ok(!app.all().some((e) => e.attrs['data-batch']), 'no rail in the small window');
+  assert.ok(!app.all().some((e) => e.attrs['data-feed']), 'no feed, no history');
+  for (const want of ['4 of 10 · iteration 4 of 5', '05 document-human-tickets', '$4.25/$25', 'Stop after this one']) assert.ok(text(app).includes(want), want);
+  assert.equal(app.classList ? app.className.includes('solo') : true, true);
+  buttonNamed(app, 'Full view').click();
+  assert.deepEqual(api.calls.compact, [true, false]);
+  assert.ok(app.all().some((e) => e.attrs['data-row']));
+
+  buttonNamed(app, 'Compact view').click();
+  api.push(data({ status: { ...sample(), run: { in_flight: false, id: null, started_at: null, iteration: null, budget: null, live: null, control_dir: null, pid: null } } }));
+  await tick();
+  assert.deepEqual(api.calls.compact, [true, false, true, false], 'the run ended: back to the full window by itself');
+  assert.ok(!byAttr(app, 'data-view', 'compact'));
+  assert.ok(text(app).includes('Dry run'), 'the overview is back');
+});
+
+test('a run that ends is left: the screen follows the files, not a timer', async () => {
+  const { app, api } = await openLive();
+  assert.ok(app.all().some((e) => e.attrs['data-row'] === 'running'));
+  api.pushRun({ batch: '.scratch/b', run: liveSnap({ control: { budget: 5, iteration: 4, live: true, activity: null, feed: [{ tm: '03:00', tool: 'Edit', text: 'lib/x.sh' }], spent: null } }) });
+  assert.ok(text(app).includes('lib/x.sh'), 'a feed line arrives by a push');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  assert.ok(!/setInterval|setTimeout/.test(src), 'no timer in app.js');
+});
+
+test('a run that ended before it began shows the CLI\'s own words', async () => {
+  const { app, api } = await openConfirmation();
+  startButton(app).click();
+  await tick();
+  api.pushExit({ batch: '.scratch/b', code: 1, signal: null, out: 'preflight: the working tree is dirty.\nCommit or set aside first.' });
+  assert.ok(text(app).includes('The run ended before it began.'));
+  assert.ok(text(app).includes('preflight: the working tree is dirty.'));
+  buttonNamed(app, 'Back').click();
+  await tick();
+  assert.ok(text(app).includes('Dry run'), 'back on the overview');
 });
