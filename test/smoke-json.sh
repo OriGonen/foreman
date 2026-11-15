@@ -2107,6 +2107,18 @@ if case_is "a stop file in the control directory pauses the run as Ctrl-C does, 
   assert_contains "$ERR" "Interrupt received" "the same words"
   [ -f "$repo/batch/.foreman-stall-marker" ] && pass || fail "the stall marker stays"
   assert_eq "$(ls -A "$repo/batch/.foreman-run" 2>/dev/null)" "" "the control directory is cleared, the stop file with it"
+  # During a checkpoint turn: what Ctrl-C does there is today's stall path (the loop does not read its
+  # flag until the next iteration), and a stop file is read at the same place, so it ends the same
+  # way, with the same warning. Not better than Ctrl-C, not worse.
+  repo="$WORK/now-checkpoint"; ctl_repo "$repo" 2
+  run_foreman_env "$repo" "FOREMAN_FAKE_BEHAVIOUR=dirty FOREMAN_FAKE_CHECKPOINT_BEHAVIOUR=fail" run batch --unlimited
+  plain_st="$ST"; plain_err="$ERR"
+  repo="$WORK/now-checkpoint-stop"; ctl_repo "$repo" 2
+  run_foreman_env "$repo" "FOREMAN_FAKE_BEHAVIOUR=dirty FOREMAN_FAKE_CHECKPOINT_BEHAVIOUR=stop-file" run batch --unlimited
+  assert_eq "$ST" "$plain_st" "stopped during the checkpoint turn: the exit code of an unsalvaged stall, as with Ctrl-C"
+  assert_contains "$ERR" "Interrupt received" "with the interrupt noted, as Ctrl-C notes it"
+  assert_missing "$plain_err" "Interrupt received" "(and not without a stop)"
+  repo="$WORK/now-file"
   # Not the next run: a leftover stop file is cleared with the directory.
   mkdir -p "$repo/batch/.foreman-run"; : > "$repo/batch/.foreman-run/stop"
   run_foreman_env "$repo" "FOREMAN_FAKE_BEHAVIOUR=land" run batch --unlimited

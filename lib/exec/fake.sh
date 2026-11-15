@@ -80,7 +80,8 @@
 # signature) is a SECOND, separate turn within the same iteration, recognised here by a
 # sentinel phrase in the prompt itself — the real prompt-assembly path, not a side channel.
 # It never consumes a slot of FOREMAN_FAKE_BEHAVIOUR's list; its own scripted outcome is:
-#   FOREMAN_FAKE_CHECKPOINT_BEHAVIOUR   commit (default), fail, discard, or reject
+#   FOREMAN_FAKE_CHECKPOINT_BEHAVIOUR   commit (default), fail, discard, reject, or stop-file (as `fail`,
+#                          with a `stop` file left in the control directory: `foreman stop --now` mid-checkpoint)
 #     commit   stage and commit whatever is dirty, as `wip: <ticket> — remaining: the rest`
 #     fail     leave the tree exactly as it was — still dirty, nothing committed
 #     discard  clean the tree WITHOUT committing — simulates a checkpoint turn that
@@ -204,6 +205,10 @@ _fake_checkpoint() {
   case "${FOREMAN_FAKE_CHECKPOINT_BEHAVIOUR:-commit}" in
     fail)
       _fake_payload success false "could not commit the checkpoint"
+      ;;
+    stop-file)
+      : > "$RUN_CTL_DIR/stop"
+      _fake_payload success false "stopped from outside before it could commit"
       ;;
     reject)
       _fake_payload success false "Read the diff.\n${FOREMAN_REVIEW_REJECTED_SENTINEL:-FOREMAN_REVIEW: REJECTED}: changes outside the ticket's scope"

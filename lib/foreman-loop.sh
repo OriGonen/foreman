@@ -1436,6 +1436,7 @@ run_checkpoint_turn() {    # run_checkpoint_turn [stall|review]
   exec_run "$checkpoint_prompt" "$TICKET_FILE" </dev/null |
     node "$FOREMAN_TOOL_DIR/foreman-stream.cjs" ${STREAM_ARGS+"${STREAM_ARGS[@]}"} > "$PAYLOAD_FILE"
   checkpoint_agent_status=${PIPESTATUS[0]}
+  check_stop_file
   checkpoint_result=$(cat "$PAYLOAD_FILE")
   rm -f "$RUN_CTL_DIR/activity"
   FOREMAN_CLAUDE_ARGS=(${checkpoint_args_saved+"${checkpoint_args_saved[@]}"})
