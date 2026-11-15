@@ -242,3 +242,50 @@ test('doctor: the environment is the one every question gets (no display, no str
   const wrong = setup({ code: 0, stdout: JSON.stringify(good), stderr: '' });
   await assert.rejects(() => wrong.f.doctorFix(), (e) => e.kind === 'version' && /asked for doctor/.test(e.message));
 });
+
+// ---- steering a run: keys, stop, and whether the control directory can be reached (ticket 10) ----
+
+test('keys: foreman keys <batch> <keys>, no --json, and the terminal\'s echo on stderr is cleaned', async () => {
+  const { f, calls } = setup({ code: 0, stdout: '', stderr: '\r\u001b[2K⌨ iterations: 1 of 4\n' });
+  const r = await f.keys('.scratch/gui', '+');
+  assert.deepEqual(calls[0].args, ['C:/tools/foreman/bin/foreman', 'keys', '.scratch/gui', '+']);
+  assert.equal(calls[0].opts.cwd, 'C:/Projects/app');
+  assert.equal(r.stderr, '⌨ iterations: 1 of 4');
+  await f.keys('.scratch/gui', '-');
+  assert.deepEqual(calls[1].args.slice(1), ['keys', '.scratch/gui', '-'], 'a lone - is a key, not an option');
+});
+
+test('keys: only +, -, = , _, L and l are passed on; a batch that is not a repo path never reaches the CLI', async () => {
+  const { f, calls } = setup({ code: 0, stdout: '', stderr: '' });
+  for (const bad of ['', 'x', '+x', '; rm -rf /', '--now', undefined, 3]) {
+    await assert.rejects(async () => f.keys('b', bad), (e) => e.kind === 'bad-keys', String(bad));
+  }
+  await assert.rejects(async () => f.keys('../out', '+'), (e) => e.kind === 'bad-batch');
+  await assert.rejects(async () => f.keys('--help', '+'), (e) => e.kind === 'bad-batch');
+  assert.equal(calls.length, 0);
+});
+
+test('keys and stop that fail say what the CLI said, as an exit error', async () => {
+  const { f } = setup({ code: 1, stdout: '', stderr: 'foreman keys: no run in flight in batch b\n' });
+  await assert.rejects(f.keys('b', 'L'), (e) => e.kind === 'exit' && e.message === 'foreman keys: no run in flight in batch b' && e.code === 1);
+  await assert.rejects(f.stop('b'), (e) => e.kind === 'exit' && /no run in flight/.test(e.message));
+});
+
+test('stop: foreman stop <batch>; with now, --now before the batch', async () => {
+  const { f, calls } = setup({ code: 0, stdout: 'foreman stop: the run will stop after iteration 2\n', stderr: '' });
+  const r = await f.stop('.scratch/gui');
+  assert.deepEqual(calls[0].args, ['C:/tools/foreman/bin/foreman', 'stop', '.scratch/gui']);
+  assert.match(r.stdout, /will stop after iteration 2/);
+  await f.stop('.scratch/gui', { now: true });
+  assert.deepEqual(calls[1].args, ['C:/tools/foreman/bin/foreman', 'stop', '--now', '.scratch/gui']);
+  await assert.rejects(async () => f.stop('a b\\c'), (e) => e.kind === 'bad-batch');
+});
+
+test('controlIgnored asks git, from the repo root: 0 is ignored, 1 is not, anything else is an error', async () => {
+  const { f, calls } = setup({ code: 0, stdout: '', stderr: '' });
+  assert.equal(await f.controlIgnored('.scratch/gui'), true);
+  assert.deepEqual(calls[0].args, ['-c', 'git check-ignore -q -- "$1/.foreman-run/pid"', '_', '.scratch/gui']);
+  assert.equal(calls[0].opts.cwd, 'C:/Projects/app');
+  assert.equal((await setup({ code: 1, stdout: '', stderr: '' }).f.controlIgnored('b')), false);
+  await assert.rejects(setup({ code: 128, stdout: '', stderr: 'fatal: not a git repository\n' }).f.controlIgnored('b'), (e) => e.kind === 'exit');
+});

@@ -13,7 +13,9 @@
 // The paths given to foreman are repo-relative with forward slashes and the working directory is
 // the repo root, so a `C:\` path never reaches the CLI (spec: "Windows paths").
 //
-// Starting and stopping runs is a later ticket; this is the read side (status, dry-run, report, doctor), and the one write (`doctorFix`).
+// The read side (status, dry-run, report, doctor), `doctorFix`, and the steering of a run in flight:
+// `keys` and `stop`, which print words, not JSON, and are free (they only write the run's control files).
+// Starting a run is runner.cjs.
 const { execFile } = require('child_process');
 
 const SUPPORTED_JSON = 1;
@@ -107,6 +109,15 @@ function defaultRun(file, args, opts) {
   });
 }
 
+// What a command that prints words said, as lines a person can read: no escape codes (`foreman keys`
+// echoes the terminal's own `⌨ …` line, with a carriage return and a clear-line before it), no blank ends.
+function plainText(s) {
+  return String(s || '')
+    .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '')
+    .replace(/[\r\x00-\x08\x0b-\x1f]/g, '\n')
+    .split('\n').map((l) => l.trim()).filter(Boolean).join('\n');
+}
+
 function createForeman({ bash, checkout, repoRoot, run = defaultRun, env = process.env }) {
   const script = `${checkout.replace(/\\/g, '/')}/bin/foreman`;
 
@@ -120,6 +131,24 @@ function createForeman({ bash, checkout, repoRoot, run = defaultRun, env = proce
       throw new ForemanError('spawn', `could not start ${bash}: ${e.message}`, { cause: e });
     }
     return parseOutput(command, out);
+  }
+
+  // A command with no JSON to give back: resolves with what it printed, rejects with the CLI's own
+  // words when it exited non-zero.
+  async function words(command, args) {
+    let out;
+    try {
+      out = await run(bash, [script, command, ...args], {
+        cwd: repoRoot, env: cliEnv(env), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    } catch (e) {
+      throw new ForemanError('spawn', `could not start ${bash}: ${e.message}`, { cause: e });
+    }
+    if (out.code !== 0) {
+      const said = plainText(out.stderr) || plainText(out.stdout);
+      throw new ForemanError('exit', said || `foreman ${command} exited ${out.code}`, { code: out.code });
+    }
+    return { stdout: plainText(out.stdout), stderr: plainText(out.stderr) };
   }
 
   return {
@@ -140,6 +169,34 @@ function createForeman({ bash, checkout, repoRoot, run = defaultRun, env = proce
     // The inspection sheet of the machine and the repository (no batch): `foreman doctor --json`. Free,
     // and it writes nothing. `doctorFix` is `doctor --fix --json`: it appends the lines the sheet's plan
     // lists to .gitignore and .gitattributes, and answers with what it appended.
+    // Press keys in a run's terminal, from outside it: + one more iteration, - one fewer, L the live view.
+    // Free. `foreman keys` writes the control files and nothing else; what it echoes is the terminal's.
+    keys: (batch, keys) => {
+      if (typeof keys !== 'string' || !/^[-+Ll=_]+$/.test(keys)) {
+        throw new ForemanError('bad-keys', `not keys foreman understands: ${JSON.stringify(keys)}`);
+      }
+      return words('keys', [checkBatchPath(batch), keys]);
+    },
+    // Finish the iteration in flight, then pause; with `now`, end it at once as Ctrl-C does (the CLI
+    // keeps the ticket's uncommitted work, and the next run reviews it). `stop --now` waits for the run
+    // to end, up to a minute. Free.
+    stop: (batch, { now = false } = {}) => words('stop', [...(now ? ['--now'] : []), checkBatchPath(batch)]),
+    // Whether the repository ignores the batch's control directory (`**/.foreman-run/`): without it a
+    // run cannot be steered from here, and the app's own `out` would show up as a change. Asked of git,
+    // as the loop asks it.
+    controlIgnored: async (batch) => {
+      let out;
+      try {
+        out = await run(bash, ['-c', 'git check-ignore -q -- "$1/.foreman-run/pid"', '_', checkBatchPath(batch)], {
+          cwd: repoRoot, env: cliEnv(env), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
+        });
+      } catch (e) {
+        throw new ForemanError('spawn', `could not start ${bash}: ${e.message}`, { cause: e });
+      }
+      if (out.code === 0) return true;
+      if (out.code === 1) return false;
+      throw new ForemanError('exit', plainText(out.stderr) || `git check-ignore exited ${out.code}`, { code: out.code });
+    },
     doctor: () => call('doctor', ['--json']),
     doctorFix: () => call('doctor', ['--fix', '--json']),
   };
@@ -165,4 +222,4 @@ async function findRepoRoot({ bash, dir, run = defaultRun, env = process.env }) 
   return root;
 }
 
-module.exports = { findRepoRoot, createForeman, parseOutput, checkBatchPath, checkRunId, cliEnv, ForemanError, SUPPORTED_JSON };
+module.exports = { plainText, findRepoRoot, createForeman, parseOutput, checkBatchPath, checkRunId, cliEnv, ForemanError, SUPPORTED_JSON };

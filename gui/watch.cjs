@@ -16,7 +16,11 @@
 //
 //   const w = createWatcher({
 //     dirs:     async () => [directories to watch, as they are now],
-//     read:     async () => whatever the screen needs,           // e.g. status --json
+//     read:     async (changes) => whatever the screen needs,    // e.g. status --json
+//               // changes: [{ dir, name }] — what changed since the last read, `name` relative to `dir`
+//               // with forward slashes (null when the platform did not say). A read that only needs
+//               // to know whether something it cares about moved can look at it; one that does not,
+//               // need not.
 //     onResult: (result) => ...,                                 // after a successful read
 //     onError:  (error)  => ...,                                 // after the retry failed too
 //   });
@@ -38,6 +42,7 @@ function createWatcher({
   let dirtyWhileReading = false;
   let attempt = 0;             // 0 for a fresh read, 1 for its one retry
   let stopped = false;
+  let changed = [];            // { dir, name } since the last read, kept for the retry
 
   function schedule() {
     if (stopped) return;
@@ -46,15 +51,16 @@ function createWatcher({
     timer = setTimer(run, debounceMs);
   }
 
-  function onEvent() {
+  function onEvent(dir, name) {
     attempt = 0;
+    changed.push({ dir: dir === undefined ? null : dir, name: name === undefined || name === null ? null : String(name).replace(/\\/g, '/') });
     schedule();
   }
 
   function watchDir(dir) {
     let handle;
     try {
-      handle = fsWatch(dir, { recursive: true }, onEvent);
+      handle = fsWatch(dir, { recursive: true }, (_type, name) => onEvent(dir, name));
     } catch {
       return;                  // not there (yet): the next read looks again
     }
@@ -62,7 +68,7 @@ function createWatcher({
       // The directory under the handle went away or was renamed: let it go, and read.
       try { handle.close(); } catch { /* already closed */ }
       if (open.get(dir) === handle) open.delete(dir);
-      onEvent();
+      onEvent(dir, null);
     });
     open.set(dir, handle);
   }
@@ -85,7 +91,9 @@ function createWatcher({
     reading = true;
     dirtyWhileReading = false;
     let result, failure = null;
-    try { result = await read(); } catch (e) { failure = e; }
+    const asked = changed;
+    changed = [];
+    try { result = await read(asked); } catch (e) { failure = e; }
     reading = false;
     if (stopped) return;
     await sync();
@@ -95,6 +103,7 @@ function createWatcher({
       onResult(result);
     } else if (attempt === 0) {
       attempt = 1;             // maybe a rename was in the way: once more after the debounce
+      changed = asked.concat(changed);
       schedule();
       return;
     } else {

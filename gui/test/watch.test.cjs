@@ -225,3 +225,46 @@ test('a read finishing after stop is not delivered', async () => {
   release(); await settle();
   assert.equal(t.results.length, 0);
 });
+
+// ---- what changed is handed to the read (ticket 10) ----
+
+test('read is given what changed since the last read: the directory and the name, with forward slashes', async () => {
+  const seen = [];
+  const t = setup({ read: async (changes) => { seen.push(changes); return 1; } });
+  await t.w.start();
+  t.fsw.fire('batch', 'issues\\01-a.md');
+  t.fsw.fire('batch', '.foreman-run/feed');
+  t.fsw.fire('batch', '.foreman-run/feed');
+  await t.clock.advance(150);
+  assert.deepEqual(seen[0], [
+    { dir: 'batch', name: 'issues/01-a.md' }, { dir: 'batch', name: '.foreman-run/feed' }, { dir: 'batch', name: '.foreman-run/feed' },
+  ], 'one read for the burst, and it knows what was in it');
+  t.fsw.fire('batch', 'foreman-runs.jsonl');
+  await t.clock.advance(150);
+  assert.deepEqual(seen[1], [{ dir: 'batch', name: 'foreman-runs.jsonl' }], 'the next read has only what is new');
+});
+
+test('an event with no name, or a watch that ended, reads as "something changed": name null', async () => {
+  const seen = [];
+  const t = setup({ read: async (changes) => { seen.push(changes); return 1; } });
+  await t.w.start();
+  t.fsw.fire('batch', null);
+  await t.clock.advance(150);
+  assert.deepEqual(seen[0], [{ dir: 'batch', name: null }]);
+  t.fsw.fail('batch');
+  await t.clock.advance(150);
+  assert.deepEqual(seen[1], [{ dir: 'batch', name: null }]);
+});
+
+test('the one retry after a failed read is given what the failed read was given, and what came since', async () => {
+  const seen = [];
+  let n = 0;
+  const t = setup({ read: async (changes) => { seen.push(changes.map((c) => c.name)); if (++n === 1) throw new Error('renamed under us'); return n; } });
+  await t.w.start();
+  t.fsw.fire('batch', 'a');
+  await t.clock.advance(150);
+  assert.equal(t.errors.length, 0, 'not an error yet');
+  await t.clock.advance(150);
+  assert.deepEqual(seen, [['a'], ['a']]);
+  assert.equal(t.results.length, 1);
+});
