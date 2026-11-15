@@ -146,3 +146,8 @@
 - Review: fixed `exec` example (real value is `sandbox (sandbox foreman-<repo>)`), `# reason:` scope (exit 20 only, not 30), button names. Skipped: README's "The logs" says "Nothing reads them back" — still true of the loop; the new section says `report` and `--json` read them (ticket forbids touching other prose).
 - Full smoke suite: 2741 passed in 2m 10s, 1 failed ("convert ... CRLF kept", pre-existing). `foreman help` md5 unchanged.
 - Remaining: (1) the five dark screenshots from the real app into `docs/images/`, added to the section (needs Windows + Electron: not possible in this sandbox, nothing was faked); (2) by-hand read on GitHub + commands in Git Bash. Ticket 15 is blocked by this one.
+
+
+## 14 — re-checked (still NOT landed; Status stays `ready-for-agent`)
+- Re-checked the sandbox: still no Electron, browser, display or Windows (only the /tmp/standin stub), so the five dark screenshots cannot be taken from the app. Nothing faked; no code or README change this iteration.
+- Remaining (unchanged, human on Windows): (1) save five dark PNGs of the real app to `docs/images/` (designs 01 overview, 02 ticket, 03 confirmation, 04 live run, 07 report) and add them to the README section in the existing `<table>` style; (2) read the section on GitHub's rendering of the branch and run every command in it in Git Bash. Then flip the ticket to `implemented`; ticket 15 is blocked until then.
