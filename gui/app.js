@@ -1417,7 +1417,8 @@
       'open-log': () => openFileFromScene(a.file),
       iterations: () => { l.ended.listing = true; draw(); },
     }[a.do];
-    const b = button(a.label, { cls: a.primary ? 'primary' : a.do === 'iterations' || a.do === 'resume' && !a.primary ? 'quiet' : '', tag: a.tag || null, onClick: () => { l.error = null; return go(); } });
+    const quiet = a.do === 'iterations' || a.do === 'resume';       // the primary step, if the scene has one, is the one that stands out
+    const b = button(a.label, { cls: a.primary ? 'primary' : quiet ? 'quiet' : '', tag: a.tag || null, onClick: () => { l.error = null; return go(); } });
     b.setAttribute('data-end-action', a.do);
     return b;
   }

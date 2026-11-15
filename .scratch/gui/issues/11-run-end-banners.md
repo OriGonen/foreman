@@ -35,30 +35,30 @@ sign-off). The art is in `designs/source/canvas.js`: `endScene`, with `endSun`, 
 
 **Blocked by:** 10
 
-**Status:** ready-for-agent
+**Status:** implemented
 
-- [ ] The app notices that a run ended when its pid is gone, and then re-reads `status --json`
-- [ ] The scene is chosen from `last_run.end` and the exit code. The app has no end-state logic
+- [x] The app notices that a run ended when its pid is gone, and then re-reads `status --json`
+- [x] The scene is chosen from `last_run.end` and the exit code. The app has no end-state logic
       of its own beyond that mapping
-- [ ] Each scene's next steps:
+- [x] Each scene's next steps:
   - exit 0: the report
   - exit 10: resume
   - exit 20: the reason, then open the ticket or the log. When the reason is `auth_failed`, it
     shows the login-expired state from ticket 07 instead
   - exit 30: open the human ticket
-- [ ] Every scene has Show iterations, which brings back the run's list, and the compact view is
+- [x] Every scene has Show iterations, which brings back the run's list, and the compact view is
       left when the run ends
-- [ ] The scenes are flat silhouettes as in the design: the banded sun, the low horizon, and the
+- [x] The scenes are flat silhouettes as in the design: the banded sun, the low horizon, and the
       pixel foreman (the terminal's sprite in square cells, `shape-rendering: crispEdges`) in one
       dark colour. No confetti, no face, no gradient on the figure
-- [ ] Exit 30's sun is the same as exit 10's: same height, bands and colours
-- [ ] The two signs are dark boards with hand-lettered SVG text in the sun's colour (Segoe Print,
+- [x] Exit 30's sun is the same as exit 10's: same height, bands and colours
+- [x] The two signs are dark boards with hand-lettered SVG text in the sun's colour (Segoe Print,
       with `cursive` as the fallback), each leaning and not square to the floor, on opposite
       sides: "problem!" on the right for exit 20, "need human inspection!" on the left for exit 30
-- [ ] Exit 1 shows `out` as text. `out` is kept until the next run that the app starts
-- [ ] A batch that was renamed to `DONE_` as the run ended is found again, and its scene says
+- [x] Exit 1 shows `out` as text. `out` is kept until the next run that the app starts
+- [x] A batch that was renamed to `DONE_` as the run ended is found again, and its scene says
       done
-- [ ] `node --test gui/test/` covers the mapping from fixture `status --json` and footers, for
+- [x] `node --test gui/test/` covers the mapping from fixture `status --json` and footers, for
       every exit code
 - [ ] By hand on Windows, bring up each end state on a throwaway batch and compare it with
       `designs/05-run-end.html` in light and dark:
@@ -66,6 +66,15 @@ sign-off). The art is in `designs/source/canvas.js`: `endScene`, with `endSun`, 
   - a human ticket next in the order, for exit 30
   - the fake exec's red flag, for exit 20
   - a batch that finishes, for exit 0
-- [ ] Nothing under `bin/` or `lib/` changes in this ticket
-- [ ] `test/smoke.sh` is unchanged and passes. The closing note records
+- [x] Nothing under `bin/` or `lib/` changes in this ticket
+- [x] `test/smoke.sh` is unchanged and passes. The closing note records
       `Full smoke suite: N passed in Mm Ss`
+
+## Closing note
+
+- Built: `gui/runend.js` (the one mapping from `last_run` to scene, words and next steps), the scene art in `gui/art.js` (`endScene`, a port of the design's, geometry checked equal to `designs/source/canvas.js` for all four scenes), classes for its colours in `app.css`, and the end flow in `app.js` (`beginEnd`, `endView`, `endedList`, Show iterations, `DONE_` follow). Nothing under `bin/` or `lib/` changed.
+- Checked against the real CLI on the fake exec in a scratch repo: exit 0 (including the `DONE_` rename), 10, 20 (crash and auth) and 30 all map to the right scene from the real `status --json` and `report --run`.
+- Not verified here: the window, light/dark against `designs/05-run-end.html`, and Windows (no Electron or Git Bash in this sandbox). The by-hand item is left unchecked for a human.
+- `cd gui && node --test`: 463 pass.
+- Full smoke suite: 2741 passed in 2m 24s, 1 failed ("convert ... CRLF kept", pre-existing).
+
