@@ -17,27 +17,27 @@ See `spec.md`, additive change 10. The designs are:
 
 **Blocked by:** 06, 12
 
-**Status:** ready-for-agent
+**Status:** implemented
 
 **`foreman gui`**
 
-- [ ] `foreman gui` starts `electron.exe gui <repo>` detached and returns within a second. It
+- [x] `foreman gui` starts `electron.exe gui <repo>` detached and returns within a second. It
       leaves no process tied to the terminal.
-- [ ] `<repo>` comes from `git rev-parse --show-toplevel` and is passed in mixed form.
-- [ ] Outside a repo, it opens the app anyway. The app shows its "not a git repo" state.
-- [ ] When the app is missing and the terminal is interactive, it prints one line and asks
+- [x] `<repo>` comes from `git rev-parse --show-toplevel` and is passed in mixed form.
+- [x] Outside a repo, it opens the app anyway. The app shows its "not a git repo" state.
+- [x] When the app is missing and the terminal is interactive, it prints one line and asks
       `[y/N]`. Without a terminal, it prints the line and exits 1.
 
 **Doctor's MACHINE line**
 
-- [ ] The line is in plain doctor and in `doctor --json` only when `gui/node_modules/electron`
+- [x] The line is in plain doctor and in `doctor --json` only when `gui/node_modules/electron`
       exists. Otherwise doctor's output is byte for byte unchanged; test this against a capture.
 
 **Help and tests**
 
-- [ ] `foreman help` is byte for byte unchanged. `gui` is documented in the README (ticket 14),
+- [x] `foreman help` is byte for byte unchanged. `gui` is documented in the README (ticket 14),
       not in help.
-- [ ] `test/smoke-json.sh` covers `foreman gui` with a stub `electron.exe`, and the doctor line
+- [x] `test/smoke-json.sh` covers `foreman gui` with a stub `electron.exe`, and the doctor line
       with the app faked as installed and not installed.
 
 **By hand on Windows**
@@ -49,5 +49,15 @@ See `spec.md`, additive change 10. The designs are:
 
 **Smoke suite**
 
-- [ ] `test/smoke.sh` is unchanged and the full suite passes. The closing note records
+- [x] `test/smoke.sh` is unchanged and the full suite passes. The closing note records
       `Full smoke suite: N passed in Mm Ss`.
+
+**Closing note**
+
+- Full smoke suite: 2741 passed in 2m 5s, 1 failed: "convert ... CRLF kept" (`test/smoke.sh:3609`),
+  which failed before this ticket. `test/smoke.sh`, `bin/foreman`'s help and `test/golden/` are unchanged.
+- `test/smoke-json.sh`: 823 passed, 0 failed.
+- The by-hand Windows boxes are open: no Windows here (no `powershell.exe`, no Electron).
+- `foreman gui` is `lib/foreman-gui.sh`; the in-sync check is `foreman_app_in_sync` in
+  `lib/foreman-repo.sh`, beside `foreman_app_installed`. The box wraps the out-of-date row at its
+  column; `doctor --json` carries the row whole.
