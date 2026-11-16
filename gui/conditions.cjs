@@ -17,21 +17,16 @@
 // behind it, and `onChange` says when it found something different, for the window to be sent again.
 // A failing read is no state at all: nothing here is guessed.
 
-const RUNNER_ROW = /^(\S+) is not on PATH, and FOREMAN_EXEC=(\S+) needs it$/;
+const Conf = require('./conf.js');
+
+const RUNNER_ROW =/^(\S+) is not on PATH, and FOREMAN_EXEC=(\S+) needs it$/;
 
 // FOREMAN_EXEC for a batch, the way foreman-config.sh settles it: the environment first, then the last
-// active `FOREMAN_EXEC=` line of foreman.conf (as the doctor reads it, legacy `RALPH_EXEC=` too), else the
-// default, sandbox.
+// assignment of `FOREMAN_EXEC` in foreman.conf (or ralph.conf; legacy `RALPH_EXEC` ranks below it — see
+// conf.js), else the default, sandbox.
 function execModeOf(confText, env = {}) {
-  const fromEnv = env.FOREMAN_EXEC !== undefined ? String(env.FOREMAN_EXEC).trim() : '';
-  if (fromEnv !== '') return fromEnv;
-  let mode = '';
-  if (typeof confText === 'string') {
-    for (const line of confText.split('\n')) {
-      const m = /^[ \t]*(?:export[ \t]+)?(?:FOREMAN|RALPH)_EXEC=(.*)$/.exec(line.replace(/\r$/, ''));
-      if (m) mode = m[1].replace(/[ \t]+#.*$/, '').replace(/["']/g, '').trim();
-    }
-  }
+  const { value } = Conf.knob(confText, 'FOREMAN_EXEC', env);
+  const mode = value === null ? '' : value.trim();
   return mode === '' ? 'sandbox' : mode;
 }
 

@@ -22,6 +22,7 @@ const { createRunner, exitNotifier } = require('./runner.cjs');
 const { createLive, onlyControlFiles } = require('./live.cjs');
 const { checkBatchPath } = require('./foreman.cjs');
 const { createConditions } = require('./conditions.cjs');
+const Conf = require('./conf.js');
 const { INIT_COMMAND } = require('./states.js');
 const { repoFromArgv, refuseNavigation, openWindowHandler, repoPath, openablePath } = require('./guard.cjs');
 
@@ -231,7 +232,7 @@ ipcMain.handle('ticket:save', async (event, batch, name, text, base) => {
 // the control directory, whether a run is already going, the batch's foreman.conf and the caps the
 // app's own environment carries (for "where it is set"). The page words them (runplan.js).
 function readConf(batch) {
-  try { return fs.readFileSync(`${ctx.repoRoot}/${checkBatchPath(batch)}/foreman.conf`, 'utf8'); } catch { return ''; }
+  try { return Conf.readBatchConf(fs, `${ctx.repoRoot}/${checkBatchPath(batch)}`) || ''; } catch { return ''; }
 }
 
 ipcMain.handle('run:confirm', async (event, batch) => {
@@ -241,7 +242,8 @@ ipcMain.handle('run:confirm', async (event, batch) => {
     checkBatchPath(batch);
     const [dry, ignored] = await Promise.all([ctx.foreman.dryRun(batch), ctx.foreman.controlIgnored(batch)]);
     const known = ctx.overview.statusOf(batch);
-    const env = { FOREMAN_MAX_COST_USD: process.env.FOREMAN_MAX_COST_USD, FOREMAN_MAX_MINUTES: process.env.FOREMAN_MAX_MINUTES };
+    const env = {};
+    for (const k of ['MAX_COST_USD', 'MAX_MINUTES']) for (const p of ['FOREMAN', 'RALPH']) env[`${p}_${k}`] = process.env[`${p}_${k}`];
     return { ok: true, doc: { dry, ignored, inFlight: !!(known && known.run && known.run.in_flight), confText: readConf(batch), env } };
   } catch (e) {
     return { ok: false, error: describe(e) };

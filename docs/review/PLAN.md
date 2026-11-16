@@ -27,7 +27,7 @@ Stop and ask the owner before any change to the public CLI interface, the config
 | T09 | Finished batches keep a readable order | todo |
 | T10 | Log and terminal hygiene | todo |
 | T11 | GUI main-process fixes | done |
-| T12 | GUI conf readers agree with the shell | todo |
+| T12 | GUI conf readers agree with the shell | done |
 | T13 | Signals: keep the trap through the footer; forward TERM | todo |
 | R1 | Loop: one path for terminal states | todo |
 | R2 | Move status and dry-run out of the loop file | todo |

@@ -12,9 +12,9 @@
 // foreman.conf. A cap edited in the confirmation is passed to that one run in its environment and
 // shown as a prefix of the command. foreman.conf is never written.
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory();
-  else root.ForemanRunPlan = factory();
-}(typeof self !== 'undefined' ? self : this, function () {
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./conf.js'));
+  else root.ForemanRunPlan = factory(root.ForemanConf);
+}(typeof self !== 'undefined' ? self : this, function (Conf) {
 
   const COST = 'FOREMAN_MAX_COST_USD';
   const MINUTES = 'FOREMAN_MAX_MINUTES';
@@ -110,9 +110,9 @@
   // Where a cap's value comes from: the environment the app was started in (which the CLI ranks
   // first), foreman.conf (an active, uncommented line), or nowhere.
   function capSource(name, { env, confText }) {
-    if (env && env[name] !== undefined && String(env[name]).trim() !== '') return { kind: 'environment', text: 'set in the environment' };
-    const line = new RegExp('^[ \\t]*(?:export[ \\t]+)?' + name + '=', 'm');
-    if (typeof confText === 'string' && line.test(confText)) return { kind: 'conf', text: 'set in foreman.conf' };
+    const { source } = Conf.knob(confText, name, env);
+    if (source === 'environment') return { kind: 'environment', text: 'set in the environment' };
+    if (source === 'conf') return { kind: 'conf', text: 'set in foreman.conf' };
     return { kind: 'none', text: 'not set · 0 = no cap' };
   }
 

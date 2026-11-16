@@ -71,7 +71,7 @@ function boot(api) {
   win.addEventListener = (type, fn) => { (win.listeners[type] = win.listeners[type] || []).push(fn); };
   win.window = win;
   vm.createContext(win);
-  for (const f of ['model.js', 'states.js', 'runplan.js', 'runview.js', 'runend.js', 'art.js', 'preview.js', 'app.js']) {
+  for (const f of ['model.js', 'states.js', 'conf.js', 'runplan.js', 'runview.js', 'runend.js', 'art.js', 'preview.js', 'app.js']) {
     vm.runInContext(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'), win, { filename: f });
   }
   return { app, document, window: win };

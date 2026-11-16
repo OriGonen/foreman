@@ -10,6 +10,7 @@
 // appended to), or says something odd reads as absent, never as an error: the screen shows what it
 // has and the next change reads again.
 const nodeFs = require('fs');
+const Conf = require('./conf.js');
 
 function readText(fs, p) { try { return fs.readFileSync(p, 'utf8'); } catch { return null; } }
 
@@ -52,13 +53,9 @@ function readControl(dir, fs = nodeFs) {
 // line, or one in the environment the app has. null is no cap, or one the app cannot tell.
 function capsFromConf(confText, env = {}) {
   const pick = (name) => {
-    const fromEnv = env[name] !== undefined && String(env[name]).trim() !== '' ? String(env[name]).trim() : null;
-    let text = fromEnv;
-    if (text === null && typeof confText === 'string') {
-      const m = new RegExp('^[ \\t]*(?:export[ \\t]+)?' + name + '=["\']?([0-9]+(?:\\.[0-9]+)?)["\']?[ \\t]*(?:#.*)?$', 'm').exec(confText);
-      text = m ? m[1] : null;
-    }
-    const n = text === null ? 0 : Number(text);
+    const { source, value } = Conf.knob(confText, name, env);
+    // What conf.js could not settle (`$(cat x)`) is not a number, and is no cap.
+    const n = source === null || (source === 'conf' && !/^[0-9]+(?:\.[0-9]+)?$/.test(value)) ? 0 : Number(value);
     return Number.isFinite(n) && n > 0 ? n : null;
   };
   return { cost: pick('FOREMAN_MAX_COST_USD'), minutes: pick('FOREMAN_MAX_MINUTES') };
@@ -89,7 +86,7 @@ function createLive({ repoRoot, foreman, fs = nodeFs, env = process.env }) {
       const control = dir ? readControl(dir, fs) : null;
       let rep = lastReport && lastReport.batch === batch && lastReport.runId === run.id ? lastReport : null;
       if (record || !rep) rep = await iterations(batch, run.id);
-      const conf = readText(fs, `${repoRoot}/${batch}/foreman.conf`);
+      const conf = Conf.readBatchConf(fs, `${repoRoot}/${batch}`);
       return {
         batch, run, next, control,
         iterations: rep.rows, iterationsError: rep.error,
