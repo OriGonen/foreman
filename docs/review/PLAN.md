@@ -16,7 +16,7 @@ Stop and ask the owner before any change to the public CLI interface, the config
 
 | Ticket | Title | Status |
 |--------|-------|--------|
-| T01 | Validate numeric knobs; fail safe on a crashed loop | todo |
+| T01 | Validate numeric knobs; fail safe on a crashed loop | done |
 | T02 | Never reset the sandbox over uncollected commits | todo |
 | T03 | One liveness check; refuse a second run | todo |
 | T04 | Record: verdict first, guarded appends, strict payload | todo |

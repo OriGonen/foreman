@@ -1951,6 +1951,44 @@ if case_is "an unknown exec mode is rejected before anything runs"; then
   assert_contains "$OUT" "fake" "the list is generated from lib/exec/"
 fi
 
+if case_is "a leading-zero FOREMAN_MAX_MINUTES is refused at preflight and the batch keeps its name"; then
+  # "08" is invalid octal to the shell's arithmetic: it used to pass validation, abort the loop
+  # body and let the run end as done, renaming the batch with its ticket still todo.
+  repo="$(make_repo 1 minutes-octal-repo)"
+  FOREMAN_MAX_MINUTES=08 run_foreman "$repo" run batch --unlimited
+
+  assert_eq "$ST" 1 "refuses to start"
+  assert_contains "$OUT" "FOREMAN_MAX_MINUTES must be a whole number (got '08')" "names the knob"
+  assert_missing "$OUT" "marked done" "nothing says the batch is done"
+  [ -d "$repo/batch" ] && [ ! -e "$repo/DONE_batch" ] && pass || fail "the batch was not renamed"
+  assert_eq "$(done_count "$repo")" "0" "no ticket ran"
+
+  FOREMAN_MAX_MINUTES=0 run_foreman "$repo" dry-run batch
+  assert_eq "$ST" 0 "a plain 0 is still accepted"
+  FOREMAN_MAX_MINUTES=30 run_foreman "$repo" dry-run batch
+  assert_eq "$ST" 0 "and so is 30"
+fi
+
+if case_is "a malformed FOREMAN_MAX_COST_USD is refused at preflight instead of meaning unlimited"; then
+  repo="$(make_repo 2 cost-typo-repo)"
+  for bad in '$25' abc -5 USD25 '1.' '.5'; do
+    FOREMAN_MAX_COST_USD=$bad run_foreman "$repo" run batch --unlimited
+    assert_eq "$ST" 1 "FOREMAN_MAX_COST_USD='$bad' is refused"
+    assert_contains "$OUT" "FOREMAN_MAX_COST_USD must be a dollar amount" "and names the knob ($bad)"
+    [ -d "$repo/batch" ] && [ ! -e "$repo/DONE_batch" ] && pass || fail "the batch was not renamed ($bad)"
+  done
+  assert_eq "$(done_count "$repo")" "0" "no ticket ran"
+
+  # Valid amounts still work: empty and 0 mean no cap, a decimal is a cap that pauses the run.
+  FOREMAN_MAX_COST_USD= run_foreman "$repo" dry-run batch
+  assert_eq "$ST" 0 "an empty value is accepted"
+  FOREMAN_MAX_COST_USD=0 run_foreman "$repo" dry-run batch
+  assert_eq "$ST" 0 "0 is accepted"
+  FOREMAN_FAKE_COST=0.02 FOREMAN_MAX_COST_USD=0.015 run_foreman "$repo" run batch --unlimited
+  assert_eq "$ST" 10 "0.015 is accepted, and pauses the run on the cost budget"
+  assert_contains "$OUT" "cost budget reached" "says why"
+fi
+
 if case_is "doctor asks the adapter what this repo needs"; then
   repo="$(make_repo 1 doctor-repo)"
   run_foreman "$repo" doctor

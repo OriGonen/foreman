@@ -1324,7 +1324,10 @@ if [ -t 0 ]; then
   KEYS_PID=$!
 fi
 
-FINAL_STATUS="$EXIT_DONE"
+# Undecided until the loop says otherwise. Every way out of the loop sets it (done only where
+# next_sh reports that no ticket is left); falling out with it still empty (an arithmetic error
+# aborting the body, say) is turned into needs-a-human right after the loop, never into done.
+FINAL_STATUS=""
 HUMAN_TICKET=""
 # Why the run stopped for a human, in one line: the first thing the terminal says about it. Set
 # beside every FINAL_STATUS="$EXIT_NEEDS_HUMAN", and written to the run log as `# reason:` after
@@ -2087,6 +2090,13 @@ while true; do
   FINAL_STATUS="$EXIT_NEEDS_HUMAN"
   break
 done
+
+if [ -z "$FINAL_STATUS" ]; then
+  NEEDS_REASON="The loop ended unexpectedly, without deciding how the run should finish. Read the error above."
+  warn ""
+  warn "$NEEDS_REASON"
+  FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+fi
 
 # ---------------------------------------------------------------------------
 # Footer

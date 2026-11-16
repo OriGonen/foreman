@@ -450,12 +450,19 @@ esac
 
 for _foreman_int in FOREMAN_TICKET_ATTEMPTS FOREMAN_MAX_MINUTES FOREMAN_PROGRESS_TAIL_BYTES \
                   FOREMAN_CONTEXT_BUDGET_TOKENS FOREMAN_MAX_CONTINUATIONS; do
-  if ! [[ "${!_foreman_int}" =~ ^[0-9]+$ ]]; then
+  # No leading zeros ("08" is invalid octal to the shell's arithmetic, and would abort the loop).
+  if ! [[ "${!_foreman_int}" =~ ^(0|[1-9][0-9]*)$ ]]; then
     echo "foreman: $_foreman_int must be a whole number (got '${!_foreman_int}')" >&2
     return 1 2>/dev/null || exit 1
   fi
 done
 unset _foreman_int
+# Empty or 0 = no cap; anything else must be a plain non-negative decimal. Without this, a typo
+# such as '$25' or 'abc' reads as 0 to awk and silently turns the cap off.
+if [ -n "$FOREMAN_MAX_COST_USD" ] && ! [[ "$FOREMAN_MAX_COST_USD" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+  echo "foreman: FOREMAN_MAX_COST_USD must be a dollar amount such as 25 or 0.50 (got '$FOREMAN_MAX_COST_USD')" >&2
+  return 1 2>/dev/null || exit 1
+fi
 # Not 0 = "no limit" like the budgets: a zero cap would leave the agent no command at all.
 if ! [[ "$FOREMAN_COMMAND_TIMEOUT_MINUTES" =~ ^[1-9][0-9]*$ ]]; then
   echo "foreman: FOREMAN_COMMAND_TIMEOUT_MINUTES must be a whole number of minutes, at least 1 (got '$FOREMAN_COMMAND_TIMEOUT_MINUTES')" >&2
