@@ -1434,7 +1434,7 @@ fi
 FINAL_STATUS=""
 HUMAN_TICKET=""
 # Why the run stopped for a human, in one line: the first thing the terminal says about it. Set
-# beside every FINAL_STATUS="$EXIT_NEEDS_HUMAN", and written to the run log as `# reason:` after
+# beside every finish_needs_human, and written to the run log as `# reason:` after
 # `# stopped: needs a human`, where a program can read it (`foreman status --json`).
 NEEDS_REASON=""
 CURRENT_TICKET=""
@@ -1467,6 +1467,26 @@ START_OF_RUN_CHECKED=0
 # say why no rescue was attempted rather than leaving the operator to guess.
 STALL_MARKER_UNTRUSTED=0
 
+# The ways out of the supervising loop. Each records the decision and nothing else: a function
+# cannot `break` its caller's loop, so every call site is followed by its own `break`. The reason
+# is optional: a site that had to set it before it decided (to print it first) calls the helper
+# bare, and the sentence it already set stands.
+finish_done() {
+  FINAL_STATUS="$EXIT_DONE"
+}
+finish_paused() {    # finish_paused [REASON]
+  [ $# -eq 0 ] || PAUSE_REASON="$1"
+  FINAL_STATUS="$EXIT_PAUSED"
+}
+finish_needs_human() {    # finish_needs_human [REASON]
+  [ $# -eq 0 ] || NEEDS_REASON="$1"
+  FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+}
+# A usage limit is worded the same wherever it is hit: after an iteration, or inside a checkpoint turn.
+finish_limit_paused() {    # finish_limit_paused RESET
+  finish_paused "usage limit reached${1:+ · resets $1}"
+}
+
 # What to say when a checkpoint turn left the tree clean without committing. Said the same
 # way wherever it happens: nothing is left to point a recovery note at.
 checkpoint_discarded_note() {
@@ -1488,12 +1508,11 @@ checkpoint_paused() {
   limit_hit=$(verdict_get "$VERDICT_FILE" limit_hit)
   if [ "$limit_hit" = "1" ]; then
     limit_reset=$(verdict_get "$VERDICT_FILE" limit_reset)
-    PAUSE_REASON="usage limit reached${limit_reset:+ · resets $limit_reset}"
-    FINAL_STATUS="$EXIT_PAUSED"
+    finish_limit_paused "$limit_reset"
     return 0
   fi
   if [ "$PAUSE_REQUESTED" -eq 1 ]; then
-    FINAL_STATUS="$EXIT_PAUSED"
+    finish_paused
     return 0
   fi
   return 1
@@ -1503,6 +1522,25 @@ checkpoint_paused() {
 # says it on the local adapter, which never strands work, and then neither does the log.
 stranded_reason() {
   NEEDS_REASON="The sandbox committed ${EXEC_AGENT_HEAD:-work} but it could not be brought back to this repo."
+}
+
+# The stop for commits the sandbox could not hand back: its first line about it, whatever else the
+# caller has to say about the turn (NOTE, optional), then the recovery note. The caller breaks.
+stranded_stop() {    # stranded_stop [NOTE]
+  warn ""
+  stranded_reason
+  [ -z "${1:-}" ] || warn "$1"
+  exec_recovery_note "$BASE_REF"
+  finish_needs_human
+}
+
+# The bookkeeping for a stall a checkpoint turn salvaged, found by this run or an earlier one:
+# the ticket is now a continuation of a stall, and its attempts start over.
+count_stall_salvaged() {
+  CONTINUATIONS_ON_CURRENT=$((CONTINUATIONS_ON_CURRENT + 1))
+  STALLS_ON_CURRENT=$((STALLS_ON_CURRENT + 1))
+  LAST_CONTINUATION_STALLED=1
+  ATTEMPTS_ON_CURRENT=0
 }
 
 # Runs one checkpoint turn for TICKET_FILE against BASE_REF and reports how it went in
@@ -1636,7 +1674,7 @@ review_rejection_reasons() {    # review_rejection_reasons PAYLOAD_FILE
 while true; do
   check_stop_file
   if [ "$PAUSE_REQUESTED" -eq 1 ]; then
-    FINAL_STATUS="$EXIT_PAUSED"
+    finish_paused
     break
   fi
 
@@ -1654,7 +1692,7 @@ while true; do
     if [ "$pick_status" -eq 1 ]; then
       say ""
       say "Every ticket in $BATCH_DIR is done."
-      FINAL_STATUS="$EXIT_DONE"
+      finish_done
     else
       warn "foreman next failed with status $pick_status"
       FINAL_STATUS=1
@@ -1747,20 +1785,17 @@ while true; do
           # Exactly what the same rescue mid-run would have recorded: the ticket is now a
           # continuation of a stall, reviewed from the commit the stall began at.
           run_event salvaged "reviewed and salvaged by a checkpoint turn" "$(git log -1 --format=%h "$HEAD_REF")"
-          CONTINUATIONS_ON_CURRENT=$((CONTINUATIONS_ON_CURRENT + 1))
-          STALLS_ON_CURRENT=$((STALLS_ON_CURRENT + 1))
-          LAST_CONTINUATION_STALLED=1
-          ATTEMPTS_ON_CURRENT=0
+          count_stall_salvaged
           TICKET_BASE_REF="$stalled_from"
           if continuation_cap_reached; then
-            FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+            finish_needs_human
             break
           fi
           say ""
           # Ctrl-C during the review turn: the work is safe now, so stop here rather than
           # start the iteration the interrupt was meant to prevent.
           if [ "$PAUSE_REQUESTED" -eq 1 ]; then
-            FINAL_STATUS="$EXIT_PAUSED"
+            finish_paused
             break
           fi
           ;;
@@ -1774,19 +1809,16 @@ while true; do
           warn "The tree is untouched. Look at it yourself; if it is sound after all, keep it"
           warn "as a checkpoint and rerun to continue:"
           exec_dirty_recovery_note "$BASE_REF" "$TICKET_FILE" "$BATCH_DIR" >&2
-          FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+          finish_needs_human
           break
           ;;
         stranded)
-          warn ""
-          stranded_reason
-          exec_recovery_note "$BASE_REF"
-          FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+          stranded_stop
           break
           ;;
         discarded)
           checkpoint_discarded_note
-          FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+          finish_needs_human
           break
           ;;
         *)
@@ -1803,7 +1835,7 @@ while true; do
           warn "Stopping so you can look."
           exec_show_dirty
           exec_dirty_recovery_note "$BASE_REF" "$TICKET_FILE" "$BATCH_DIR" >&2
-          FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+          finish_needs_human
           break
           ;;
       esac
@@ -1815,18 +1847,15 @@ while true; do
   # --- budget checks, BEFORE spending anything on this iteration -------------
   refresh_budget
   if [ "$MAX_ITERATIONS" -gt 0 ] && [ "$ITERATIONS_RUN" -ge "$MAX_ITERATIONS" ]; then
-    PAUSE_REASON="iteration budget reached ($MAX_ITERATIONS)"
-    FINAL_STATUS="$EXIT_PAUSED"
+    finish_paused "iteration budget reached ($MAX_ITERATIONS)"
     break
   fi
   if fgt "$MAX_COST" 0 && fge "$RUN_COST" "$MAX_COST"; then
-    PAUSE_REASON="cost budget reached (\$$RUN_COST of \$$MAX_COST)"
-    FINAL_STATUS="$EXIT_PAUSED"
+    finish_paused "cost budget reached (\$$RUN_COST of \$$MAX_COST)"
     break
   fi
   if [ "$MAX_MINUTES" -gt 0 ] && [ "$SECONDS" -ge $((MAX_MINUTES * 60)) ]; then
-    PAUSE_REASON="time budget reached (${MAX_MINUTES}m)"
-    FINAL_STATUS="$EXIT_PAUSED"
+    finish_paused "time budget reached (${MAX_MINUTES}m)"
     break
   fi
 
@@ -1863,7 +1892,7 @@ while true; do
     warn "  $FOREMAN_INVOKE run $BATCH_DIR$(resume_args) --adopt-dirty"
     warn "Or keep them as a checkpoint by hand and rerun to continue:"
     exec_dirty_recovery_note "$BASE_REF" "$TICKET_FILE" "$BATCH_DIR" >&2
-    FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+    finish_needs_human
     break
   fi
 
@@ -1872,8 +1901,7 @@ while true; do
   # second pass over the first one's leftovers. (Only the clone arrangement has anything
   # to do here; the adapter decides.)
   if ! exec_sync_down "$BASE_REF"; then
-    NEEDS_REASON="${EXEC_SYNC_DOWN_REASON:-could not sync the sandbox to $BASE_REF — stopping before spending anything.}"
-    FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+    finish_needs_human "${EXEC_SYNC_DOWN_REASON:-could not sync the sandbox to $BASE_REF — stopping before spending anything.}"
     break
   fi
 
@@ -1977,30 +2005,27 @@ while true; do
   #    stopped for one of those reasons may also have stranded its commits, and pausing
   #    "with nothing to restore" would hide that. What those branches know is said here.
   if [ "$sync_failed" -eq 1 ]; then
-    warn ""
-    stranded_reason
+    stranded_why=""
     if [ "$limit_hit" = "1" ]; then
-      warn "(The turn also hit the usage limit: ${limit_reset:+resets $limit_reset; }rerun after recovering the commits.)"
+      stranded_why="(The turn also hit the usage limit: ${limit_reset:+resets $limit_reset; }rerun after recovering the commits.)"
     elif [ "$PAUSE_REQUESTED" -eq 1 ]; then
-      warn "(The run was also interrupted; recover the commits before rerunning.)"
+      stranded_why="(The run was also interrupted; recover the commits before rerunning.)"
     elif [ "$auth_failed" = "1" ]; then
-      warn "(The turn also failed to authenticate: sign in again in the sandbox once the commits are recovered.)"
+      stranded_why="(The turn also failed to authenticate: sign in again in the sandbox once the commits are recovered.)"
     fi
-    exec_recovery_note "$BASE_REF"
-    FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+    stranded_stop "$stranded_why"
     break
   fi
 
   # 1. A usage or billing limit. Pause immediately: every further iteration would fail the
   #    same way, and failing repeatedly is the one thing worse than stopping.
   if [ "$limit_hit" = "1" ]; then
-    PAUSE_REASON="usage limit reached${limit_reset:+ · resets $limit_reset}"
-    FINAL_STATUS="$EXIT_PAUSED"
+    finish_limit_paused "$limit_reset"
     break
   fi
 
   if [ "$PAUSE_REQUESTED" -eq 1 ]; then
-    FINAL_STATUS="$EXIT_PAUSED"
+    finish_paused
     break
   fi
 
@@ -2023,7 +2048,7 @@ while true; do
         warn "Sign in again with \`claude\` (then /login), and rerun."
         ;;
     esac
-    FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+    finish_needs_human
     break
   fi
 
@@ -2044,7 +2069,7 @@ while true; do
     warn "  FOREMAN_CLAUDE_ARGS=(--allowed-tools \"Bash(git add:*)\" \"Bash(git commit:*)\")"
     warn "(Or set FOREMAN_PERMISSION_MODE=bypassPermissions there if you want no gate at all.)"
     exec_show_dirty
-    FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+    finish_needs_human
     break
   fi
 
@@ -2080,20 +2105,14 @@ while true; do
 
       case "$CHECKPOINT_OUTCOME" in
         stranded)
-          warn ""
-          stranded_reason
-          exec_recovery_note "$BASE_REF"
-          FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+          stranded_stop
           break
           ;;
         salvaged)
           run_event salvaged "stalled, salvaged by a checkpoint turn" "$(git log -1 --format=%h "$HEAD_REF")"
-          CONTINUATIONS_ON_CURRENT=$((CONTINUATIONS_ON_CURRENT + 1))
-          STALLS_ON_CURRENT=$((STALLS_ON_CURRENT + 1))
-          LAST_CONTINUATION_STALLED=1
-          ATTEMPTS_ON_CURRENT=0
+          count_stall_salvaged
           if continuation_cap_reached; then
-            FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+            finish_needs_human
             break
           fi
           continue
@@ -2105,7 +2124,7 @@ while true; do
           # it. There is nothing left to point a recovery note at — and nothing for a marker
           # to vouch for.
           checkpoint_discarded_note
-          FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+          finish_needs_human
           break
           ;;
       esac
@@ -2128,7 +2147,7 @@ while true; do
       warn "commit them either. Stopping so you can look."
       exec_show_dirty
       exec_dirty_recovery_note "$BASE_REF" "$TICKET_FILE" "$BATCH_DIR" >&2
-      FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+      finish_needs_human
       break
     fi
 
@@ -2139,7 +2158,7 @@ while true; do
     NEEDS_REASON="$TICKET_FILE left uncommitted changes behind. Stopping so you can look."
     warn "$NEEDS_REASON"
     exec_show_dirty
-    FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+    finish_needs_human
     break
   fi
 
@@ -2177,7 +2196,7 @@ while true; do
     run_event progress "progressed" "$(git log -1 --format=%h "$HEAD_REF")"
 
     if continuation_cap_reached; then
-      FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+      finish_needs_human
       break
     fi
     continue
@@ -2219,7 +2238,7 @@ while true; do
   fi
   warn "Read the tail of $RUN_LOG and of $PROGRESS_FILE, then either fix it by hand or"
   warn "adjust the ticket. Rerun to continue from here."
-  FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+  finish_needs_human
   break
 done
 
