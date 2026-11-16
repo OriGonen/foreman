@@ -2499,5 +2499,20 @@ if case_is "gui: node --test over gui/test/"; then
   fi
 fi
 
+# The recorder, the stream filter and the report, driven as child processes (test/node/).
+# A glob, not the directory: `node --test <dir>` reads a directory as a module path.
+if case_is "node: node --test over test/node/"; then
+  if [ ! -d "$FOREMAN_HOME/test/node" ]; then
+    fail "test/node/ is missing"
+  elif command -v node >/dev/null 2>&1; then
+    node_out="$(cd "$FOREMAN_HOME" && node --test "test/node/*.test.cjs" 2>&1)"
+    node_st=$?
+    assert_eq "$node_st" 0 "the node scripts' tests pass"
+    [ "$node_st" = 0 ] || printf '%s\n' "$node_out" | tail -40 >&2
+  else
+    printf '  (node is not on PATH: skipped)\n'
+  fi
+fi
+
 printf '\n%s passed, %s failed\n' "$passed" "$failed"
 [ "$failed" -eq 0 ]
