@@ -52,6 +52,22 @@ source "$FOREMAN_TOOL_DIR/foreman-repo.sh" || {
   return 1 2>/dev/null || exit 1
 }
 
+# Whether the run a control directory's `pid` file names (see foreman-keys.sh: "MSYS_PID WINDOWS_PID")
+# is still that run. THE one answer, for the loop's start guard, `foreman stop` / `keys` and the
+# `runalive` fact of `status --json`: a pid that is merely alive is not enough, because Windows
+# recycles pids and a run killed too hard to clean up leaves its file behind. Under MSYS a recycled
+# MSYS pid has a different Windows pid (`/proc/<pid>/winpid`), so that must match what the loop
+# recorded. Where there is no winpid (Linux, macOS) it is `kill -0`, as it always was.
+run_pid_alive() {    # run_pid_alive MSYS_PID WIN_PID
+  local msys="${1:-}" win="${2:-}" now=""
+  [[ "$msys" =~ ^[0-9]+$ ]] && kill -0 "$msys" 2>/dev/null || return 1
+  if [ -n "$win" ] && [ -r "/proc/$msys/winpid" ]; then
+    read -r now 2>/dev/null < "/proc/$msys/winpid"
+    [ "$now" = "$win" ] || return 1
+  fi
+  return 0
+}
+
 foreman_repo_root REPO_ROOT || {
   echo "foreman: not inside a git repository" >&2
   return 1 2>/dev/null || exit 1

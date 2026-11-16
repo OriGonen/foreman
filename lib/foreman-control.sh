@@ -18,7 +18,8 @@
 # They can only reach a run whose control directory is `<batch>/.foreman-run/`, which is where the
 # loop puts it when the repository ignores `**/.foreman-run/` (see foreman-loop.sh). Without a run
 # in flight there, each exits 1 with one line saying so. A run is in flight when the pid in the
-# directory's `pid` file is alive.
+# directory's `pid` file is alive and is still that run (run_pid_alive, foreman-config.sh): a stale
+# file whose pid another program has taken is no run, and that program is never signalled.
 #
 # `stop --now` is for a run that has no terminal to press Ctrl-C in: the app starts it detached, with
 # no console. Ctrl-C does three things, and this does the same three from outside, keeping the loop's
@@ -90,9 +91,13 @@ source "$FOREMAN_TOOL_DIR/foreman-config.sh" || exit 1
 CTL="$REPO_ROOT/$BATCH_DIR/.foreman-run"
 [ "$BATCH_DIR" != . ] || CTL="$REPO_ROOT/.foreman-run"
 
-loop_pid=""
-read -r loop_pid _ 2>/dev/null < "$CTL/pid"
-if ! [[ "$loop_pid" =~ ^[0-9]+$ ]] || ! kill -0 "$loop_pid" 2>/dev/null; then
+loop_pid="" loop_win=""
+read -r loop_pid loop_win _ 2>/dev/null < "$CTL/pid"
+# The loop, by the rule every reader of the pid file shares (run_pid_alive, in foreman-config.sh): a
+# pid file left by a run that was killed too hard to clean up may name a pid another program has since
+# taken, and that program is never signalled.
+loop_alive() { run_pid_alive "$loop_pid" "$loop_win"; }
+if ! loop_alive; then
   echo "foreman $CMD: no run in flight in $BATCH_DIR, or its control directory is not in the batch (that needs **/.foreman-run/ in .gitignore)" >&2
   exit 1
 fi
@@ -171,22 +176,22 @@ stop_now() {
 
   # 3. Whatever has not taken it by the end of the grace period is ended. Early if nothing is left.
   n=$((grace * 5))
-  while [ "$n" -gt 0 ] && kill -0 "$loop_pid" 2>/dev/null && stop_any_alive ${below[@]+"${below[@]}"}; do
+  while [ "$n" -gt 0 ] && loop_alive && stop_any_alive ${below[@]+"${below[@]}"}; do
     sleep 0.2
     n=$((n - 1))
   done
   for p in ${below[@]+"${below[@]}"}; do
-    kill -0 "$loop_pid" 2>/dev/null || break
+    loop_alive || break
     kill -0 "$p" 2>/dev/null && stop_force "$p"
   done
 
   # The loop does its own bookkeeping now: records the turn, writes the footer, leaves the marker.
   n=$((wait_s * 5))
-  while [ "$n" -gt 0 ] && kill -0 "$loop_pid" 2>/dev/null; do
+  while [ "$n" -gt 0 ] && loop_alive; do
     sleep 0.2
     n=$((n - 1))
   done
-  if kill -0 "$loop_pid" 2>/dev/null; then
+  if loop_alive; then
     echo "foreman stop: the run in $BATCH_DIR was told to stop but is still finishing after ${wait_s}s (pid $loop_pid); it has not been killed" >&2
     exit 1
   fi

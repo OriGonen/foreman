@@ -741,9 +741,13 @@ status_json_facts() {
   done < <(next_sh --all)
   printf 'humans\t%s\n' "$humans"
   # Where a run in flight would keep its control directory in this batch (see where the run makes
-  # it); whether one is there, and alive, is for foreman-json.cjs to read from its files.
+  # it), and whether the run its `pid` file names is alive, by the rule `foreman stop` and the start
+  # guard use (run_pid_alive): foreman-json.cjs only reads the rest of the directory's files.
   line="$BATCH_DIR/.foreman-run"; [ "$BATCH_DIR" != . ] || line=.foreman-run
   printf 'runctl\t%s\n' "${line//\\//}"
+  local run_pid="" run_win=""
+  read -r run_pid run_win _ 2>/dev/null < "$REPO_ROOT/$line/pid"
+  if run_pid_alive "$run_pid" "$run_win"; then printf 'runalive\t1\n'; else printf 'runalive\t0\n'; fi
   if [ -n "$stop" ]; then printf 'until\t%s\t%s\n' "$until_count" "$stop"; fi
   if [ -n "$next" ] && foreman_ticket_needs_human "$next"; then
     line="$(foreman_was_sent_back "$next")"
@@ -873,6 +877,23 @@ if [ "$MODE" = "status" ]; then
     printf '%s\n' "$warnings"
   fi
   exit 0
+fi
+
+# A run that is already in flight in this batch is not started twice: two loops on one batch take
+# each other's work for a stall and rename the batch under one another. The first thing a run
+# does, before the preflight and before the start-of-run sweep (which renames and commits), so that
+# a refusal changes nothing. Only a run in a control directory in the batch can be seen (see where
+# the run makes it, below); the pid file of one that was killed too hard to clean up is not a run
+# (run_pid_alive), and the run that follows clears it.
+RUN_CTL_REL="$BATCH_DIR/.foreman-run"; [ "$BATCH_DIR" != . ] || RUN_CTL_REL=.foreman-run
+if [ "$MODE" = "run" ] && git check-ignore -q -- "$RUN_CTL_REL/pid" 2>/dev/null; then
+  RUN_CTL_PID="" RUN_CTL_WIN=""
+  read -r RUN_CTL_PID RUN_CTL_WIN _ 2>/dev/null < "$REPO_ROOT/$RUN_CTL_REL/pid"
+  if run_pid_alive "$RUN_CTL_PID" "$RUN_CTL_WIN"; then
+    warn_preflight "a run is already in flight on this batch (pid $RUN_CTL_PID). Stop it with: $FOREMAN_INVOKE stop $BATCH_DIR"
+    exit 1
+  fi
+  unset RUN_CTL_PID RUN_CTL_WIN
 fi
 
 # ---------------------------------------------------------------------------
@@ -1120,8 +1141,8 @@ PAYLOAD_FILE="$(mktemp)"
 # It is `<batch>/.foreman-run/` when the repository ignores that name (`**/.foreman-run/`, which
 # `foreman doctor --fix` appends when the desktop app is installed), so that `foreman keys` and the
 # app can reach it from outside this terminal. Otherwise it is a temporary directory, as it always
-# was. A batch's directory is also left alone when another run is alive in it (its `pid` file): the
-# second run keeps a directory of its own rather than steal the first one's keys.
+# was. A batch's directory is never shared: a run that finds another one alive in it (its `pid` file)
+# has already been refused, at the top of the run (see "a run that is already in flight").
 #
 # `out`, if the app put one there (the run's own stdout and stderr), outlives the run; everything
 # else is removed when it ends (run_ctl_end), whichever way, and before the batch can be renamed.
@@ -1136,19 +1157,13 @@ run_ctl_clear() {    # run_ctl_clear DIR: remove DIR's files, except `out`; DIR 
   if [ "$keep" -eq 0 ]; then rm -rf "$dir"; elif [ "${#victims[@]}" -gt 0 ]; then rm -rf "${victims[@]}"; fi
 }
 RUN_CTL_DIR=""
-RUN_CTL_REL="$BATCH_DIR/.foreman-run"; [ "$BATCH_DIR" != . ] || RUN_CTL_REL=.foreman-run
 if git check-ignore -q -- "$RUN_CTL_REL/pid" 2>/dev/null; then
-  RUN_CTL_PID=""
-  read -r RUN_CTL_PID _ 2>/dev/null < "$REPO_ROOT/$RUN_CTL_REL/pid"
-  if [[ "$RUN_CTL_PID" =~ ^[0-9]+$ ]] && kill -0 "$RUN_CTL_PID" 2>/dev/null; then
-    :
-  elif mkdir -p "$REPO_ROOT/$RUN_CTL_REL" 2>/dev/null; then
+  if mkdir -p "$REPO_ROOT/$RUN_CTL_REL" 2>/dev/null; then
     RUN_CTL_DIR="$REPO_ROOT/$RUN_CTL_REL"
     # What a run that was killed too hard to clean up after itself left behind.
     run_ctl_clear "$RUN_CTL_DIR"
     mkdir -p "$RUN_CTL_DIR" 2>/dev/null
   fi
-  unset RUN_CTL_PID
 fi
 [ -n "$RUN_CTL_DIR" ] || RUN_CTL_DIR="$(mktemp -d)"
 printf '%s\n' "$MAX_ITERATIONS" > "$RUN_CTL_DIR/budget"

@@ -8139,6 +8139,84 @@ if case_is "test/demo.sh shows draws each command's show once, under a caption";
 fi
 
 # ---------------------------------------------------------------------------
+# One run per batch: the start guard, and what counts as a run (run_pid_alive). The control directory
+# is only in the batch when the repository ignores it, as `doctor --fix` leaves it with the app installed.
+ctl_ignored_repo() {    # ctl_ignored_repo TICKETS NAME : prints the repo's path
+  local repo
+  repo="$(make_repo "$1" "$2")"
+  printf '**/.foreman-run/\n' >> "$repo/.gitignore"
+  git -C "$repo" add -A >/dev/null
+  git -C "$repo" commit --quiet -m "ignore the control directory"
+  printf '%s' "$repo"
+}
+
+if case_is "a second run on a batch with a run in flight is refused, changes nothing, and the first finishes"; then
+  repo="$(ctl_ignored_repo 2 one-run-repo)"
+  ctl="$repo/batch/.foreman-run"
+  ( cd "$repo" && env FOREMAN_FAKE_SLEEP=4 "$FOREMAN" run batch --unlimited > "$WORK/one-run-1.out" 2>&1
+    echo $? > "$WORK/one-run-1.st" ) &
+  first=$!
+  n=100; while [ "$n" -gt 0 ] && [ ! -s "$ctl/iteration" ]; do sleep 0.1; n=$((n - 1)); done
+  [ -s "$ctl/pid" ] && pass || fail "the first run is up, with a pid file"
+  head="$(git -C "$repo" rev-parse HEAD)"
+  tree="$(git -C "$repo" status --porcelain)"
+  pidfile="$(cat "$ctl/pid")"
+
+  run_foreman "$repo" run batch --unlimited
+  assert_eq "$ST" 1 "the second run exits 1"
+  assert_contains "$OUT" "a run is already in flight on this batch (pid ${pidfile%% *})" "and says a run is already in flight, with its pid"
+  assert_contains "$OUT" "Stop it with: foreman stop batch" "and how to stop it"
+  assert_eq "$(git -C "$repo" rev-parse HEAD)" "$head" "no commit: HEAD is where the first run left it"
+  assert_eq "$(git -C "$repo" status --porcelain)" "$tree" "nothing in the tree changed"
+  [ -d "$repo/batch" ] && [ ! -e "$repo/DONE_batch" ] && pass || fail "the batch was not renamed"
+  assert_eq "$(cat "$ctl/pid" 2>/dev/null)" "$pidfile" "the first run's pid file is as it was"
+  assert_eq "$(grep -c '^# run .* started' "$repo/batch/foreman-runs.log" 2>/dev/null)" 1 "and no second run was logged"
+
+  wait "$first"
+  assert_eq "$(cat "$WORK/one-run-1.st")" 0 "the first run finishes the batch"
+  assert_eq "$(done_count "$repo")" 2 "with both tickets landed"
+  assert_eq "$(git -C "$repo" status --porcelain)" "" "and a clean tree"
+fi
+
+if case_is "a pid file whose run is gone does not block a start"; then
+  repo="$(ctl_ignored_repo 2 stale-dead-repo)"
+  ctl="$repo/batch/.foreman-run"
+  sleep 0 & dead=$!; wait "$dead"
+  mkdir -p "$ctl"
+  printf '%s %s\n' "$dead" "$dead" > "$ctl/pid"; printf '3\n' > "$ctl/budget"
+  run_foreman "$repo" run batch
+  assert_eq "$ST" 10 "the run starts and pauses at its budget"
+  assert_missing "$OUT" "already in flight" "nothing refused it"
+  assert_eq "$(done_count "$repo")" 1 "and landed a ticket"
+fi
+
+if case_is "a pid file naming a live program that is not the run is no run: stop and keys leave it alone"; then
+  repo="$(ctl_ignored_repo 2 stale-live-repo)"
+  ctl="$repo/batch/.foreman-run"
+  sleep 60 & other=$!
+  win="$(cat "/proc/$other/winpid" 2>/dev/null)"
+  if [[ "$win" =~ ^[0-9]+$ ]]; then
+    # Its MSYS pid is alive, but the Windows pid recorded is not the one it has now: the run that
+    # wrote this file is long gone and its pid has been handed on.
+    mkdir -p "$ctl"
+    printf '%s %s\n' "$other" "$((win + 1))" > "$ctl/pid"; printf '3\n' > "$ctl/budget"
+    run_foreman "$repo" stop --now batch
+    assert_eq "$ST" 1 "stop --now: exits 1"
+    assert_contains "$OUT" "foreman stop: no run in flight in batch" "and says there is no run"
+    kill -0 "$other" 2>/dev/null && pass || fail "the program is still alive"
+    [ -e "$ctl/stop" ] && fail "no stop file was written" || pass
+    run_foreman "$repo" keys batch +
+    assert_eq "$ST" 1 "keys: exits 1"
+    assert_contains "$OUT" "foreman keys: no run in flight in batch" "and says so"
+    assert_eq "$(cat "$ctl/budget")" 3 "the budget was not touched"
+    run_foreman "$repo" run batch
+    assert_eq "$ST" 10 "and a run starts over the stale file"
+    assert_missing "$OUT" "already in flight" "without being refused"
+  fi
+  kill "$other" 2>/dev/null; wait "$other" 2>/dev/null
+fi
+
+# ---------------------------------------------------------------------------
 # A case process that ran the last case in the file ends here.
 [ "$CASE_OPEN" = 1 ] && case_finish
 exit 0

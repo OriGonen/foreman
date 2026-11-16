@@ -1811,11 +1811,14 @@ fi
 if case_is "control directory: a live run in the batch keeps its directory, and a run that was killed leaves nothing in the way"; then
   repo="$WORK/ctl-held"; ctl_repo "$repo" 2
   ctl="$repo/batch/.foreman-run"
-  # Another run holds the directory: this one must not use it (nor take its keys).
+  # Another run holds the directory: this one is refused, and must not touch it (nor take its keys).
+  # This shell stands in for the run, under the pid Windows knows it by (the same number elsewhere).
+  win="$(cat /proc/$$/winpid 2>/dev/null)"; win="${win:-$$}"
   mkdir -p "$ctl"
-  printf '7\n' > "$ctl/budget"; printf '%s %s\n' "$$" "$$" > "$ctl/pid"
+  printf '7\n' > "$ctl/budget"; printf '%s %s\n' "$$" "$win" > "$ctl/pid"
   run_foreman "$repo" run batch 1
-  assert_eq "$ST" 10 "a second run still runs"
+  assert_eq "$ST" 1 "a second run is refused"
+  assert_contains "$ERR" "a run is already in flight on this batch (pid $$)" "and says why"
   assert_eq "$(cat "$ctl/budget")" 7 "the first run's budget is not touched"
   assert_eq "$(cut -d' ' -f1 "$ctl/pid")" "$$" "nor its pid"
   rm -rf "$ctl"
@@ -1965,6 +1968,33 @@ if case_is "foreman keys: no run in flight, a directory not in the batch, a dead
   run_foreman "$repo" keys nowhere +
   assert_eq "$ST" 1 "no such batch: exits 1"
   assert_contains "$ERR" "no such directory: nowhere" "and says that"
+fi
+
+if case_is "status --json: a stale pid file is no run in flight, whoever holds its pid now"; then
+  repo="$WORK/stale-json"; ctl_repo "$repo" 2
+  ctl="$repo/batch/.foreman-run"
+  sleep 60 & other=$!
+  other_win="$(cat /proc/$other/winpid 2>/dev/null)"; other_win="${other_win:-$other}"
+  sleep 0 & dead=$!; wait "$dead"
+  mkdir -p "$ctl"; printf 'id 2026-01-01T00:00:00Z\n' > "$ctl/run"; printf '3\n' > "$ctl/budget"
+
+  # The loop is gone and another program holds the Windows pid it had (node asks Windows pids, bash
+  # asks MSYS pids, so they used to disagree about this file).
+  printf '%s %s\n' "$dead" "$other_win" > "$ctl/pid"
+  run_foreman "$repo" status batch --json
+  assert_eq "$(jv "$OUT" 'j.run.in_flight')" false "a dead loop whose Windows pid is alive again is not in flight"
+  assert_eq "$(jv "$OUT" 'j.run.control_dir')" null "and has no control directory to show"
+
+  # The MSYS pid is alive and is some other program's: where it has a Windows pid the file must match it.
+  if [ -r "/proc/$other/winpid" ]; then
+    printf '%s %s\n' "$other" 99996 > "$ctl/pid"
+    run_foreman "$repo" status batch --json
+    assert_eq "$(jv "$OUT" 'j.run.in_flight')" false "a live pid that is not the one recorded is not in flight"
+    printf '%s %s\n' "$other" "$other_win" > "$ctl/pid"
+    run_foreman "$repo" status batch --json
+    assert_eq "$(jv "$OUT" 'j.run.in_flight')" true "and the pid as recorded is"
+  fi
+  kill "$other" 2>/dev/null; wait "$other" 2>/dev/null
 fi
 
 if case_is "foreman stop: the run finishes the iteration in flight and ends with exit 10, budget reached"; then
