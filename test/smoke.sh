@@ -8392,6 +8392,50 @@ if case_is "a batch path is read from the caller's directory first, and a root-l
   assert_missing "$OUT" "no such directory" "without the file name taken for a directory"
 fi
 
+if case_is "doctor reads a conf the way the run does: export, comments, quotes, last assignment, the environment, DONE_ batches"; then
+  repo="$(make_repo 1 doctor-reads-conf-repo)"
+  conf="$repo/batch/foreman.conf"
+  words() { printf '%s\n' "$OUT" | box_words; }
+
+  # A trailing comment is not part of the value.
+  printf 'FOREMAN_EXEC=fake   # no agent\n' > "$conf"
+  run_foreman "$repo" doctor
+  assert_missing "$(words)" "valid modes" "a trailing comment is not 'no such execution mode'"
+  assert_missing "$(words)" "FOREMAN_EXEC=" "and fake needs no runner, so no knob is mentioned"
+
+  # An `export` prefix is honoured: the mode it names is the mode judged (and here it is not one).
+  printf 'export FOREMAN_EXEC=nonsense\n' > "$conf"
+  run_foreman "$repo" doctor
+  assert_contains "$(words)" "FOREMAN_EXEC=nonsense in" "an exported assignment is read"
+  printf 'export FOREMAN_EXEC=fake\n' > "$conf"
+  run_foreman "$repo" doctor
+  assert_missing "$(words)" "FOREMAN_EXEC=sandbox" "export FOREMAN_EXEC=fake is not judged as the default sandbox"
+  assert_missing "$(words)" "valid modes" "and is a mode"
+
+  # Quotes come off, and the last assignment wins.
+  printf 'FOREMAN_EXEC=nonsense\nFOREMAN_EXEC="fake"  # later\n' > "$conf"
+  run_foreman "$repo" doctor
+  assert_missing "$(words)" "valid modes" "the last assignment wins, quotes and comment off"
+
+  # The environment wins over the conf, FOREMAN_ over a legacy RALPH_, as in foreman-config.sh.
+  printf 'FOREMAN_EXEC=nonsense\n' > "$conf"
+  FOREMAN_EXEC=fake run_foreman "$repo" doctor
+  assert_missing "$(words)" "valid modes" "FOREMAN_EXEC in the environment overrides the conf"
+  RALPH_EXEC=fake run_foreman "$repo" doctor
+  assert_missing "$(words)" "valid modes" "a legacy RALPH_EXEC in the environment does too"
+  RALPH_EXEC=fake FOREMAN_EXEC=nonsense run_foreman "$repo" doctor
+  assert_contains "$(words)" "FOREMAN_EXEC=nonsense" "but FOREMAN_EXEC beats RALPH_EXEC"
+
+  # A finished batch is not listed, as `foreman status` with no batch skips it.
+  printf 'FOREMAN_EXEC=fake\n' > "$conf"
+  mkdir -p "$repo/DONE_old"
+  cp "$conf" "$repo/DONE_old/foreman.conf"
+  run_foreman "$repo" doctor
+  assert_missing "$(words)" "DONE_old" "a DONE_ batch is not listed"
+  assert_missing "$(words)" "order unreadable" "so it is not 'order unreadable' either"
+  assert_contains "$(words)" "batch" "while the live batch still is"
+fi
+
 # ---------------------------------------------------------------------------
 # A case process that ran the last case in the file ends here.
 [ "$CASE_OPEN" = 1 ] && case_finish

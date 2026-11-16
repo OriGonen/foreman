@@ -195,13 +195,16 @@ fi
 
 # ---------------------------------------------------------------------------
 # Which batches are here, and therefore which agent runner matters.
-# Same prune list as foreman-config.sh: .claude/worktrees holds full copies of the repo, so
-# without it every batch would be reported once per worktree.
+# foreman_find_batches (foreman-repo.sh) is the one answer to that, the same one foreman-config.sh
+# uses when no batch is named: it prunes .claude/worktrees (full copies of the repo) and finished
+# DONE_ batches, so neither is reported.
 # ---------------------------------------------------------------------------
-batches=$(find . \
-  \( -name node_modules -o -name .git -o -path './.claude/worktrees' -o -name .svelte-kit \) -prune \
-  -o \( -name foreman.conf -o -name ralph.conf \) -print 2>/dev/null |
-  sed 's|^\./||; s|/foreman\.conf$||; s|/ralph\.conf$||' | sort -u)   # legacy: ralph.conf
+# legacy: config reads RALPH_DONE_PREFIX when FOREMAN_DONE_PREFIX is unset, before it looks.
+if [ -z "${FOREMAN_DONE_PREFIX+x}" ] && [ -n "${RALPH_DONE_PREFIX+x}" ]; then
+  batches=$(FOREMAN_DONE_PREFIX="$RALPH_DONE_PREFIX" foreman_find_batches)
+else
+  batches=$(foreman_find_batches)
+fi
 
 # How many checks there will be, as near as is known now, for the box's bar: the machine's four and
 # a runner, the repository's five, the batches (one line each, or the one saying there are none),
@@ -219,13 +222,41 @@ done
 foreman_app_installed && _expect=$((_expect + 1))    # the desktop app's line
 _fact "expect"$'\t'"$_expect"
 
-# The last assignment of a scalar FOREMAN_* in a conf, unquoted. doctor deliberately does not
-# source foreman-config.sh (it has to work in a repo with no batch at all), and it must not
-# source a batch's foreman.conf either — that file is arbitrary bash. Reading it as text is
-# the compromise: enough to spot a misconfiguration, never enough to be affected by one.
-# legacy: a conf from before the rename spells the knob RALPH_*, and that still counts.
-_conf_value() {
-  grep -E "^[[:space:]]*(FOREMAN|RALPH)_${2#FOREMAN_}=" "$1" 2>/dev/null | tail -1 | sed 's/[^=]*=//' | tr -d '"'"'"'\r'
+# The value of a scalar FOREMAN_* knob for a batch, as foreman-config.sh would end up with it.
+# doctor deliberately does not source foreman-config.sh (it has to work in a repo with no batch at
+# all), and it must not source a batch's foreman.conf either — that file is arbitrary bash.
+# Reading it as text is the compromise: enough to spot a misconfiguration, never enough to be
+# affected by one. The precedence is config's, highest first:
+#   the environment's FOREMAN_<knob> (set, even to empty), then its legacy RALPH_<knob>,
+#   the conf's last FOREMAN_<knob>= assignment, then its last RALPH_<knob>=.
+# An assignment may start with `export`, be quoted, and be followed by a `# comment`.
+# legacy: RALPH_* from before the rename still counts, as foreman-legacy.sh makes it.
+_conf_last() {    # _conf_last CONF NAME — sets _CONF_LAST to the last assignment's value; 1 if none
+  local line v re="^[[:space:]]*(export[[:space:]]+)?$2=(.*)\$" re_dq='^"([^"]*)"' re_sq="^'([^']*)'" found=1
+  [ -f "$1" ] || return 1
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%$'\r'}"
+    [[ $line =~ $re ]] || continue
+    v="${BASH_REMATCH[2]}"
+    if   [[ $v =~ $re_dq ]]; then v="${BASH_REMATCH[1]}"
+    elif [[ $v =~ $re_sq ]]; then v="${BASH_REMATCH[1]}"
+    else
+      v="${v%%[[:space:]]#*}"                       # an unquoted ` # comment`
+      v="${v%"${v##*[![:space:]]}"}"                # and the blanks before it
+      v="${v//[\"\']/}"
+    fi
+    _CONF_LAST="$v"; found=0
+  done < "$1"
+  return "$found"
+}
+_conf_value() {   # _conf_value CONF FOREMAN_NAME
+  local knob="${2#FOREMAN_}" k
+  for k in "FOREMAN_$knob" "RALPH_$knob"; do
+    [ -z "${!k+x}" ] || { printf '%s' "${!k}"; return; }
+  done
+  for k in "FOREMAN_$knob" "RALPH_$knob"; do
+    if _conf_last "$1" "$k"; then printf '%s' "$_CONF_LAST"; return; fi
+  done
 }
 
 # Ask each batch's adapter what it needs on PATH, and check the union. One line per tool,
