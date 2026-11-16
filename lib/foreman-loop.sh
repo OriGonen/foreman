@@ -1751,7 +1751,7 @@ while true; do
   # second pass over the first one's leftovers. (Only the clone arrangement has anything
   # to do here; the adapter decides.)
   if ! exec_sync_down "$BASE_REF"; then
-    NEEDS_REASON="could not sync the sandbox to $BASE_REF — stopping before spending anything."
+    NEEDS_REASON="${EXEC_SYNC_DOWN_REASON:-could not sync the sandbox to $BASE_REF — stopping before spending anything.}"
     FINAL_STATUS="$EXIT_NEEDS_HUMAN"
     break
   fi
@@ -1852,6 +1852,26 @@ while true; do
 
   # --- decide what happens next ---------------------------------------------
 
+  # 0. The commits could not be brought back. Stop immediately and do NOT sync down on a
+  #    retry — the work only exists inside the sandbox now, and a retry would reset the
+  #    clone over it. Decided before the limit, interrupt and auth branches: a turn that
+  #    stopped for one of those reasons may also have stranded its commits, and pausing
+  #    "with nothing to restore" would hide that. What those branches know is said here.
+  if [ "$sync_failed" -eq 1 ]; then
+    warn ""
+    stranded_reason
+    if [ "$limit_hit" = "1" ]; then
+      warn "(The turn also hit the usage limit: ${limit_reset:+resets $limit_reset; }rerun after recovering the commits.)"
+    elif [ "$PAUSE_REQUESTED" -eq 1 ]; then
+      warn "(The run was also interrupted; recover the commits before rerunning.)"
+    elif [ "$auth_failed" = "1" ]; then
+      warn "(The turn also failed to authenticate: sign in again in the sandbox once the commits are recovered.)"
+    fi
+    exec_recovery_note "$BASE_REF"
+    FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+    break
+  fi
+
   # 1. A usage or billing limit. Pause immediately: every further iteration would fail the
   #    same way, and failing repeatedly is the one thing worse than stopping.
   if [ "$limit_hit" = "1" ]; then
@@ -1884,17 +1904,6 @@ while true; do
         warn "Sign in again with \`claude\` (then /login), and rerun."
         ;;
     esac
-    FINAL_STATUS="$EXIT_NEEDS_HUMAN"
-    break
-  fi
-
-  # 2. The commits could not be brought back. Stop immediately and do NOT sync down on a
-  #    retry — the work only exists inside the sandbox now, and a retry would reset the
-  #    clone over it.
-  if [ "$sync_failed" -eq 1 ]; then
-    warn ""
-    stranded_reason
-    exec_recovery_note "$BASE_REF"
     FINAL_STATUS="$EXIT_NEEDS_HUMAN"
     break
   fi

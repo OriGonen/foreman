@@ -60,11 +60,61 @@ exec_prepare() {
 #
 # `git clean -fd` without -x deliberately: dependency directories are gitignored, and
 # wiping them every iteration would mean a fresh install every iteration.
+#
+# Never over commits this repo does not have. A clone that is clean but AHEAD — a turn's
+# commits whose collection failed, or that could not fast-forward because this repo moved
+# during the turn — passes every dirty-tree check the loop makes, and `reset --hard` would
+# destroy the only copy. So when the clone's HEAD is not contained in TARGET, and is not on
+# any of this repo's branches either, refuse. Commits already collected do not trip it: they
+# are in TARGET (the ff-merge put them in this repo's history), or on a host branch after a
+# branch switch. An unborn HEAD (a fresh clone) has nothing to protect. A refusal is a
+# failed sync, which the loop turns into a stop for a human (exit 20); EXEC_SYNC_DOWN_REASON
+# is what it says. The one false positive is a host history rewrite (amend, reset) since the
+# last sync, and the message names the way to discard the commits on purpose.
 exec_sync_down() {
-  if ! _sbx_sh "git fetch --quiet origin && git reset --quiet --hard $1 && git clean -qfd" >/dev/null 2>&1; then
-    warn "   could not sync the sandbox to $1 — stopping before spending anything."
+  local target="$1" out rc
+  EXEC_SYNC_DOWN_REASON=""
+  out="$(_sbx_sh "
+    git fetch --quiet origin || exit 1
+    if git rev-parse -q --verify HEAD >/dev/null 2>&1 &&
+       git cat-file -e $target^{commit} 2>/dev/null &&
+       ! git merge-base --is-ancestor HEAD $target 2>/dev/null &&
+       [ -z \"\$(git branch -r --contains HEAD 2>/dev/null)\" ]; then
+      git rev-parse HEAD
+      git rev-list --count $target..HEAD
+      git log --format='%h %s' -n 10 $target..HEAD
+      exit 3
+    fi
+    git reset --quiet --hard $target && git clean -qfd
+  " 2>/dev/null)"
+  rc=$?
+  if [ "$rc" -eq 3 ]; then
+    _sbx_refuse_reset "$target" "$(printf '%s\n' "$out" | tr -d '\r')"
     return 1
   fi
+  if [ "$rc" -ne 0 ]; then
+    warn "   could not sync the sandbox to $target — stopping before spending anything."
+    return 1
+  fi
+}
+
+# What exec_sync_down says when it will not reset: OUT is the sandbox's HEAD, the number of
+# commits TARGET lacks, and their subjects.
+_sbx_refuse_reset() {
+  local target="$1" out="$2" head count incoming
+  head="$(printf '%s\n' "$out" | sed -n 1p)"
+  count="$(printf '%s\n' "$out" | sed -n 2p)"
+  incoming="$(git rev-parse -q --verify refs/foreman/incoming 2>/dev/null)"
+  [ "$incoming" = "$head" ] || incoming=""    # an older collection's leftover says nothing about these
+  EXEC_SYNC_DOWN_REASON="The sandbox's clone has ${count:-some} commit(s) this repo does not have (HEAD ${head:0:7}). Refusing to reset it over them."
+  warn ""
+  warn "   $EXEC_SYNC_DOWN_REASON"
+  printf '%s\n' "$out" | sed -n '3,$p' | sed 's/^/       /' >&2
+  warn "   They are in the sandbox's clone${incoming:+, and on this repo at refs/foreman/incoming ($(git rev-parse --short "$incoming"))}."
+  warn "   A reset would destroy them, so nothing was changed. To bring them over:"
+  _sbx_recover_bundle_lines "$target" >&2
+  warn "   To discard them on purpose, then rerun:"
+  warn "     sbx exec $FOREMAN_SANDBOX git reset --hard $target"
 }
 
 # Read-only: is the sandbox's clone dirty right now? No side effects on the work — unlike
@@ -137,12 +187,14 @@ _sbx_sync_up() {
     warn "   could not copy the bundle out of the sandbox"
     return 1
   fi
-  if ! git fetch --quiet "$BUNDLE_FILE" "HEAD:refs/foreman/incoming" 2>/dev/null; then
+  # `+`: a ref left by an earlier failed collection must not make this fetch fail.
+  if ! git fetch --quiet "$BUNDLE_FILE" "+HEAD:refs/foreman/incoming" 2>/dev/null; then
     warn "   bundle did not contain a fetchable ref"
     return 1
   fi
   if ! git merge --quiet --ff-only refs/foreman/incoming >/dev/null 2>&1; then
     warn "   could not fast-forward onto the sandbox's commits (diverged?)"
+    warn "   They are on this repo at refs/foreman/incoming, and in the sandbox's clone."
     return 1
   fi
   git update-ref -d refs/foreman/incoming 2>/dev/null || true

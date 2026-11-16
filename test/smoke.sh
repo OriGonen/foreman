@@ -1003,18 +1003,20 @@ STUB
   assert_eq "$(dirty_against "$target")" clean "leaving a clean clone"
 fi
 
-if case_is "a rescue in a sandbox lands its wip on a host that has moved on, and stops on a conflict"; then
-  # The whole loop on the real sandbox adapter. The stub `sbx` runs every `exec NAME sh -c`
-  # inside $STUB_CLONE, with the sandbox's /tmp and source mount mapped onto real paths, and
-  # `exec NAME env … claude` runs the stub `claude` there: a review turn commits the tree as
-  # wip, any other turn lands the ticket its prompt names.
-  stub="$WORK/sbxrescue-bin"; mkdir -p "$stub"
+# The stub `sbx` and `claude` of the sandbox cases below. The stub `sbx` runs every
+# `exec NAME sh -c` inside $STUB_CLONE, with the sandbox's /tmp and source mount mapped onto
+# real paths, and `exec NAME env ... claude` runs the stub `claude` there: a review turn
+# commits the tree as wip, any other turn lands the ticket its prompt names. Steered by
+# STUB_CP_FAIL (the bundle copy out fails), STUB_LIMIT (the turn hits the usage limit) and
+# STUB_HOST_COMMIT (a commit lands on the host while the turn runs).
+sbxrescue_init() {
+  stub="$WORK/sbxrescue-bin.${CASE_IDX:-0}"; mkdir -p "$stub"
   cat > "$stub/sbx" <<'STUB'
 #!/bin/bash
 set -o pipefail
 case "$1" in
   ls)     printf '%s\r\n' "$2" "$STUB_NAME" ;;
-  cp)     cp "$STUB_TMP/${2#*:/tmp/}" "$3" ;;
+  cp)     [ -z "$STUB_CP_FAIL" ] || exit 1; cp "$STUB_TMP/${2#*:/tmp/}" "$3" ;;
   exec)   shift 2; cd "$STUB_CLONE" || exit 1
           if [ "$1" = sh ]; then
             sh -c "$(printf '%s' "$3" | sed "s#/tmp/#$STUB_TMP/#g; s#/run/sandbox/source#$STUB_SOURCE#g")" |
@@ -1035,29 +1037,47 @@ case "$prompt" in
      sed -i 's/^\*\*Status:\*\*.*/**Status:** implemented/' "$ticket"
      commit "stub: land $ticket" ;;
 esac >/dev/null 2>&1
+[ -z "$STUB_HOST_COMMIT" ] || git -C "$STUB_HOST" -c user.name=host -c user.email=host@host.invalid \
+  commit -q --allow-empty -m "host commit during the turn" >/dev/null 2>&1
+if [ -n "$STUB_LIMIT" ]; then
+  printf '{"type":"result","subtype":"error","is_error":true,"session_id":"stub","num_turns":1,'
+  printf '"duration_ms":10,"duration_api_ms":10,"total_cost_usd":0.01,"usage":{"input_tokens":1,'
+  printf '"output_tokens":1,"cache_read_input_tokens":0,"cache_creation_input_tokens":0},'
+  printf '"result":"Claude AI usage limit reached|1735689600"}\n'
+  exit 1
+fi
 printf '{"type":"result","subtype":"success","is_error":false,"session_id":"stub","num_turns":1,'
 printf '"duration_ms":10,"duration_api_ms":10,"total_cost_usd":0.01,"usage":{"input_tokens":1,'
 printf '"output_tokens":1,"cache_read_input_tokens":0,"cache_creation_input_tokens":0},"result":"ok"}\n'
 STUB
   chmod +x "$stub/sbx" "$stub/claude"
-  mkdir -p "$WORK/sbxrescue-tmp"
+  sbx_tmp="$WORK/sbxrescue-tmp.${CASE_IDX:-0}"; mkdir -p "$sbx_tmp"
+}
 
-  # A batch on the sandbox adapter, a clone of it as the sandbox left it — synced to the batch's
-  # commit, with a stalled turn's work uncommitted in it — and then one more commit on the host.
-  rescue_setup() {    # rescue_setup NAME — sets repo, clone, host_head
-    repo="$(make_repo 2 "$1")"; clone="$WORK/$1-clone"
-    sed -i 's/^FOREMAN_EXEC=fake$/FOREMAN_EXEC=sandbox/' "$repo/batch/foreman.conf"
-    printf 'shared\n' > "$repo/shared.txt"
-    git -C "$repo" add -A; git -C "$repo" commit -qm "sandbox batch"
-    rm -rf "$clone"; git clone -q "$repo" "$clone"
-    # The host path as git writes it back (C:/… under Git Bash), so the stub can map it both ways.
-    source_path="$(git -C "$clone" remote get-url origin)"
-  }
-  run_sandboxed() {    # run_sandboxed — runs the batch with --adopt-dirty against the stub
-    PATH="$stub:$PATH" STUB_CLONE="$clone" STUB_SOURCE="$source_path" STUB_TMP="$WORK/sbxrescue-tmp" \
-      STUB_NAME="foreman-${repo##*/}" STUB_PROMPTS="$WORK/${repo##*/}-prompts.txt" \
-      run_foreman "$repo" run batch --unlimited --adopt-dirty
-  }
+# A batch on the sandbox adapter, and a clone of it as the sandbox left it: synced to the
+# batch's commit.
+rescue_setup() {    # rescue_setup NAME: sets repo, clone, source_path
+  repo="$(make_repo 2 "$1")"; clone="$WORK/$1-clone"
+  sed -i 's/^FOREMAN_EXEC=fake$/FOREMAN_EXEC=sandbox/' "$repo/batch/foreman.conf"
+  printf 'shared\n' > "$repo/shared.txt"
+  git -C "$repo" add -A; git -C "$repo" commit -qm "sandbox batch"
+  rm -rf "$clone"; git clone -q "$repo" "$clone"
+  # The host path as git writes it back (C:/... under Git Bash), so the stub can map it both ways.
+  source_path="$(git -C "$clone" remote get-url origin)"
+}
+run_sandboxed_with() {    # run_sandboxed_with ARGS: runs the batch against the stub; STUB_* env steers it
+  PATH="$stub:$PATH" STUB_CLONE="$clone" STUB_SOURCE="$source_path" STUB_TMP="$sbx_tmp" \
+    STUB_NAME="foreman-${repo##*/}" STUB_PROMPTS="$WORK/${repo##*/}-prompts.txt" STUB_HOST="$repo" \
+    run_foreman "$repo" run batch --unlimited "$@"
+}
+run_sandboxed() { run_sandboxed_with --adopt-dirty; }    # the rescue case's run
+
+if case_is "a rescue in a sandbox lands its wip on a host that has moved on, and stops on a conflict"; then
+  # The whole loop on the real sandbox adapter. The stub `sbx` runs every `exec NAME sh -c`
+  # inside $STUB_CLONE, with the sandbox's /tmp and source mount mapped onto real paths, and
+  # `exec NAME env … claude` runs the stub `claude` there: a review turn commits the tree as
+  # wip, any other turn lands the ticket its prompt names.
+  sbxrescue_init
 
   rescue_setup sbx-moved-repo
   printf 'half of ticket 1\n' > "$clone/feature.txt"
@@ -1107,11 +1127,87 @@ STUB
   # for the human to resolve.
   recovery="$(printf '%s\n' "$OUT" | grep -E "^  (sbx (exec|cp) |git fetch )" | grep -v "git add -A\|git commit")"
   (cd "$repo" && PATH="$stub:$PATH" STUB_CLONE="$clone" STUB_SOURCE="$source_path" \
-     STUB_TMP="$WORK/sbxrescue-tmp" bash -c "$recovery" >/dev/null 2>&1)
+     STUB_TMP="$sbx_tmp" bash -c "$recovery" >/dev/null 2>&1)
   assert_contains "$(git -C "$repo" status --porcelain)" "UU shared.txt" \
     "the recovery commands reach the merge, which stops on the conflict"
   assert_eq "$(git -C "$repo" rev-parse refs/foreman/recovered)" "$(git -C "$clone" rev-parse HEAD)" \
     "with the sandbox's wip as the other side"
+fi
+
+if case_is "a sandbox commit that could not be collected is never reset over, even when the turn hit the limit"; then
+  # The turn commits in the clone, hits the usage limit, and the bundle cannot be copied out.
+  # The limit used to be decided first: the run paused with "nothing to restore", and the
+  # plain rerun reset the clone over the only copy of the commit.
+  sbxrescue_init
+  rescue_setup sbx-strand-limit-repo
+  host_before="$(git -C "$repo" rev-parse HEAD)"
+
+  STUB_CP_FAIL=1 STUB_LIMIT=1 run_sandboxed_with
+  stranded="$(git -C "$clone" rev-parse HEAD)"
+  assert_eq "$ST" 20 "a stranded turn stops for a human, not a pause"
+  assert_contains "$OUT" "could not copy the bundle out of the sandbox" "says what failed"
+  assert_contains "$OUT" "work exists ONLY in the sandbox" "and where the work is"
+  assert_contains "$OUT" "git bundle create /tmp/recover.bundle" "with the way to bring it over"
+  assert_contains "$OUT" "also hit the usage limit" "and keeps what the limit branch knew"
+  assert_missing "$OUT" "nothing to restore" "never claims there is nothing to restore"
+  assert_missing "$OUT" "PAUSED" "and is not a pause"
+  assert_eq "$(git -C "$repo" rev-parse HEAD)" "$host_before" "the host is untouched"
+  [ "$stranded" != "$host_before" ] && pass || fail "the turn committed in the sandbox"
+
+  run_sandboxed_with
+  assert_eq "$ST" 20 "a plain rerun refuses"
+  assert_contains "$OUT" "Refusing to reset it over them" "and says why"
+  assert_contains "$OUT" "stub: land batch/issues" "naming the commits"
+  assert_contains "$OUT" "git reset --hard $host_before" "and how to discard them on purpose"
+  assert_eq "$(git -C "$clone" rev-parse HEAD)" "$stranded" "the sandbox's HEAD is where it was"
+  git -C "$clone" merge-base --is-ancestor "$stranded" HEAD && pass || fail "the commit is still reachable"
+
+  # The discard it names works, and the run then goes through.
+  (cd "$repo" && PATH="$stub:$PATH" STUB_CLONE="$clone" STUB_NAME="foreman-${repo##*/}" \
+     sbx exec "foreman-${repo##*/}" git reset --hard "$host_before" >/dev/null 2>&1)
+  run_sandboxed_with
+  assert_eq "$ST" 0 "after a deliberate discard the batch runs"
+  assert_eq "$(done_count "$repo")" "2" "both tickets land"
+fi
+
+if case_is "a host commit during a turn leaves the work at refs/foreman/incoming, and a rerun refuses to reset"; then
+  # ff-only fails because the host moved during the turn. The fetch had already succeeded, so
+  # the work is on the host, invisibly, and the note used to say it was only in the sandbox.
+  sbxrescue_init
+  rescue_setup sbx-strand-host-repo
+
+  STUB_HOST_COMMIT=1 run_sandboxed_with
+  stranded="$(git -C "$clone" rev-parse HEAD)"
+  assert_eq "$ST" 20 "a collection that cannot fast-forward stops for a human"
+  assert_contains "$OUT" "could not fast-forward onto the sandbox's commits" "says what failed"
+  assert_contains "$OUT" "refs/foreman/incoming" "and names where the commits are on the host"
+  assert_eq "$(git -C "$repo" rev-parse -q --verify refs/foreman/incoming)" "$stranded" \
+    "which holds the sandbox's commit"
+
+  host_moved="$(git -C "$repo" rev-parse HEAD)"
+  run_sandboxed_with
+  assert_eq "$ST" 20 "a plain rerun refuses"
+  assert_contains "$OUT" "Refusing to reset it over them" "and says why"
+  assert_contains "$OUT" "refs/foreman/incoming" "naming the ref again"
+  assert_eq "$(git -C "$clone" rev-parse HEAD)" "$stranded" "the sandbox's HEAD is where it was"
+  git -C "$clone" merge-base --is-ancestor "$stranded" HEAD && pass || fail "the commit is still reachable"
+  assert_eq "$(git -C "$repo" rev-parse HEAD)" "$host_moved" "the host is untouched by the refusal"
+fi
+
+if case_is "a stale refs/foreman/incoming does not break the next collection"; then
+  # Without `+` on the refspec, a ref left by an earlier failed collection made every later
+  # fetch fail ("did not contain a fetchable ref"), each one stranding the turn's commits.
+  sbxrescue_init
+  rescue_setup sbx-stale-incoming-repo
+  stale="$(git -C "$repo" commit-tree HEAD^{tree} -m "an old collection that never merged")"
+  git -C "$repo" update-ref refs/foreman/incoming "$stale"
+
+  run_sandboxed_with
+  assert_eq "$ST" 0 "the batch finishes"
+  assert_missing "$OUT" "fetchable ref" "no fetch failure"
+  assert_eq "$(done_count "$repo")" "2" "both tickets come back"
+  assert_eq "$(git -C "$repo" rev-parse -q --verify refs/foreman/incoming || echo none)" none \
+    "and the ref is cleaned up"
 fi
 
 if case_is "the sandbox adapters sign in to Docker with a token, only when asked to"; then
