@@ -557,6 +557,7 @@ if case_is "status --json --all: a finished batch with a repo-relative order.md 
 
   run_foreman "$repo" status DONE_batch --json
   assert_eq "$(jv "$OUT" 'j.counts')" '{"done":2,"total":2}' "status DONE_batch --json agrees"
+  rm -f "$WORK"/foreman-fake-*.calls
 fi
 
 if case_is "status --json --all: outside a repository"; then

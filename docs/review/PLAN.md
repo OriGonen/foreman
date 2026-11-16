@@ -143,3 +143,18 @@ Stop and ask the owner before any change to the public CLI interface, the config
 5. **B28:** allow `dry-run` on a dirty tree; reject a second mode flag (CLI behaviour).
 6. **B21:** should an empty env var override a conf value? Array-valued knobs from env.
 7. **B31:** `init --force` backing up what it overwrites.
+
+## Where this stopped (2026-11-16)
+
+Done and committed on `review/deep-refactor`: T01, T02, T03, T04, T06, T07, T08, T09, T11, T12, T13, R1, and the status half of R2.
+
+**In the working tree, uncommitted: T05 and T10.** Files: `lib/foreman-record.cjs`, `lib/foreman-stream.cjs`, `test/node/record.test.cjs`, `test/node/hygiene.test.cjs`. Both are implemented and their node tests pass (23/23). T05 cannot be committed until `lib/exec/fake.sh`'s `permission-denied` behaviour (about line 375) emits a structured `permission_denials` array in its payload; without it the smoke case "a denied tool call" fails 5 of 7. The owner has to make or allow that edit (the session's permission system refused it). Then: run `bash test/smoke.sh "a denied tool call"`, commit T05 (the classification hunks of `record.cjs`, `record.test.cjs`, `fake.sh`), then T10 (the `indent()` hunks of `record.cjs`, `stream.cjs`, `hygiene.test.cjs`). A T05-only snapshot of `record.cjs` was left in the session scratchpad and may be gone; `git add -p` does the same split.
+
+Left to do:
+- **T06 follow-up:** a fake checkpoint behaviour that hits the limit, to test the limit half of `checkpoint_paused` (needs `fake.sh`).
+- **R2 remainder:** move the dry-run block (needs a second source point after the preflight and the human gate).
+- **R3** (blocked by T05), **R4**, **R5**: not started.
+- **A full-suite run of the final tip.** `FULL-RUN.md` compares the baseline with `5f5c8f7` (everything up to T09): no real regressions. R1, R2 and two test fixes landed after it and were checked only by their related cases.
+- **By hand:** T13 on Windows with the real `claude.exe` (a native process may ignore TERM) and on macOS bash 3.2; T11's `cssText` under the real CSP in Electron.
+
+Known flaky under 8-way load (pass alone): smoke.sh "foreman order draws the stake line", "SIGTERM during a turn ends the turn at once", "a second run on a batch with a run in flight is refused".
