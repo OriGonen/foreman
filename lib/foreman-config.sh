@@ -72,6 +72,9 @@ foreman_repo_root REPO_ROOT || {
   echo "foreman: not inside a git repository" >&2
   return 1 2>/dev/null || exit 1
 }
+# Where the command was typed, kept for resolving the batch argument: after the `cd` below a
+# path relative to the caller's directory would mean something else.
+_foreman_caller_dir="$PWD"
 # Every path this file produces is repo-relative, because the repo root is the agent's
 # working directory. Standing there is what makes that the natural spelling.
 cd "$REPO_ROOT" || { echo "foreman: cannot cd to $REPO_ROOT" >&2; return 1 2>/dev/null || exit 1; }
@@ -83,7 +86,9 @@ foreman_legacy_knobs "the environment"
 # Which batch?
 # ---------------------------------------------------------------------------
 
+_foreman_batch_given=1
 if [ -z "${FOREMAN_BATCH:-}" ]; then
+  _foreman_batch_given=0
   # foreman_find_batches (foreman-repo.sh) is the one answer to "which directories are foreman
   # batches" — foreman-report.cjs shells out to the same function rather than keeping its own.
   _foreman_candidates=$(foreman_find_batches)
@@ -105,8 +110,19 @@ if [ -z "${FOREMAN_BATCH:-}" ]; then
 fi
 
 # Accept an absolute path, a Windows-style path, or a path relative to the repo root or to
-# the caller's own directory — and let git normalise all of them to repo-relative.
-foreman_batch_relpath BATCH_DIR "$FOREMAN_BATCH" "$REPO_ROOT"
+# the caller's own directory — and let git normalise all of them to repo-relative. A relative
+# argument the user typed is tried against the caller's directory FIRST, as `foreman init` does
+# (so `foreman status .` inside a batch means that batch, and `foreman status b2` from sub/ finds
+# sub/b2), and falls back to the repo root, which is where it always meant. When both exist the
+# caller's wins. A batch found above is already repo-relative, so it skips this.
+_foreman_batch_arg="$FOREMAN_BATCH"
+if [ "$_foreman_batch_given" = 1 ]; then
+  case "$FOREMAN_BATCH" in
+    /*|[A-Za-z]:[/\\]*) ;;
+    *) [ ! -d "$_foreman_caller_dir/$FOREMAN_BATCH" ] || _foreman_batch_arg="$_foreman_caller_dir/$FOREMAN_BATCH" ;;
+  esac
+fi
+foreman_batch_relpath BATCH_DIR "$_foreman_batch_arg" "$REPO_ROOT"
 case "$?" in
   1)
     echo "foreman: no such directory: $FOREMAN_BATCH" >&2
@@ -162,7 +178,7 @@ fi
 for _foreman_name in "${!_FOREMAN_FROM_ENV[@]}"; do
   printf -v "$_foreman_name" '%s' "${_FOREMAN_FROM_ENV[$_foreman_name]}"
 done
-unset _FOREMAN_FROM_ENV _foreman_name _foreman_candidates _foreman_count
+unset _FOREMAN_FROM_ENV _foreman_name _foreman_candidates _foreman_count _foreman_caller_dir _foreman_batch_given _foreman_batch_arg
 
 # ---------------------------------------------------------------------------
 # Defaults for everything foreman.conf and the environment left unset

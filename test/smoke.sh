@@ -8344,6 +8344,54 @@ if case_is "a signal during the footer does not stop the bookkeeping: the batch 
   rm -f "$WORK"/foreman-fake-*.calls
 fi
 
+if case_is "a batch path is read from the caller's directory first, and a root-level batch is found"; then
+  repo="$(make_repo 2 batch-paths-repo)"
+  mkdir -p "$repo/sub"
+  cp -R "$repo/batch" "$repo/sub/b2"
+  git -C "$repo" add -A >/dev/null && git -C "$repo" commit --quiet -m "sub batch"
+
+  # A path relative to the directory the command was typed in.
+  OUT="$(cd "$repo/sub" && "$FOREMAN" status b2 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "status b2 from sub/ finds sub/b2"
+  assert_contains "$OUT" "sub/b2" "and names that batch"
+  assert_missing "$OUT" "no such directory" "without an error"
+
+  # `.` inside a batch is that batch, not the repo root.
+  OUT="$(cd "$repo/sub/b2" && "$FOREMAN" status . 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "status . inside a batch"
+  assert_contains "$OUT" "01-ticket.md" "lists that batch's tickets"
+
+  # A repo-relative path still means what it did: from the repo root, and from a subdirectory
+  # when nothing of that name exists relative to it.
+  OUT="$(cd "$repo" && "$FOREMAN" status sub/b2 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "a repo-relative path from the repo root is unchanged"
+  assert_contains "$OUT" "01-ticket.md" "and lists its tickets"
+  OUT="$(cd "$repo/sub" && "$FOREMAN" status batch 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "a repo-relative path from a subdirectory still falls back to the repo root"
+
+  # When a name exists both ways the caller's directory wins, as it does for `foreman init`.
+  mkdir -p "$repo/sub/batch/issues"
+  printf '# Other 1\n\n**Status:** todo\n' > "$repo/sub/batch/issues/09-other.md"
+  OUT="$(cd "$repo/sub" && "$FOREMAN" status batch 2>&1)"
+  assert_contains "$OUT" "09-other.md" "a name under the caller's directory wins over the repo root's"
+  rm -rf "$repo/sub/batch"
+
+  # A batch at the repo root: found when no batch is named.
+  root="$WORK/root-batch-repo"
+  mkdir -p "$root/issues"
+  git -C "$root" init --quiet; git -C "$root" config core.autocrlf false
+  git -C "$root" config user.name foreman-test; git -C "$root" config user.email test@foreman.invalid
+  printf 'FOREMAN_EXEC=fake\n' > "$root/foreman.conf"
+  printf '# Ticket 1\n\n**Status:** todo\n' > "$root/issues/01-ticket.md"
+  git -C "$root" add -A >/dev/null && git -C "$root" commit --quiet -m "root batch"
+  found="$(cd "$root" && bash -c 'source "$1/foreman-repo.sh" && foreman_find_batches' bash "$FOREMAN_HOME/lib")"
+  assert_eq "$found" "." "foreman_find_batches names a root-level batch '.'"
+  run_foreman "$root" status
+  assert_eq "$ST" 0 "status with no batch argument works on a root-level batch"
+  assert_contains "$OUT" "01-ticket.md" "and lists its ticket"
+  assert_missing "$OUT" "no such directory" "without the file name taken for a directory"
+fi
+
 # ---------------------------------------------------------------------------
 # A case process that ran the last case in the file ends here.
 [ "$CASE_OPEN" = 1 ] && case_finish

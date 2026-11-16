@@ -142,7 +142,7 @@ foreman_find_batches() {
     find . \
       \( -name node_modules -o -name .git -o -path './.claude/worktrees' -o -name .svelte-kit "${skip_done[@]}" \) -prune \
       -o \( -name foreman.conf -o -name ralph.conf \) -print 2>/dev/null |
-      sed 's|^\./||; s|/foreman\.conf$||; s|/ralph\.conf$||' | sort -u
+      sed 's|^\./||; s|^foreman\.conf$|.|; s|^ralph\.conf$|.|; s|/foreman\.conf$||; s|/ralph\.conf$||' | sort -u
   )
 }
 
