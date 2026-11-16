@@ -22,9 +22,9 @@ Stop and ask the owner before any change to the public CLI interface, the config
 | T04 | Record: verdict first, guarded appends, strict payload | done |
 | T05 | Classify failures from structured fields, not prose | todo |
 | T06 | Stall-path checkpoint honours limit and pause | done (limit half untested: needs a fake.sh checkpoint behaviour) |
-| T07 | Resolve batch paths before `cd`; root batch discovery | todo |
-| T08 | Doctor reads confs the way config does | todo |
-| T09 | Finished batches keep a readable order | todo |
+| T07 | Resolve batch paths before `cd`; root batch discovery | done |
+| T08 | Doctor reads confs the way config does | done |
+| T09 | Finished batches keep a readable order | done |
 | T10 | Log and terminal hygiene | todo |
 | T11 | GUI main-process fixes | done |
 | T12 | GUI conf readers agree with the shell | done |
