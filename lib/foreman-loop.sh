@@ -1206,7 +1206,7 @@ on_exit() {
   [[ "$BAR_CLOSE_ROWS" =~ ^[0-9]+$ ]] && [[ "$BAR_CLOSE_KEPT" =~ ^[12]$ ]] && ui_bar_close "$BAR_CLOSE_ROWS" "$BAR_CLOSE_KEPT"
   # The reader restores the terminal itself; this is for a reader that died too hard to.
   [ -z "$SAVED_STTY" ] || stty "$SAVED_STTY" 2>/dev/null
-  rm -rf "$VERDICT_FILE" "$PAYLOAD_FILE"
+  rm -rf "$VERDICT_FILE" "$PAYLOAD_FILE" "$PAYLOAD_FILE.status"
 }
 trap on_exit EXIT
 
@@ -1267,9 +1267,10 @@ if [ "$RUN_SHOW" = 1 ] && [ "${#STREAM_ARGS[@]}" -gt 0 ]; then
 fi
 
 # Ctrl-C should end the run between iterations rather than half-way through one. The trap
-# only raises a flag; the agent is a foreground child, so an interrupt during an iteration
-# still kills it — but the flag means we record that iteration, write the footer, and stop
-# instead of charging into the next ticket.
+# only raises a flag; the agent is in the terminal's foreground group (see run_turn), so an
+# interrupt during an iteration still kills it — but the flag means we record that iteration,
+# write the footer, and stop instead of charging into the next ticket. TERM does the same and
+# also ends the turn at once (on_term).
 PAUSE_REQUESTED=0
 PAUSE_REASON=""
 on_interrupt() {
@@ -1278,7 +1279,95 @@ on_interrupt() {
   warn ""
   warn "Interrupt received — finishing this iteration's bookkeeping, then pausing."
 }
-trap on_interrupt INT TERM
+
+# Every pid below $1 (its children, theirs, and so on), one per line. The same walk as
+# stop_descendants in foreman-control.sh, which cannot be sourced: that file is a command, and
+# dispatches on load. From /proc, which MSYS has too; `ps` where there is none.
+loop_descendants() {    # loop_descendants PID
+  local root="$1" p line rest a b i grew
+  local -a all=() par=() found=("$root")
+  if [ -r /proc/self/stat ]; then
+    for p in /proc/[0-9]*; do
+      p="${p#/proc/}"
+      read -r line 2>/dev/null < "/proc/$p/stat" || continue
+      rest="${line##*) }"
+      read -r a b _ <<< "$rest"
+      [[ "$b" =~ ^[0-9]+$ ]] || continue
+      all+=("$p"); par+=("$b")
+    done
+  else
+    while read -r a b; do
+      [[ "$a" =~ ^[0-9]+$ ]] && [[ "$b" =~ ^[0-9]+$ ]] || continue
+      all+=("$a"); par+=("$b")
+    done < <(ps -A -o pid= -o ppid= 2>/dev/null)
+  fi
+  grew=1
+  while [ "$grew" -eq 1 ]; do
+    grew=0
+    for i in "${!all[@]}"; do
+      [ -n "${all[$i]}" ] || continue
+      for p in "${found[@]}"; do
+        if [ "${par[$i]}" = "$p" ]; then
+          found+=("${all[$i]}"); printf '%s\n' "${all[$i]}"
+          all[i]=""; grew=1
+          break
+        fi
+      done
+    done
+  done
+}
+
+# One agent turn: exec_run into the stream filter into PAYLOAD_FILE, as a background job that this
+# shell `wait`s for. `wait` is the one wait a trapped signal interrupts at once; a foreground
+# pipeline holds every trap back until the whole turn is over, which is what let `kill -TERM` sit
+# through it. The agent's status (the head of the pipeline: `set -o pipefail` is on, so a plain `$?`
+# would be the filter's too) is the group's to hand back — it goes to a file, because the group is
+# a process of its own and `wait`'s own status is no use when the wait can end early. It lands in
+# TURN_STATUS.
+#
+# Ctrl-C needs nothing here: it goes to the terminal's foreground group, which the job is still in
+# (job control is off in a script), and the agent dies of it as it did. Two things make that so.
+# The group traps INT itself, so that it survives to write the status — and a trap, unlike the
+# ignore a script's `&` otherwise gives its job, is reset to the default in everything it starts.
+# And the wait is repeated until the job is gone: the INT trap in this shell ends a `wait` early too.
+TURN_PID=""
+TURN_STATUS=1
+run_turn() {    # run_turn PROMPT TICKET
+  local prompt="$1" ticket="$2" st=""
+  : > "$PAYLOAD_FILE.status"
+  {
+    trap ':' INT
+    exec_run "$prompt" "$ticket" </dev/null |
+      node "$FOREMAN_TOOL_DIR/foreman-stream.cjs" ${STREAM_ARGS+"${STREAM_ARGS[@]}"} > "$PAYLOAD_FILE"
+    printf '%s\n' "${PIPESTATUS[0]}" > "$PAYLOAD_FILE.status"
+  } &
+  TURN_PID=$!
+  while :; do
+    wait "$TURN_PID" 2>/dev/null
+    kill -0 "$TURN_PID" 2>/dev/null || break
+  done
+  TURN_PID=""
+  read -r st 2>/dev/null < "$PAYLOAD_FILE.status"
+  # No status: the job was ended too hard to write one.
+  [[ "$st" =~ ^[0-9]+$ ]] || { st=1; [ "$PAUSE_REQUESTED" -eq 0 ] || st=130; }
+  TURN_STATUS="$st"
+}
+
+# TERM during a turn ends the turn instead of waiting it out: the agent, the filter and whatever
+# the agent started get the signal, as the terminal gives Ctrl-C to its whole group. The group that
+# runs them is left alone, to write the status. Everything after is the pause path an interrupt takes.
+end_turn() {
+  local p
+  [ -n "$TURN_PID" ] || return 0
+  for p in $(loop_descendants "$TURN_PID"); do kill -TERM "$p" 2>/dev/null; done
+  return 0
+}
+on_term() {
+  on_interrupt
+  end_turn
+}
+trap on_interrupt INT
+trap on_term TERM
 
 # `foreman stop --now` (foreman-control.sh) is Ctrl-C from outside the terminal. It sends the loop
 # SIGINT, which is the path above, and also leaves a `stop` file in the control directory, for the
@@ -1473,9 +1562,8 @@ run_checkpoint_turn() {    # run_checkpoint_turn [stall|review]
   FOREMAN_CLAUDE_ARGS+=(--max-turns "$checkpoint_max_turns")
   # A checkpoint turn killed part-way is still uncommitted work a rerun should review.
   mark_turn_in_flight
-  exec_run "$checkpoint_prompt" "$TICKET_FILE" </dev/null |
-    node "$FOREMAN_TOOL_DIR/foreman-stream.cjs" ${STREAM_ARGS+"${STREAM_ARGS[@]}"} > "$PAYLOAD_FILE"
-  checkpoint_agent_status=${PIPESTATUS[0]}
+  run_turn "$checkpoint_prompt" "$TICKET_FILE"
+  checkpoint_agent_status=$TURN_STATUS
   check_stop_file
   checkpoint_result=$(cat "$PAYLOAD_FILE")
   rm -f "$RUN_CTL_DIR/activity"
@@ -1811,18 +1899,16 @@ while true; do
   # shellcheck source=foreman-prompt.sh
   source "$FOREMAN_TOOL_DIR/foreman-prompt.sh"
 
-  # `${PIPESTATUS[0]}` is load-bearing: `set -o pipefail` is on, so a plain `$?` here would
-  # conflate the filter's status with the agent's, and every branch below turns on the
-  # agent's. Everything after this pipeline and the clean-up below it — the recorder call, the verdict, the branch
-  # order — is untouched by whether the run is being watched.
+  # run_turn hands back the agent's status alone (TURN_STATUS), not the filter's, and every branch
+  # below turns on the agent's. Everything after it and the clean-up below it — the recorder call,
+  # the verdict, the branch order — is untouched by whether the run is being watched.
   #
   # The agent gets /dev/null for stdin, never the terminal: the prompt goes in with `-p`, and
   # an agent holding the terminal can swallow the keys meant for foreman-keys.sh or switch the
   # terminal's mode under it. Same for the checkpoint turn.
   mark_turn_in_flight
-  exec_run "$FOREMAN_PROMPT" "$TICKET_FILE" </dev/null |
-    node "$FOREMAN_TOOL_DIR/foreman-stream.cjs" ${STREAM_ARGS+"${STREAM_ARGS[@]}"} > "$PAYLOAD_FILE"
-  agent_status=${PIPESTATUS[0]}
+  run_turn "$FOREMAN_PROMPT" "$TICKET_FILE"
+  agent_status=$TURN_STATUS
   check_stop_file
   result=$(cat "$PAYLOAD_FILE")
   # The live view's row goes blank until the next agent starts, rather than showing a clock
@@ -2147,7 +2233,14 @@ fi
 # ---------------------------------------------------------------------------
 # Footer
 # ---------------------------------------------------------------------------
-trap - INT TERM
+# Still trapped: a signal now would kill the script between the log append and the batch rename, or
+# between the rename's `git mv` and its commit. It is noted and the footer goes on, to the status
+# already decided, however many times it comes.
+footer_signal() {
+  warn ""
+  warn "Interrupt received — the run is finishing its footer first."
+}
+trap footer_signal INT TERM
 refresh_budget
 
 billed=$((RUN_INPUT + RUN_OUTPUT))

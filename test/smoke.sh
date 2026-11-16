@@ -8250,6 +8250,100 @@ if case_is "a pid file naming a live program that is not the run is no run: stop
   kill "$other" 2>/dev/null; wait "$other" 2>/dev/null
 fi
 
+# Signals to a run in flight (the loop's trap in foreman-loop.sh). A run started here from a
+# subshell, `&` and all, has its own SIGINT ignored; these send TERM, which a `&` does not touch.
+# Helpers: poll a command for up to $1 seconds, and look for a process by its command line.
+sig_poll() {    # sig_poll SECONDS COMMAND...
+  local n=$(($1 * 10)); shift
+  while [ "$n" -gt 0 ]; do "$@" && return 0; sleep 0.1; n=$((n - 1)); done
+  return 1
+}
+proc_running() {    # proc_running 'sleep 733' : a process whose command line is these two words
+  proc_each "$1" :
+}
+proc_kill() {    # proc_kill 'sleep 733' : ends what proc_running finds
+  proc_each "$1" kill -9
+}
+# Runs the rest, with its pid, for each process whose first two words are $1's; fails if there is none.
+# Builtins only (a process per process is slow here), and the words are joined without their
+# separator: MSYS shows the arguments of some processes with none.
+proc_each() {    # proc_each 'WORD WORD' COMMAND...
+  local want="${1// /}" f a b p found=1
+  shift
+  for f in /proc/[0-9]*/cmdline; do
+    a="" b=""
+    { IFS= read -r -d '' a; IFS= read -r -d '' b; } 2>/dev/null < "$f"
+    [ "$a$b" = "$want" ] || continue
+    p="${f#/proc/}"; "$@" "${p%/cmdline}" 2>/dev/null; found=0
+  done
+  return "$found"
+}
+
+if case_is "SIGTERM during a turn ends the turn at once and pauses the run, footer and all"; then
+  repo="$(ctl_ignored_repo 2 term-turn-repo)"
+  ctl="$repo/batch/.foreman-run"
+  log="$repo/batch/foreman-runs.log"
+  rm -f "$WORK/term.st"
+  ( cd "$repo" && env FOREMAN_FAKE_BEHAVIOUR=hang-dirty FOREMAN_FAKE_HANG=733 "$FOREMAN" run batch --unlimited > "$WORK/term.out" 2>&1
+    echo $? > "$WORK/term.st" ) &
+  bg=$!
+  sig_poll 30 test -f "$repo/.foreman-fake-leftover" && pass || fail "the agent is mid-turn, with work in the tree"
+  sig_poll 5 proc_running 'sleep 733' && pass || fail "its process is running"
+  loop="$(cut -d' ' -f1 "$ctl/pid" 2>/dev/null)"
+  SECONDS=0
+  kill -TERM "$loop"
+  sig_poll 15 test -s "$WORK/term.st" && pass || fail "the run ends well inside the turn's 733 seconds"
+  waited=$SECONDS
+  [ "$waited" -le 6 ] && pass || fail "TERM ended the run in $waited s, not at once"
+  if [ ! -s "$WORK/term.st" ]; then kill -9 "$loop" 2>/dev/null; proc_kill 'sleep 733'; fi
+  wait "$bg" 2>/dev/null
+  OUT="$(cat "$WORK/term.out")"
+  assert_eq "$(cat "$WORK/term.st")" 10 "it pauses, as Ctrl-C does: exit 10"
+  assert_contains "$OUT" "PAUSED: interrupted (Ctrl-C)" "the terminal footer says so"
+  assert_contains "$(cat "$log")" "# paused: interrupted (Ctrl-C)" "the log footer says so"
+  assert_contains "$(cat "$log")" "# ---- run " "the log has its footer"
+  assert_eq "$(tail -n 1 "$log")" "#############################################################################" "and it is complete"
+  assert_eq "$(grep -c . "$repo/batch/foreman-runs.jsonl")" 1 "the interrupted iteration is recorded"
+  [ -f "$repo/batch/.foreman-stall-marker" ] && pass || fail "the stall marker stays, for the next run's review"
+  proc_running 'sleep 733' && fail "no agent process is left" || pass
+  assert_eq "$(ls -A "$ctl" 2>/dev/null)" "" "the control directory is gone"
+  rm -f "$WORK"/foreman-fake-*.calls
+fi
+
+if case_is "a signal during the footer does not stop the bookkeeping: the batch is renamed and committed, the run exits as decided"; then
+  # A hook that fires inside the batch rename's own `git commit` (after `git mv` has staged the
+  # rename, before the commit exists) and sends the loop SIGINT, then a second one, and TERM. Before,
+  # the first of them killed the script there with 130.
+  repo="$(ctl_ignored_repo 2 term-footer-repo)"
+  ctl="$repo/batch/.foreman-run"
+  printf '%s\n' '#!/bin/sh' \
+    'grep -q "batch done" "$1" || exit 0' \
+    '[ -s "$FOOTER_PID_FILE" ] || exit 0' \
+    'pid="$(cut -d" " -f1 "$FOOTER_PID_FILE")"' \
+    'kill -INT "$pid"; sleep 0.3; kill -INT "$pid"; sleep 0.3; kill -TERM "$pid"; sleep 1' \
+    'echo fired > "$FOOTER_PID_FILE.fired"' \
+    'exit 0' > "$repo/.git/hooks/commit-msg"
+  chmod +x "$repo/.git/hooks/commit-msg"
+  rm -f "$WORK/footer.pid" "$WORK/footer.pid.fired" "$WORK/footer.st"
+  ( cd "$repo" && env FOOTER_PID_FILE="$WORK/footer.pid" FOREMAN_FAKE_SLEEP=2 "$FOREMAN" run batch --unlimited > "$WORK/footer.out" 2>&1
+    echo $? > "$WORK/footer.st" ) &
+  bg=$!
+  sig_poll 30 test -s "$ctl/pid" && pass || fail "the run is up"
+  cut -d' ' -f1 "$ctl/pid" > "$WORK/footer.pid"
+  sig_poll 40 test -s "$WORK/footer.st" && pass || fail "the run ends"
+  wait "$bg" 2>/dev/null
+  OUT="$(cat "$WORK/footer.out")"
+  [ -f "$WORK/footer.pid.fired" ] && pass || fail "the signals were sent during the batch rename's commit"
+  assert_eq "$(cat "$WORK/footer.st")" 0 "the run exits 0, the status it had decided"
+  assert_contains "$OUT" "finishing its footer first" "and says it is finishing the footer"
+  assert_contains "$OUT" "Appended to" "the footer was written"
+  [ -d "$repo/DONE_batch" ] && [ ! -e "$repo/batch" ] && pass || fail "the batch directory is renamed"
+  assert_eq "$(git -C "$repo" status --porcelain)" "" "nothing is left staged or modified"
+  assert_contains "$(git -C "$repo" log -1 --format=%s)" "mark batch batch done" "the rename is committed"
+  assert_contains "$(cat "$repo/DONE_batch/foreman-runs.log")" "# complete" "the log says the batch is complete"
+  rm -f "$WORK"/foreman-fake-*.calls
+fi
+
 # ---------------------------------------------------------------------------
 # A case process that ran the last case in the file ends here.
 [ "$CASE_OPEN" = 1 ] && case_finish
