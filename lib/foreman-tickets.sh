@@ -123,18 +123,50 @@ _foreman_status_hold() {
 # An order entry may be written repo-relative (".scratch/b/issues/01.md") or relative to
 # the batch ("issues/01.md"). Accept both; complain about neither-resolves.
 _foreman_resolve_ticket() {
-  local entry="$1"
-  if [ -f "$entry" ]; then printf '%s' "$entry"; return 0; fi
-  if [ -f "$BATCH_DIR/$entry" ]; then printf '%s' "$BATCH_DIR/$entry"; return 0; fi
-  # Not there under that name: the loop may have renamed it to DONE_<name> since the order
-  # was written (FOREMAN_DONE_PREFIX), so a finished ticket stays findable.
-  if [ -n "$FOREMAN_DONE_PREFIX" ]; then
-    local dir base
-    _foreman_dirname dir "$entry"; _foreman_basename base "$entry"
-    if [ -f "$dir/$FOREMAN_DONE_PREFIX$base" ]; then printf '%s' "$dir/$FOREMAN_DONE_PREFIX$base"; return 0; fi
-    if [ -f "$BATCH_DIR/$dir/$FOREMAN_DONE_PREFIX$base" ]; then
-      printf '%s' "$BATCH_DIR/$dir/$FOREMAN_DONE_PREFIX$base"; return 0
-    fi
+  local entry="$1" parent rest lead
+  _foreman_try_ticket "$entry" && return 0
+  [ -n "$FOREMAN_DONE_PREFIX" ] && _foreman_try_ticket_renamed "$entry" && return 0
+
+  # Still not there: the whole batch may have been renamed (DONE_<batch>) since the order was
+  # written, and a repo-relative entry still names the old directory. Swap that leading
+  # component — only that; nothing is searched for — for the current batch directory. The old
+  # directory is the entry's first component after this batch's parent, and it is the old one
+  # when the current name ends with it (the prefix the loop added, whatever it was). order.md
+  # itself is not rewritten.
+  if [ "$BATCH_DIR" != . ]; then
+    parent=""
+    case "$BATCH_DIR" in */*) parent="${BATCH_DIR%/*}/" ;; esac
+    case "$entry" in "$parent"*/*) ;; *) return 1 ;; esac
+    rest="${entry#"$parent"}"
+    lead="${rest%%/*}"
+    [ -n "$lead" ] || return 1
+    case "${BATCH_DIR##*/}" in
+      *"$lead") [ "${BATCH_DIR##*/}" != "$lead" ] || return 1 ;;
+      *) return 1 ;;
+    esac
+    entry="$BATCH_DIR/${rest#*/}"
+    _foreman_try_ticket "$entry" && return 0
+    [ -n "$FOREMAN_DONE_PREFIX" ] && _foreman_try_ticket_renamed "$entry" && return 0
+  fi
+  return 1
+}
+
+# ENTRY as written: repo-relative, or relative to the batch. Prints what it found.
+_foreman_try_ticket() {
+  if [ -f "$1" ]; then printf '%s' "$1"; return 0; fi
+  if [ -f "$BATCH_DIR/$1" ]; then printf '%s' "$BATCH_DIR/$1"; return 0; fi
+  return 1
+}
+
+# ENTRY with the file name carrying the done prefix: the loop may have renamed the ticket to
+# DONE_<name> since the order was written (FOREMAN_DONE_PREFIX), so a finished ticket stays
+# findable.
+_foreman_try_ticket_renamed() {
+  local dir base
+  _foreman_dirname dir "$1"; _foreman_basename base "$1"
+  if [ -f "$dir/$FOREMAN_DONE_PREFIX$base" ]; then printf '%s' "$dir/$FOREMAN_DONE_PREFIX$base"; return 0; fi
+  if [ -f "$BATCH_DIR/$dir/$FOREMAN_DONE_PREFIX$base" ]; then
+    printf '%s' "$BATCH_DIR/$dir/$FOREMAN_DONE_PREFIX$base"; return 0
   fi
   return 1
 }

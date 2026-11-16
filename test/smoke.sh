@@ -8436,6 +8436,42 @@ if case_is "doctor reads a conf the way the run does: export, comments, quotes, 
   assert_contains "$(words)" "batch" "while the live batch still is"
 fi
 
+if case_is "a finished batch's order.md, written repo-relative, still resolves after the batch is renamed"; then
+  repo="$(make_repo 2 done-order-repo)"
+  { echo '<!-- ORDER:BEGIN -->'
+    echo 'batch/issues/01-ticket.md'
+    echo 'batch/issues/02-ticket.md'
+    echo '<!-- ORDER:END -->'; } > "$repo/batch/order.md"
+  git -C "$repo" add -A >/dev/null && git -C "$repo" commit --quiet -m "order"
+  run_foreman "$repo" run batch --unlimited
+  assert_eq "$ST" 0 "the batch finishes"
+  [ -d "$repo/DONE_batch" ] && [ ! -e "$repo/batch" ] && pass || fail "batch became DONE_batch"
+  assert_contains "$(cat "$repo/DONE_batch/order.md")" "batch/issues/01-ticket.md" "and order.md still names the old directory"
+
+  run_foreman "$repo" status DONE_batch
+  assert_eq "$ST" 0 "status of the renamed batch works"
+  assert_missing "$OUT" "does not exist" "with no 'lists a ticket that does not exist'"
+  assert_contains "$OUT" "Tickets done: 2 / 2" "and counts its tickets"
+  run_foreman "$repo" next DONE_batch --all
+  assert_eq "$ST" 0 "next --all reads it too"
+  assert_eq "$(printf '%s\n' "$OUT" | grep -c .)" 2 "both tickets, found where they are now"
+  assert_eq "$(cat "$repo/DONE_batch/order.md" | grep -c 'batch/issues/')" 2 "order.md was not rewritten"
+
+  # A prefix of its own, and a batch nested deeper than the repo root.
+  repo="$(make_repo 1 done-order-custom-repo)"
+  mkdir -p "$repo/.scratch"
+  git -C "$repo" mv batch .scratch/feat >/dev/null
+  { echo '<!-- ORDER:BEGIN -->'; echo '.scratch/feat/issues/01-ticket.md'; echo '<!-- ORDER:END -->'; } > "$repo/.scratch/feat/order.md"
+  git -C "$repo" add -A >/dev/null && git -C "$repo" commit --quiet -m "nested batch"
+  FOREMAN_DONE_PREFIX=FIN_ run_foreman "$repo" run .scratch/feat --unlimited
+  assert_eq "$ST" 0 "a nested batch finishes under its own prefix"
+  [ -d "$repo/.scratch/FIN_feat" ] && pass || fail "the batch became .scratch/FIN_feat"
+  FOREMAN_DONE_PREFIX=FIN_ run_foreman "$repo" status .scratch/FIN_feat
+  assert_eq "$ST" 0 "status of it works"
+  assert_missing "$OUT" "does not exist" "with no missing ticket"
+  assert_contains "$OUT" "Tickets done: 1 / 1" "and counts its ticket"
+fi
+
 # ---------------------------------------------------------------------------
 # A case process that ran the last case in the file ends here.
 [ "$CASE_OPEN" = 1 ] && case_finish

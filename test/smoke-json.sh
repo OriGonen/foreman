@@ -539,6 +539,26 @@ if case_is "status --json --all: every batch in the repo, counts only, finished 
   assert_eq "$ST" 1 "--all without --json is refused"
 fi
 
+if case_is "status --json --all: a finished batch with a repo-relative order.md has its counts"; then
+  repo="$WORK/json-done-order-repo"
+  copy_fixture "$WORK/template" "$repo" 2
+  { echo '<!-- ORDER:BEGIN -->'; echo 'batch/issues/01-ticket.md'; echo 'batch/issues/02-ticket.md'; echo '<!-- ORDER:END -->'; } > "$repo/batch/order.md"
+  git -C "$repo" add -A >/dev/null && git -C "$repo" commit --quiet -m "order"
+  run_foreman "$repo" run batch --unlimited
+  assert_eq "$ST" 0 "the batch finishes and is renamed"
+  [ -d "$repo/DONE_batch" ] && pass || fail "batch became DONE_batch"
+
+  run_foreman "$repo" status --json --all
+  json="$OUT"
+  assert_eq "$ST" 0 "status --json --all exits 0"
+  assert_eq "$(jv "$json" 'j.batches.map(b => b.path)')" '["DONE_batch"]' "the finished batch is listed"
+  assert_eq "$(jv "$json" 'j.batches[0].counts')" '{"done":2,"total":2}' "with its counts, not null"
+  assert_eq "$(jv "$json" 'j.batches[0].error')" null "and no error"
+
+  run_foreman "$repo" status DONE_batch --json
+  assert_eq "$(jv "$OUT" 'j.counts')" '{"done":2,"total":2}' "status DONE_batch --json agrees"
+fi
+
 if case_is "status --json --all: outside a repository"; then
   mkdir -p "$WORK/not-a-repo"
   OUT="$(cd "$WORK/not-a-repo" && GIT_CEILING_DIRECTORIES="$WORK" "$FOREMAN" status --json --all 2>"$WORK/stderr")"
