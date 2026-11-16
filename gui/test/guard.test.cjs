@@ -159,3 +159,51 @@ test('the app writes the handoff and the run\'s own output file, and nothing els
   assert.match(r, /openSync\(outPath\(batch\), 'w'\)/, 'and it is out, for writing');
   assert.doesNotMatch(r, /foreman\.conf/, 'runner.cjs never names foreman.conf');
 });
+
+// ---- what shell.openPath is given ----
+
+const { openablePath } = require('../guard.cjs');
+const os = require('node:os');
+
+function repoWith(files, dirs = []) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'open-'));
+  for (const d of dirs) fs.mkdirSync(path.join(root, d), { recursive: true });
+  for (const f of files) { fs.mkdirSync(path.dirname(path.join(root, f)), { recursive: true }); fs.writeFileSync(path.join(root, f), 'x'); }
+  return root.replace(/\\/g, '/');
+}
+
+test('openablePath: the tickets, handoffs, notes and log the screens open, and the batch folder', () => {
+  const root = repoWith(['.scratch/b/01-a.md', '.scratch/b/progress.txt', '.scratch/b/foreman-runs.log', '.scratch/b/handoff/x.MD'], ['.scratch/b/folder.d']);
+  for (const rel of ['.scratch/b/01-a.md', '.scratch/b/progress.txt', '.scratch/b/foreman-runs.log', '.scratch/b/handoff/x.MD', '.scratch/b', '.scratch/b/folder.d']) {
+    assert.equal(path.relative(fs.realpathSync(root), openablePath(root, rel)), path.normalize(rel), rel);
+  }
+});
+
+test('openablePath refuses a program, a shortcut, a script and a file with no extension', () => {
+  const root = repoWith(['b/run.cmd', 'b/a.bat', 'b/t.exe', 'b/l.lnk', 'b/s.ps1', 'b/noext', 'b/x.md.exe']);
+  for (const f of ['run.cmd', 'a.bat', 't.exe', 'l.lnk', 's.ps1', 'noext', 'x.md.exe']) {
+    assert.throws(() => openablePath(root, `b/${f}`), (e) => e.kind === 'bad-open', f);
+  }
+});
+
+test('openablePath refuses a : in a segment (an NTFS stream or a drive) and anything in .git', () => {
+  const root = repoWith(['b/t.md']);
+  assert.throws(() => openablePath(root, 'b/t.md:evil.exe'), /:/);
+  assert.throws(() => openablePath(root, 'b/t.md::$DATA'), /:/);
+  assert.throws(() => openablePath(root, '.git/config.txt'), /\.git/);
+});
+
+test('openablePath follows symlinks: a link inside the repository that points outside is refused', (t) => {
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'outside-'));
+  fs.writeFileSync(path.join(outside, 'secret.md'), 'x');
+  const root = repoWith([], ['b']);
+  try { fs.symlinkSync(outside, path.join(root, 'b', 'link'), 'junction'); } catch { return t.skip('cannot make a link here'); }
+  assert.throws(() => openablePath(root, 'b/link'), /outside the repository/);
+  assert.throws(() => openablePath(root, 'b/link/secret.md'), /outside the repository/);
+});
+
+test('main.cjs opens only what openablePath returns', () => {
+  const m = read('main.cjs');
+  assert.match(m, /shell\.openPath\(openablePath\(/);
+  assert.doesNotMatch(m, /shell\.openPath\(repoPath\(/);
+});

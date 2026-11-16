@@ -199,3 +199,14 @@ test('decorate: the mode comes from the batch\'s foreman.conf and the environmen
   await g.decorate(answerOf(sample()), { fresh: true }); await g.settled();
   assert.equal((await g.decorate(answerOf(sample()), { fresh: false })).conditions.runners.mode, 'sandbox');
 });
+
+test('a doctor read that failed (timed out) is not remembered as still reading: the next fresh read starts', async () => {
+  const f = fake({ doctor: new Error('foreman did not answer within 60 s') });
+  const c = C.createConditions({ foreman: f, readConf: () => '', env: {}, onChange: () => {} });
+  await c.decorate(answerOf(needsHuman()), { fresh: true });
+  await c.settled();
+  assert.equal(f.calls.doctor, 1);
+  await c.decorate(answerOf(needsHuman()), { fresh: true });
+  await c.settled();
+  assert.equal(f.calls.doctor, 2, 'a second read is started, not the first one\'s memo');
+});

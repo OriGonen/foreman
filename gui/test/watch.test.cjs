@@ -268,3 +268,15 @@ test('the one retry after a failed read is given what the failed read was given,
   assert.deepEqual(seen, [['a'], ['a']]);
   assert.equal(t.results.length, 1);
 });
+
+test('a read that was rejected (a timed-out CLI call) does not wedge the watcher: the next change is read', async () => {
+  let calls = 0;
+  const t = setup({ read: async () => { calls++; if (calls <= 2) throw new Error('foreman did not answer within 60 s'); return { ok: calls }; } });
+  await t.w.start();
+  t.fsw.fire('batch');
+  await t.clock.advance(150 + 150 + 1000);
+  assert.equal(t.errors.length, 1, 'the failure is shown once');
+  t.fsw.fire('batch');
+  await t.clock.advance(150);
+  assert.deepEqual(t.results, [{ ok: 3 }], 'and a later change is read again');
+});

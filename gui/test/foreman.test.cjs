@@ -289,3 +289,48 @@ test('controlIgnored asks git, from the repo root: 0 is ignored, 1 is not, anyth
   assert.equal((await setup({ code: 1, stdout: '', stderr: '' }).f.controlIgnored('b')), false);
   await assert.rejects(setup({ code: 128, stdout: '', stderr: 'fatal: not a git repository\n' }).f.controlIgnored('b'), (e) => e.kind === 'exit');
 });
+
+// ---- time limits ----
+
+const { defaultRun, CALL_TIMEOUT_MS } = require('../foreman.cjs');
+
+test('every CLI call is given a timeout and a kill signal; stop --now is given longer', async () => {
+  const ok = { code: 0, stdout: JSON.stringify(good), stderr: '' };
+  const { f, calls } = setup(ok);
+  await f.status('b');
+  await f.keys('b', '+');
+  await f.stop('b');
+  await f.stop('b', { now: true });
+  await f.controlIgnored('b');
+  for (const c of calls) {
+    assert.equal(c.opts.killSignal, 'SIGKILL', c.args.join(' '));
+    assert.ok(c.opts.timeout >= 30000, `a generous timeout: ${c.args.join(' ')}`);
+  }
+  assert.equal(CALL_TIMEOUT_MS, 60000);
+  assert.equal(calls[0].opts.timeout, CALL_TIMEOUT_MS);
+  assert.ok(calls[3].opts.timeout > calls[2].opts.timeout, '`stop --now` waits up to a minute for the run itself');
+});
+
+test('defaultRun: a process that outlives its timeout is killed and rejects with a clear ForemanError', async () => {
+  const t0 = Date.now();
+  await assert.rejects(
+    defaultRun(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], { timeout: 300 }),
+    (e) => e instanceof ForemanError && e.kind === 'timeout' && /did not answer within/.test(e.message),
+  );
+  assert.ok(Date.now() - t0 < 10000, 'and it did not wait for the process');
+});
+
+test('defaultRun still resolves with the exit code and streams for a process that finishes (and fails)', async () => {
+  const r = await defaultRun(process.execPath, ['-e', 'console.log("hi"); process.exit(3)'], {});
+  assert.equal(r.code, 3);
+  assert.match(r.stdout, /hi/);
+});
+
+test('a timed-out call is a timeout, not "could not start bash", whichever call it was', async () => {
+  const hung = () => { throw new ForemanError('timeout', 'foreman did not answer within 60 s and was stopped'); };
+  const { f } = setup(hung);
+  for (const ask of [() => f.status('b'), () => f.keys('b', '+'), () => f.stop('b'), () => f.controlIgnored('b'), () => f.doctor()]) {
+    await assert.rejects(ask(), (e) => e.kind === 'timeout' && !/could not start/.test(e.message));
+  }
+  await assert.rejects(findRepoRoot({ bash: 'b', dir: 'd', run: hung }), (e) => e.kind === 'timeout');
+});

@@ -20,6 +20,11 @@ const { execFile } = require('child_process');
 
 const SUPPORTED_JSON = 1;
 
+// How long any one CLI call may take before it is killed and reported. Generous: the doctor probes
+// the machine and takes seconds. `stop --now` waits for the run to end (up to a minute itself).
+const CALL_TIMEOUT_MS = 60 * 1000;
+const STOP_NOW_TIMEOUT_MS = 150 * 1000;
+
 class ForemanError extends Error {
   constructor(kind, message, extra = {}) {
     super(message);
@@ -98,11 +103,15 @@ function parseOutput(command, { code, stdout, stderr }) {
   return doc;
 }
 
-// The default runner: resolves with the exit code and both streams, rejects only when the process
-// could not be started at all.
+// The default runner: resolves with the exit code and both streams, rejects when the process could
+// not be started at all, or ran past its timeout and was killed (ForemanError 'timeout').
 function defaultRun(file, args, opts) {
   return new Promise((resolve, reject) => {
-    execFile(file, args, { ...opts, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }, (err, stdout, stderr) => {
+    const limit = { timeout: CALL_TIMEOUT_MS, killSignal: 'SIGKILL', ...opts };
+    execFile(file, args, { ...limit, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }, (err, stdout, stderr) => {
+      if (err && err.killed && limit.timeout > 0) {
+        return reject(new ForemanError('timeout', `foreman did not answer within ${Math.round(limit.timeout / 1000)} s and was stopped`, { cause: err }));
+      }
       if (err && typeof err.code !== 'number') return reject(err);
       resolve({ code: err ? err.code : 0, stdout, stderr });
     });
@@ -118,6 +127,11 @@ function plainText(s) {
     .split('\n').map((l) => l.trim()).filter(Boolean).join('\n');
 }
 
+// What a failed `run` is told as: a ForemanError (a timeout) as it is, anything else as a failure to start.
+function startFailure(bash, e) {
+  return e instanceof ForemanError ? e : new ForemanError('spawn', `could not start ${bash}: ${e.message}`, { cause: e });
+}
+
 function createForeman({ bash, checkout, repoRoot, run = defaultRun, env = process.env }) {
   const script = `${checkout.replace(/\\/g, '/')}/bin/foreman`;
 
@@ -125,24 +139,24 @@ function createForeman({ bash, checkout, repoRoot, run = defaultRun, env = proce
     let out;
     try {
       out = await run(bash, [script, command, ...args], {
-        cwd: repoRoot, env: cliEnv(env), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
+        cwd: repoRoot, env: cliEnv(env), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], timeout: CALL_TIMEOUT_MS, killSignal: 'SIGKILL',
       });
     } catch (e) {
-      throw new ForemanError('spawn', `could not start ${bash}: ${e.message}`, { cause: e });
+      throw startFailure(bash, e);
     }
     return parseOutput(command, out);
   }
 
   // A command with no JSON to give back: resolves with what it printed, rejects with the CLI's own
   // words when it exited non-zero.
-  async function words(command, args) {
+  async function words(command, args, timeout = CALL_TIMEOUT_MS) {
     let out;
     try {
       out = await run(bash, [script, command, ...args], {
-        cwd: repoRoot, env: cliEnv(env), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
+        cwd: repoRoot, env: cliEnv(env), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], timeout, killSignal: 'SIGKILL',
       });
     } catch (e) {
-      throw new ForemanError('spawn', `could not start ${bash}: ${e.message}`, { cause: e });
+      throw startFailure(bash, e);
     }
     if (out.code !== 0) {
       const said = plainText(out.stderr) || plainText(out.stdout);
@@ -180,7 +194,7 @@ function createForeman({ bash, checkout, repoRoot, run = defaultRun, env = proce
     // Finish the iteration in flight, then pause; with `now`, end it at once as Ctrl-C does (the CLI
     // keeps the ticket's uncommitted work, and the next run reviews it). `stop --now` waits for the run
     // to end, up to a minute. Free.
-    stop: (batch, { now = false } = {}) => words('stop', [...(now ? ['--now'] : []), checkBatchPath(batch)]),
+    stop: (batch, { now = false } = {}) => words('stop', [...(now ? ['--now'] : []), checkBatchPath(batch)], now ? STOP_NOW_TIMEOUT_MS : CALL_TIMEOUT_MS),
     // Whether the repository ignores the batch's control directory (`**/.foreman-run/`): without it a
     // run cannot be steered from here, and the app's own `out` would show up as a change. Asked of git,
     // as the loop asks it.
@@ -188,10 +202,10 @@ function createForeman({ bash, checkout, repoRoot, run = defaultRun, env = proce
       let out;
       try {
         out = await run(bash, ['-c', 'git check-ignore -q -- "$1/.foreman-run/pid"', '_', checkBatchPath(batch)], {
-          cwd: repoRoot, env: cliEnv(env), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
+          cwd: repoRoot, env: cliEnv(env), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], timeout: CALL_TIMEOUT_MS, killSignal: 'SIGKILL',
         });
       } catch (e) {
-        throw new ForemanError('spawn', `could not start ${bash}: ${e.message}`, { cause: e });
+        throw startFailure(bash, e);
       }
       if (out.code === 0) return true;
       if (out.code === 1) return false;
@@ -209,10 +223,10 @@ async function findRepoRoot({ bash, dir, run = defaultRun, env = process.env }) 
   let out;
   try {
     out = await run(bash, ['-c', 'git rev-parse --show-toplevel'], {
-      cwd: dir, env: cliEnv(env), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'],
+      cwd: dir, env: cliEnv(env), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], timeout: CALL_TIMEOUT_MS, killSignal: 'SIGKILL',
     });
   } catch (e) {
-    throw new ForemanError('spawn', `could not start ${bash}: ${e.message}`, { cause: e });
+    throw startFailure(bash, e);
   }
   const root = String(out.stdout || '').trim().replace(/\\/g, '/');
   if (out.code !== 0 || root === '') {
@@ -222,4 +236,4 @@ async function findRepoRoot({ bash, dir, run = defaultRun, env = process.env }) 
   return root;
 }
 
-module.exports = { plainText, findRepoRoot, createForeman, parseOutput, checkBatchPath, checkRunId, cliEnv, ForemanError, SUPPORTED_JSON };
+module.exports = { CALL_TIMEOUT_MS, defaultRun, plainText, findRepoRoot, createForeman, parseOutput, checkBatchPath, checkRunId, cliEnv, ForemanError, SUPPORTED_JSON };

@@ -2241,3 +2241,13 @@ test('the picture of each state is one svg, and the whole-pane ones fill the mai
     assert.equal(st.tagName === 'main', whole);
   }
 });
+
+// ---- inline style under the page's CSP ----
+
+test('h() applies `style` through the CSSOM (style.cssText), never as an attribute the CSP would drop', async () => {
+  const { app } = await openConfirmation();
+  const styled = app.all().filter((e) => e.style && e.style.cssText);
+  assert.ok(styled.length >= 5, 'the confirmation\'s spacing and alignment rules are applied');
+  assert.ok(styled.some((e) => e.style.cssText === 'gap:6px;margin-left:auto'), 'with the text it was given');
+  assert.deepEqual(app.all().filter((e) => 'style' in e.attrs).map((e) => e.tagName), [], 'and no element carries a style attribute');
+});

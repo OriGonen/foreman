@@ -16,7 +16,8 @@
     const p = props || {};
     if (p.cls) e.className = p.cls;
     if (p.text !== undefined) e.textContent = p.text;
-    for (const [k, v] of Object.entries(p.attrs || {})) e.setAttribute(k, v);
+    // `style` goes through the CSSOM: the page's CSP (no 'unsafe-inline') drops a style *attribute*.
+    for (const [k, v] of Object.entries(p.attrs || {})) { if (k === 'style') e.style.cssText = v; else e.setAttribute(k, v); }
     for (const [k, fn] of Object.entries(p.on || {})) e.addEventListener(k, fn);
     for (const kid of kids) if (kid !== null && kid !== undefined && kid !== false) e.append(kid);
     return e;
@@ -193,6 +194,7 @@
       'git-bash-missing': 'Git Bash was not found.',
       'not-a-repo': 'This folder is not a git repository.',
       spawn: 'foreman could not be started.',
+      timeout: 'foreman took too long and was stopped.',
       exit: 'foreman reported a problem.',
       parse: 'foreman answered with something this app cannot read.',
       version: 'foreman and this app do not match.',

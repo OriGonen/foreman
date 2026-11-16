@@ -52,7 +52,7 @@ test('spawn env: the run is told not to draw, not to colour and not to take opti
   assert.equal(env.FOREMAN_COLOR, 'never');
   assert.equal(env.GIT_OPTIONAL_LOCKS, '0');
   assert.equal(env.PATH, 'C:\\Windows', 'what Git Bash needs to start');
-  assert.equal(env.SECRET_TOKEN, undefined, 'nothing else is passed on');
+  assert.equal(env.SECRET_TOKEN, 'hunter2', 'the whole environment is passed on: the run is the person own, as in a terminal');
   assert.equal(env.FOREMAN_MAX_COST_USD, undefined, 'no edit, no cap in the environment: foreman.conf decides');
   assert.equal(env.FOREMAN_MAX_MINUTES, undefined);
 });
@@ -119,4 +119,57 @@ test('spawnPlan: the same arguments and env without starting anything', () => {
   assert.deepEqual(p.args, ['C:/tools/foreman/bin/foreman', 'run', '.scratch/gui', '2', '--live']);
   assert.equal(p.env.FOREMAN_MAX_MINUTES, '15');
   assert.equal(p.cwd, 'C:/p');
+});
+
+// ---- the run gets the person's whole environment (the whitelist is for the read-only calls) ----
+
+test('a run is spawned with the whole environment: RALPH_*, keys, proxy, ssh agent; the app\'s own forced values and caps still win', () => {
+  const env = { ...ENV, RALPH_MAX_COST_USD: '20', ANTHROPIC_API_KEY: 'k', HTTPS_PROXY: 'http://p', SSH_AUTH_SOCK: '/s', FOREMAN_MAX_MINUTES: '5', UNSET: undefined };
+  const p = spawnPlan({ bash: BASH, checkout: 'C:\\tools\\foreman', repoRoot: 'C:/p', batch: 'b', plan: checkRequest({ iterations: 1, caps: { minutes: '15' } }), env });
+  for (const k of ['RALPH_MAX_COST_USD', 'ANTHROPIC_API_KEY', 'HTTPS_PROXY', 'SSH_AUTH_SOCK', 'SECRET_TOKEN']) assert.equal(p.env[k], env[k], k);
+  assert.equal('UNSET' in p.env, false);
+  assert.equal(p.env.FOREMAN_SHOW, 'never', 'forced over the user\'s own');
+  assert.equal(p.env.FOREMAN_COLOR, 'never');
+  assert.equal(p.env.GIT_OPTIONAL_LOCKS, '0');
+  assert.equal(p.env.FOREMAN_MAX_MINUTES, '15', 'the run\'s cap beats the environment');
+});
+
+test('the process the runner spawns is given that environment', async () => {
+  const { spawned, runner } = rig();
+  await runner.start('b', { iterations: 1 });
+  assert.equal(spawned[0].opts.env.SECRET_TOKEN, 'hunter2');
+});
+
+// ---- when the run ends ----
+
+const { exitNotifier } = require('../runner.cjs');
+
+test('exitNotifier: sends the batch\'s own output from the runner that started it', () => {
+  const sent = [];
+  const runner = { readOut: (b) => `out of ${b}` };
+  exitNotifier({ runner, batch: 'b', current: () => true, send: (m) => sent.push(m) })({ code: 0, signal: null });
+  assert.deepEqual(sent, [{ batch: 'b', code: 0, signal: null, out: 'out of b' }]);
+});
+
+test('exitNotifier: says nothing, and does not throw, when the app has moved to another repository', () => {
+  const sent = [];
+  let ctx = { runner: {} };
+  const runner = { readOut: () => { throw new Error('must not read another repository\'s output'); } };
+  const n = exitNotifier({ runner, batch: 'b', current: () => !!ctx && ctx.runner === runner, send: (m) => sent.push(m) });
+  ctx = null;                                       // "Choose folder"
+  assert.doesNotThrow(() => n({ code: 0, signal: null }));
+  ctx = { runner: { readOut: () => 'other repo' } };   // another repository set up meanwhile
+  assert.doesNotThrow(() => n({ code: 0, signal: null }));
+  assert.deepEqual(sent, []);
+});
+
+test('exitNotifier: a window that is gone by the send does not throw out of the exit listener', () => {
+  const n = exitNotifier({ runner: { readOut: () => 'x' }, batch: 'b', current: () => true, send: () => { throw new TypeError('Object has been destroyed'); } });
+  assert.doesNotThrow(() => n({ code: 1, signal: null }));
+});
+
+test('main.cjs hands start() an exitNotifier made from the runner it captured, and the callback never names the global ctx', () => {
+  const m = fs.readFileSync(path.join(__dirname, '..', 'main.cjs'), 'utf8');
+  assert.match(m, /const runner = ctx\.runner;\s*\n\s*const started = await runner\.start\(batch, request, exitNotifier\(\{/);
+  assert.doesNotMatch(m, /ctx\.runner\.readOut/);
 });

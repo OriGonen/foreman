@@ -18,12 +18,12 @@ const { createForeman, findRepoRoot, ForemanError } = require('./foreman.cjs');
 const { createWatcher } = require('./watch.cjs');
 const { createOverview } = require('./overview.cjs');
 const { createTicketFiles } = require('./ticket.cjs');
-const { createRunner } = require('./runner.cjs');
+const { createRunner, exitNotifier } = require('./runner.cjs');
 const { createLive, onlyControlFiles } = require('./live.cjs');
 const { checkBatchPath } = require('./foreman.cjs');
 const { createConditions } = require('./conditions.cjs');
 const { INIT_COMMAND } = require('./states.js');
-const { repoFromArgv, refuseNavigation, openWindowHandler, repoPath } = require('./guard.cjs');
+const { repoFromArgv, refuseNavigation, openWindowHandler, repoPath, openablePath } = require('./guard.cjs');
 
 const PAGE = path.join(__dirname, 'index.html');
 
@@ -261,9 +261,13 @@ ipcMain.handle('run:start', async (event, batch, request) => {
     }
     const status = await ctx.foreman.status(batch);
     if (status.run && status.run.in_flight) throw new ForemanError('in-flight', 'A run is already in flight in this batch.');
-    const started = await ctx.runner.start(batch, request, ({ code, signal }) => {
-      if (win && !win.isDestroyed()) win.webContents.send('run:exit', { batch, code, signal, out: ctx.runner.readOut(batch) });
-    });
+    // The run's own runner, taken now: when it ends the app may have been pointed at another repository.
+    const runner = ctx.runner;
+    const started = await runner.start(batch, request, exitNotifier({
+      runner, batch,
+      current: () => !!ctx && ctx.runner === runner && !!win && !win.isDestroyed(),
+      send: (m) => win.webContents.send('run:exit', m),
+    }));
     return { ok: true, ...started };
   } catch (e) {
     return { ok: false, error: describe(e) };
@@ -328,7 +332,7 @@ ipcMain.handle('window:compact', (event, on) => {
 ipcMain.handle('open', async (event, relativePath) => {
   if (!trusted(event) || !ctx) return 'refused';
   try {
-    return (await shell.openPath(repoPath(ctx.repoRoot, relativePath))) || null;
+    return (await shell.openPath(openablePath(ctx.repoRoot, relativePath))) || null;
   } catch (e) {
     return e.message;
   }

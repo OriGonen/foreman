@@ -1,8 +1,10 @@
 'use strict';
 // What the window refuses, and how it learns which repository it was opened on. No Electron in
 // here, so both are tested with plain Node.
+const fs = require('fs');
 const win = require('path').win32;
 const { checkBatchPath, ForemanError } = require('./foreman.cjs');
+const { resolveInside } = require('./ticket.cjs');
 
 // `npm start -- C:\Projects\app` runs `electron . C:\Projects\app`: with a default app (run from a
 // folder) the first argument is Electron itself and the second the app's folder; the repository is
@@ -32,4 +34,24 @@ function repoPath(repoRoot, rel) {
   return full;
 }
 
-module.exports = { repoFromArgv, refuseNavigation, openWindowHandler, repoPath };
+// What the app asks the desktop to open: a ticket or handoff (.md), a note or the run's log (.txt,
+// .log), or a folder (the batch's). Never a program or a shortcut, which the default handler would run.
+const OPENABLE = new Set(['.md', '.txt', '.log']);
+
+// The real path of a repo-relative file or folder that may be opened, for `shell.openPath`, or a
+// ForemanError. Held to the same rule as the handoff file (ticket.cjs resolveInside: symlinks followed
+// and still inside the repository, no `:` in a name, nothing in .git), and to the extension list above.
+function openablePath(repoRoot, rel, io = fs) {
+  checkBatchPath(rel);
+  const full = resolveInside(repoRoot, rel, io);
+  let isDir = false;
+  try { isDir = io.statSync(full).isDirectory(); } catch { /* not there: the extension decides */ }
+  if (isDir) return full;
+  const ext = win.extname(full).toLowerCase();
+  if (!OPENABLE.has(ext)) {
+    throw new ForemanError('bad-open', `the app opens only ${[...OPENABLE].join(', ')} files and folders, not ${JSON.stringify(rel)}`);
+  }
+  return full;
+}
+
+module.exports = { repoFromArgv, refuseNavigation, openWindowHandler, repoPath, openablePath, OPENABLE };

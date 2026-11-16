@@ -26,7 +26,7 @@ Stop and ask the owner before any change to the public CLI interface, the config
 | T08 | Doctor reads confs the way config does | todo |
 | T09 | Finished batches keep a readable order | todo |
 | T10 | Log and terminal hygiene | todo |
-| T11 | GUI main-process fixes | todo |
+| T11 | GUI main-process fixes | done |
 | T12 | GUI conf readers agree with the shell | todo |
 | T13 | Signals: keep the trap through the footer; forward TERM | todo |
 | R1 | Loop: one path for terminal states | todo |

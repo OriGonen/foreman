@@ -8,13 +8,14 @@
 //
 // with its working directory the repository root, stdin ignored, stdout and stderr in
 // `<batch>/.foreman-run/out` (which the CLI leaves alone when the run ends, so a preflight failure can
-// still be read), and in its environment what any CLI call from the app gets, FOREMAN_SHOW=never,
-// FOREMAN_COLOR=never, GIT_OPTIONAL_LOCKS=0, and the caps the person edited for this run only.
+// still be read), and in its environment the app's own, whole — what a run started in a terminal has, RALPH_* knobs, proxy,
+// ssh agent and credentials included (the whitelist is for the read-only `--json` calls only) — with
+// FOREMAN_SHOW=never, FOREMAN_COLOR=never, GIT_OPTIONAL_LOCKS=0, and the caps the person edited for this run only.
 // foreman.conf is never written.
 const nodeFs = require('fs');
 const { spawn: nodeSpawn } = require('child_process');
 const RP = require('./runplan.js');
-const { cliEnv, checkBatchPath, plainText, ForemanError } = require('./foreman.cjs');
+const { checkBatchPath, plainText, ForemanError } = require('./foreman.cjs');
 
 const RUN_FORCED = { FOREMAN_SHOW: 'never', FOREMAN_COLOR: 'never', GIT_OPTIONAL_LOCKS: '0' };
 
@@ -25,6 +26,26 @@ function checkRequest(request) {
   return r.plan;
 }
 
+// The environment of a run: everything the app has, then what the app forces, then the run's caps.
+function runEnv(base, plan) {
+  const env = {};
+  for (const [k, v] of Object.entries(base)) if (v !== undefined) env[k] = v;
+  return Object.assign(env, RUN_FORCED, RP.capEnv(plan));
+}
+
+// What to do when the run ends: the callback `start` is given. It is bound to the runner (and so the
+// repository) that started the run, never to whatever the app has open by the time it ends: it says
+// nothing when the app moved to another repository (`current()` false), and it never throws, for it
+// runs inside a child's `exit` listener.
+function exitNotifier({ runner, batch, current, send }) {
+  return ({ code, signal }) => {
+    try {
+      if (!current()) return;
+      send({ batch, code, signal, out: runner.readOut(batch) });
+    } catch { /* the window went away between the check and the send */ }
+  };
+}
+
 // { file, args, env, cwd } for the process, without starting it: what the tests look at.
 function spawnPlan({ bash, checkout, repoRoot, batch, plan, env = process.env }) {
   const script = `${String(checkout).replace(/\\/g, '/')}/bin/foreman`;
@@ -32,7 +53,7 @@ function spawnPlan({ bash, checkout, repoRoot, batch, plan, env = process.env })
     file: bash,
     args: [script, ...RP.runArgs(checkBatchPath(batch), plan)],
     cwd: repoRoot,
-    env: Object.assign(cliEnv(env), RUN_FORCED, RP.capEnv(plan)),
+    env: runEnv(env, plan),
   };
 }
 
@@ -87,4 +108,4 @@ function createRunner({ bash, checkout, repoRoot, env = process.env, spawn = nod
   };
 }
 
-module.exports = { createRunner, spawnPlan, checkRequest, RUN_FORCED };
+module.exports = { createRunner, spawnPlan, checkRequest, exitNotifier, RUN_FORCED };
