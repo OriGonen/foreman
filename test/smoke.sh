@@ -625,6 +625,25 @@ if case_is "a dirty tree stops the run and is never auto-committed"; then
   assert_missing "$OUT" "sbx exec" "never the sandbox's advice"
 fi
 
+if case_is "a stall checkpoint interrupted by a stop file pauses, with the marker, not a needs-a-human stop"; then
+  # The same interrupt during a REVIEW checkpoint already paused (exit 10); the stall's copy
+  # of that handling lacked it and ended 20 with "could not commit them either" advice.
+  # (No existing fake behaviour makes the checkpoint turn hit the usage limit, so only the
+  # interrupt half of the shared checkpoint_paused is driven here.)
+  repo="$(make_repo 2 stall-ckpt-stop-repo)"
+  marker="$repo/batch/.foreman-stall-marker"
+  FOREMAN_FAKE_BEHAVIOUR=dirty FOREMAN_FAKE_CHECKPOINT_BEHAVIOUR=stop-file     run_foreman "$repo" run batch --unlimited
+
+  assert_eq "$ST" 10 "pauses (exit 10), resumable, rather than stopping for a human"
+  assert_contains "$OUT" "stalled" "the stall was named and the checkpoint turn ran"
+  assert_missing "$OUT" "could not" "no needs-a-human refusal wording"
+  assert_missing "$OUT" "Stopping so you can look" "and no recovery advice for a stop that is only a pause"
+  [ -f "$marker" ] && pass || fail "the marker is still written, so the rerun reviews the work"
+  assert_contains "$(cat "$marker" 2>/dev/null)" "batch/issues/01-ticket.md" "and it names the ticket"
+  [ -n "$(git -C "$repo" status --porcelain)" ] && pass || fail "the work is still uncommitted"
+  assert_eq "$(done_count "$repo")" "0" "nothing landed"
+fi
+
 if case_is "a stall is salvaged by a checkpoint turn and the ticket continues"; then
   repo="$(make_repo 2 stall-repo)"
   log="$WORK/stall-prompts.txt"
@@ -1409,6 +1428,21 @@ if case_is "a rerun with no stall marker refuses rather than rescuing, and delet
   # Without the override the preflight has its say first, exactly as it always did.
   run_foreman "$repo" run batch
   assert_eq "$ST" 1 "a dirty tree nobody vouches for still fails the preflight"
+fi
+
+if case_is "a review salvage counts against the continuation cap like a stall salvage does"; then
+  # The start-of-run rescue bumps the continuation count; with a cap of 1 that one allowed
+  # extra turn is spent, and the run stops for a human at once rather than starting the
+  # iteration that the next real progression would then count as a second.
+  repo="$(stalled_repo review-cap-repo)"
+  head_before="$(git -C "$repo" rev-parse HEAD)"
+  FOREMAN_ALLOW_DIRTY=1 FOREMAN_MAX_CONTINUATIONS=1 FOREMAN_FAKE_BEHAVIOUR=land     run_foreman "$repo" run batch --unlimited
+  assert_eq "$ST" 20 "the rescue spends the one allowed continuation: needs a human"
+  assert_contains "$OUT" "reviewed and salvaged by a checkpoint turn" "the rescue itself happened"
+  assert_contains "$OUT" "has needed 1 extra turns without landing" "and the cap is named"
+  assert_contains "$OUT" "(0 progressed, 1 stalled)" "as a stall"
+  assert_eq "$(done_count "$repo")" "0" "no ordinary turn ran after it"
+  assert_contains "$(git -C "$repo" log --format=%s)" "wip: batch/issues/01-ticket.md" "the work was committed"
 fi
 
 if case_is "a marker that does not match the dirty tree is never trusted"; then

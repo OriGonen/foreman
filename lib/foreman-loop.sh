@@ -1388,6 +1388,28 @@ checkpoint_discarded_note() {
   warn "need to be redone, not salvaged."
 }
 
+# What to do about a checkpoint turn that failed to commit (outcome `failed`) because the turn
+# itself ran into the usage limit or was interrupted (Ctrl-C, `foreman stop --now`): the same
+# pause any iteration would take, not a refusal for a human. Returns 0 with FINAL_STATUS (and
+# PAUSE_REASON for a limit) set when it did, 1 when neither happened. Shared by the
+# start-of-run review and the mid-run stall; the caller breaks out of the loop on 0, having
+# written the stall marker first so the next run tries the rescue again.
+checkpoint_paused() {
+  local limit_hit limit_reset
+  limit_hit=$(verdict_get "$VERDICT_FILE" limit_hit)
+  if [ "$limit_hit" = "1" ]; then
+    limit_reset=$(verdict_get "$VERDICT_FILE" limit_reset)
+    PAUSE_REASON="usage limit reached${limit_reset:+ · resets $limit_reset}"
+    FINAL_STATUS="$EXIT_PAUSED"
+    return 0
+  fi
+  if [ "$PAUSE_REQUESTED" -eq 1 ]; then
+    FINAL_STATUS="$EXIT_PAUSED"
+    return 0
+  fi
+  return 1
+}
+
 # The reason for a stop after exec_recovery_note: the sandbox's own first line about it. Nothing
 # says it on the local adapter, which never strands work, and then neither does the log.
 stranded_reason() {
@@ -1642,6 +1664,10 @@ while true; do
           LAST_CONTINUATION_STALLED=1
           ATTEMPTS_ON_CURRENT=0
           TICKET_BASE_REF="$stalled_from"
+          if continuation_cap_reached; then
+            FINAL_STATUS="$EXIT_NEEDS_HUMAN"
+            break
+          fi
           say ""
           # Ctrl-C during the review turn: the work is safe now, so stop here rather than
           # start the iteration the interrupt was meant to prevent.
@@ -1680,15 +1706,7 @@ while true; do
           # The review turn itself ran into the usage limit, or was interrupted: the same
           # pause any iteration would take, and the marker means the next run tries the
           # review again.
-          limit_hit=$(verdict_get "$VERDICT_FILE" limit_hit)
-          if [ "$limit_hit" = "1" ]; then
-            limit_reset=$(verdict_get "$VERDICT_FILE" limit_reset)
-            PAUSE_REASON="usage limit reached${limit_reset:+ · resets $limit_reset}"
-            FINAL_STATUS="$EXIT_PAUSED"
-            break
-          fi
-          if [ "$PAUSE_REQUESTED" -eq 1 ]; then
-            FINAL_STATUS="$EXIT_PAUSED"
+          if checkpoint_paused; then
             break
           fi
           warn ""
@@ -2014,6 +2032,10 @@ while true; do
       # dirty tree is its own unfinished business — see "The stall marker" above. Against
       # HEAD as it is now, which is past BASE_REF if the stalled turn committed part of it.
       write_stall_marker "$TICKET_FILE" "$HEAD_REF"
+      # A usage limit or an interrupt during the checkpoint turn is a pause, as in the review.
+      if checkpoint_paused; then
+        break
+      fi
       warn ""
       NEEDS_REASON="$TICKET_FILE left uncommitted changes behind, and the checkpoint turn could not commit them either. Stopping so you can look."
       warn "$TICKET_FILE left uncommitted changes behind, and the checkpoint turn could not"
