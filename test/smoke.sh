@@ -8203,10 +8203,12 @@ ctl_ignored_repo() {    # ctl_ignored_repo TICKETS NAME : prints the repo's path
 if case_is "a second run on a batch with a run in flight is refused, changes nothing, and the first finishes"; then
   repo="$(ctl_ignored_repo 2 one-run-repo)"
   ctl="$repo/batch/.foreman-run"
-  ( cd "$repo" && env FOREMAN_FAKE_SLEEP=4 "$FOREMAN" run batch --unlimited > "$WORK/one-run-1.out" 2>&1
+  ( cd "$repo" && env FOREMAN_FAKE_SLEEP=10 "$FOREMAN" run batch --unlimited > "$WORK/one-run-1.out" 2>&1
     echo $? > "$WORK/one-run-1.st" ) &
   first=$!
-  n=100; while [ "$n" -gt 0 ] && [ ! -s "$ctl/iteration" ]; do sleep 0.1; n=$((n - 1)); done
+  # The pid file is written last, once the run has everything else in place (foreman-ctl.sh); a turn
+  # of 10 s keeps the first run from committing while the second one starts, even under load.
+  n=200; while [ "$n" -gt 0 ] && [ ! -s "$ctl/pid" ]; do sleep 0.1; n=$((n - 1)); done
   [ -s "$ctl/pid" ] && pass || fail "the first run is up, with a pid file"
   head="$(git -C "$repo" rev-parse HEAD)"
   tree="$(git -C "$repo" status --porcelain)"
