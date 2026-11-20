@@ -30,7 +30,7 @@ Stop and ask the owner before any change to the public CLI interface, the config
 | T12 | GUI conf readers agree with the shell | done |
 | T13 | Signals: keep the trap through the footer; forward TERM | done (verify by hand: native claude.exe on Windows may ignore TERM; macOS bash 3.2 untested) |
 | R1 | Loop: one path for terminal states | done |
-| R2 | Move status and dry-run out of the loop file | status done; dry-run not moved (it runs after the preflight and gate, needs a second source point) |
+| R2 | Move status and dry-run out of the loop file | done |
 | R3 | Shared node module for cross-boundary formats | todo |
 | R4 | Side-effect-free config reading | todo |
 | R5 | Control directory gets an owner | todo |
