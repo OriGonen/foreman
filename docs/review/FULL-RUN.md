@@ -56,3 +56,17 @@ None.
 ## Conclusion
 No assertion that passed at 6d01ff8 fails at the branch tip for a product reason. gui `node --test`: 0 fails
 in both trees. One test-isolation bug to fix in the T09 case (item 2).
+
+## Second full run: tip `06266c8` (T01–T13, R1, R2, R5), 2026-11-20
+
+| Suite | base `6d01ff8` | tip `06266c8` |
+|-------|----------------|---------------|
+| smoke.sh | 2516 pass / 85 fail | 2686 pass / 83 fail |
+| smoke-json.sh (incl. gui and node tests) | 685 pass / 34 fail | 698 pass / 35 fail |
+
+Failures keyed by (case, assertion) against the base logs: every base key still fails at the tip except the ones the tickets fixed; four keys fail at the tip and not in base:
+
+- smoke.sh "foreman-keys.sh --text draws the design's foot…" (the tool after a spinner), smoke.sh "SIGTERM during a turn ends the turn at once…" (17 s under load), smoke-json.sh "feed: a --live run writes each iteration's calls…" (iteration 2 count): all pass when run alone at the tip. Load flakes.
+- smoke.sh "a second run on a batch with a run in flight is refused…": a race in the test itself (it waited on `iteration`, which the loop writes before `pid` on purpose, and a 4 s fake turn let the first run commit under load). Fixed in `87593eb`; passes alone and twice concurrently.
+
+No product regression at the tip. R3 (on branch `review/r3`) was not part of this run.
