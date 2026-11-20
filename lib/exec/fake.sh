@@ -82,6 +82,7 @@
 # It never consumes a slot of FOREMAN_FAKE_BEHAVIOUR's list; its own scripted outcome is:
 #   FOREMAN_FAKE_CHECKPOINT_BEHAVIOUR   commit (default), fail, discard, reject, or stop-file (as `fail`,
 #                          with a `stop` file left in the control directory: `foreman stop --now` mid-checkpoint)
+#                          or limit (the checkpoint turn itself hits the usage limit, tree left dirty)
 #     commit   stage and commit whatever is dirty, as `wip: <ticket> — remaining: the rest`
 #     fail     leave the tree exactly as it was — still dirty, nothing committed
 #     discard  clean the tree WITHOUT committing — simulates a checkpoint turn that
@@ -211,6 +212,11 @@ _fake_checkpoint() {
     stop-file)
       : > "$RUN_CTL_DIR/stop"
       _fake_payload success false "stopped from outside before it could commit"
+      ;;
+    limit)
+      # The usage limit lands during the checkpoint turn itself: the work is still uncommitted.
+      printf 'Claude AI usage limit reached|%s\n' "$(( $(date +%s) + 3600 ))"
+      return 1
       ;;
     reject)
       _fake_payload success false "Read the diff.\n${FOREMAN_REVIEW_REJECTED_SENTINEL:-FOREMAN_REVIEW: REJECTED}: changes outside the ticket's scope"

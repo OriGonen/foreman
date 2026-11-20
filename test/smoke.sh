@@ -644,6 +644,22 @@ if case_is "a stall checkpoint interrupted by a stop file pauses, with the marke
   assert_eq "$(done_count "$repo")" "0" "nothing landed"
 fi
 
+if case_is "a stall checkpoint that hits the usage limit pauses, with the marker, not a needs-a-human stop"; then
+  # The other half of checkpoint_paused: the stall path's copy used to ignore a limit hit on the
+  # checkpoint turn and end 20 with "could not commit them either" advice.
+  repo="$(make_repo 2 stall-ckpt-limit-repo)"
+  marker="$repo/batch/.foreman-stall-marker"
+  FOREMAN_FAKE_BEHAVIOUR=dirty FOREMAN_FAKE_CHECKPOINT_BEHAVIOUR=limit run_foreman "$repo" run batch --unlimited
+
+  assert_eq "$ST" 10 "pauses (exit 10), resumable, rather than stopping for a human"
+  assert_contains "$OUT" "stalled" "the stall was named and the checkpoint turn ran"
+  assert_contains "$OUT" "limit" "the pause names the usage limit"
+  assert_missing "$OUT" "could not" "no needs-a-human refusal wording"
+  [ -f "$marker" ] && pass || fail "the marker is still written, so the rerun reviews the work"
+  [ -n "$(git -C "$repo" status --porcelain)" ] && pass || fail "the work is still uncommitted"
+  assert_eq "$(done_count "$repo")" "0" "nothing landed"
+fi
+
 if case_is "a stall is salvaged by a checkpoint turn and the ticket continues"; then
   repo="$(make_repo 2 stall-repo)"
   log="$WORK/stall-prompts.txt"
