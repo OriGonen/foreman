@@ -1151,7 +1151,10 @@ to show you what a run cost.
 | `install.sh` | writes the PATH shims and copies the skills; `--uninstall` removes them |
 | `skills/*/SKILL.md` | foreman's skills, which `install.sh` copies into `~/.claude/skills` |
 | `lib/foreman-loop.sh` | the loop: preflight, budgets, iteration, pause/resume, footer |
+| `lib/foreman-status.sh` | `foreman status`: plain text, the picture and the `--json` facts, and the facts `dry-run --json` is made of — sourced by the loop, never run |
+| `lib/foreman-dryrun.sh` | `foreman dry-run`: the plan and the prompt that would be sent — sourced by the loop after the preflight, never run |
 | `lib/foreman-config.sh` | resolves a batch into FOREMAN_* — sourced, never run |
+| `lib/foreman-ctl.sh` / `lib/foreman-ctl.cjs` | the run's control directory (`.foreman-run/`): its file names, the pid file and the one liveness rule, for bash and for node and the app — sourced / required, never run |
 | `lib/foreman-exec.sh` | the seam between the loop and where the agent runs — sourced, never run |
 | `lib/exec/*.sh` | one adapter per `FOREMAN_EXEC` mode; `_`-prefixed files are shared implementation |
 | `lib/foreman-repo.sh` | repo root and batch-relative path: the one place that crosses Windows path syntax — sourced, never run |

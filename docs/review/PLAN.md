@@ -31,8 +31,8 @@ Stop and ask the owner before any change to the public CLI interface, the config
 | T13 | Signals: keep the trap through the footer; forward TERM | done (verify by hand: native claude.exe on Windows may ignore TERM; macOS bash 3.2 untested) |
 | R1 | Loop: one path for terminal states | done |
 | R2 | Move status and dry-run out of the loop file | done |
-| R3 | Shared node module for cross-boundary formats | todo |
-| R4 | Side-effect-free config reading | todo |
+| R3 | Shared node module for cross-boundary formats | implemented on branch `review/r3`, not merged (needs a two-line test edit, see below) |
+| R4 | Side-effect-free config reading | deferred (see R4 below) |
 | R5 | Control directory gets an owner | done |
 
 ## Bug fixes
@@ -130,6 +130,7 @@ Stop and ask the owner before any change to the public CLI interface, the config
 
 ### R4 — Side-effect-free config reading
 - **Scope:** split `foreman-config.sh` into resolve-and-validate (no `cd`, no legacy migration) and prepare-repo; doctor and `--json` use the real reader; `--json` exposes effective settings so the GUI drops its reader. **Blocked by:** T07, T08, T12. Touches every entry point.
+- **Deferred (2026-11-20).** Most of the payoff already landed: T07 fixed the path resolution, T08 made doctor read confs as config does, T12 gave the GUI one reader matching the shell. The rest is not worth its risk now: doctor reads `foreman.conf` as text **on purpose** (it must never execute a repo's arbitrary bash), so "doctor uses the real reader" is the wrong goal; and taking `cd` and legacy migration out of read-only commands changes when `ralph-*` files are migrated, a behaviour change for the owner to choose. Revisit together with decision 6 (B21).
 
 ### R5 — Control directory gets an owner
 - **Scope:** one bash file and one node file define the control-dir file names and read/write them, with the liveness rule from T03. **Blocked by:** T03, R1.
@@ -144,17 +145,16 @@ Stop and ask the owner before any change to the public CLI interface, the config
 6. **B21:** should an empty env var override a conf value? Array-valued knobs from env.
 7. **B31:** `init --force` backing up what it overwrites.
 
-## Where this stopped (2026-11-16)
+## Where this stopped (2026-11-20)
 
-Done and committed on `review/deep-refactor`: T01, T02, T03, T04, T06, T07, T08, T09, T11, T12, T13, R1, and the status half of R2.
+Done and committed on `review/deep-refactor`: T01–T13, R1, R2, R5. R4 deferred (reason above).
 
-**In the working tree, uncommitted: T05 and T10.** Files: `lib/foreman-record.cjs`, `lib/foreman-stream.cjs`, `test/node/record.test.cjs`, `test/node/hygiene.test.cjs`. Both are implemented and their node tests pass (23/23). T05 cannot be committed until `lib/exec/fake.sh`'s `permission-denied` behaviour (about line 375) emits a structured `permission_denials` array in its payload; without it the smoke case "a denied tool call" fails 5 of 7. The owner has to make or allow that edit (the session's permission system refused it). Then: run `bash test/smoke.sh "a denied tool call"`, commit T05 (the classification hunks of `record.cjs`, `record.test.cjs`, `fake.sh`), then T10 (the `indent()` hunks of `record.cjs`, `stream.cjs`, `hygiene.test.cjs`). A T05-only snapshot of `record.cjs` was left in the session scratchpad and may be gone; `git add -p` does the same split.
+**R3 is on branch `review/r3` (commit `30c8788`, based on `4a32690`), not merged.** It adds `lib/foreman-facts.cjs` (one `parseFacts` with a `typed` option, the outcome rules, run-end codes, EPIPE-safe stdout) and turns report and convert into modules with `main()`. Node 41/41, GUI 489/0, output byte-identical in every mode compared. It needs one test edit the session was not permitted to make: `test/smoke.sh` cases "foreman report is the text when the picture cannot be made" (about line 7551) and "foreman convert is the text when the picture cannot be made" (about line 8029) copy a lone `foreman-report.cjs` / `foreman-convert.cjs` into a fake `lib/`; each `cp` list must also copy `"$FOREMAN_HOME/lib/foreman-facts.cjs"`. Without it those cases fail 3 assertions. To land: cherry-pick `30c8788` (expect a conflict only in this file's status table), make the edit, run `bash test/smoke.sh "is the text when the picture cannot be made"`, commit. Also add `foreman-facts.cjs`, `foreman-ctl.sh`, `foreman-ctl.cjs`, `foreman-dryrun.sh` to the README file table.
 
 Left to do:
-- **T06 follow-up:** a fake checkpoint behaviour that hits the limit, to test the limit half of `checkpoint_paused` (needs `fake.sh`).
-- **R2 remainder:** move the dry-run block (needs a second source point after the preflight and the human gate).
-- **R3** (blocked by T05), **R4**, **R5**: not started.
-- **A full-suite run of the final tip.** `FULL-RUN.md` compares the baseline with `5f5c8f7` (everything up to T09): no real regressions. R1, R2 and two test fixes landed after it and were checked only by their related cases.
 - **By hand:** T13 on Windows with the real `claude.exe` (a native process may ignore TERM) and on macOS bash 3.2; T11's `cssText` under the real CSP in Electron.
+- The decisions below `Decisions for the owner`.
 
-Known flaky under 8-way load (pass alone): smoke.sh "foreman order draws the stake line", "SIGTERM during a turn ends the turn at once", "a second run on a batch with a run in flight is refused".
+Full-suite results for the tip are in `FULL-RUN.md`.
+
+Known flaky under 8-way load (pass alone): smoke.sh "foreman order draws the stake line", "SIGTERM during a turn ends the turn at once", "a second run on a batch with a run in flight is refused", smoke-json.sh "a second stop leaves it there".
