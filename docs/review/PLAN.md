@@ -135,7 +135,7 @@ Stop and ask the owner before any change to the public CLI interface, the config
 ### R5 — Control directory gets an owner
 - **Scope:** one bash file and one node file define the control-dir file names and read/write them, with the liveness rule from T03. **Blocked by:** T03, R1.
 
-## Decisions for the owner (not started)
+## Decisions for the owner (approved 2026-11-21; being implemented, see `DECISIONS.md`)
 
 1. **B4, `foreman convert` and untracked files.** Options: skip untracked files, or refuse when any exist, or write backups. All change what the command touches.
 2. **Agent hang timeout.** Needs a new config knob and a default.
