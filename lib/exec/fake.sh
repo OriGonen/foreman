@@ -152,10 +152,12 @@ _fake_press_keys() {
 }
 
 # The `claude --output-format json` shape, as much of it as foreman-record.cjs reads.
+# An optional fourth argument is extra top-level JSON fields, written with a trailing comma.
 _fake_payload() {
-  local subtype="$1" is_error="$2" result="$3"
+  local subtype="$1" is_error="$2" result="$3" extra="${4:-}"
   printf '{"type":"result","subtype":"%s","is_error":%s,"session_id":"fake-session",' \
     "$subtype" "$is_error"
+  [ -n "$extra" ] && printf '%s,' "$extra"
   printf '"num_turns":3,"duration_ms":1200,"duration_api_ms":900,"total_cost_usd":%s,' \
     "${FOREMAN_FAKE_COST:-0.01}"
   printf '"usage":{"input_tokens":1000,"output_tokens":200,'
@@ -378,7 +380,8 @@ exec_run() {
       # decide this above the dirty-tree branch or it reports the symptom instead.
       printf 'work the fake adapter could not commit\n' > .foreman-fake-uncommitted
       _fake_payload success false \
-        "I implemented the ticket, but Bash(git commit) requires approval and I could not obtain it, so the work is uncommitted."
+        "I implemented the ticket, but Bash(git commit) requires approval and I could not obtain it, so the work is uncommitted." \
+        '"permission_denials":[{"tool_name":"Bash","tool_use_id":"fake-1","tool_input":{"command":"git commit -m fake"}}]'
       ;;
     crash)
       printf 'claude: unexpected failure, no output\n'

@@ -20,7 +20,7 @@ Stop and ask the owner before any change to the public CLI interface, the config
 | T02 | Never reset the sandbox over uncollected commits | done |
 | T03 | One liveness check; refuse a second run | done |
 | T04 | Record: verdict first, guarded appends, strict payload | done |
-| T05 | Classify failures from structured fields, not prose | todo |
+| T05 | Classify failures from structured fields, not prose | done |
 | T06 | Stall-path checkpoint honours limit and pause | done (limit half untested: needs a fake.sh checkpoint behaviour) |
 | T07 | Resolve batch paths before `cd`; root batch discovery | done |
 | T08 | Doctor reads confs the way config does | done |
