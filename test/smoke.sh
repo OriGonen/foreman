@@ -7548,7 +7548,7 @@ if case_is "foreman report is the text when the picture cannot be made"; then
   # A renderer that will not load: the report is not lost with it.
   fake_home="$WORK/report-nodraw-home"
   mkdir -p "$fake_home/lib" "$fake_home/bin"
-  cp "$FOREMAN" "$fake_home/bin/foreman"; cp "$FOREMAN_HOME/lib/foreman-ui.sh" "$FOREMAN_HOME/lib/foreman-report.cjs" "$fake_home/lib/"
+  cp "$FOREMAN" "$fake_home/bin/foreman"; cp "$FOREMAN_HOME/lib/foreman-ui.sh" "$FOREMAN_HOME/lib/foreman-report.cjs" "$FOREMAN_HOME/lib/foreman-facts.cjs" "$fake_home/lib/"
   printf 'throw new Error("no")\n' > "$fake_home/lib/foreman-draw.cjs"
   FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 bash "$fake_home/bin/foreman" report "$b" > "$WORK/report-fallback-got.txt" 2>&1; ST=$?
   assert_eq "$ST" 0 "a renderer that fails does not fail the report"
@@ -8026,7 +8026,7 @@ if case_is "foreman convert is the text when the picture cannot be made"; then
   # The renderer fails to load, or is not there: the conversion is the same and the text is printed alone.
   fake_home="$WORK/convert-fallback-home-toolkit"
   mkdir -p "$fake_home/lib" "$fake_home/bin"
-  cp "$FOREMAN" "$fake_home/bin/foreman"; cp "$FOREMAN_HOME/lib/foreman-ui.sh" "$FOREMAN_HOME/lib/foreman-convert.cjs" "$fake_home/lib/"
+  cp "$FOREMAN" "$fake_home/bin/foreman"; cp "$FOREMAN_HOME/lib/foreman-ui.sh" "$FOREMAN_HOME/lib/foreman-convert.cjs" "$FOREMAN_HOME/lib/foreman-facts.cjs" "$fake_home/lib/"
   printf 'throw new Error("no")\n' > "$fake_home/lib/foreman-draw.cjs"
   (cd "$repo" && env -u FOREMAN_CREDENTIALS_FILE RALPH_MODEL=x HOME="$repo-home" FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 bash "$fake_home/bin/foreman" convert > "$WORK/convert-fallback-got.txt" 2>&1); ST=$?
   assert_eq "$ST" 0 "a renderer that fails does not fail the conversion"

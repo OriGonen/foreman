@@ -31,7 +31,7 @@ Stop and ask the owner before any change to the public CLI interface, the config
 | T13 | Signals: keep the trap through the footer; forward TERM | done (verify by hand: native claude.exe on Windows may ignore TERM; macOS bash 3.2 untested) |
 | R1 | Loop: one path for terminal states | done |
 | R2 | Move status and dry-run out of the loop file | done |
-| R3 | Shared node module for cross-boundary formats | implemented on branch `review/r3`, not merged (needs a two-line test edit, see below) |
+| R3 | Shared node module for cross-boundary formats | done |
 | R4 | Side-effect-free config reading | deferred (see R4 below) |
 | R5 | Control directory gets an owner | done |
 
@@ -147,9 +147,7 @@ Stop and ask the owner before any change to the public CLI interface, the config
 
 ## Where this stopped (2026-11-20)
 
-Done and committed on `review/deep-refactor`: T01–T13, R1, R2, R5. R4 deferred (reason above).
-
-**R3 is on branch `review/r3` (commit `30c8788`, based on `4a32690`), not merged.** It adds `lib/foreman-facts.cjs` (one `parseFacts` with a `typed` option, the outcome rules, run-end codes, EPIPE-safe stdout) and turns report and convert into modules with `main()`. Node 41/41, GUI 489/0, output byte-identical in every mode compared. It needs one test edit the session was not permitted to make: `test/smoke.sh` cases "foreman report is the text when the picture cannot be made" (about line 7551) and "foreman convert is the text when the picture cannot be made" (about line 8029) copy a lone `foreman-report.cjs` / `foreman-convert.cjs` into a fake `lib/`; each `cp` list must also copy `"$FOREMAN_HOME/lib/foreman-facts.cjs"`. Without it those cases fail 3 assertions. To land: cherry-pick `30c8788` (expect a conflict only in this file's status table), make the edit, run `bash test/smoke.sh "is the text when the picture cannot be made"`, commit. Also add `foreman-facts.cjs`, `foreman-ctl.sh`, `foreman-ctl.cjs`, `foreman-dryrun.sh` to the README file table.
+Done and committed on `review/deep-refactor`: T01–T13, R1, R2, R3, R5. R4 deferred (reason above).
 
 Left to do:
 - **By hand:** T13 on Windows with the real `claude.exe` (a native process may ignore TERM) and on macOS bash 3.2; T11's `cssText` under the real CSP in Electron.
