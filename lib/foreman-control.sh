@@ -5,7 +5,7 @@
 #   foreman stop [<batch>]               finish the iteration in flight, then pause
 #   foreman stop --now [<batch>]         end the run at once, as Ctrl-C in its terminal does
 #
-# Both work through the run's control directory (see foreman-keys.sh) and nothing else: the keys
+# Both work through the run's control directory (see foreman-ctl.sh) and nothing else: the keys
 # are applied by `foreman-keys.sh --apply`, so a key does exactly what it does in the terminal, and
 # stop is `foreman-keys.sh --stop`, which sets the budget to the iteration in flight — the run
 # finishes it and ends with exit 10, "budget reached", as pressing - down to it would. Both are free:
@@ -88,12 +88,12 @@ esac
 # shellcheck source=foreman-config.sh
 source "$FOREMAN_TOOL_DIR/foreman-config.sh" || exit 1
 
-CTL="$REPO_ROOT/$BATCH_DIR/.foreman-run"
-[ "$BATCH_DIR" != . ] || CTL="$REPO_ROOT/.foreman-run"
+ctl_rel_dir "$BATCH_DIR" CTL
+CTL="$REPO_ROOT/$CTL"
 
-loop_pid="" loop_win=""
-read -r loop_pid loop_win _ 2>/dev/null < "$CTL/pid"
-# The loop, by the rule every reader of the pid file shares (run_pid_alive, in foreman-config.sh): a
+ctl_read_pid "$CTL"
+loop_pid="$CTL_PID_MSYS" loop_win="$CTL_PID_WIN"
+# The loop, by the rule every reader of the pid file shares (run_pid_alive, in foreman-ctl.sh): a
 # pid file left by a run that was killed too hard to clean up may name a pid another program has since
 # taken, and that program is never signalled.
 loop_alive() { run_pid_alive "$loop_pid" "$loop_win"; }
@@ -166,8 +166,8 @@ stop_now() {
   local -a below=() left=()
 
   # 1. The file first, so that a loop that gets there before the signal still finds it.
-  printf '%s\n' "$$" > "$CTL/stop.tmp" && mv -f "$CTL/stop.tmp" "$CTL/stop" ||
-    { echo "foreman stop: could not write $CTL/stop" >&2; exit 1; }
+  ctl_write "$CTL" "$CTL_F_STOP" "$$" ||
+    { echo "foreman stop: could not write $CTL/$CTL_F_STOP" >&2; exit 1; }
 
   # 2. The signal, to the loop and to everything under it, as the terminal sends it to its group.
   mapfile -t below < <(stop_descendants "$loop_pid")

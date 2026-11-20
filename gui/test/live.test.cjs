@@ -132,3 +132,24 @@ test('which changes are only a run\'s control files: the feed and the budget are
   assert.equal(onlyControlFiles([]), false);
   assert.equal(onlyControlFiles(null), false);
 });
+
+test('the app reads the control directory by the names lib/foreman-ctl.cjs defines (and those are the wire names)', () => {
+  const Ctl = require('../../lib/foreman-ctl.cjs');
+  assert.equal(Ctl.DIRNAME, '.foreman-run');
+  assert.deepEqual(Object.values(Ctl.FILES).sort(),
+    ['activity', 'budget', 'feed', 'foot', 'iteration', 'live', 'out', 'pid', 'run', 'screen', 'spent', 'stop']);
+  const { ctl } = repo({ [Ctl.FILES.budget]: '4\n', [Ctl.FILES.iteration]: '2\n', [Ctl.FILES.live]: '1\n', [Ctl.FILES.activity]: '1700000000 Read x\n',
+    [Ctl.FILES.feed]: '00:03 · Read x\n', [Ctl.FILES.spent]: '0.5 25\n' });
+  const c = readControl(ctl);
+  assert.equal(c.budget, 4);
+  assert.equal(c.iteration, 2);
+  assert.equal(c.live, true);
+  assert.deepEqual(c.activity, { epoch: 1700000000, label: 'Read x' });
+  assert.equal(c.feed.length, 1);
+  assert.deepEqual(c.spent, { spent: 0.5, max: 25 });
+  const { onlyControlFiles } = require('../live.cjs');
+  const ch = (...names) => names.map((name) => ({ dir: 'b', name }));
+  assert.equal(onlyControlFiles(ch(...[Ctl.FILES.feed, Ctl.FILES.activity, Ctl.FILES.budget, Ctl.FILES.out].map((n) => `${Ctl.DIRNAME}/${n}`))), true);
+  assert.equal(onlyControlFiles(ch(`${Ctl.DIRNAME}/${Ctl.FILES.pid}`)), false);
+  assert.equal(onlyControlFiles(ch(`${Ctl.DIRNAME}/${Ctl.FILES.run}`)), false);
+});

@@ -337,7 +337,7 @@ run_header() {    # run_header [LANDED_TICKET]
 
 # What the run has spent and what it may spend, for the foot (foreman-keys.sh).
 run_write_spent() {
-  printf '%s %s\n' "$RUN_COST" "$(fgt "$MAX_COST" 0 && printf '%s' "$MAX_COST" || printf 0)" > "$RUN_CTL_DIR/spent"
+  printf '%s %s\n' "$RUN_COST" "$(fgt "$MAX_COST" 0 && printf '%s' "$MAX_COST" || printf 0)" > "$RUN_CTL_DIR/$CTL_F_SPENT"
 }
 
 # `1/3  05-name` (the iteration of the budget, the ticket, and which attempt it is) after a blank
@@ -535,7 +535,7 @@ resume_args() {
   # The live view as the run ended (L toggles it), or as it began when that is not known yet.
   # --live only adds, so a run that is live from foreman.conf alone needs no flag to be again;
   # one that was live from the flag does.
-  [ -n "${RUN_CTL_DIR:-}" ] && read -r live 2>/dev/null < "$RUN_CTL_DIR/live"
+  [ -n "${RUN_CTL_DIR:-}" ] && read -r live 2>/dev/null < "$RUN_CTL_DIR/$CTL_F_LIVE"
   [ -n "$live" ] || live="$LIVE_FLAG"
   if [ "$live" = 1 ] && { [ "$LIVE_FLAG" = 1 ] || [ "$FOREMAN_STREAM" != 1 ]; }; then
     printf ' --live'
@@ -664,15 +664,13 @@ source "$FOREMAN_TOOL_DIR/foreman-status.sh" || exit 1
 # a refusal changes nothing. Only a run in a control directory in the batch can be seen (see where
 # the run makes it, below); the pid file of one that was killed too hard to clean up is not a run
 # (run_pid_alive), and the run that follows clears it.
-RUN_CTL_REL="$BATCH_DIR/.foreman-run"; [ "$BATCH_DIR" != . ] || RUN_CTL_REL=.foreman-run
-if [ "$MODE" = "run" ] && git check-ignore -q -- "$RUN_CTL_REL/pid" 2>/dev/null; then
-  RUN_CTL_PID="" RUN_CTL_WIN=""
-  read -r RUN_CTL_PID RUN_CTL_WIN _ 2>/dev/null < "$REPO_ROOT/$RUN_CTL_REL/pid"
-  if run_pid_alive "$RUN_CTL_PID" "$RUN_CTL_WIN"; then
-    warn_preflight "a run is already in flight on this batch (pid $RUN_CTL_PID). Stop it with: $FOREMAN_INVOKE stop $BATCH_DIR"
+ctl_rel_dir "$BATCH_DIR" RUN_CTL_REL
+if [ "$MODE" = "run" ] && git check-ignore -q -- "$RUN_CTL_REL/$CTL_F_PID" 2>/dev/null; then
+  ctl_read_pid "$REPO_ROOT/$RUN_CTL_REL"
+  if run_pid_alive "$CTL_PID_MSYS" "$CTL_PID_WIN"; then
+    warn_preflight "a run is already in flight on this batch (pid $CTL_PID_MSYS). Stop it with: $FOREMAN_INVOKE stop $BATCH_DIR"
     exit 1
   fi
-  unset RUN_CTL_PID RUN_CTL_WIN
 fi
 
 # ---------------------------------------------------------------------------
@@ -822,7 +820,7 @@ PAYLOAD_FILE="$(mktemp)"
 # the control directory: `budget` and `live`, which whoever steers owns once they are seeded here,
 # `iteration`, which only this loop writes, `screen`, the status bar's size, `activity`, what the
 # agent is doing for the live view's row, and for a program watching the run `pid`, `run` and
-# `feed` (see foreman-keys.sh for each). See refresh_budget.
+# `feed` (see foreman-ctl.sh for each). See refresh_budget.
 #
 # It is `<batch>/.foreman-run/` when the repository ignores that name (`**/.foreman-run/`, which
 # `foreman doctor --fix` appends when the desktop app is installed), so that `foreman keys` and the
@@ -832,42 +830,30 @@ PAYLOAD_FILE="$(mktemp)"
 #
 # `out`, if the app put one there (the run's own stdout and stderr), outlives the run; everything
 # else is removed when it ends (run_ctl_end), whichever way, and before the batch can be renamed.
-run_ctl_clear() {    # run_ctl_clear DIR: remove DIR's files, except `out`; DIR itself when there is no `out`
-  local dir="$1" f keep=0
-  local -a victims=()
-  [ -d "$dir" ] || return 0
-  for f in "$dir"/* "$dir"/.[!.]*; do
-    [ -e "$f" ] || [ -L "$f" ] || continue
-    if [ "${f##*/}" = out ]; then keep=1; else victims+=("$f"); fi
-  done
-  if [ "$keep" -eq 0 ]; then rm -rf "$dir"; elif [ "${#victims[@]}" -gt 0 ]; then rm -rf "${victims[@]}"; fi
-}
 RUN_CTL_DIR=""
-if git check-ignore -q -- "$RUN_CTL_REL/pid" 2>/dev/null; then
+if git check-ignore -q -- "$RUN_CTL_REL/$CTL_F_PID" 2>/dev/null; then
   if mkdir -p "$REPO_ROOT/$RUN_CTL_REL" 2>/dev/null; then
     RUN_CTL_DIR="$REPO_ROOT/$RUN_CTL_REL"
     # What a run that was killed too hard to clean up after itself left behind.
-    run_ctl_clear "$RUN_CTL_DIR"
+    ctl_clear "$RUN_CTL_DIR"
     mkdir -p "$RUN_CTL_DIR" 2>/dev/null
   fi
 fi
 [ -n "$RUN_CTL_DIR" ] || RUN_CTL_DIR="$(mktemp -d)"
-printf '%s\n' "$MAX_ITERATIONS" > "$RUN_CTL_DIR/budget"
-printf '0\n' > "$RUN_CTL_DIR/iteration"
-printf '%s\n' "$FOREMAN_STREAM" > "$RUN_CTL_DIR/live"
-printf '%s %s\n' "$RUN_ID" "$RUN_STARTED_AT" > "$RUN_CTL_DIR/run"
+printf '%s\n' "$MAX_ITERATIONS" > "$RUN_CTL_DIR/$CTL_F_BUDGET"
+printf '0\n' > "$RUN_CTL_DIR/$CTL_F_ITERATION"
+printf '%s\n' "$FOREMAN_STREAM" > "$RUN_CTL_DIR/$CTL_F_LIVE"
+printf '%s %s\n' "$RUN_ID" "$RUN_STARTED_AT" > "$RUN_CTL_DIR/$CTL_F_RUN"
 if ui_show 1 RUN_TIER && ui_cols RUN_COLS 1 && [ "$RUN_COLS" -ge "$_run_min_cols" ]; then
   RUN_SHOW=1 RECORD_QUIET="--quiet"
   printf -v RUN_STARTED_CLOCK '%(%H:%M)T' -1
-  printf '%(%s)T\n' -1 > "$RUN_CTL_DIR/foot"
+  printf '%(%s)T\n' -1 > "$RUN_CTL_DIR/$CTL_F_FOOT"
   run_write_spent
 fi
 # Last, so that a `pid` is a run that has everything else in place: this shell's pid, and the one
 # Windows knows it by (`taskkill` and a Windows program's liveness check want that one; elsewhere
 # the two are the same number).
-RUN_WINPID=""
-read -r RUN_WINPID 2>/dev/null < "/proc/$$/winpid"
-printf '%s %s\n' "$$" "${RUN_WINPID:-$$}" > "$RUN_CTL_DIR/pid"
+ctl_write_pid "$RUN_CTL_DIR"
 KEYS_PID=""
 SAVED_STTY=""
 RUN_CTL_ENDED=0
@@ -883,8 +869,8 @@ run_ctl_end() {
     wait "$KEYS_PID" 2>/dev/null
     KEYS_PID=""
   fi
-  read -r BAR_CLOSE_ROWS _ BAR_CLOSE_KEPT 2>/dev/null < "$RUN_CTL_DIR/screen"
-  run_ctl_clear "$RUN_CTL_DIR"
+  read -r BAR_CLOSE_ROWS _ BAR_CLOSE_KEPT 2>/dev/null < "$RUN_CTL_DIR/$CTL_F_SCREEN"
+  ctl_clear "$RUN_CTL_DIR"
 }
 on_exit() {
   run_ctl_end
@@ -901,7 +887,7 @@ trap on_exit EXIT
 # the pause reason and the resume command report the budget as it ended.
 refresh_budget() {
   local budget="" when
-  read -r budget < "$RUN_CTL_DIR/budget" 2>/dev/null
+  read -r budget < "$RUN_CTL_DIR/$CTL_F_BUDGET" 2>/dev/null
   [[ "$budget" =~ ^[0-9]+$ ]] || return 0
   budget=$((10#$budget))
   [ "$budget" != "$MAX_ITERATIONS" ] || return 0
@@ -930,25 +916,25 @@ STREAM_ARGS=()
 if [ -t 0 ]; then
   export FOREMAN_LIVE_KEY=1
   if [ "$BAR_ROWS" -gt 0 ]; then
-    STREAM_ARGS=(--activity-file "$RUN_CTL_DIR/activity")
+    STREAM_ARGS=(--activity-file "$RUN_CTL_DIR/$CTL_F_ACTIVITY")
   else
-    STREAM_ARGS=(--live-file "$RUN_CTL_DIR/live")
+    STREAM_ARGS=(--live-file "$RUN_CTL_DIR/$CTL_F_LIVE")
   fi
 elif [ "$FOREMAN_STREAM" = "1" ]; then
   # Off a terminal there is no key, but `foreman keys L` (or the app) can still turn the view off
   # and on through the control directory's `live`, which was seeded 1 just now: until somebody
   # does, this draws exactly what --live always has.
-  STREAM_ARGS=(--live-file "$RUN_CTL_DIR/live")
+  STREAM_ARGS=(--live-file "$RUN_CTL_DIR/$CTL_F_LIVE")
 fi
 # While the view is on, the filter also keeps the iteration's calls in the control directory's `feed`.
-[ "${#STREAM_ARGS[@]}" -eq 0 ] || STREAM_ARGS+=(--feed-file "$RUN_CTL_DIR/feed")
+[ "${#STREAM_ARGS[@]}" -eq 0 ] || STREAM_ARGS+=(--feed-file "$RUN_CTL_DIR/$CTL_F_FEED")
 # The ticker is drawn by a node process that cannot see foreman.conf, so the one colour decision
 # (foreman-ui.sh, for stderr, which is where it draws) is made here and handed over as a flag.
 [ "${#STREAM_ARGS[@]}" -gt 0 ] && ui_color_on 2 && STREAM_ARGS+=(--color)
 # On the show path the calls are lines in the picture's palette, and with a bar the filter must also
 # know whether the view is on, to write the ones that are over.
 if [ "$RUN_SHOW" = 1 ] && [ "${#STREAM_ARGS[@]}" -gt 0 ]; then
-  [ "$BAR_ROWS" -le 0 ] || STREAM_ARGS+=(--live-file "$RUN_CTL_DIR/live")
+  [ "$BAR_ROWS" -le 0 ] || STREAM_ARGS+=(--live-file "$RUN_CTL_DIR/$CTL_F_LIVE")
   STREAM_ARGS+=(--show "$RUN_TIER")
 fi
 
@@ -1063,7 +1049,7 @@ trap on_term TERM
 # next one — and goes through the same on_interrupt, so the footer, the exit code and the stall marker
 # are Ctrl-C's. One file test, no process, and nothing without a file.
 check_stop_file() {
-  [ "$PAUSE_REQUESTED" -eq 1 ] || [ ! -e "$RUN_CTL_DIR/stop" ] || on_interrupt
+  [ "$PAUSE_REQUESTED" -eq 1 ] || [ ! -e "$RUN_CTL_DIR/$CTL_F_STOP" ] || on_interrupt
 }
 
 _foreman_dirname _jsonl_dir "$RUN_JSONL"
@@ -1078,7 +1064,7 @@ log_append "# budgets: cost=$(budget_label "$MAX_COST" '$') time=$(budget_label 
 log_append "# head at start: $(git rev-parse HEAD)"
 log_append "#############################################################################"
 
-if [ "$RUN_SHOW" = 1 ] && ! run_header; then RUN_SHOW=0 RECORD_QUIET=""; rm -f "$RUN_CTL_DIR/foot"; fi
+if [ "$RUN_SHOW" = 1 ] && ! run_header; then RUN_SHOW=0 RECORD_QUIET=""; rm -f "$RUN_CTL_DIR/$CTL_F_FOOT"; fi
 if [ "$RUN_SHOW" != 1 ]; then
   say "run $RUN_ID  ·  $BATCH_DIR  ·  $FOREMAN_EXEC  ·  model $FOREMAN_MODEL  ·  effort $FOREMAN_EFFORT"
   progress_line
@@ -1106,7 +1092,7 @@ if [ -t 0 ]; then
   fi
   if [ "$BAR_ROWS" -gt 0 ]; then
     _kept=1; [ "$FOREMAN_STREAM" != 1 ] || _kept=2
-    printf '%s %s %s\n' "$BAR_ROWS" "$BAR_COLS" "$_kept" > "$RUN_CTL_DIR/screen"
+    printf '%s %s %s\n' "$BAR_ROWS" "$BAR_COLS" "$_kept" > "$RUN_CTL_DIR/$CTL_F_SCREEN"
     ui_bar_rows "$BAR_ROWS" 0 "$_kept"
     unset _kept
   fi
@@ -1290,7 +1276,7 @@ run_checkpoint_turn() {    # run_checkpoint_turn [stall|review]
   checkpoint_agent_status=$TURN_STATUS
   check_stop_file
   checkpoint_result=$(cat "$PAYLOAD_FILE")
-  rm -f "$RUN_CTL_DIR/activity"
+  rm -f "$RUN_CTL_DIR/$CTL_F_ACTIVITY"
   FOREMAN_CLAUDE_ARGS=(${checkpoint_args_saved+"${checkpoint_args_saved[@]}"})
 
   # Bring back whatever the checkpoint turn committed (only the clone-based sandbox has
@@ -1550,9 +1536,9 @@ while true; do
   [ -n "$TICKET_BASE_REF" ] || TICKET_BASE_REF="$BASE_REF"
   STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
-  printf '%s\n' "$ITERATIONS_RUN" > "$RUN_CTL_DIR/iteration"
+  printf '%s\n' "$ITERATIONS_RUN" > "$RUN_CTL_DIR/$CTL_F_ITERATION"
   # The feed is this iteration's: foreman-stream.cjs appends to it while the live view is on.
-  [ ! -e "$RUN_CTL_DIR/feed" ] || : > "$RUN_CTL_DIR/feed"
+  [ ! -e "$RUN_CTL_DIR/$CTL_F_FEED" ] || : > "$RUN_CTL_DIR/$CTL_F_FEED"
   iter_of=""; [ "$MAX_ITERATIONS" -le 0 ] || iter_of=" of $MAX_ITERATIONS"
   iter_attempt=""; [ "$ATTEMPTS_ON_CURRENT" -le 1 ] || iter_attempt=" (attempt $ATTEMPTS_ON_CURRENT)"
   run_iteration_line "$iter_of" "$iter_attempt"
@@ -1627,7 +1613,7 @@ while true; do
   result=$(cat "$PAYLOAD_FILE")
   # The live view's row goes blank until the next agent starts, rather than showing a clock
   # still counting on a command that has finished.
-  rm -f "$RUN_CTL_DIR/activity"
+  rm -f "$RUN_CTL_DIR/$CTL_F_ACTIVITY"
 
   # Bring the iteration's commits back before inspecting anything: the ticket's Status
   # line, and every check below, lives in the work the agent just did. The adapter sets

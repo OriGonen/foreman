@@ -1,6 +1,6 @@
 'use strict';
 // Rebuilds the live run screen from files, whenever it is asked to: the run's control directory
-// (`<batch>/.foreman-run/`: budget, iteration, live, activity, feed — see lib/foreman-keys.sh), the
+// (`<batch>/.foreman-run/`: budget, iteration, live, activity, feed — see lib/foreman-ctl.sh), the
 // iterations the run has finished with the words the CLI uses for how each came out (`report --json
 // --run <id>`, which reads foreman-runs.jsonl), and the run that `status --json` found in flight. It
 // keeps nothing the files do not have, apart from the last report it read — an iteration only ends
@@ -11,6 +11,9 @@
 // has and the next change reads again.
 const nodeFs = require('fs');
 const Conf = require('./conf.js');
+// The control directory's names. The app runs from the git checkout (ADR 0004, `main.cjs` finds bin/foreman
+// at `..`), so lib/ is always beside it.
+const Ctl = require('../lib/foreman-ctl.cjs');
 
 function readText(fs, p) { try { return fs.readFileSync(p, 'utf8'); } catch { return null; } }
 
@@ -30,20 +33,20 @@ function parseFeed(text) {
 
 // What the control directory says now. `dir` is a full path.
 function readControl(dir, fs = nodeFs) {
-  const file = (name) => readText(fs, `${dir}/${name}`);
-  const budgetText = file('budget');
+  const file = (name) => readText(fs, Ctl.filePath(dir, name));
+  const budgetText = file(Ctl.FILES.budget);
   const budgetN = whole(budgetText);
-  const liveText = file('live');
-  const act = (file('activity') || '').trim();
+  const liveText = file(Ctl.FILES.live);
+  const act = (file(Ctl.FILES.activity) || '').trim();
   const am = /^(\d+)\s*(.*)$/.exec(act);
-  const spent = /^([0-9]*\.?[0-9]+)\s+([0-9]*\.?[0-9]+)\s*$/.exec(file('spent') || '');
+  const spent = /^([0-9]*\.?[0-9]+)\s+([0-9]*\.?[0-9]+)\s*$/.exec(file(Ctl.FILES.spent) || '');
   return {
     // null is unlimited (a budget file of 0); undefined, that the file was not readable
     budget: budgetN === null ? undefined : budgetN === 0 ? null : budgetN,
-    iteration: whole(file('iteration')),
+    iteration: whole(file(Ctl.FILES.iteration)),
     live: liveText === null ? undefined : liveText.trim() === '1',
     activity: am ? { epoch: Number(am[1]), label: am[2] } : null,
-    feed: parseFeed(file('feed')),
+    feed: parseFeed(file(Ctl.FILES.feed)),
     spent: spent ? { spent: Number(spent[1]), max: Number(spent[2]) } : null,
   };
 }
@@ -103,11 +106,11 @@ function createLive({ repoRoot, foreman, fs = nodeFs, env = process.env }) {
 // them from disk, with no process. The ones that say a run began or ended (`pid`, `run`) and anything
 // outside the directory (a ticket, the record, the log) are a reason to ask foreman again. `changes` is
 // what watch.cjs hands its read: [{ dir, name }].
-const CONTROL = /^\.foreman-run\//;
-const CONTROL_STARTS_OR_ENDS = /^\.foreman-run\/(pid|run)$/;
+const CONTROL_PREFIX = `${Ctl.DIRNAME}/`;
+const CONTROL_STARTS_OR_ENDS = new Set([Ctl.FILES.pid, Ctl.FILES.run].map((n) => `${CONTROL_PREFIX}${n}`));
 function onlyControlFiles(changes) {
   return Array.isArray(changes) && changes.length > 0
-    && changes.every((c) => c && typeof c.name === 'string' && CONTROL.test(c.name) && !CONTROL_STARTS_OR_ENDS.test(c.name));
+    && changes.every((c) => c && typeof c.name === 'string' && c.name.startsWith(CONTROL_PREFIX) && !CONTROL_STARTS_OR_ENDS.has(c.name));
 }
 
 module.exports = { onlyControlFiles, createLive, readControl, parseFeed, capsFromConf };

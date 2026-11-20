@@ -210,7 +210,7 @@ _fake_checkpoint() {
       _fake_payload success false "could not commit the checkpoint"
       ;;
     stop-file)
-      : > "$RUN_CTL_DIR/stop"
+      : > "$RUN_CTL_DIR/$CTL_F_STOP"
       _fake_payload success false "stopped from outside before it could commit"
       ;;
     limit)
@@ -335,7 +335,7 @@ exec_run() {
       ;;
     stop-file-dirty)
       printf 'half-written by the fake adapter (call %s)\n' "$call" >> .foreman-fake-leftover
-      : > "$RUN_CTL_DIR/stop"
+      : > "$RUN_CTL_DIR/$CTL_F_STOP"
       _fake_payload success false "stopped from outside"
       ;;
     session-limit)

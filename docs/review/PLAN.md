@@ -33,7 +33,7 @@ Stop and ask the owner before any change to the public CLI interface, the config
 | R2 | Move status and dry-run out of the loop file | done |
 | R3 | Shared node module for cross-boundary formats | todo |
 | R4 | Side-effect-free config reading | todo |
-| R5 | Control directory gets an owner | todo |
+| R5 | Control directory gets an owner | done |
 
 ## Bug fixes
 

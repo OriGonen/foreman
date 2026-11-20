@@ -17,6 +17,7 @@
 // `keys` and `stop`, which print words, not JSON, and are free (they only write the run's control files).
 // Starting a run is runner.cjs.
 const { execFile } = require('child_process');
+const Ctl = require('../lib/foreman-ctl.cjs');
 
 const SUPPORTED_JSON = 1;
 
@@ -201,7 +202,7 @@ function createForeman({ bash, checkout, repoRoot, run = defaultRun, env = proce
     controlIgnored: async (batch) => {
       let out;
       try {
-        out = await run(bash, ['-c', 'git check-ignore -q -- "$1/.foreman-run/pid"', '_', checkBatchPath(batch)], {
+        out = await run(bash, ['-c', `git check-ignore -q -- "$1/${Ctl.DIRNAME}/${Ctl.FILES.pid}"`, '_', checkBatchPath(batch)], {
           cwd: repoRoot, env: cliEnv(env), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], timeout: CALL_TIMEOUT_MS, killSignal: 'SIGKILL',
         });
       } catch (e) {

@@ -154,7 +154,9 @@ test('the app writes the handoff and the run\'s own output file, and nothing els
   const r = strip('runner.cjs');
   const used = [...r.matchAll(new RegExp(writes.source, 'g'))].map((m) => m[1]);
   assert.deepEqual([...new Set(used)], ['mkdirSync'], 'runner.cjs creates one directory and no file by writing');
-  assert.equal([...r.matchAll(/mkdirSync\(([^)]*)\)/g)].every((m) => /\.foreman-run/.test(m[1])), true, 'and that directory is .foreman-run');
+  assert.equal([...r.matchAll(/mkdirSync\(([^)]*)\)/g)].every((m) => /^ctlDir\(batch$/.test(m[1])), true, 'and that directory is the control directory');
+  assert.match(r, /ctlDir = \(batch\) => `\$\{repoRoot\}\/\$\{batch\}\/\$\{Ctl\.DIRNAME\}`/, 'which is <batch>/.foreman-run (lib/foreman-ctl.cjs)');
+  assert.equal(require('../../lib/foreman-ctl.cjs').DIRNAME, '.foreman-run');
   assert.equal([...r.matchAll(/\bopenSync\(/g)].length, 1, 'runner.cjs opens one file');
   assert.match(r, /openSync\(outPath\(batch\), 'w'\)/, 'and it is out, for writing');
   assert.doesNotMatch(r, /foreman\.conf/, 'runner.cjs never names foreman.conf');

@@ -12,36 +12,13 @@
 #   -  _    one fewer — never below the iteration already running
 #   L  l    live view on / off: what --live draws, from the next tick of the iteration running
 #
-# The two talk through small files in <ctl-dir>, so neither has to signal the other:
-#   budget     the iteration budget, 0 for unlimited. Seeded by the loop, then written only
-#              here (temp file plus mv, so the loop never reads half a number).
-#   live       1 while the live view is on, else 0. Seeded by the loop, then written only
-#              here; read by foreman-stream.cjs when there is no bar (see below).
-#   iteration  the iteration now running, written by the loop. Only read here.
-#   screen     "ROWS COLS KEPT" while the loop has a status bar open: the terminal's size and
-#              how many bottom rows are held back. Written by the loop, then here on a resize
-#              or an L. No file, no bar: each key press prints a line instead.
-#   activity   "EPOCH LABEL" while an iteration runs with a bar open: when it started and what
-#              the agent did last. Written by foreman-stream.cjs, removed by the loop after.
-#   foot       the epoch second the run started, when the loop is showing the design (ticket 06):
-#              the bar is then the design's foot, `0m41s elapsed · iteration 1 of 3 · $0.34 of $25
-#              · live off`, and the live view's row has its spinner. No file, the bar it always was.
-#   spent      "COST BUDGET" for the foot: what the run has spent so far and the cost budget (0 for
-#              none). Written by the loop after every iteration.
-#   pid        "MSYS_PID WINDOWS_PID": the loop's pid, and the one Windows knows it by (`/proc/$$/winpid`;
-#              the same number off Windows). Written by the loop last, once the files above are in
-#              place, so a pid is a run that is ready. Read by `foreman status --json`, `foreman keys`
-#              and `foreman stop`, to know a run is in flight.
-#   run        "RUN_ID STARTED_AT": the run's id and its start time (UTC, ISO 8601). Written once.
-#   feed       the calls `--live` shows, one per line, `00:41 · Write README.md`: the clock since the
-#              iteration's agent started, and the label. Written by foreman-stream.cjs only while the
-#              live view is on, emptied by the loop at each iteration. No file until there is a call.
+# The two talk through small files in <ctl-dir>, so neither has to signal the other; what each file
+# holds, and who writes it, is in foreman-ctl.sh (here: `budget` and `live` are written only by this
+# reader, with a temp file plus mv so the loop never reads half a number).
 # The loop reads `budget` before each iteration's budget check; a key never touches the
 # iteration already running.
 #
-# The directory is `<batch>/.foreman-run/` when the repository ignores that name, and a temporary one
-# otherwise (foreman-loop.sh); only the first can be reached by `foreman keys` and `foreman stop`,
-# from another terminal or the app. The loop removes it when the run ends, except `out`.
+# Where the directory is, and what the loop does with it when the run ends: foreman-ctl.sh.
 #
 # THE STATUS BAR (foreman-ui.sh draws it; the loop opens and closes it). This reader is the
 # only thing that draws there — the live view included, from `activity`, on the row above the
@@ -57,6 +34,8 @@
 _keys_dir="${BASH_SOURCE[0]%/*}"; [ "$_keys_dir" != "${BASH_SOURCE[0]}" ] || _keys_dir=.
 # shellcheck source=foreman-ui.sh
 source "$_keys_dir/foreman-ui.sh" || exit 1
+# shellcheck source=foreman-ctl.sh
+source "$_keys_dir/foreman-ctl.sh" || exit 1
 
 # The lines drawn here are fitted to the terminal's width by ${#…}, which counts bytes unless
 # the locale is UTF-8 — and Git Bash often has none set, so every `·` counted twice. Switched
@@ -76,17 +55,12 @@ fi
 _keys_read_state() {
   local dir="$1"
   _KEYS_BUDGET=0; _KEYS_ITERATION=0; _KEYS_LIVE=0
-  read -r _KEYS_BUDGET 2>/dev/null < "$dir/budget"
-  read -r _KEYS_ITERATION 2>/dev/null < "$dir/iteration"
-  read -r _KEYS_LIVE 2>/dev/null < "$dir/live"
+  read -r _KEYS_BUDGET 2>/dev/null < "$dir/$CTL_F_BUDGET"
+  read -r _KEYS_ITERATION 2>/dev/null < "$dir/$CTL_F_ITERATION"
+  read -r _KEYS_LIVE 2>/dev/null < "$dir/$CTL_F_LIVE"
   [[ "$_KEYS_BUDGET" =~ ^[0-9]+$ ]] || _KEYS_BUDGET=0
   [[ "$_KEYS_ITERATION" =~ ^[0-9]+$ ]] || _KEYS_ITERATION=0
   [ "$_KEYS_LIVE" = 1 ] || _KEYS_LIVE=0
-}
-
-# Writes VALUE to <ctl-dir>/NAME whole: a temp file plus mv, so no reader sees half of it.
-_keys_write() {    # _keys_write DIR NAME VALUE
-  printf '%s\n' "$3" > "$1/$2.tmp" && mv -f "$1/$2.tmp" "$1/$2"
 }
 
 # Applies one key to the control files and sets _KEYS_SAID to what it did, in words — empty
@@ -102,9 +76,9 @@ keys_apply() {    # keys_apply KEY CTL_DIR
 
   if [ "$key" = L ] || [ "$key" = l ]; then
     if [ "$_KEYS_LIVE" = 1 ]; then
-      _keys_write "$dir" live 0 && _KEYS_SAID="live view off"
+      ctl_write "$dir" "$CTL_F_LIVE" 0 && _KEYS_SAID="live view off"
     else
-      _keys_write "$dir" live 1 && _KEYS_SAID="live view on"
+      ctl_write "$dir" "$CTL_F_LIVE" 1 && _KEYS_SAID="live view on"
     fi
     return 0
   fi
@@ -131,7 +105,7 @@ keys_apply() {    # keys_apply KEY CTL_DIR
       ;;
   esac
 
-  [ "$budget" = "$_KEYS_BUDGET" ] || _keys_write "$dir" budget "$budget"
+  [ "$budget" = "$_KEYS_BUDGET" ] || ctl_write "$dir" "$CTL_F_BUDGET" "$budget"
   if [ "$budget" -le "$floor" ]; then
     _KEYS_SAID="stops after this iteration ($floor of $budget)"
   else
@@ -149,7 +123,7 @@ keys_stop() {    # keys_stop CTL_DIR
   budget="$_KEYS_BUDGET"
   if [ "$budget" -eq 0 ] || [ "$budget" -gt "$floor" ]; then
     budget="$floor"
-    _keys_write "$dir" budget "$budget"
+    ctl_write "$dir" "$CTL_F_BUDGET" "$budget"
   fi
   _KEYS_SAID="stops after this iteration ($floor of $budget)"
 }
@@ -166,7 +140,7 @@ keys_foot_text() {    # keys_foot_text COLS STARTED
   printf -v now '%(%s)T' -1
   s=$((now - $2)); [ "$s" -ge 0 ] || s=0
   printf -v elapsed '%dm%02ds' $((s / 60)) $((s % 60))
-  read -r spent max 2>/dev/null < "$_KEYS_CTL/spent"
+  read -r spent max 2>/dev/null < "$_KEYS_CTL/$CTL_F_SPENT"
   [[ "$spent" =~ ^[0-9]*\.?[0-9]+$ ]] || spent=0
   [[ "$max" =~ ^[0-9]*\.?[0-9]+$ ]] || max=0
   printf -v spend '$%.2f' "$spent"
@@ -212,7 +186,7 @@ keys_foot_text() {    # keys_foot_text COLS STARTED
 keys_bar_text() {    # keys_bar_text CTL_DIR COLS
   local cols="$2" head hints rule foot=""
   _keys_read_state "$1"
-  read -r foot 2>/dev/null < "$1/foot"
+  read -r foot 2>/dev/null < "$1/$CTL_F_FOOT"
   if [[ "$foot" =~ ^[0-9]+$ ]]; then
     _KEYS_CTL="$1"
     keys_foot_text "$cols" "$foot"
@@ -252,14 +226,14 @@ keys_bar_text() {    # keys_bar_text CTL_DIR COLS
 keys_ticker_text() {    # keys_ticker_text CTL_DIR COLS
   local cols="$2" started="" label="" now s clock room foot="" verb arg spin
   _KEYS_TICKER=""
-  read -r started label 2>/dev/null < "$1/activity"
+  read -r started label 2>/dev/null < "$1/$CTL_F_ACTIVITY"
   [[ "$started" =~ ^[0-9]+$ ]] || return 0
   printf -v now '%(%s)T' -1 2>/dev/null
   [[ "$now" =~ ^[0-9]+$ ]] || now="$started"
   s=$((now - started)); [ "$s" -ge 0 ] || s=0
   printf -v clock '%02d:%02d' $((s / 60)) $((s % 60))
   # The design's row, when the foot is: a spinner, the clock, the tool in lower case and its argument.
-  read -r foot 2>/dev/null < "$1/foot"
+  read -r foot 2>/dev/null < "$1/$CTL_F_FOOT"
   if [[ "$foot" =~ ^[0-9]+$ ]]; then
     verb="${label%% *}"; arg=""
     if [ "$verb" != "$label" ]; then arg="${label#* }"; verb="${verb,,}"; printf -v verb '%-6s' "$verb"; label="$verb $arg"; fi
@@ -335,7 +309,7 @@ trap 'exit 0' INT TERM HUP
 # (1, or 2 with the live view's row), and what was last drawn, so a second that changed
 # nothing draws nothing. The loop reads `screen` back to close the bar on the way out.
 ROWS=0 COLS=0 KEPT=0 DRAWN=""
-read -r ROWS COLS KEPT 2>/dev/null < "$CTL_DIR/screen"
+read -r ROWS COLS KEPT 2>/dev/null < "$CTL_DIR/$CTL_F_SCREEN"
 [[ "$ROWS" =~ ^[0-9]+$ ]] && [[ "$COLS" =~ ^[0-9]+$ ]] && [[ "$KEPT" =~ ^[12]$ ]] || ROWS=0
 
 # Draws the bar, and the live view's row above it while the view is on. The row comes and
@@ -349,7 +323,7 @@ repaint() {
   if [ "$want" != "$KEPT" ]; then
     ui_bar_rows "$ROWS" "$KEPT" "$want"
     KEPT="$want" DRAWN=""
-    _keys_write "$CTL_DIR" screen "$ROWS $COLS $KEPT"
+    ctl_write "$CTL_DIR" "$CTL_F_SCREEN" "$ROWS $COLS $KEPT"
   fi
   if [ "$KEPT" = 2 ]; then
     keys_ticker_text "$CTL_DIR" "$COLS"
@@ -376,7 +350,7 @@ on_resize() {
   [ "$rows" != "$ROWS" ] || [ "$cols" != "$COLS" ] || return 0
   ui_bar_resized "$rows" "$KEPT"
   ROWS="$rows" COLS="$cols" DRAWN=""
-  _keys_write "$CTL_DIR" screen "$ROWS $COLS $KEPT"
+  ctl_write "$CTL_DIR" "$CTL_F_SCREEN" "$ROWS $COLS $KEPT"
 }
 
 repaint

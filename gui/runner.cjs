@@ -15,6 +15,8 @@
 const nodeFs = require('fs');
 const { spawn: nodeSpawn } = require('child_process');
 const RP = require('./runplan.js');
+// The control directory's names; the app runs from the git checkout (ADR 0004), so lib/ is beside it.
+const Ctl = require('../lib/foreman-ctl.cjs');
 const { checkBatchPath, plainText, ForemanError } = require('./foreman.cjs');
 
 const RUN_FORCED = { FOREMAN_SHOW: 'never', FOREMAN_COLOR: 'never', GIT_OPTIONAL_LOCKS: '0' };
@@ -58,7 +60,8 @@ function spawnPlan({ bash, checkout, repoRoot, batch, plan, env = process.env })
 }
 
 function createRunner({ bash, checkout, repoRoot, env = process.env, spawn = nodeSpawn, fs = nodeFs }) {
-  const outPath = (batch) => `${repoRoot}/${batch}/.foreman-run/out`;
+  const ctlDir = (batch) => `${repoRoot}/${batch}/${Ctl.DIRNAME}`;
+  const outPath = (batch) => Ctl.filePath(ctlDir(batch), Ctl.FILES.out);
 
   return {
     // Start the run. Resolves with { pid, command } once the process exists (not when it ends), and
@@ -70,7 +73,7 @@ function createRunner({ bash, checkout, repoRoot, env = process.env, spawn = nod
       return new Promise((resolve, reject) => {
         let fd;
         try {
-          fs.mkdirSync(`${repoRoot}/${batch}/.foreman-run`, { recursive: true });
+          fs.mkdirSync(ctlDir(batch), { recursive: true });
           fd = fs.openSync(outPath(batch), 'w');          // the previous run's words are replaced, not appended to
         } catch (e) {
           reject(new ForemanError('spawn', `could not open ${outPath(batch)}: ${e.message}`, { cause: e }));

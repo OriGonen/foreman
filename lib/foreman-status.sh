@@ -98,11 +98,10 @@ status_json_facts() {
   # Where a run in flight would keep its control directory in this batch (see where the run makes
   # it), and whether the run its `pid` file names is alive, by the rule `foreman stop` and the start
   # guard use (run_pid_alive): foreman-json.cjs only reads the rest of the directory's files.
-  line="$BATCH_DIR/.foreman-run"; [ "$BATCH_DIR" != . ] || line=.foreman-run
+  ctl_rel_dir "$BATCH_DIR" line
   printf 'runctl\t%s\n' "${line//\\//}"
-  local run_pid="" run_win=""
-  read -r run_pid run_win _ 2>/dev/null < "$REPO_ROOT/$line/pid"
-  if run_pid_alive "$run_pid" "$run_win"; then printf 'runalive\t1\n'; else printf 'runalive\t0\n'; fi
+  ctl_read_pid "$REPO_ROOT/$line"
+  if run_pid_alive "$CTL_PID_MSYS" "$CTL_PID_WIN"; then printf 'runalive\t1\n'; else printf 'runalive\t0\n'; fi
   if [ -n "$stop" ]; then printf 'until\t%s\t%s\n' "$until_count" "$stop"; fi
   if [ -n "$next" ] && foreman_ticket_needs_human "$next"; then
     line="$(foreman_was_sent_back "$next")"
