@@ -1164,6 +1164,7 @@ to show you what a run cost.
 | `lib/prompt.template.md` | the five-step prompt, with slots |
 | `lib/foreman-record.cjs` | appends one iteration to both logs; writes the verdict the loop acts on |
 | `lib/foreman-report.cjs` | manual log reader |
+| `lib/foreman-facts.cjs` | the formats node shares across the bash line: the `key<TAB>value` facts, how an iteration and a run ended, stdout that survives `\| head` — required, never run |
 | `lib/foreman-stream.cjs` | sits between the agent and the recorder; draws the run when `--live`, a pass-through otherwise |
 | `lib/foreman-credentials.sh` | the one reader of the credentials file (`~/.config/foreman/env`): path, lookup (environment, else file), and `…last4` mask — sourced, never run |
 | `lib/foreman-ui.sh` | how output looks: the glyphs, indents, `  ·  ` separators and colour, as `say_event`, `say_rule` and friends — sourced, never run |
