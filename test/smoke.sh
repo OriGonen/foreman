@@ -3828,6 +3828,27 @@ if case_is "convert --dry-run changes nothing, and a dirty tree or the toolkit i
   assert_contains "$OUT" "the foreman toolkit itself" "and says so"
 fi
 
+if case_is "convert refuses to rewrite an untracked file, and says how to go on"; then
+  repo="$(make_ralph_repo convert-untracked-repo)"
+  printf 'Ask Ralph Smith <ralph@example.com>.\r\n' > "$repo/scratch-notes.txt"
+  cp "$repo/scratch-notes.txt" "$WORK/convert-untracked-before.txt"
+  OUT="$(HOME="$WORK/convert-untracked-home" "$FOREMAN" convert "$repo" --dry-run 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "a dry run still succeeds"
+  assert_contains "$OUT" "scratch-notes.txt  (2 changes)  [untracked]" "and marks the untracked file it would rewrite"
+
+  OUT="$(HOME="$WORK/convert-untracked-home" "$FOREMAN" convert "$repo" 2>&1)"; ST=$?
+  assert_eq "$ST" 1 "the real run is refused"
+  assert_contains "$OUT" "scratch-notes.txt" "it lists the file"
+  assert_contains "$OUT" "git stash -u" "and says to commit, stash or move it"
+  cmp -s "$repo/scratch-notes.txt" "$WORK/convert-untracked-before.txt" && pass || fail "the untracked file is byte-identical"
+  [ -f "$repo/batch/ralph.conf" ] && [ -f "$repo/batch/ralph-runs.jsonl" ] && pass || fail "and nothing else was converted"
+  assert_contains "$(cat "$repo/docs/guide.md")" "ralph run batch" "not even a tracked file"
+
+  rm "$repo/scratch-notes.txt"
+  OUT="$(HOME="$WORK/convert-untracked-home" "$FOREMAN" convert "$repo" 2>&1)"; ST=$?
+  assert_eq "$ST" 0 "with it moved aside, the conversion goes through"
+fi
+
 # --- the show (foreman-ui.sh, foreman-draw.cjs) -------------------------------------
 # The show is the drawn rendering of a command; plain is today's text. `ui_show` decides which,
 # per stream, and `ui_cols` asks how wide the terminal is. A real terminal is made with `script`,

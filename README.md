@@ -1231,7 +1231,11 @@ It renames every `ralph.conf` (with `git mv`) and the run files, and rewrites `R
 `ralph` commands and toolkit file names, and "Ralph" in prose, in every text file git knows
 about. It leaves credit to the Ralph loop alone, and also any path to a file of the project's
 own with ralph in its name. Those are listed at the end. It refuses a tree with uncommitted
-changes (`--allow-dirty` overrides), so the conversion is a diff of its own. A second run
+changes (`--allow-dirty` overrides), so the conversion is a diff of its own. It also refuses,
+before writing anything, when it would rewrite or rename a file git does not track (an untracked
+file that says "Ralph", or an untracked or ignored `ralph.conf`), since there is no `git checkout`
+for those. It lists up to ten and tells you to commit them, `git stash -u`, or move them aside;
+`--allow-dirty` does not override this. `--dry-run` marks them and still exits 0. A second run
 finds nothing to do. On the machine it copies `~/.config/ralph/env` to `~/.config/foreman/env`
 under the new names, and prints the rest for you: `RALPH_*` variables to `setx` again, and
 the old sandbox to remove.
