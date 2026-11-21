@@ -15,7 +15,12 @@
 #   2. the batch's foreman.conf      <batch>/foreman.conf
 #   3. the defaults below
 #
-# Inputs:  FOREMAN_BATCH   path to the batch directory (the caller sets this from its
+# Inputs:  FOREMAN_CONFIG_MIGRATE
+#                        set to 1, as a plain shell variable and before sourcing, by the commands
+#                        that change things (run, order): only they rename a batch's legacy
+#                        ralph-* run files (foreman-legacy.sh). Every other command reads them where
+#                        they are and moves or deletes nothing. Consumed here, never a knob.
+#          FOREMAN_BATCH   path to the batch directory (the caller sets this from its
 #                        positional argument, or the user exports it). If unset, and
 #                        exactly one directory in the repo has a foreman.conf, that one is
 #                        used; otherwise this errors with the candidates listed.
@@ -60,6 +65,11 @@ source "$FOREMAN_TOOL_DIR/foreman-ctl.sh" || {
   echo "foreman: cannot load $FOREMAN_TOOL_DIR/foreman-ctl.sh" >&2
   return 1 2>/dev/null || exit 1
 }
+
+# Whether this load may rename legacy run files, read now: the snapshot below takes every
+# FOREMAN_* name for a setting from the environment, and this one is not.
+_foreman_migrate="${FOREMAN_CONFIG_MIGRATE:-0}"
+unset FOREMAN_CONFIG_MIGRATE
 
 foreman_repo_root REPO_ROOT || {
   echo "foreman: not inside a git repository" >&2
@@ -135,12 +145,43 @@ esac
 # Load foreman.conf, with the environment winning over it
 #
 # Every FOREMAN_* variable that exists right now came from the environment: no foreman script
-# sets one before sourcing this file. Snapshot them, source the conf, put them back.
+# sets one before sourcing this file (but for the three paths and the legacy list at the top, which
+# are never settings). Snapshot them, source the conf, put them back.
+#
+# One that is set but empty is not a setting: it is dropped here, so the conf's value, or the
+# default, wins (`FOREMAN_MODEL= foreman run` does not blank the model, and an empty
+# FOREMAN_CHECK_CMD does not blank the conf's command). To switch a knob off, set it empty in the
+# conf, where an empty value still sticks.
+#
+# A knob that is a bash array (only FOREMAN_CLAUDE_ARGS) cannot come from the environment, which
+# holds strings: one string would replace element 0 only and leave a malformed command line. A
+# non-empty one from the environment is refused. Foreman never hands one down: bash does not export
+# arrays, and nothing sets the name for a child (the GUI starts `foreman` with the user's own
+# environment plus FOREMAN_SHOW, FOREMAN_COLOR and the run's caps). An array that is already one in
+# this shell (a caller that sourced this file before) is kept as it is.
 # ---------------------------------------------------------------------------
 declare -A _FOREMAN_FROM_ENV=()
+_foreman_array_decl=""
 for _foreman_name in $(compgen -v FOREMAN_ 2>/dev/null); do
+  [ "$_foreman_name" != FOREMAN_LEGACY_KNOBS ] || continue
+  if [ "$_foreman_name" = FOREMAN_CLAUDE_ARGS ]; then
+    _foreman_array_decl="$(declare -p FOREMAN_CLAUDE_ARGS 2>/dev/null)"
+    _foreman_flags="${_foreman_array_decl#declare -}"; _foreman_flags="${_foreman_flags%% *}"
+    if [[ "$_foreman_flags" == *a* ]]; then continue; fi        # kept as the array it is
+    _foreman_array_decl=""
+    if [ -n "${FOREMAN_CLAUDE_ARGS:-}" ]; then
+      echo "foreman: FOREMAN_CLAUDE_ARGS is a list of arguments and cannot be set from the environment." >&2
+      echo "       Set it in $BATCH_DIR/foreman.conf instead:" >&2
+      echo "         FOREMAN_CLAUDE_ARGS=(--allowed-tools \"Bash(git add:*)\" \"Bash(git commit:*)\")" >&2
+      return 1 2>/dev/null || exit 1
+    fi
+    unset FOREMAN_CLAUDE_ARGS
+    continue
+  fi
+  if [ -z "${!_foreman_name}" ]; then unset "$_foreman_name" 2>/dev/null; continue; fi
   _FOREMAN_FROM_ENV["$_foreman_name"]="${!_foreman_name}"
 done
+unset _foreman_flags
 
 # legacy: a batch from before the rename may only have a ralph.conf (foreman-legacy.sh).
 foreman_legacy_conf_path FOREMAN_CONF "$BATCH_DIR"
@@ -171,7 +212,8 @@ fi
 for _foreman_name in "${!_FOREMAN_FROM_ENV[@]}"; do
   printf -v "$_foreman_name" '%s' "${_FOREMAN_FROM_ENV[$_foreman_name]}"
 done
-unset _FOREMAN_FROM_ENV _foreman_name _foreman_candidates _foreman_count _foreman_caller_dir _foreman_batch_given _foreman_batch_arg
+[ -z "$_foreman_array_decl" ] || eval "declare -g ${_foreman_array_decl#declare }"
+unset _FOREMAN_FROM_ENV _foreman_array_decl _foreman_name _foreman_candidates _foreman_count _foreman_caller_dir _foreman_batch_given _foreman_batch_arg
 
 # ---------------------------------------------------------------------------
 # Defaults for everything foreman.conf and the environment left unset
@@ -371,8 +413,14 @@ _foreman_path BUNDLE_FILE "${FOREMAN_BUNDLE_FILE:-}" .foreman-iter.bundle
 # foreman-loop.sh's "The stall marker". Not a knob: there is nothing about it worth choosing.
 STALL_MARKER_FILE="$BATCH_DIR/.foreman-stall-marker"
 
-# legacy: move ralph-runs.*, .ralph-stall-marker and .ralph-iter.bundle to their new names.
-foreman_legacy_batch_files "$BATCH_DIR"
+# legacy: ralph-runs.*, .ralph-stall-marker and .ralph-iter.bundle. A command that changes things
+# moves them to their new names; every other one reads them where they are and says so once.
+if [ "$_foreman_migrate" = 1 ]; then
+  foreman_legacy_batch_files "$BATCH_DIR"
+else
+  foreman_legacy_batch_files_in_place "$BATCH_DIR"
+fi
+unset _foreman_migrate
 
 # --- how the agent is executed --------------------------------------------
 # The name of an adapter in lib/exec/ — see foreman-exec.sh. sandbox (the default) runs the

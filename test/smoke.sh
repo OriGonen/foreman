@@ -2000,6 +2000,97 @@ if case_is "the model defaults to a pinned full id, and foreman.conf and the env
   assert_contains "$OUT" "Model:   haiku " "and the environment beats foreman.conf"
 fi
 
+if case_is "an empty environment variable is ignored, so foreman.conf and the defaults still win (B21)"; then
+  repo="$(make_repo 1 env-empty-repo)"
+  printf 'FOREMAN_MODEL=claude-opus-5-5\nFOREMAN_EFFORT=low\nFOREMAN_CHECK_CMD="zzcheck-from-conf"\n' >> "$repo/batch/foreman.conf"
+  git -C "$repo" commit --quiet -am "conf values"
+
+  FOREMAN_MODEL= FOREMAN_CHECK_CMD= run_foreman "$repo" dry-run batch
+  assert_eq "$ST" 0 "dry-run exits 0"
+  assert_contains "$OUT" "Model:   claude-opus-5-5 " "a set-but-empty FOREMAN_MODEL leaves the conf's model"
+  assert_contains "$OUT" "zzcheck-from-conf" "and an empty FOREMAN_CHECK_CMD does not blank the conf's command"
+
+  # Nothing in the conf for it: the default, not an empty string.
+  sed -i '/^FOREMAN_MODEL=claude-opus-5-5$/d' "$repo/batch/foreman.conf"
+  git -C "$repo" commit --quiet -am "no conf model"
+  FOREMAN_MODEL= FOREMAN_EFFORT= run_foreman "$repo" dry-run batch
+  assert_contains "$OUT" "Model:   claude-sonnet-5-5 " "with nothing in the conf, an empty FOREMAN_MODEL gives the default"
+  assert_contains "$OUT" "Effort: low" "and an empty FOREMAN_EFFORT leaves the conf's"
+fi
+
+if case_is "FOREMAN_CLAUDE_ARGS, a list, is refused from the environment and read from foreman.conf (B21)"; then
+  repo="$(make_repo 1 env-array-repo)"
+
+  FOREMAN_CLAUDE_ARGS=--verbose run_foreman "$repo" dry-run batch
+  assert_eq "$ST" 1 "a one-string value from the environment exits 1"
+  assert_contains "$OUT" "FOREMAN_CLAUDE_ARGS" "the knob is named"
+  assert_contains "$OUT" "foreman.conf" "and the message says where to set it"
+  assert_missing "$OUT" "Model:" "nothing else ran"
+
+  FOREMAN_CLAUDE_ARGS=--verbose run_foreman "$repo" run batch 1
+  assert_eq "$ST" 1 "run refuses it as well"
+
+  FOREMAN_CLAUDE_ARGS= run_foreman "$repo" dry-run batch
+  assert_eq "$ST" 0 "an empty one is just ignored"
+
+  # The conf's own list works, and the run's internal handoffs (the loop starts foreman-next.sh,
+  # the checkpoint turn extends the list) never trip the refusal.
+  printf 'FOREMAN_CLAUDE_ARGS=(--verbose --allowed-tools "Bash(git add:*)")\n' >> "$repo/batch/foreman.conf"
+  git -C "$repo" commit --quiet -am "claude args"
+  run_foreman "$repo" run batch 1
+  assert_eq "$ST" 0 "a list in foreman.conf is fine, through a whole run"
+  assert_missing "$OUT" "cannot be set from the environment" "and the run says nothing about it"
+fi
+
+if case_is "legacy ralph run files: read-only commands read them in place and leave them, run renames them (R4)"; then
+  repo="$(make_repo 1 legacy-migrate-repo)"
+  printf '%s\n' '**/ralph-runs.*' '**/.ralph-*' >> "$repo/.gitignore"
+  git -C "$repo" commit --quiet -am "ignore the old run files"
+  b="$repo/batch"
+  printf '{"cost_usd": 1.5}\n' > "$b/ralph-runs.jsonl"
+  printf 'old log line\n' > "$b/ralph-runs.log"
+  printf 'ticket=x\nbase_ref=y\nsandbox=z\n' > "$b/.ralph-stall-marker"
+  printf 'bundle' > "$b/.ralph-iter.bundle"
+  legacy_untouched() {    # $1: what the check is about
+    [ -f "$b/ralph-runs.jsonl" ] && [ -f "$b/ralph-runs.log" ] && [ -f "$b/.ralph-stall-marker" ] &&
+      [ -f "$b/.ralph-iter.bundle" ] && [ ! -e "$b/foreman-runs.jsonl" ] && [ ! -e "$b/foreman-runs.log" ] &&
+      [ ! -e "$b/.foreman-stall-marker" ] && pass || fail "$1: the old run files stay where they are, and nothing new appears"
+  }
+
+  run_foreman "$repo" status batch
+  assert_eq "$ST" 0 "status exits 0"
+  legacy_untouched "status"
+  assert_contains "$OUT" "foreman run" "status says that run will rename them"
+  assert_contains "$OUT" "ralph-runs.jsonl" "and which files"
+
+  run_foreman "$repo" status batch --json
+  assert_eq "$ST" 0 "status --json exits 0"
+  legacy_untouched "status --json"
+  assert_contains "$OUT" '"spent_usd":1.5' "--json reads the cost from ralph-runs.jsonl where it is"
+
+  run_foreman "$repo" dry-run batch
+  assert_eq "$ST" 0 "dry-run exits 0"
+  legacy_untouched "dry-run"
+  assert_contains "$OUT" "Logs:    batch/ralph-runs.jsonl" "dry-run names the log it would append to... which is the one that is there"
+
+  run_foreman "$repo" next batch
+  legacy_untouched "next"
+  run_foreman "$repo" stop batch
+  legacy_untouched "stop"
+  run_foreman "$repo" keys batch +
+  legacy_untouched "keys"
+
+  rm -f "$b/.ralph-stall-marker"    # a pending stall would make the run salvage it first
+  run_foreman "$repo" run batch 1
+  assert_eq "$ST" 0 "run exits 0"
+  assert_contains "$OUT" "ralph-runs.jsonl -> foreman-runs.jsonl" "run says what it renamed"
+  b="$repo/DONE_batch"    # the single ticket landed, so the finished batch was renamed
+  [ ! -e "$b/ralph-runs.jsonl" ] && [ ! -e "$b/ralph-runs.log" ] && [ ! -e "$b/.ralph-iter.bundle" ] && pass ||
+    fail "run: the old names are gone"
+  grep -q 'cost_usd": 1.5' "$b/foreman-runs.jsonl" && grep -q 'old log line' "$b/foreman-runs.log" && pass ||
+    fail "run: the old history carries on under the new names"
+fi
+
 # The words of a doctor box as one line: the borders gone and a check that wrapped back in one piece,
 # so an assertion is about what was said and not where the box broke it. Only for a full-width
 # section (batches, skill, rename), where a row holds one check and not two columns.
@@ -2322,7 +2413,10 @@ fi
 
 if case_is "FOREMAN_DONE_PREFIX empty leaves ticket files alone"; then
   repo="$(make_repo 1 done-rename-off-repo)"
-  FOREMAN_DONE_PREFIX= run_foreman "$repo" run batch --unlimited
+  # Off in foreman.conf: an empty value in the environment is ignored (B21), the conf's sticks.
+  printf 'FOREMAN_DONE_PREFIX=\n' >> "$repo/batch/foreman.conf"
+  git -C "$repo" commit --quiet -am "no done prefix"
+  run_foreman "$repo" run batch --unlimited
   assert_eq "$ST" 0 "the batch finishes"
   [ -f "$repo/batch/issues/01-ticket.md" ] && pass || fail "the ticket kept its name"
   [ -d "$repo/batch" ] && pass || fail "and so did the batch"
@@ -2370,7 +2464,9 @@ fi
 
 if case_is "FOREMAN_DONE_PREFIX empty leaves the batch directory alone"; then
   repo="$(make_repo 1 done-batch-off-repo)"
-  FOREMAN_DONE_PREFIX= run_foreman "$repo" run batch --unlimited
+  printf 'FOREMAN_DONE_PREFIX=\n' >> "$repo/batch/foreman.conf"    # off in the conf; empty in the environment is ignored (B21)
+  git -C "$repo" commit --quiet -am "no done prefix"
+  run_foreman "$repo" run batch --unlimited
   assert_eq "$ST" 0 "the batch finishes"
   [ -d "$repo/batch" ] && [ ! -e "$repo/DONE_batch" ] && pass || fail "the batch kept its name"
   assert_missing "$OUT" "batch marked done" "and nothing is announced"
@@ -2571,7 +2667,9 @@ if case_is "the human word is configurable and can be switched off"; then
   repo="$(make_repo 2 human-off-repo)"
   make_human_ticket "$repo" 1
   log="$WORK/human-off-prompts.txt"
-  FOREMAN_HUMAN_WORD= FOREMAN_FAKE_PROMPT_LOG="$log" run_foreman "$repo" run batch
+  printf 'FOREMAN_HUMAN_WORD=\n' >> "$repo/batch/foreman.conf"    # off in the conf; empty in the environment is ignored (B21)
+  git -C "$repo" commit --quiet -am "no human word"
+  FOREMAN_FAKE_PROMPT_LOG="$log" run_foreman "$repo" run batch
   assert_eq "$ST" 10 "an empty word hands the ticket to the agent like any other"
   assert_contains "$(cat "$log")" "01-ticket.md" "which was prompted"
 fi
@@ -2862,7 +2960,9 @@ if case_is "with the human word off, only the followup-ticket warnings still app
   sed -i 's/^\*\*Status:\*\* todo/&\n**Checks:** 99-nowhere.md/' "$repo/batch/issues/02-ticket.md"
   git -C "$repo" commit --quiet -am "ticket 1 human, ticket 2 checks nothing real"
 
-  FOREMAN_HUMAN_WORD= run_foreman "$repo" status batch
+  printf 'FOREMAN_HUMAN_WORD=\n' >> "$repo/batch/foreman.conf"    # off in the conf; empty in the environment is ignored (B21)
+  git -C "$repo" commit --quiet -am "no human word"
+  run_foreman "$repo" status batch
   assert_eq "$ST" 0 "still exits 0"
   assert_missing "$OUT" "is a human ticket with no ticket" "warning 1 is skipped"
   assert_missing "$OUT" "has no Handoff:" "warning 2 is skipped"

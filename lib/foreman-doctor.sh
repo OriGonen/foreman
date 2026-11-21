@@ -227,7 +227,8 @@ _fact "expect"$'\t'"$_expect"
 # all), and it must not source a batch's foreman.conf either — that file is arbitrary bash.
 # Reading it as text is the compromise: enough to spot a misconfiguration, never enough to be
 # affected by one. The precedence is config's, highest first:
-#   the environment's FOREMAN_<knob> (set, even to empty), then its legacy RALPH_<knob>,
+#   the environment's FOREMAN_<knob> (when not empty: a set-but-empty one is ignored, as in config),
+#   then its legacy RALPH_<knob>,
 #   the conf's last FOREMAN_<knob>= assignment, then its last RALPH_<knob>=.
 # An assignment may start with `export`, be quoted, and be followed by a `# comment`.
 # legacy: RALPH_* from before the rename still counts, as foreman-legacy.sh makes it.
@@ -252,7 +253,7 @@ _conf_last() {    # _conf_last CONF NAME — sets _CONF_LAST to the last assignm
 _conf_value() {   # _conf_value CONF FOREMAN_NAME
   local knob="${2#FOREMAN_}" k
   for k in "FOREMAN_$knob" "RALPH_$knob"; do
-    [ -z "${!k+x}" ] || { printf '%s' "${!k}"; return; }
+    [ -z "${!k:-}" ] || { printf '%s' "${!k}"; return; }
   done
   for k in "FOREMAN_$knob" "RALPH_$knob"; do
     if _conf_last "$1" "$k"; then printf '%s' "$_CONF_LAST"; return; fi

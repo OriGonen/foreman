@@ -65,6 +65,8 @@ done
 # defaults — so FOREMAN_ORDERING_MODEL set there is honoured without this script knowing
 # anything about foreman.conf's format itself.
 export FOREMAN_BATCH="$BATCH_INPUT"
+# Ordering writes the batch's order file, so like a run it may rename legacy ralph-* run files.
+FOREMAN_CONFIG_MIGRATE=1
 # shellcheck source=foreman-config.sh
 source "$FOREMAN_TOOL_DIR/foreman-config.sh" || exit 1
 # shellcheck source=foreman-human.sh

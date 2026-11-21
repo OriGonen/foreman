@@ -642,7 +642,15 @@ so explicitly — a budget was overshot to salvage stalled work, and by how much
 letting the figures in the summary silently disagree with the budget that was set.
 
 Any `FOREMAN_*` set in the environment beats the batch's `foreman.conf`, so a one-off run needs
-no edit.
+no edit. Two rules go with that:
+
+- A variable that is set but **empty** is ignored, as if it were not set: `FOREMAN_MODEL= foreman run`
+  runs on the conf's model (or the default), and an empty `FOREMAN_CHECK_CMD` does not blank the
+  conf's command. To switch a knob off (`FOREMAN_DONE_PREFIX`, `FOREMAN_HUMAN_WORD`), set it empty in
+  `foreman.conf`, where an empty value still counts.
+- `FOREMAN_CLAUDE_ARGS` is a list, and the environment only holds strings, so it cannot be set
+  there: a non-empty one in the environment stops the command with exit 1 and a message saying to put
+  it in `foreman.conf`.
 
 #### Changing the budget mid-run
 
@@ -1262,7 +1270,7 @@ the old sandbox to remove.
 | `<batch>/ralph.conf` | read when the batch has no `foreman.conf`; `foreman init` keeps it rather than adding a second conf | `git mv <batch>/ralph.conf <batch>/foreman.conf` |
 | `RALPH_*` settings, in a conf or the environment | each is used when its `FOREMAN_*` name is unset, with one warning naming them | rename each to `FOREMAN_*` — the same name, new prefix |
 | `~/.config/ralph/env` | read when `~/.config/foreman/env` does not exist; `RALPH_DOCKER_*` keys in it still count | move it to `~/.config/foreman/env` and rename the keys |
-| `ralph-runs.jsonl`, `ralph-runs.log`, `.ralph-stall-marker` | renamed to `foreman-*` on the batch's next run, so history and a pending stall salvage carry on | `foreman doctor --fix`, for the new `.gitignore` lines |
+| `ralph-runs.jsonl`, `ralph-runs.log`, `.ralph-stall-marker`, `.ralph-iter.bundle` | `foreman run` and `foreman order` rename them to `foreman-*` (the bundle is deleted), so history and a pending stall salvage carry on. Read-only commands (`status`, `dry-run`, `next`, `stop`, `keys`, `--json`) read them where they are, move nothing, and say once that `foreman run` will rename them | `foreman doctor --fix`, for the new `.gitignore` lines |
 | the `ralph-<repo>` sandbox | no longer used: the default is now `foreman-<repo>`, created on first run | `sbx rm ralph-<repo>` |
 
 </details>

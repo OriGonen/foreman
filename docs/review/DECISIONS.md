@@ -72,10 +72,10 @@ The owner approved all seven recommendations (2026-11-21), plus R4 as scoped bel
 ## Status
 | Ticket | State | Commit |
 |--------|-------|--------|
-| D1 | todo | |
-| D5 | todo | |
-| D6+R4 | todo | |
-| D7 | done | (this commit) |
-| D3 | todo | |
-| D4 | todo | |
-| D2 | todo | |
+| D1 | done | 8b9722a |
+| D5 | todo |  |
+| D6+R4 | done | (this commit) |
+| D7 | done | 9eb7a67 |
+| D3 | done | 01c3412 |
+| D4 | todo |  |
+| D2 | todo |  |

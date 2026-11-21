@@ -32,7 +32,7 @@ Stop and ask the owner before any change to the public CLI interface, the config
 | R1 | Loop: one path for terminal states | done |
 | R2 | Move status and dry-run out of the loop file | done |
 | R3 | Shared node module for cross-boundary formats | done |
-| R4 | Side-effect-free config reading | deferred (see R4 below) |
+| R4 | Side-effect-free config reading | done (narrowed, see DECISIONS.md D6+R4) |
 | R5 | Control directory gets an owner | done |
 
 ## Bug fixes
@@ -130,6 +130,7 @@ Stop and ask the owner before any change to the public CLI interface, the config
 
 ### R4 — Side-effect-free config reading
 - **Scope:** split `foreman-config.sh` into resolve-and-validate (no `cd`, no legacy migration) and prepare-repo; doctor and `--json` use the real reader; `--json` exposes effective settings so the GUI drops its reader. **Blocked by:** T07, T08, T12. Touches every entry point.
+- **Narrowed and done (2026-11-21, `DECISIONS.md` D6+R4):** only the legacy-file migration moved, to `run` and `order`; read-only commands read the old files in place. The config split and the `--json` settings stay out.
 - **Deferred (2026-11-20).** Most of the payoff already landed: T07 fixed the path resolution, T08 made doctor read confs as config does, T12 gave the GUI one reader matching the shell. The rest is not worth its risk now: doctor reads `foreman.conf` as text **on purpose** (it must never execute a repo's arbitrary bash), so "doctor uses the real reader" is the wrong goal; and taking `cd` and legacy migration out of read-only commands changes when `ralph-*` files are migrated, a behaviour change for the owner to choose. Revisit together with decision 6 (B21).
 
 ### R5 — Control directory gets an owner

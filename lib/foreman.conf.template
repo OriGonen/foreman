@@ -58,7 +58,8 @@
 # touching what tickets run on:
 #FOREMAN_ORDERING_MODEL=haiku
 
-# Extra arguments passed through to `claude`, as a bash array.
+# Extra arguments passed through to `claude`, as a bash array. Set it here only: the environment
+# cannot hold a list, so a FOREMAN_CLAUDE_ARGS in the environment is refused.
 #
 # The default is not empty, and this is why: `acceptEdits` covers Edit and Write but leaves
 # Bash to the settings allowlist, and foreman's own prompt requires the agent to `git commit`

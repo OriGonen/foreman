@@ -186,6 +186,10 @@ if [ "$STATUS_ALL" = 1 ]; then
   exit "${PIPESTATUS[1]}"
 fi
 
+# Only a run renames a batch's legacy ralph-* run files; status and dry-run read them where they
+# are (foreman-config.sh, foreman-legacy.sh). A plain variable, not an export: it is not a setting,
+# and the foreman-next.sh the loop starts has nothing left to rename.
+[ "$MODE" != run ] || FOREMAN_CONFIG_MIGRATE=1
 # shellcheck source=foreman-config.sh
 source "$FOREMAN_TOOL_DIR/foreman-config.sh" || exit 1
 # shellcheck source=foreman-human.sh

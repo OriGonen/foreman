@@ -8,6 +8,8 @@
 #   RALPH_<knob>           accepted, from the environment or a conf, when FOREMAN_<knob> is
 #                          unset — with one deprecation warning naming them
 #   ralph-runs.jsonl/.log  moved to foreman-runs.* (untracked telemetry), so history continues
+#                          (only by `run` and `order`: every other command reads them where they are
+#                          and prints one hint, see foreman_legacy_batch_files_in_place)
 #   .ralph-stall-marker    moved to .foreman-stall-marker, so a rerun still salvages the stall
 #   .ralph-iter.bundle     deleted: it never outlives an iteration on purpose
 #
@@ -110,4 +112,28 @@ foreman_legacy_batch_files() {
   printf 'foreman: renamed run files in %s, from before the rename to Foreman:\n' "$batch" >&2
   printf '         %s\n' "${moved[@]}" >&2
   printf '         If `foreman doctor` reports missing .gitignore lines, `foreman doctor --fix` adds them.\n' >&2
+}
+
+# The same files for a command that must not change anything (status, dry-run, next, stop, keys,
+# anything behind --json): nothing is moved or deleted. The run files are read where they are, by
+# pointing RUN_JSONL, RUN_LOG and STALL_MARKER_FILE at the old names when only those exist (and
+# only for the default names, as above), and one hint says that `foreman run` will rename them.
+#   foreman_legacy_batch_files_in_place BATCH_DIR
+foreman_legacy_batch_files_in_place() {
+  local batch="$1" old new left=()
+  for old in ralph-runs.jsonl ralph-runs.log .ralph-stall-marker .ralph-iter.bundle; do
+    [ -e "$batch/$old" ] || continue
+    left+=("$old")
+    new="${old/ralph/foreman}"
+    [ ! -e "$batch/$new" ] || continue    # the new one is what this version has been writing to
+    case "$new" in
+      foreman-runs.jsonl)       [ "${RUN_JSONL:-}" != "$batch/$new" ] || RUN_JSONL="$batch/$old" ;;
+      foreman-runs.log)         [ "${RUN_LOG:-}" != "$batch/$new" ] || RUN_LOG="$batch/$old" ;;
+      .foreman-stall-marker)    STALL_MARKER_FILE="$batch/$old" ;;
+    esac
+  done
+  [ ${#left[@]} -gt 0 ] || return 0
+  _foreman_legacy_say _FOREMAN_LEGACY_SAID_FILES \
+    "$batch has run files from before the rename to Foreman: ${left[*]}" \
+    "They are read where they are. \`foreman run\` renames them to foreman-*."
 }
