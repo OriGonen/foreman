@@ -8766,18 +8766,20 @@ tag_running() {    # tag_running TAG
 if case_is "turn timeout: a turn that runs past FOREMAN_TURN_TIMEOUT_MINUTES is ended and the run pauses"; then
   repo="$(make_repo 2 timeout-clean-repo)"
   SECONDS=0
-  FOREMAN_TURN_TIMEOUT_MINUTES=2 FOREMAN_TIMEOUT_UNIT_SECONDS=1 FOREMAN_FAKE_SLEEP=29 \
+  FOREMAN_TURN_TIMEOUT_MINUTES=2 FOREMAN_TIMEOUT_UNIT_SECONDS=1 FOREMAN_FAKE_SLEEP=89 \
     FOREMAN_SMOKE_TAG=d2-clean run_foreman "$repo" run batch --unlimited
   waited=$SECONDS
   log="$repo/batch/foreman-runs.log"
   assert_eq "$ST" 10 "it pauses: exit 10"
-  [ "$waited" -le 20 ] && pass || fail "the turn was ended at its timeout (the run took $waited s of the turn's 29)"
+  # the turn alone takes 89 s; ended at its 2 s timeout plus the stop grace, the run is far under
+  # that even on a loaded Windows box, where a run's own start-up takes several seconds
+  [ "$waited" -le 60 ] && pass || fail "the turn was ended at its timeout (the run took $waited s of the turn's 89)"
   assert_contains "$OUT" "PAUSED: the turn ran past FOREMAN_TURN_TIMEOUT_MINUTES=2" "the terminal footer gives the reason"
   assert_contains "$(cat "$log" 2>/dev/null)" "# paused: the turn ran past FOREMAN_TURN_TIMEOUT_MINUTES=2" "the log footer gives it"
   assert_eq "$(grep -c . "$repo/batch/foreman-runs.jsonl" 2>/dev/null)" 1 "the timed-out turn is recorded"
   assert_eq "$(done_count "$repo")" "0" "no ticket landed"
   [ ! -f "$repo/batch/.foreman-stall-marker" ] && pass || fail "a clean tree leaves no stall marker"
-  proc_running 'sleep 29' && { fail "the agent's process is ended"; proc_kill 'sleep 29'; } || pass
+  proc_running 'sleep 89' && { fail "the agent's process is ended"; proc_kill 'sleep 89'; } || pass
   tag_running d2-clean && fail "nothing of the run, watchdog included, is left running" || pass
   rm -f "$WORK"/foreman-fake-*.calls
 fi
@@ -8789,7 +8791,7 @@ if case_is "turn timeout: a timed-out turn's uncommitted work is checkpointed, t
     FOREMAN_FAKE_HANG=731 FOREMAN_SMOKE_TAG=d2-dirty run_foreman "$repo" run batch --unlimited
   waited=$SECONDS
   assert_eq "$ST" 10 "it pauses: exit 10"
-  [ "$waited" -le 30 ] && pass || fail "the turn was ended at its timeout (the run took $waited s)"
+  [ "$waited" -le 60 ] && pass || fail "the turn was ended at its timeout (the run took $waited s of the hang's 731)"
   assert_contains "$OUT" "PAUSED: the turn ran past FOREMAN_TURN_TIMEOUT_MINUTES=2" "with the timeout as the reason"
   assert_contains "$(git -C "$repo" log -1 --format=%s)" "wip:" "the checkpoint turn committed the work"
   assert_eq "$(git -C "$repo" status --porcelain)" "" "the tree is clean"
