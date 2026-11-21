@@ -73,9 +73,10 @@ The owner approved all seven recommendations (2026-11-21), plus R4 as scoped bel
 | Ticket | State | Commit |
 |--------|-------|--------|
 | D1 | done | 8b9722a |
-| D5 | todo |  |
-| D6+R4 | done | (this commit) |
+| D5 | done | 69e35b4 |
+| D6+R4 | done | fe7cabd |
 | D7 | done | 9eb7a67 |
 | D3 | done | 01c3412 |
-| D4 | todo |  |
-| D2 | todo |  |
+| D4 | done | 744716c |
+| D4b (GUI Start run without the ignore line) | in progress | |
+| D2 | in progress | |
