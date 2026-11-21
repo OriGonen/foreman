@@ -188,4 +188,4 @@ FOREMAN_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)")
 # by a checkpoint turn first, or else reviewed by the next run. It is for an agent that hangs
 # with no one watching. Keep it above FOREMAN_COMMAND_TIMEOUT_MINUTES, or one long check can
 # trip it. 0 = no limit.
-#FOREMAN_TURN_TIMEOUT_MINUTES=60
+#FOREMAN_TURN_TIMEOUT_MINUTES=120

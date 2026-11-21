@@ -484,7 +484,7 @@ FOREMAN_MAX_CONTINUATIONS="${FOREMAN_MAX_CONTINUATIONS:-5}"
 FOREMAN_COMMAND_TIMEOUT_MINUTES="${FOREMAN_COMMAND_TIMEOUT_MINUTES:-60}"
 # How long one agent turn may run before foreman ends it, as `foreman stop --now` would, and
 # pauses the run (exit 10) with whatever it left uncommitted checkpointed. 0 = no limit.
-FOREMAN_TURN_TIMEOUT_MINUTES="${FOREMAN_TURN_TIMEOUT_MINUTES:-60}"
+FOREMAN_TURN_TIMEOUT_MINUTES="${FOREMAN_TURN_TIMEOUT_MINUTES:-120}"
 # Seconds in one of the turn timeout's "minutes". For the tests, which cannot wait minutes; not
 # documented, and quietly 60 when it is not a positive whole number.
 FOREMAN_TIMEOUT_UNIT_SECONDS="${FOREMAN_TIMEOUT_UNIT_SECONDS:-60}"

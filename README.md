@@ -482,13 +482,13 @@ it, and a one-shot turn never hears back. Foreman starts `claude` with `BASH_MAX
 set to this, and the prompt tells the agent the limit, to never background a check, and to
 commit as `wip:` before it starts the long ones.
 
-`FOREMAN_TURN_TIMEOUT_MINUTES` (default 60, 0 = off) is how long one agent turn may run: work,
+`FOREMAN_TURN_TIMEOUT_MINUTES` (default 120, 0 = off) is how long one agent turn may run: work,
 checkpoint and review turns alike, whatever the executor. A turn still running then is ended
 as `foreman stop --now` ends it, and the run pauses (exit 10) with the reason "the turn ran past
 FOREMAN_TURN_TIMEOUT_MINUTES=N". Work the turn left uncommitted goes through the stall's
 checkpoint turn first. If that cannot commit it, the next run reviews it. The sync steps around
-a turn are not timed. With both at their defaults, one command that runs its full
-`FOREMAN_COMMAND_TIMEOUT_MINUTES` also ends the turn, so raise this one if your checks run long.
+a turn are not timed. Keep it above `FOREMAN_COMMAND_TIMEOUT_MINUTES` (default 60), or one long
+check can end the turn.
 
 ### Permissions — `FOREMAN_PERMISSION_MODE` and `FOREMAN_CLAUDE_ARGS`
 

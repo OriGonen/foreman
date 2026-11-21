@@ -56,7 +56,7 @@
 # BUDGETS (all optional; 0 or unset means no limit)
 #   FOREMAN_MAX_COST_USD=25     pause before an iteration that would take the run over $25
 #   FOREMAN_MAX_MINUTES=180     pause before an iteration once 180 minutes have elapsed
-#   FOREMAN_TURN_TIMEOUT_MINUTES=60   end a turn that runs longer, then pause (default 60)
+#   FOREMAN_TURN_TIMEOUT_MINUTES=120  end a turn that runs longer, then pause (default 120)
 #   <iterations> argument     pause after this many iterations (default: 1)
 #   --unlimited               no iteration cap; only cost/time budgets stop it
 #   + / - while it runs       one more / one fewer iteration (on a terminal; see foreman-keys.sh)
@@ -1113,7 +1113,7 @@ end_turn() {    # end_turn [--force]
 # are not: they move work that exists nowhere else, and ending one half-way is worse than waiting.
 TURN_WATCHDOG_PID=""
 TURN_WATCHDOG_FD=""
-TURN_TIMEOUT_REASON="the turn ran past FOREMAN_TURN_TIMEOUT_MINUTES=${FOREMAN_TURN_TIMEOUT_MINUTES:-60}"
+TURN_TIMEOUT_REASON="the turn ran past FOREMAN_TURN_TIMEOUT_MINUTES=${FOREMAN_TURN_TIMEOUT_MINUTES:-120}"
 turn_watchdog() {    # turn_watchdog SECONDS MARK_FILE : as the process substitution; TURN_PID is the turn's
   local grace="${FOREMAN_STOP_GRACE:-5}" st=0
   [[ "$grace" =~ ^[0-9]+$ ]] || grace=5
@@ -1130,7 +1130,7 @@ turn_watchdog() {    # turn_watchdog SECONDS MARK_FILE : as the process substitu
 }
 turn_watchdog_start() {
   TURN_WATCHDOG_PID=""
-  [ "${FOREMAN_TURN_TIMEOUT_MINUTES:-60}" -gt 0 ] 2>/dev/null || return 0
+  [ "${FOREMAN_TURN_TIMEOUT_MINUTES:-120}" -gt 0 ] 2>/dev/null || return 0
   exec {TURN_WATCHDOG_FD}> >(turn_watchdog \
     "$(( FOREMAN_TURN_TIMEOUT_MINUTES * ${FOREMAN_TIMEOUT_UNIT_SECONDS:-60} ))" \
     "$PAYLOAD_FILE.timeout" >/dev/null 2>&1)
