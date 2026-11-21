@@ -34,6 +34,7 @@ Stop and ask the owner before any change to the public CLI interface, the config
 | R3 | Shared node module for cross-boundary formats | done |
 | R4 | Side-effect-free config reading | done (narrowed, see DECISIONS.md D6+R4) |
 | R5 | Control directory gets an owner | done |
+| D1–D7 | Owner decisions (convert guard, turn timeout, order via executor, control dir under `.git`, dry-run flags, env rules, init backups) | done, see `DECISIONS.md` |
 
 ## Bug fixes
 
@@ -136,7 +137,7 @@ Stop and ask the owner before any change to the public CLI interface, the config
 ### R5 — Control directory gets an owner
 - **Scope:** one bash file and one node file define the control-dir file names and read/write them, with the liveness rule from T03. **Blocked by:** T03, R1.
 
-## Decisions for the owner (approved 2026-11-21; being implemented, see `DECISIONS.md`)
+## Decisions for the owner (approved 2026-11-21; done, see `DECISIONS.md`)
 
 1. **B4, `foreman convert` and untracked files.** Options: skip untracked files, or refuse when any exist, or write backups. All change what the command touches.
 2. **Agent hang timeout.** Needs a new config knob and a default.
@@ -146,14 +147,15 @@ Stop and ask the owner before any change to the public CLI interface, the config
 6. **B21:** should an empty env var override a conf value? Array-valued knobs from env.
 7. **B31:** `init --force` backing up what it overwrites.
 
-## Where this stopped (2026-11-20)
+## Where this stopped (2026-11-21)
 
-Done and committed on `review/deep-refactor`: T01–T13, R1, R2, R3, R5. R4 deferred (reason above).
+Done and committed on `review/deep-refactor`: T01–T13, R1–R5 (R4 narrowed), D1–D7 plus D4b. Nothing pushed.
 
-Left to do:
-- **By hand:** T13 on Windows with the real `claude.exe` (a native process may ignore TERM) and on macOS bash 3.2; T11's `cssText` under the real CSP in Electron.
-- The decisions below `Decisions for the owner`.
+Left to do, all by hand (needs access the agents did not have):
+- **T13 / D2:** on Windows with the real `claude.exe`, check that `foreman stop`, SIGTERM and a turn timeout (`FOREMAN_TURN_TIMEOUT_MINUTES=1`) end the agent: a native process may ignore TERM, so the forced `taskkill /T` stage is what matters. Ctrl-C on macOS bash 3.2.
+- **T11 / D4b:** open the Electron app, check that inline spacing renders under the CSP, and press Start run in a batch without the `.foreman-run/` ignore line.
+- **D3:** with a real `sbx`, run `foreman order` under `FOREMAN_EXEC=sandbox` and `sandbox-mount`: the sandbox is created if missing, and the claude inside it is installed and logged in.
 
-Full-suite results for the tip are in `FULL-RUN.md`.
+Full-suite results are in `FULL-RUN.md`.
 
 Known flaky under 8-way load (pass alone): smoke.sh "foreman order draws the stake line", "SIGTERM during a turn ends the turn at once", "a second run on a batch with a run in flight is refused", smoke-json.sh "a second stop leaves it there".

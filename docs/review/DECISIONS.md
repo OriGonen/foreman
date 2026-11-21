@@ -78,5 +78,5 @@ The owner approved all seven recommendations (2026-11-21), plus R4 as scoped bel
 | D7 | done | 9eb7a67 |
 | D3 | done | 01c3412 |
 | D4 | done | 744716c |
-| D4b (GUI Start run without the ignore line) | in progress | |
-| D2 | in progress | |
+| D4b (GUI Start run without the ignore line) | done | 7b63887 |
+| D2 | done | 7a73a61, 03ffcc5 (default 120, above the command timeout) |
