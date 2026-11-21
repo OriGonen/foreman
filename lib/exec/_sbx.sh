@@ -130,6 +130,38 @@ exec_run() {
     --print "${FOREMAN_EXEC_FORMAT_ARGS[@]}" -p "$1"
 }
 
+# One question in the sandbox (see exec_ask in foreman-exec.sh), for both arrangements: $1 is
+# what to create the sandbox as when there is none yet, `clone` or `mount`, exactly as
+# exec_prepare would. A question is usually `foreman init`'s ordering, before any run has made
+# the sandbox, and a run needs the same one; but nothing beyond creating it — the probe and the
+# setup command are for turns that verify their work, and a question verifies nothing.
+#
+# It runs at the host's working tree as it is now, uncommitted files and all, since that is
+# what a question is about. Under the bind mount that is the sandbox's own workspace. Under
+# the clone it is the read-only mount the clone was made from: the clone itself holds the
+# commit the last run synced it to, which can be older than the tickets being asked about,
+# and the read-only mount is also why the answer is the reply and never an edit.
+#
+# 125 when there is no sandbox to ask in, or no claude in it — `exec` in the sandbox's sh exits
+# 127 for a command it cannot find — with the reason on stdout.
+_sbx_ask() {    # _sbx_ask clone|mount PROMPT
+  local arrangement="$1" prompt="$2" rc
+  if ! _sbx_create "$arrangement" >&2; then
+    printf "sandbox '%s' could not be created\n" "$FOREMAN_SANDBOX"
+    return 125
+  fi
+  # shellcheck disable=SC2016  # $1 and $@ are the sandbox shell's, not this one's
+  sbx exec "$FOREMAN_SANDBOX" sh -c 'cd "$1" 2>/dev/null; shift; exec "$@"' foreman-ask "$_SBX_SOURCE_MOUNT" \
+    claude --model "$FOREMAN_MODEL" --effort "$FOREMAN_EFFORT" --permission-mode "$FOREMAN_PERMISSION_MODE" \
+    --print --output-format json -p "$prompt" </dev/null
+  rc=$?
+  if [ "$rc" -eq 127 ]; then
+    printf "'claude' is not installed in sandbox '%s'\n" "$FOREMAN_SANDBOX"
+    return 125
+  fi
+  return "$rc"
+}
+
 # Sign in to Docker without a browser, when asked to. `sbx` signs out on its own schedule and
 # its first command after that starts an interactive device-code flow — which, run unattended,
 # is a stall rather than a prompt. With FOREMAN_DOCKER_USERNAME and FOREMAN_DOCKER_PAT to hand,

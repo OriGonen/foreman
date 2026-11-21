@@ -25,6 +25,8 @@ source "$FOREMAN_EXEC_DIR/_sbx.sh"
 
 exec_describe() { printf 'sandbox (sandbox %s)' "$FOREMAN_SANDBOX"; }
 
+exec_ask() { _sbx_ask clone "$1"; }
+
 exec_prepare() {
   _sbx_create clone || return 1
 

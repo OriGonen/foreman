@@ -11,6 +11,8 @@ source "$FOREMAN_EXEC_DIR/_sbx.sh"
 
 exec_describe() { printf 'sandbox-mount (sandbox %s)' "$FOREMAN_SANDBOX"; }
 
+exec_ask() { _sbx_ask mount "$1"; }
+
 exec_prepare() {
   _sbx_create mount || return 1
 

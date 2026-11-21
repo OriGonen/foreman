@@ -314,8 +314,15 @@ constraint that isn't in the ticket text. Re-run it any time the tickets change:
 foreman order .scratch/my-batch
 ```
 
-It costs one model call, touches only `order.md`, and runs locally — no sandbox, since it
-edits no code. If the agent call fails — including an `is_error` reply that came with exit 0 —
+It costs one model call and touches only `order.md`. The call runs where a ticket's agent
+runs — through `FOREMAN_EXEC` (see "Where the agent runs"), with the same permission settings:
+on the host under `local`, inside the sandbox under `sandbox` and `sandbox-mount`, and as a
+canned reply under `fake`. The agent edits nothing; it replies with the new `order.md`, and
+Foreman writes that file in your tree itself (a reply without a complete
+`ORDER:BEGIN`/`ORDER:END` block leaves `order.md` as it is). If the executor cannot be used — `claude`
+or `sbx` not on PATH, the sandbox unavailable, or no `claude` inside it — ordering is skipped
+with a message saying why, `order.md` keeps its filename order, and `foreman init` carries on.
+If the agent call fails — including an `is_error` reply that came with exit 0 —
 it prints what claude said, with a `claude /login` hint when the login has expired, and leaves
 `order.md` alone. `foreman init --no-order` skips it and leaves `order.md` in plain filename
 order, same as before this step existed.
@@ -357,7 +364,8 @@ first real run of any new batch.
 
 Each mode is one file in `lib/exec/`, satisfying the interface documented in
 `lib/foreman-exec.sh`. Nothing outside those files asks which mode is in force, and nothing
-holds a list of the modes that exist — adding a mode is adding a file.
+holds a list of the modes that exist — adding a mode is adding a file. `foreman order` asks
+its one question through the same mode (`exec_ask`), so ordering runs where tickets run.
 
 The clone in `sandbox` mode is not a preference. A bind-mounted Windows workspace hands a
 Linux container the host's compiled native modules, which it cannot load, and the container
@@ -1175,7 +1183,7 @@ to show you what a run cost.
 | `lib/foreman-ui.sh` | how output looks: the glyphs, indents, `  ·  ` separators and colour, as `say_event`, `say_rule` and friends — sourced, never run |
 | `lib/foreman-strip-ansi.cjs` | removes `sbx`'s banner control codes — shared by the two above |
 | `lib/foreman-auth-patterns.cjs` | the strings that mean the agent's login has expired — shared by the recorder and `foreman-claude-reply.cjs` |
-| `lib/foreman-claude-reply.cjs` | reads one `claude --print` JSON reply: failed or not, cost, what it said, whether the login expired — shared by `foreman order` and `foreman commands` |
+| `lib/foreman-claude-reply.cjs` | reads one `claude --print` JSON reply: failed or not, cost, what it said, whether the login expired (and, with `--whole`, the whole message after them) — shared by `foreman order` and `foreman commands` |
 | `lib/foreman-init.sh` | scaffolds a batch, then runs `foreman-commands.sh` and `foreman-order.sh` unless told not to |
 | `lib/foreman-commands.sh` | has an agent fill in `foreman.conf`'s check, test and sandbox-setup commands, through the `foreman-conf-commands` skill |
 | `lib/foreman-order.sh` | has an agent order the tickets by dependency, importance and load |

@@ -2939,11 +2939,16 @@ STUB
 # itself (--unordered). But `foreman_human_warnings` reads the batch through `--all`, which DOES
 # honour order.md, so the block has to list every ticket already in batch/issues, or an empty
 # block reads as an empty batch.
+#
+# Ordering asks through the batch's executor (exec_ask), and the stub `claude` on PATH is
+# what the `local` executor runs, so the batch is switched from the fixture's `fake` to
+# `local`. A case that wants the fake sets FOREMAN_EXEC=fake, which wins over the conf.
 write_order_stub() {    # write_order_stub REPO
   local repo="$1"
   { echo '<!-- ORDER:BEGIN -->'
     for f in "$repo"/batch/issues/*.md; do echo "batch/issues/$(basename "$f")"; done
     echo '<!-- ORDER:END -->'; } > "$repo/batch/order.md"
+  sed -i 's/^FOREMAN_EXEC=fake$/FOREMAN_EXEC=local/' "$repo/batch/foreman.conf"
   git -C "$repo" add -A && git -C "$repo" commit --quiet -m "order.md stub"
 }
 
@@ -2986,6 +2991,119 @@ if case_is "with neither kind of ticket, the ordering prompt has no human or fol
   assert_missing "$prompt" "HUMAN TICKETS" "no human-tickets section"
   assert_missing "$prompt" "FOLLOWUP TICKETS" "no followup-tickets section"
   assert_contains "$prompt" "Blocked by" "the Blocked by: sentence is still there"
+fi
+
+# Ordering goes through the executor, like an agent turn: under `fake` no claude is run at all,
+# the fake's exec_ask answers, and order.md is written from its reply.
+if case_is "foreman order asks through the executor: the fake answers, and its reply becomes order.md"; then
+  repo="$(make_repo 2 order-fake-repo)"
+  write_order_stub "$repo"
+  log="$WORK/order-fake-ask-$CASE_IDX.txt"
+  claude_log="$WORK/order-fake-claude-$CASE_IDX.txt"
+  reply="# Order for batch
+
+02 first: 01 reads what it writes.
+
+<!-- ORDER:BEGIN -->
+\`\`\`
+batch/issues/02-ticket.md
+batch/issues/01-ticket.md
+\`\`\`
+<!-- ORDER:END -->"
+
+  PATH="$(make_claude_stub):$PATH" FOREMAN_ORDER_PROMPT_LOG="$claude_log" FOREMAN_EXEC=fake \
+    FOREMAN_FAKE_PROMPT_LOG="$log" FOREMAN_FAKE_ASK_REPLY="$reply" FOREMAN_ORDERING_MODEL=order-model \
+    run_foreman "$repo" order batch
+  assert_eq "$ST" 0 "order exits 0"
+  assert_contains "$OUT" "wrote batch/order.md" "it reports writing order.md"
+  asked="$(cat "$log" 2>/dev/null)"
+  assert_contains "$asked" "===== fake ask =====" "the fake executor recorded the question"
+  assert_contains "$asked" "args: --model order-model --effort high" "with the ordering model and effort"
+  assert_contains "$asked" "Tickets in batch:" "and the ordering prompt"
+  [ -e "$claude_log" ] && fail "the claude on PATH is not run under the fake executor" || pass
+  assert_eq "$(cat "$repo/batch/order.md")" "$reply" "order.md is the reply"
+  run_foreman "$repo" next batch --all
+  assert_eq "$OUT" "batch/issues/02-ticket.md
+batch/issues/01-ticket.md" "and it is the order the batch now runs in"
+
+  # A reply fenced as a code block, with a word after it, is the same file.
+  swapped="${reply//02-ticket/0X}"; swapped="${swapped//01-ticket/02-ticket}"; swapped="${swapped//0X/01-ticket}"
+  FOREMAN_EXEC=fake FOREMAN_FAKE_ASK_REPLY="$(printf '%s\n' '```markdown' "$swapped" '```' '' 'Done.')" \
+    run_foreman "$repo" order batch
+  assert_eq "$ST" 0 "a fenced reply exits 0"
+  assert_eq "$(cat "$repo/batch/order.md")" "$swapped" "the fence and the words after the block are not written"
+
+  # A reply that fails is a failed call, as from claude itself.
+  before="$(cat "$repo/batch/order.md")"
+  FOREMAN_EXEC=fake FOREMAN_FAKE_ASK=error run_foreman "$repo" order batch
+  assert_eq "$ST" 1 "a failed ask exits 1"
+  assert_contains "$OUT" "the agent call failed" "and says so"
+  assert_eq "$(cat "$repo/batch/order.md")" "$before" "order.md is unchanged"
+fi
+
+# The local executor runs the claude on PATH with exactly the command line ordering always used.
+if case_is "foreman order under the local executor runs claude with the same arguments as before"; then
+  repo="$(make_repo 2 order-local-args-repo)"
+  write_order_stub "$repo"
+  dir="$WORK/args-stub-$CASE_IDX"; mkdir -p "$dir"
+  cat > "$dir/claude" <<'STUB'
+#!/bin/bash
+prev=""
+for a in "$@"; do
+  if [ "$prev" = -p ]; then printf '<prompt>\n'; else printf '%s\n' "$a"; fi
+  prev="$a"
+done > "$ARGS_LOG"
+echo '{"is_error":false,"total_cost_usd":0}'
+STUB
+  chmod +x "$dir/claude"
+  args="$WORK/order-local-args-$CASE_IDX.txt"
+
+  PATH="$dir:$PATH" ARGS_LOG="$args" FOREMAN_ORDERING_MODEL=order-model run_foreman "$repo" order batch
+  assert_eq "$ST" 0 "order exits 0"
+  assert_eq "$(cat "$args" 2>/dev/null)" "--model
+order-model
+--effort
+high
+--permission-mode
+acceptEdits
+--print
+--output-format
+json
+-p
+<prompt>" "the arguments ordering always passed, and none of FOREMAN_CLAUDE_ARGS"
+fi
+
+# Ordering is optional: an executor that cannot be used skips it, and neither order nor init fails.
+if case_is "foreman order skips without failing when the executor cannot be used"; then
+  repo="$(make_repo 2 order-unready-repo)"
+  write_order_stub "$repo"
+  before="$(cat "$repo/batch/order.md")"
+  facts="$WORK/order-unready-facts-$CASE_IDX.txt"
+  log="$WORK/order-unready-ask-$CASE_IDX.txt"
+
+  FOREMAN_ORDER_RESULT="$facts" FOREMAN_EXEC=fake FOREMAN_FAKE_PREFLIGHT=fail FOREMAN_FAKE_PROMPT_LOG="$log" \
+    run_foreman "$repo" order batch
+  assert_eq "$ST" 0 "a preflight that fails is not a failure"
+  assert_contains "$OUT" "skipping" "ordering is skipped"
+  assert_contains "$OUT" "keeps its filename order" "and order.md is said to keep its order"
+  assert_contains "$(cat "$facts" 2>/dev/null)" "result	skipped" "the facts say skipped"
+  [ -e "$log" ] && fail "nothing is asked when preflight fails" || pass
+  assert_eq "$(cat "$repo/batch/order.md")" "$before" "order.md is unchanged"
+
+  # An executor that turns out not to be there when asked (no sandbox, no claude in it).
+  FOREMAN_ORDER_RESULT="$facts" FOREMAN_EXEC=fake FOREMAN_FAKE_ASK=unavailable run_foreman "$repo" order batch
+  assert_eq "$ST" 0 "an executor that cannot ask is not a failure"
+  assert_eq "$(cat "$facts" 2>/dev/null)" "result	skipped
+said	the fake exec was told it cannot ask (FOREMAN_FAKE_ASK=unavailable)" "skipped, with the executor's reason"
+  assert_contains "$OUT" "FOREMAN_FAKE_ASK=unavailable) — skipping" "which is printed"
+  assert_eq "$(cat "$repo/batch/order.md")" "$before" "order.md is still unchanged"
+
+  # init runs the ordering, and a skipped one does not break it.
+  rm -f "$repo/batch/order.md"
+  FOREMAN_EXEC=fake FOREMAN_FAKE_PREFLIGHT=fail run_foreman "$repo" init batch --no-commands
+  assert_eq "$ST" 0 "init still exits 0"
+  assert_contains "$OUT" "skipping" "and says the ordering was skipped"
+  [ -f "$repo/batch/order.md" ] && pass || fail "init still wrote order.md"
 fi
 
 # A stub `claude` that prints $STUB_OUT on stdout and exits $STUB_EXIT, for the failure cases.
@@ -4669,10 +4787,11 @@ if case_is "foreman-draw knows how many tickets moved and what a ticket is calle
 fi
 
 # The show, forced into a capture: no terminal, so every show variable is named. `strip` takes the
-# colour off.
+# colour off. The ordering asks through the batch's executor, and the conf init writes says the
+# default, `sandbox`: FOREMAN_EXEC=local is what runs the stub `claude` on PATH instead.
 init_show() {    # init_show REPO ARGS... — a forced 24-bit show 120 wide, in $OUT and $ST
   local repo="$1"; shift
-  OUT="$(cd "$repo" && env -u CI -u NO_COLOR FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" init "$@" 2>&1)"
+  OUT="$(cd "$repo" && env -u CI -u NO_COLOR FOREMAN_EXEC=local FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=120 "$FOREMAN" init "$@" 2>&1)"
   ST=$?
 }
 
@@ -4882,7 +5001,7 @@ Nothing to do — this batch is already set up." "all kept"
   assert_missing "$OUT" "replaced" "and not replaced"
 
   repo="$(make_repo 2 init-plain-order-repo)"; rm -f "$repo/batch/foreman.conf"
-  PATH="$(make_commands_claude_stub):$PATH" STUB_OUT='{"is_error":false,"total_cost_usd":0.08}' run_foreman "$repo" init batch --no-commands
+  PATH="$(make_commands_claude_stub):$PATH" STUB_OUT='{"is_error":false,"total_cost_usd":0.08}' FOREMAN_EXEC=local run_foreman "$repo" init batch --no-commands
   assert_eq "$OUT" "Batch: batch
    created  batch/foreman.conf
    created  batch/order.md (2 ticket(s) — re-order it before running)
@@ -4962,7 +5081,7 @@ if case_is "foreman init on a real terminal shows without being forced, and clea
     ESC=$'\033'
     repo="$(make_repo 2 init-tty-repo)"; rm -f "$repo/batch/foreman.conf"
     OUT="$(cd "$repo" && env -u CI -u NO_COLOR -u WT_SESSION -u FOREMAN_COLOR -u FOREMAN_SHOW TERM=xterm COLORTERM=truecolor COLUMNS=100 \
-      PATH="$(make_commands_claude_stub):$PATH" STUB_OUT='{"is_error":false,"total_cost_usd":0.5}' \
+      PATH="$(make_commands_claude_stub):$PATH" STUB_OUT='{"is_error":false,"total_cost_usd":0.5}' FOREMAN_EXEC=local \
       script -qec "$FOREMAN init batch --no-commands" /dev/null </dev/null 2>/dev/null)"
     OUT="${OUT//$'\r'/}"
     assert_contains "$OUT" "38;2;" "a terminal that says truecolor gets 24 bits"

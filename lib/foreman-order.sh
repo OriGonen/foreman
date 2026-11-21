@@ -6,9 +6,13 @@
 #
 # Runs automatically at the end of `foreman init`. Re-run it by hand after tickets change.
 #
-# Read-only over the tickets themselves — the only file it writes is <batch>/order.md.
-# Runs locally, never in a sandbox: it edits no code, so none of FOREMAN_EXEC's isolation
-# concerns apply, and it should work even in a repo that has no sandbox set up yet.
+# Read-only over the tickets themselves — the only file it writes is <batch>/order.md, and it
+# writes it itself, from the agent's reply. The agent is asked where the batch's agent turns run
+# (exec_ask, see foreman-exec.sh): on the host under FOREMAN_EXEC=local, in the sandbox under
+# the sbx modes, not at all under fake. So it edits nothing, and nothing has to come back out of
+# a sandbox's clone but the reply. An executor that cannot be used — its preflight fails, there
+# is no sandbox and none can be made, no claude where it would run — skips the ordering with a
+# note, exit 0, as a missing `claude` always did.
 #
 # FOREMAN_ORDER_RESULT=<file>, when set, is where it leaves how it went, as facts for the
 # renderer (`key<TAB>value` lines, see foreman-draw.cjs): that is how `foreman init` draws the
@@ -24,9 +28,9 @@
 #
 # Costs one model call, on FOREMAN_MODEL by default — ordering rarely needs the same model
 # the tickets themselves run on, so set FOREMAN_ORDERING_MODEL in foreman.conf to point it at
-# something cheaper without touching FOREMAN_MODEL. If `claude` is not on PATH, this prints a
-# note and exits 0 rather than failing whatever called it — order.md just keeps its
-# filename order.
+# something cheaper without touching FOREMAN_MODEL. If the executor cannot be used (`claude`
+# not on PATH, say), this prints a note and exits 0 rather than failing whatever called it —
+# order.md just keeps its filename order.
 set -uo pipefail
 
 # This file's directory, from the shell and not `dirname` (see foreman-config.sh).
@@ -73,13 +77,25 @@ source "$FOREMAN_TOOL_DIR/foreman-tickets.sh" || exit 1
   exit 1
 }
 
-if ! command -v claude >/dev/null 2>&1; then
+# Ordering is optional: when it cannot happen, say why and leave order.md as it is, exit 0, so
+# `foreman init` goes on regardless.
+order_skip() {    # order_skip REASON
   order_fact result skipped
-  order_fact said "'claude' is not on PATH"
-  warn_tag error "foreman order:" "'claude' is not on PATH — skipping."
-  echo "              $ORDER_FILE keeps its filename order; re-run \`foreman order $BATCH_DIR\` once it is." >&2
+  order_fact said "$1"
+  warn_tag error "foreman order:" "$1 — skipping."
+  echo "              $ORDER_FILE keeps its filename order; re-run \`foreman order $BATCH_DIR\` once it can." >&2
   exit 0
+}
+
+# The batch's executor, which asks the agent the way the batch's turns run it. The checks a run
+# makes before anything is spent come first; what only asking can find out (no sandbox, no claude
+# in it) comes back from exec_ask as 125, below.
+foreman_exec_load || exit 1
+ORDER_TOOL="$(exec_required_tool)"
+if [ -n "$ORDER_TOOL" ] && ! command -v "$ORDER_TOOL" >/dev/null 2>&1; then
+  order_skip "'$ORDER_TOOL' is not on PATH"
 fi
+exec_preflight || order_skip "FOREMAN_EXEC=$FOREMAN_EXEC did not pass preflight"
 
 # The batch's own ticket list, from the one place that knows how a batch answers that
 # (foreman-tickets.sh) —
@@ -153,8 +169,10 @@ You are ordering the tickets in $BATCH_DIR for the foreman ticket loop, which im
 exactly one ticket per iteration, in the order given, committing each before moving to the
 next.
 
-Read every ticket listed below and the current $ORDER_FILE. Then edit
-$ORDER_FILE in place, and change nothing else:
+Read every ticket listed below and the current $ORDER_FILE. Do not edit any file:
+your reply is written to $ORDER_FILE as it stands, so reply with its complete new
+contents and nothing else — from its first line through the <!-- ORDER:END --> line, with
+no preamble and no code fence around it. The new contents:
 
 1. Decide a run order, weighing these in priority order: dependencies first, then
    human-ticket placement and followup-ticket adjacency (see below, when this batch has
@@ -173,8 +191,8 @@ $ORDER_FILE in place, and change nothing else:
    isn't obvious from the filenames.
 3. Replace the block between <!-- ORDER:BEGIN --> and <!-- ORDER:END --> with the ordered,
    repo-relative ticket paths, one per line, inside the existing code fence.
-4. Do not edit any ticket file. Do not invent a ticket that is not in the list below, and
-   do not drop one that is.
+4. Keep the rest of the file as it is. Do not invent a ticket that is not in the list
+   below, and do not drop one that is.
 ${HUMAN_SECTION}${CHECK_SECTION}
 
 A ticket's \`Blocked by:\` line, when it has one, is an explicit dependency: honour it
@@ -258,19 +276,22 @@ else
   say_tag accent "foreman order:" "reading ${#tickets[@]} ticket(s) in $BATCH_DIR ..."
 fi
 
-# stdin is closed because claude, finding it is not a terminal, otherwise waits for input
-# that never comes.
+# The ordering model and effort, for this one call: the executor reads FOREMAN_MODEL and
+# FOREMAN_EFFORT, as it does for a turn.
 order_start=$SECONDS
-RESPONSE=$(claude --model "$MODEL" --effort "$EFFORT" --permission-mode acceptEdits \
-  --print --output-format json -p "$PROMPT" </dev/null)
+RESPONSE=$(FOREMAN_MODEL="$MODEL" FOREMAN_EFFORT="$EFFORT" exec_ask "$PROMPT")
 status=$?
 order_seconds=$((SECONDS - order_start))
 order_stop_spinner
 
+# 125: the executor could not ask at all, and its reply is why.
+[ "$status" -ne 125 ] || order_skip "$(printf '%s\n' "$RESPONSE" | tr -d '\r' | head -n 1)"
+
 # Read the payload once: is_error, the cost, and the agent's own message as one line, plus
-# whether that message is a login failure (see foreman-claude-reply.cjs).
-{ IFS= read -r is_error; IFS= read -r cost; IFS= read -r said; IFS= read -r auth_failed; } < <(
-  node "$FOREMAN_TOOL_DIR/foreman-claude-reply.cjs" <<< "$RESPONSE")
+# whether that message is a login failure (see foreman-claude-reply.cjs) — and the message whole,
+# after them, since it is the new order.md.
+{ IFS= read -r is_error; IFS= read -r cost; IFS= read -r said; IFS= read -r auth_failed; reply="$(cat)"; } < <(
+  node "$FOREMAN_TOOL_DIR/foreman-claude-reply.cjs" --whole <<< "$RESPONSE")
 
 if [ "$status" -ne 0 ] || [ "$is_error" = 1 ]; then
   order_fact result failed
@@ -280,6 +301,33 @@ if [ "$status" -ne 0 ] || [ "$is_error" = 1 ]; then
   [ -n "$said" ] && echo "             claude said: $said"
   [ "$auth_failed" = 1 ] && echo "             your claude login has expired — run \`claude /login\`, then re-run \`foreman order $BATCH_INPUT\`."
   exit 1
+fi
+
+# The order.md in the reply: from its first line through <!-- ORDER:END -->. A code fence the agent
+# opened it with anyway, and whatever it said after the block, are not part of the file. Fails when
+# the reply holds no order block.
+order_from_reply() {    # order_from_reply < REPLY
+  awk '
+    { sub(/\r$/, "") }
+    !started && /^[[:space:]]*$/ { next }
+    !started { started = 1; if ($0 ~ /^[[:space:]]*(```|~~~)/) next }
+    /^<!-- ORDER:BEGIN -->/ { begin = 1 }
+    { print }
+    begin && /^<!-- ORDER:END -->/ { done = 1; exit }
+    END { exit !done }
+  '
+}
+
+# A reply with no order block leaves order.md as the agent left it — where the agent's tree is
+# this one, an agent that edited the file anyway has done the same job.
+if new_order="$(printf '%s
+' "$reply" | order_from_reply)"; then
+  printf '%s\n' "$new_order" > "$ORDER_FILE" || {
+    order_fact result failed
+    order_fact said "could not write $ORDER_FILE"
+    warn_tag error "foreman order:" "could not write $ORDER_FILE."
+    exit 1
+  }
 fi
 
 warnings="$(foreman_human_warnings)"

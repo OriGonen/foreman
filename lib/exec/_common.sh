@@ -5,6 +5,9 @@
 #
 # For all three, "collect the iteration's work" is just "look at this repo", and nothing
 # can be stranded anywhere, so there is never a recovery note.
+#
+# exec_ask is not here: each of the three asks the way it runs a turn (claude here, claude in
+# the sandbox, a canned reply), so each defines its own.
 
 exec_sync_down() { return 0; }
 

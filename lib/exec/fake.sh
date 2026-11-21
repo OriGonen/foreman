@@ -68,6 +68,14 @@
 #              its result, so a test can look at a run mid-iteration, with the feed written. Default 0.
 #   FOREMAN_FAKE_PREPARE     `fail` makes exec_prepare fail, as a sandbox that cannot start does:
 #              the run ends with exit 1 after its control directory exists. Default: ok.
+#   FOREMAN_FAKE_PREFLIGHT   `fail` makes exec_preflight fail, as a signed-out sbx does. Default: ok.
+#   FOREMAN_FAKE_ASK         how exec_ask (one question, not a turn: `foreman order`) answers:
+#     ok           (default) a success payload whose reply is FOREMAN_FAKE_ASK_REPLY
+#     error        an is_error payload, exit 1
+#     unavailable  exit 125, as a sandbox that is not there or has no claude in it
+#   FOREMAN_FAKE_ASK_REPLY   the reply's text. Default: a sentence, which orders nothing.
+#   Each question is recorded in FOREMAN_FAKE_PROMPT_LOG, under `===== fake ask =====`, with an
+#   `args:` line of the model, effort and permission mode a real adapter would pass.
 #   FOREMAN_FAKE_PROMPT_LOG  file to append each prompt to, with a separator. Optional. The
 #              line after the separator is `args:` and the FOREMAN_CLAUDE_ARGS the call was
 #              given — what a real adapter would pass to claude, e.g. a checkpoint's --max-turns.
@@ -100,13 +108,43 @@ exec_required_tool() { printf ''; }
 # test asserting on the default of a non-sandbox mode needs a non-sandbox mode to ask.
 exec_default_permission_mode() { printf 'acceptEdits'; }
 
-exec_preflight() { return 0; }
+exec_preflight() {
+  [ "${FOREMAN_FAKE_PREFLIGHT:-ok}" != fail ] || { warn_preflight "the fake exec was told not to pass preflight (FOREMAN_FAKE_PREFLIGHT=fail)"; return 1; }
+  return 0
+}
 exec_prepare() {
   [ "${FOREMAN_FAKE_PREPARE:-ok}" != fail ] || { warn "the fake exec was told not to prepare (FOREMAN_FAKE_PREPARE=fail)"; return 1; }
   return 0
 }
 
 exec_describe() { printf 'fake (no agent is run)'; }
+
+# A question, answered out of FOREMAN_FAKE_ASK / FOREMAN_FAKE_ASK_REPLY. Not a turn: it takes no
+# slot of FOREMAN_FAKE_BEHAVIOUR's list and costs nothing.
+exec_ask() {
+  local prompt="$1" reply
+  if [ -n "${FOREMAN_FAKE_PROMPT_LOG:-}" ]; then
+    { printf '===== fake ask =====\n'
+      printf 'args: --model %s --effort %s --permission-mode %s\n' \
+        "$FOREMAN_MODEL" "$FOREMAN_EFFORT" "$FOREMAN_PERMISSION_MODE"
+      printf '%s\n' "$prompt"; } >> "$FOREMAN_FAKE_PROMPT_LOG"
+  fi
+  case "${FOREMAN_FAKE_ASK:-ok}" in
+    unavailable)
+      printf 'the fake exec was told it cannot ask (FOREMAN_FAKE_ASK=unavailable)\n'
+      return 125
+      ;;
+    error)
+      _fake_payload error_during_execution true "something went wrong"
+      return 1
+      ;;
+  esac
+  # The reply is free text — order.md, say — so it is escaped into the JSON string here.
+  reply="${FOREMAN_FAKE_ASK_REPLY:-the fake exec has no opinion on this}"
+  reply="${reply//\\/\\\\}"; reply="${reply//\"/\\\"}"
+  reply="${reply//$'\n'/\\n}"; reply="${reply//$'\r'/\\r}"; reply="${reply//$'\t'/\\t}"
+  FOREMAN_FAKE_COST=0 _fake_payload success false "$reply"
+}
 
 # The loop calls exec_run inside a command substitution, so the call count cannot live in
 # a variable — that subshell's increment would be thrown away. It lives in a file keyed on

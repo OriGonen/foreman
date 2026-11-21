@@ -23,3 +23,10 @@ exec_run() {
     ${FOREMAN_CLAUDE_ARGS+"${FOREMAN_CLAUDE_ARGS[@]}"} \
     --print "${FOREMAN_EXEC_FORMAT_ARGS[@]}" -p "$1"
 }
+
+# The command line `foreman order` always ran, now from here. stdin is closed because claude,
+# finding it is not a terminal, otherwise waits for input that never comes.
+exec_ask() {
+  claude --model "$FOREMAN_MODEL" --effort "$FOREMAN_EFFORT" --permission-mode "$FOREMAN_PERMISSION_MODE" \
+    --print --output-format json -p "$1" </dev/null
+}

@@ -1,7 +1,7 @@
 #!/bin/bash
 # The seam between the loop and wherever the agent actually runs.
 # Sourced by foreman-loop.sh, foreman-prompt.sh, foreman-config.sh and foreman-doctor.sh —
-# never run directly.
+# never run directly. foreman-order.sh loads an adapter through it too, to call exec_ask.
 #
 # FOREMAN_EXEC names an adapter file in lib/exec/. ADDING AN EXECUTION MODE IS ADDING A
 # FILE THERE: nothing else in the toolkit holds a list of the modes that exist, and
@@ -24,7 +24,15 @@
 #                           clone can be behind on that; the others ignore TARGET).
 #   exec_sync_down BASE     put the agent's tree at BASE; 0 ok, 1 stop
 #   exec_run PROMPT TICKET  run the agent; payload on stdout, agent's status returned
-#   exec_collect BASE       set EXEC_AGENT_HEAD and EXEC_DIRTY, and bring any commits
+#   exec_ask PROMPT         one question, not a turn (`foreman order`): claude once, where
+#                           the agent runs, on FOREMAN_MODEL / FOREMAN_EFFORT (the caller sets
+#                           them for the call) with FOREMAN_PERMISSION_MODE, stdin closed. The
+#                           `--output-format json` reply on stdout, claude's status returned.
+#                           The answer is the reply: nothing the call changes in the agent's
+#                           tree is brought back. 125: it could not ask at all — no sandbox,
+#                           no claude in it — and nothing was spent; stdout is then one line
+#                           saying why. Needs exec_preflight to have passed, not exec_prepare.
+#   exec_collect BASE      set EXEC_AGENT_HEAD and EXEC_DIRTY, and bring any commits
 #                           back to this repo; 0 ok, 1 the work is stranded
 #   exec_show_dirty         say where the uncommitted changes are (stderr)
 #   exec_recovery_note BASE how to rescue work exec_collect could not bring back
@@ -38,7 +46,9 @@
 #
 # The adapters that really invoke `claude` also splice in FOREMAN_EXEC_FORMAT_ARGS (below).
 # That is the ONLY thing that differs between a plain run and a watched one: there is one
-# exec_run per adapter, never a second code path per mode.
+# exec_run per adapter, never a second code path per mode. exec_ask splices in neither: its
+# reply is always one json object, and FOREMAN_CLAUDE_ARGS are a turn's (a git allowlist,
+# --max-turns) that a question has no use for.
 
 # Beside this file, from the shell and not `dirname` (see foreman-config.sh).
 FOREMAN_EXEC_DIR="${BASH_SOURCE[0]%/*}"; [ "$FOREMAN_EXEC_DIR" != "${BASH_SOURCE[0]}" ] || FOREMAN_EXEC_DIR=.
