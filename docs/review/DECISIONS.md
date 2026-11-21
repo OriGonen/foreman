@@ -75,7 +75,7 @@ The owner approved all seven recommendations (2026-11-21), plus R4 as scoped bel
 | D1 | todo | |
 | D5 | todo | |
 | D6+R4 | todo | |
-| D7 | todo | |
+| D7 | done | (this commit) |
 | D3 | todo | |
 | D4 | todo | |
 | D2 | todo | |

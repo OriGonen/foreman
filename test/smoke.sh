@@ -4780,6 +4780,8 @@ if case_is "foreman init at a terminal lists what --force replaced and what it k
   assert_contains "$SHOWN" "  + foreman.conf    the batch's settings, from the template  ·  replaced" "--force says foreman.conf was replaced"
   assert_contains "$SHOWN" "  + order.md        the run order  ·  replaced" "order.md"
   assert_contains "$SHOWN" "  + progress.txt    the agent's running notes, one entry per iteration  ·  replaced" "and progress.txt"
+  assert_contains "$SHOWN" "    backed up:  foreman.conf.bak" "the show says the old conf was kept as a .bak"
+  assert_contains "$SHOWN" "    backed up:  progress.txt.bak" "and the old notes"
   assert_contains "$SHOWN" "NEXT" "and there are steps to take"
 
   # Some replaced, some new: only what was there is said to be replaced.
@@ -4910,6 +4912,49 @@ Next:
   repo="$(make_repo 2 init-plain-colornever-repo)"; rm -f "$repo/batch/foreman.conf"
   OUT="$(cd "$repo" && env -u CI -u NO_COLOR FOREMAN_SHOW=always FOREMAN_COLOR=never COLUMNS=120 "$FOREMAN" init batch --no-order --no-commands 2>&1)"
   assert_contains "$OUT" "Batch: batch" "but FOREMAN_COLOR=never does not"
+fi
+
+if case_is "foreman init --force keeps the old foreman.conf and progress.txt as .bak copies"; then
+  repo="$(make_repo 2 init-force-bak-repo)"
+  printf 'FOREMAN_MODEL=my-old-model\n' > "$repo/batch/foreman.conf"
+  printf 'my old notes, entry one\n' > "$repo/batch/progress.txt"
+
+  # Without --force nothing is touched and nothing is backed up.
+  run_foreman "$repo" init batch --no-order --no-commands
+  assert_eq "$ST" 0 "no --force: exit 0"
+  assert_eq "$(cat "$repo/batch/foreman.conf")" "FOREMAN_MODEL=my-old-model" "no --force: the conf is as it was"
+  assert_eq "$(cat "$repo/batch/progress.txt")" "my old notes, entry one" "no --force: progress.txt is as it was"
+  assert_missing "$(ls "$repo/batch")" ".bak" "no --force: no backup is made"
+
+  # A stale backup from an earlier run is replaced, not kept beside the new one.
+  printf 'stale conf backup\n' > "$repo/batch/foreman.conf.bak"
+  run_foreman "$repo" init batch --no-order --no-commands --force
+  assert_eq "$ST" 0 "--force: exit 0"
+  assert_eq "$(cat "$repo/batch/foreman.conf.bak")" "FOREMAN_MODEL=my-old-model" "foreman.conf.bak holds the old conf (the stale .bak is gone)"
+  assert_eq "$(cat "$repo/batch/progress.txt.bak")" "my old notes, entry one" "progress.txt.bak holds the old notes"
+  assert_missing "$(cat "$repo/batch/foreman.conf")" "my-old-model" "the new foreman.conf is fresh"
+  assert_contains "$(cat "$repo/batch/foreman.conf")" "FOREMAN_CHECK_CMD" "the new foreman.conf is the template"
+  assert_missing "$(cat "$repo/batch/progress.txt")" "my old notes" "the new progress.txt is fresh"
+  assert_contains "$OUT" "   backed up batch/foreman.conf -> batch/foreman.conf.bak" "one line for the conf"
+  assert_contains "$OUT" "   backed up batch/progress.txt -> batch/progress.txt.bak" "one line for progress.txt"
+  assert_eq "$(printf '%s\n' "$OUT" | grep -c 'backed up')" 2 "and only those two"
+  assert_missing "$OUT" "replaced" "the plain text still never says replaced"
+
+  # Only what is overwritten is backed up: a file that was not there has no .bak.
+  repo="$(make_repo 2 init-force-bak-partial-repo)"
+  printf 'FOREMAN_MODEL=my-old-model\n' > "$repo/batch/foreman.conf"
+  rm -f "$repo/batch/progress.txt"
+  run_foreman "$repo" init batch --no-order --no-commands --force
+  assert_eq "$(cat "$repo/batch/foreman.conf.bak")" "FOREMAN_MODEL=my-old-model" "the conf that was there is backed up"
+  [ ! -e "$repo/batch/progress.txt.bak" ] && pass || fail "progress.txt was not there, so it has no .bak"
+
+  # A conf from before the rename is not overwritten by --force, so it is not backed up either.
+  repo="$(make_repo 2 init-force-bak-legacy-repo)"
+  git -C "$repo" mv batch/foreman.conf batch/ralph.conf
+  printf 'RALPH_MODEL=legacy\n' > "$repo/batch/ralph.conf"
+  run_foreman "$repo" init batch --no-order --no-commands --force
+  assert_eq "$(cat "$repo/batch/ralph.conf")" "RALPH_MODEL=legacy" "ralph.conf is untouched"
+  [ ! -e "$repo/batch/ralph.conf.bak" ] && [ ! -e "$repo/batch/foreman.conf.bak" ] && pass || fail "no backup of a conf --force did not touch"
 fi
 
 if case_is "foreman init on a real terminal shows without being forced, and clears the line it waits on"; then

@@ -2,7 +2,9 @@
 # Scaffolds a foreman batch in a directory that already has tickets.
 #
 #   foreman init <batch-dir>
-#   foreman init <batch-dir> --force      overwrite what is already there
+#   foreman init <batch-dir> --force      overwrite what is already there (the old foreman.conf and
+#                                         progress.txt are kept first, as foreman.conf.bak and
+#                                         progress.txt.bak, replacing any older .bak)
 #   foreman init <batch-dir> --no-order   skip the automatic ordering pass
 #   foreman init <batch-dir> --no-commands   skip filling in foreman.conf's commands
 #
@@ -15,7 +17,10 @@
 #                          machine-readable ORDER block the loop reads
 #   <batch>/progress.txt   empty, with a one-line header
 #
-# It never touches a ticket file, and it never overwrites without --force.
+# It never touches a ticket file, and it never overwrites without --force. With --force, the
+# foreman.conf and progress.txt it overwrites are first moved to <name>.bak, so a batch's settings
+# and notes survive a re-run; delete the .bak files, or commit them, once you have looked.
+# order.md is regenerated from the tickets, so it is not backed up.
 #
 # A foreman.conf it has just written is then handed to an agent — see foreman-commands.sh —
 # which fills in its check, test and sandbox-setup commands from what the repo shows (its CI,
@@ -155,6 +160,19 @@ write_if_absent() {
   return 0
 }
 
+# keep_old_copy TARGET: --force is about to overwrite TARGET, so move what is there to TARGET.bak
+# first (an older .bak is replaced) and say so. Sets BACKED_UP to the .bak's file name, or to
+# nothing if TARGET was not there. A failed move stops init before anything is lost.
+BACKED_UP=""
+keep_old_copy() {
+  BACKED_UP=""
+  [ "$FILE_STATE" = replaced ] || return 0
+  local target="$1"
+  mv -f "$target" "$target.bak" || { echo "foreman-init: cannot move $target to $target.bak" >&2; exit 1; }
+  BACKED_UP="${target##*/}.bak"
+  say "   backed up $target -> $target.bak"
+}
+
 say "Batch: $BATCH_DIR"
 
 # --- foreman.conf ------------------------------------------------------------
@@ -165,9 +183,10 @@ if [ -f "$BATCH_DIR/ralph.conf" ] && [ ! -e "$BATCH_DIR/foreman.conf" ]; then
   say "            rename it:  git mv \"$BATCH_DIR/ralph.conf\" \"$BATCH_DIR/foreman.conf\""
   fact file kept ralph.conf "kept, from before the rename" "git mv \"$BATCH_DIR/ralph.conf\" \"$BATCH_DIR/foreman.conf\""
 elif write_if_absent "$BATCH_DIR/foreman.conf"; then
+  keep_old_copy "$BATCH_DIR/foreman.conf"
   cp "$FOREMAN_TOOL_DIR/foreman.conf.template" "$BATCH_DIR/foreman.conf" || exit 1
   say "   created  $BATCH_DIR/foreman.conf"
-  fact file "$FILE_STATE" foreman.conf "the batch's settings, from the template"
+  fact file "$FILE_STATE" foreman.conf "the batch's settings, from the template" "" "$BACKED_UP"
   wrote_any=1
   conf_written=1
 fi
@@ -227,6 +246,7 @@ fi
 
 # --- progress.txt ----------------------------------------------------------
 if write_if_absent "$BATCH_DIR/progress.txt"; then
+  keep_old_copy "$BATCH_DIR/progress.txt"
   {
     echo "# $init_batch_name — the agent's running notes."
     echo "# One short entry per iteration, appended by the agent. The tail of this file is"
@@ -234,7 +254,7 @@ if write_if_absent "$BATCH_DIR/progress.txt"; then
     echo
   } > "$BATCH_DIR/progress.txt"
   say "   created  $BATCH_DIR/progress.txt"
-  fact file "$FILE_STATE" progress.txt "the agent's running notes, one entry per iteration"
+  fact file "$FILE_STATE" progress.txt "the agent's running notes, one entry per iteration" "" "$BACKED_UP"
   wrote_any=1
 fi
 

@@ -179,7 +179,11 @@ A batch is a directory containing tickets. A ticket is a markdown file with a st
 `foreman init <dir>` writes the three files a batch needs, generating `order.md` from
 `<dir>/issues/*.md`. Then it runs two agent passes: one fills in `foreman.conf`'s commands
 (below, unless `--no-commands`), the other rewrites the order (see "Ordering", unless
-`--no-order`). It never overwrites without `--force`, and it never touches a ticket.
+`--no-order`). It never overwrites without `--force`, and it never touches a ticket. With
+`--force`, the `foreman.conf` and `progress.txt` it overwrites are first moved to
+`foreman.conf.bak` and `progress.txt.bak` (an older `.bak` is replaced), and one line per backup
+says so; `order.md` is regenerated from the tickets and is not backed up. The `.bak` files are
+untracked, so delete them or commit them once you have looked.
 
 The lines in `<dir>/foreman.conf` that matter most are what "verify your work" means in your
 project:
@@ -786,7 +790,8 @@ yours and which check them, how long it took and what it cost — and then NEXT,
 take. The header and the files are drawn as soon as they are written, before the agent starts, so
 the wait is not a blank screen.
 
-- `--force` over a batch that is there marks each file it replaced; without it, a file that is
+- `--force` over a batch that is there marks each file it replaced, and under a replaced
+  `foreman.conf` or `progress.txt` says it kept the old one as a `.bak`; without it, a file that is
   there is shown with an `=` and left alone, and a batch with nothing to write says so.
 - `--no-order` leaves the ordering line out; an ordering that failed (or could not start, with no
   `claude` on the `PATH`) says so in its place, with what the agent said and how to try again.
