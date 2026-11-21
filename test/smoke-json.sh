@@ -2198,6 +2198,16 @@ if case_is "a stop file in the control directory pauses the run as Ctrl-C does, 
   assert_eq "$ST" 0 "a stop file left by a dead run does not stop the next"
 fi
 
+if case_is "turn timeout: a run paused by FOREMAN_TURN_TIMEOUT_MINUTES says why in status --json"; then
+  repo="$WORK/turn-timeout"; ctl_repo "$repo" 2 plain
+  run_foreman_env "$repo" "FOREMAN_TURN_TIMEOUT_MINUTES=2 FOREMAN_TIMEOUT_UNIT_SECONDS=1 FOREMAN_FAKE_SLEEP=23" run batch --unlimited
+  assert_eq "$ST" 10 "the run pauses"
+  run_foreman "$repo" status batch --json
+  assert_eq "$(jv "$OUT" 'j.last_run.end')" '"paused"' "status --json: last_run.end"
+  assert_eq "$(jv "$OUT" 'j.last_run.exit')" '10' "status --json: last_run.exit"
+  assert_eq "$(jv "$OUT" 'j.last_run.reason')" '"the turn ran past FOREMAN_TURN_TIMEOUT_MINUTES=2"' "status --json: last_run.reason"
+fi
+
 if case_is "# reason: a stop for a human gives its one-line reason in the log, for a red flag and for a login that expired"; then
   # A red flag: the review turn of the next run refuses a stopped run's leftover work.
   repo="$WORK/reason-redflag"; ctl_repo "$repo" 2 plain

@@ -182,3 +182,10 @@ FOREMAN_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)")
 # foreground backgrounds it, then ends its turn waiting for a result nothing will deliver.
 # Raise it if your slowest check takes longer than this.
 #FOREMAN_COMMAND_TIMEOUT_MINUTES=60
+
+# How long one agent turn may run, in minutes, before foreman ends it (as `foreman stop --now`
+# would) and pauses the run, exit 10. Whatever the turn left uncommitted is committed as `wip:`
+# by a checkpoint turn first, or else reviewed by the next run. It is for an agent that hangs
+# with no one watching. Keep it above FOREMAN_COMMAND_TIMEOUT_MINUTES, or one long check can
+# trip it. 0 = no limit.
+#FOREMAN_TURN_TIMEOUT_MINUTES=60

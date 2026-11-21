@@ -2270,6 +2270,20 @@ if case_is "a leading-zero FOREMAN_MAX_MINUTES is refused at preflight and the b
   assert_eq "$ST" 0 "and so is 30"
 fi
 
+if case_is "a bad FOREMAN_TURN_TIMEOUT_MINUTES knob is refused at preflight (turn timeout)"; then
+  repo="$(make_repo 1 turn-timeout-knob-repo)"
+  for bad in abc -5 08; do
+    FOREMAN_TURN_TIMEOUT_MINUTES="$bad" run_foreman "$repo" run batch --unlimited
+    assert_eq "$ST" 1 "'$bad' refuses to start"
+    assert_contains "$OUT" "FOREMAN_TURN_TIMEOUT_MINUTES must be a whole number (got '$bad')" "'$bad': names the knob"
+  done
+  assert_eq "$(done_count "$repo")" "0" "no ticket ran"
+  FOREMAN_TURN_TIMEOUT_MINUTES=0 run_foreman "$repo" dry-run batch
+  assert_eq "$ST" 0 "0 (off) is accepted"
+  FOREMAN_TURN_TIMEOUT_MINUTES=90 run_foreman "$repo" dry-run batch
+  assert_eq "$ST" 0 "and so is 90"
+fi
+
 if case_is "a malformed FOREMAN_MAX_COST_USD is refused at preflight instead of meaning unlimited"; then
   repo="$(make_repo 2 cost-typo-repo)"
   for bad in '$25' abc -5 USD25 '1.' '.5'; do
@@ -8735,6 +8749,74 @@ if case_is "SIGTERM during a turn ends the turn at once and pauses the run, foot
   [ -f "$repo/batch/.foreman-stall-marker" ] && pass || fail "the stall marker stays, for the next run's review"
   proc_running 'sleep 733' && fail "no agent process is left" || pass
   assert_eq "$(ls -A "$ctl" 2>/dev/null)" "" "the control directory is gone"
+  rm -f "$WORK"/foreman-fake-*.calls
+fi
+
+# The turn timeout (FOREMAN_TURN_TIMEOUT_MINUTES), at one second a "minute"
+# (FOREMAN_TIMEOUT_UNIT_SECONDS, for tests). Whether anything of a run is still running after it:
+# a process carrying the tag the run was started with in its environment, the watchdog included.
+tag_running() {    # tag_running TAG
+  local f
+  for f in /proc/[0-9]*/environ; do
+    tr '\0' '\n' 2>/dev/null < "$f" | grep -qx "FOREMAN_SMOKE_TAG=$1" && return 0
+  done
+  return 1
+}
+
+if case_is "turn timeout: a turn that runs past FOREMAN_TURN_TIMEOUT_MINUTES is ended and the run pauses"; then
+  repo="$(make_repo 2 timeout-clean-repo)"
+  SECONDS=0
+  FOREMAN_TURN_TIMEOUT_MINUTES=2 FOREMAN_TIMEOUT_UNIT_SECONDS=1 FOREMAN_FAKE_SLEEP=29 \
+    FOREMAN_SMOKE_TAG=d2-clean run_foreman "$repo" run batch --unlimited
+  waited=$SECONDS
+  log="$repo/batch/foreman-runs.log"
+  assert_eq "$ST" 10 "it pauses: exit 10"
+  [ "$waited" -le 20 ] && pass || fail "the turn was ended at its timeout (the run took $waited s of the turn's 29)"
+  assert_contains "$OUT" "PAUSED: the turn ran past FOREMAN_TURN_TIMEOUT_MINUTES=2" "the terminal footer gives the reason"
+  assert_contains "$(cat "$log" 2>/dev/null)" "# paused: the turn ran past FOREMAN_TURN_TIMEOUT_MINUTES=2" "the log footer gives it"
+  assert_eq "$(grep -c . "$repo/batch/foreman-runs.jsonl" 2>/dev/null)" 1 "the timed-out turn is recorded"
+  assert_eq "$(done_count "$repo")" "0" "no ticket landed"
+  [ ! -f "$repo/batch/.foreman-stall-marker" ] && pass || fail "a clean tree leaves no stall marker"
+  proc_running 'sleep 29' && { fail "the agent's process is ended"; proc_kill 'sleep 29'; } || pass
+  tag_running d2-clean && fail "nothing of the run, watchdog included, is left running" || pass
+  rm -f "$WORK"/foreman-fake-*.calls
+fi
+
+if case_is "turn timeout: a timed-out turn's uncommitted work is checkpointed, then the run pauses"; then
+  repo="$(make_repo 2 timeout-dirty-repo)"
+  SECONDS=0
+  FOREMAN_TURN_TIMEOUT_MINUTES=2 FOREMAN_TIMEOUT_UNIT_SECONDS=1 FOREMAN_FAKE_BEHAVIOUR=hang-dirty \
+    FOREMAN_FAKE_HANG=731 FOREMAN_SMOKE_TAG=d2-dirty run_foreman "$repo" run batch --unlimited
+  waited=$SECONDS
+  assert_eq "$ST" 10 "it pauses: exit 10"
+  [ "$waited" -le 30 ] && pass || fail "the turn was ended at its timeout (the run took $waited s)"
+  assert_contains "$OUT" "PAUSED: the turn ran past FOREMAN_TURN_TIMEOUT_MINUTES=2" "with the timeout as the reason"
+  assert_contains "$(git -C "$repo" log -1 --format=%s)" "wip:" "the checkpoint turn committed the work"
+  assert_eq "$(git -C "$repo" status --porcelain)" "" "the tree is clean"
+  assert_eq "$(grep -c '"kind":"checkpoint"' "$repo/batch/foreman-runs.jsonl" 2>/dev/null)" 1 "the checkpoint turn is recorded"
+  proc_running 'sleep 731' && { fail "the agent's process is ended"; proc_kill 'sleep 731'; } || pass
+  tag_running d2-dirty && fail "nothing of the run is left running" || pass
+  rm -f "$WORK"/foreman-fake-*.calls
+fi
+
+if case_is "turn timeout: turns that end in time are untouched, and no watchdog outlives the run"; then
+  repo="$(make_repo 2 timeout-fast-repo)"
+  FOREMAN_TURN_TIMEOUT_MINUTES=37 FOREMAN_TIMEOUT_UNIT_SECONDS=1 FOREMAN_SMOKE_TAG=d2-fast \
+    run_foreman "$repo" run batch --unlimited
+  assert_eq "$ST" 0 "the batch finishes"
+  assert_eq "$(done_count "$repo")" "2" "both tickets land"
+  assert_missing "$OUT" "ran past" "nothing timed out"
+  tag_running d2-fast && fail "no watchdog is left behind" || pass
+  rm -f "$WORK"/foreman-fake-*.calls
+fi
+
+if case_is "turn timeout: FOREMAN_TURN_TIMEOUT_MINUTES=0 turns the watchdog off"; then
+  repo="$(make_repo 1 timeout-off-repo)"
+  FOREMAN_TURN_TIMEOUT_MINUTES=0 FOREMAN_TIMEOUT_UNIT_SECONDS=1 FOREMAN_FAKE_SLEEP=3 \
+    run_foreman "$repo" run batch --unlimited
+  assert_eq "$ST" 0 "a 3-unit turn with the timeout off lands"
+  assert_eq "$(done_count "$repo")" "1" "the ticket landed"
+  assert_missing "$OUT" "ran past" "nothing timed out"
   rm -f "$WORK"/foreman-fake-*.calls
 fi
 

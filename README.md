@@ -482,6 +482,14 @@ it, and a one-shot turn never hears back. Foreman starts `claude` with `BASH_MAX
 set to this, and the prompt tells the agent the limit, to never background a check, and to
 commit as `wip:` before it starts the long ones.
 
+`FOREMAN_TURN_TIMEOUT_MINUTES` (default 60, 0 = off) is how long one agent turn may run: work,
+checkpoint and review turns alike, whatever the executor. A turn still running then is ended
+as `foreman stop --now` ends it, and the run pauses (exit 10) with the reason "the turn ran past
+FOREMAN_TURN_TIMEOUT_MINUTES=N". Work the turn left uncommitted goes through the stall's
+checkpoint turn first. If that cannot commit it, the next run reviews it. The sync steps around
+a turn are not timed. With both at their defaults, one command that runs its full
+`FOREMAN_COMMAND_TIMEOUT_MINUTES` also ends the turn, so raise this one if your checks run long.
+
 ### Permissions — `FOREMAN_PERMISSION_MODE` and `FOREMAN_CLAUDE_ARGS`
 
 `claude --print` has **nobody to ask**. Anything that would raise a permission prompt is
@@ -533,6 +541,7 @@ The loop pauses itself, cleanly, when:
 | the iteration budget, after `-` was pressed during the run | same — the iteration running when you pressed it still finishes |
 | a usage / rate / billing limit is detected in the response | stops immediately, reporting the reset time when the response carries one |
 | Ctrl-C | records the interrupted iteration, writes the footer, then stops |
+| an agent turn runs past `FOREMAN_TURN_TIMEOUT_MINUTES` | ends the turn, checkpoints what it left uncommitted, then stops |
 
 A limit or a Ctrl-C that lands part-way through a turn usually leaves its work uncommitted.
 Rerunning reviews that work and commits it as `wip:` before carrying on — see "Rerunning a

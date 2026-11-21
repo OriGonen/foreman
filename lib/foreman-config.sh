@@ -482,6 +482,13 @@ FOREMAN_MAX_CONTINUATIONS="${FOREMAN_MAX_CONTINUATIONS:-5}"
 # ever wakes it when the result is ready. The adapters raise the cap (BASH_MAX_TIMEOUT_MS)
 # to this, and the prompt tells the agent the number.
 FOREMAN_COMMAND_TIMEOUT_MINUTES="${FOREMAN_COMMAND_TIMEOUT_MINUTES:-60}"
+# How long one agent turn may run before foreman ends it, as `foreman stop --now` would, and
+# pauses the run (exit 10) with whatever it left uncommitted checkpointed. 0 = no limit.
+FOREMAN_TURN_TIMEOUT_MINUTES="${FOREMAN_TURN_TIMEOUT_MINUTES:-60}"
+# Seconds in one of the turn timeout's "minutes". For the tests, which cannot wait minutes; not
+# documented, and quietly 60 when it is not a positive whole number.
+FOREMAN_TIMEOUT_UNIT_SECONDS="${FOREMAN_TIMEOUT_UNIT_SECONDS:-60}"
+[[ "$FOREMAN_TIMEOUT_UNIT_SECONDS" =~ ^[1-9][0-9]*$ ]] || FOREMAN_TIMEOUT_UNIT_SECONDS=60
 
 # --- validation ------------------------------------------------------------
 # A valid FOREMAN_EXEC is one with an adapter file in lib/exec/. There is deliberately no
@@ -522,7 +529,7 @@ case "$FOREMAN_SHOW" in
 esac
 
 for _foreman_int in FOREMAN_TICKET_ATTEMPTS FOREMAN_MAX_MINUTES FOREMAN_PROGRESS_TAIL_BYTES \
-                  FOREMAN_CONTEXT_BUDGET_TOKENS FOREMAN_MAX_CONTINUATIONS; do
+                  FOREMAN_CONTEXT_BUDGET_TOKENS FOREMAN_MAX_CONTINUATIONS FOREMAN_TURN_TIMEOUT_MINUTES; do
   # No leading zeros ("08" is invalid octal to the shell's arithmetic, and would abort the loop).
   if ! [[ "${!_foreman_int}" =~ ^(0|[1-9][0-9]*)$ ]]; then
     echo "foreman: $_foreman_int must be a whole number (got '${!_foreman_int}')" >&2

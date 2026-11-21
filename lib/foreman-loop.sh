@@ -56,6 +56,7 @@
 # BUDGETS (all optional; 0 or unset means no limit)
 #   FOREMAN_MAX_COST_USD=25     pause before an iteration that would take the run over $25
 #   FOREMAN_MAX_MINUTES=180     pause before an iteration once 180 minutes have elapsed
+#   FOREMAN_TURN_TIMEOUT_MINUTES=60   end a turn that runs longer, then pause (default 60)
 #   <iterations> argument     pause after this many iterations (default: 1)
 #   --unlimited               no iteration cap; only cost/time budgets stop it
 #   + / - while it runs       one more / one fewer iteration (on a terminal; see foreman-keys.sh)
@@ -899,12 +900,14 @@ run_ctl_end() {
   [ "$RUN_CTL_WHERE" != git ] || rmdir "${RUN_CTL_DIR%/*}" 2>/dev/null
 }
 on_exit() {
+  # A watchdog sees its pipe close once this shell is gone anyway; this only waits for it.
+  [ -z "${TURN_WATCHDOG_PID:-}" ] || turn_watchdog_stop
   run_ctl_end
   # The status bar, if there is one: whole-screen scrolling back, before the shell's prompt.
   [[ "$BAR_CLOSE_ROWS" =~ ^[0-9]+$ ]] && [[ "$BAR_CLOSE_KEPT" =~ ^[12]$ ]] && ui_bar_close "$BAR_CLOSE_ROWS" "$BAR_CLOSE_KEPT"
   # The reader restores the terminal itself; this is for a reader that died too hard to.
   [ -z "$SAVED_STTY" ] || stty "$SAVED_STTY" 2>/dev/null
-  rm -rf "$VERDICT_FILE" "$PAYLOAD_FILE" "$PAYLOAD_FILE.status"
+  rm -rf "$VERDICT_FILE" "$PAYLOAD_FILE" "$PAYLOAD_FILE.status" "$PAYLOAD_FILE.timeout"
 }
 trap on_exit EXIT
 
@@ -1028,11 +1031,16 @@ loop_descendants() {    # loop_descendants PID
 # The group traps INT itself, so that it survives to write the status — and a trap, unlike the
 # ignore a script's `&` otherwise gives its job, is reset to the default in everything it starts.
 # And the wait is repeated until the job is gone: the INT trap in this shell ends a `wait` early too.
+#
+# Each turn also has a watchdog beside it, for FOREMAN_TURN_TIMEOUT_MINUTES (see turn_watchdog), and
+# says in TURN_TIMED_OUT whether it ran past that.
 TURN_PID=""
 TURN_STATUS=1
+TURN_TIMED_OUT=0
 run_turn() {    # run_turn PROMPT TICKET
   local prompt="$1" ticket="$2" st=""
   : > "$PAYLOAD_FILE.status"
+  rm -f "$PAYLOAD_FILE.timeout"
   {
     trap ':' INT
     exec_run "$prompt" "$ticket" </dev/null |
@@ -1040,11 +1048,17 @@ run_turn() {    # run_turn PROMPT TICKET
     printf '%s\n' "${PIPESTATUS[0]}" > "$PAYLOAD_FILE.status"
   } &
   TURN_PID=$!
+  # After the job has started, never before: the job must not hold the watchdog's pipe open.
+  turn_watchdog_start
   while :; do
     wait "$TURN_PID" 2>/dev/null
     kill -0 "$TURN_PID" 2>/dev/null || break
   done
   TURN_PID=""
+  turn_watchdog_stop
+  TURN_TIMED_OUT=0
+  [ ! -e "$PAYLOAD_FILE.timeout" ] || TURN_TIMED_OUT=1
+  rm -f "$PAYLOAD_FILE.timeout"
   read -r st 2>/dev/null < "$PAYLOAD_FILE.status"
   # No status: the job was ended too hard to write one.
   [[ "$st" =~ ^[0-9]+$ ]] || { st=1; [ "$PAUSE_REQUESTED" -eq 0 ] || st=130; }
@@ -1054,11 +1068,79 @@ run_turn() {    # run_turn PROMPT TICKET
 # TERM during a turn ends the turn instead of waiting it out: the agent, the filter and whatever
 # the agent started get the signal, as the terminal gives Ctrl-C to its whole group. The group that
 # runs them is left alone, to write the status. Everything after is the pause path an interrupt takes.
-end_turn() {
-  local p
+#
+# --force is for what TERM did not end (MSYS cannot hand a signal to a native Windows process):
+# `foreman stop --now`'s last step, stop_force in foreman-control.sh, which cannot be sourced —
+# `taskkill /F /T` on the Windows pid where there is one (it takes a native process's own children
+# with it), `kill -9` as well. Still never the group itself, which writes the status if it can.
+end_turn() {    # end_turn [--force]
+  local p winpid
   [ -n "$TURN_PID" ] || return 0
-  for p in $(loop_descendants "$TURN_PID"); do kill -TERM "$p" 2>/dev/null; done
+  for p in $(loop_descendants "$TURN_PID"); do
+    if [ "${1:-}" = --force ]; then
+      kill -0 "$p" 2>/dev/null || continue
+      winpid=""
+      read -r winpid 2>/dev/null < "/proc/$p/winpid"
+      if [[ "$winpid" =~ ^[0-9]+$ ]] && command -v taskkill >/dev/null 2>&1; then
+        MSYS_NO_PATHCONV=1 taskkill /F /T /PID "$winpid" >/dev/null 2>&1
+      fi
+      kill -9 "$p" 2>/dev/null
+    else
+      kill -TERM "$p" 2>/dev/null
+    fi
+  done
   return 0
+}
+
+# The turn timeout, FOREMAN_TURN_TIMEOUT_MINUTES (0 = none). A turn that hangs — an agent waiting
+# on something that will never come, a command that never returns — would otherwise hold the run
+# for good, with no one there to press Ctrl-C.
+#
+# The watchdog is a process substitution started beside each turn, reading its stdin: a pipe whose
+# other end only this shell holds. Its `read -t` ends one of two ways. EOF, at once, when run_turn
+# closes its end after the turn — and the end closes just the same when the loop dies any other way,
+# `kill -9` included, so the watchdog cannot outlive the run, and no `sleep` is left behind. Or the
+# timeout: the turn ran past its time. Then the watchdog leaves a mark for the loop beside the
+# turn's status file, and ends the turn the way TERM does (end_turn); if anything below the turn is
+# still there FOREMAN_STOP_GRACE seconds (default 5) later, it ends that by force, as `stop --now`
+# does. It ignores Ctrl-C, which is the loop's to answer: the watchdog stays until the turn is over.
+#
+# It decides nothing else. What the run does about a turn that timed out is the loop's, after the
+# turn, in one place: a stop or a usage limit that came at the same moment wins over the timeout
+# (see "decide what happens next"), so a race between them has one outcome.
+#
+# Only the agent's turn is timed. The sync steps around it (exec_collect, `sbx cp` and the like)
+# are not: they move work that exists nowhere else, and ending one half-way is worse than waiting.
+TURN_WATCHDOG_PID=""
+TURN_WATCHDOG_FD=""
+TURN_TIMEOUT_REASON="the turn ran past FOREMAN_TURN_TIMEOUT_MINUTES=${FOREMAN_TURN_TIMEOUT_MINUTES:-60}"
+turn_watchdog() {    # turn_watchdog SECONDS MARK_FILE : as the process substitution; TURN_PID is the turn's
+  local grace="${FOREMAN_STOP_GRACE:-5}" st=0
+  [[ "$grace" =~ ^[0-9]+$ ]] || grace=5
+  trap '' INT
+  read -r -t "$1" _ || st=$?
+  [ "$st" -gt 128 ] || return 0
+  kill -0 "$TURN_PID" 2>/dev/null || return 0
+  : > "$2"
+  end_turn
+  st=0
+  read -r -t "$grace" _ || st=$?
+  [ "$st" -gt 128 ] || return 0
+  end_turn --force
+}
+turn_watchdog_start() {
+  TURN_WATCHDOG_PID=""
+  [ "${FOREMAN_TURN_TIMEOUT_MINUTES:-60}" -gt 0 ] 2>/dev/null || return 0
+  exec {TURN_WATCHDOG_FD}> >(turn_watchdog \
+    "$(( FOREMAN_TURN_TIMEOUT_MINUTES * ${FOREMAN_TIMEOUT_UNIT_SECONDS:-60} ))" \
+    "$PAYLOAD_FILE.timeout" >/dev/null 2>&1)
+  TURN_WATCHDOG_PID=$!
+}
+turn_watchdog_stop() {
+  [ -n "$TURN_WATCHDOG_PID" ] || return 0
+  exec {TURN_WATCHDOG_FD}>&-
+  wait "$TURN_WATCHDOG_PID" 2>/dev/null
+  TURN_WATCHDOG_PID=""
 }
 on_term() {
   on_interrupt
@@ -1196,9 +1278,10 @@ checkpoint_discarded_note() {
 }
 
 # What to do about a checkpoint turn that failed to commit (outcome `failed`) because the turn
-# itself ran into the usage limit or was interrupted (Ctrl-C, `foreman stop --now`): the same
-# pause any iteration would take, not a refusal for a human. Returns 0 with FINAL_STATUS (and
-# PAUSE_REASON for a limit) set when it did, 1 when neither happened. Shared by the
+# itself ran into the usage limit, was interrupted (Ctrl-C, `foreman stop --now`) or ran past
+# FOREMAN_TURN_TIMEOUT_MINUTES: the same pause any iteration would take, not a refusal for a
+# human. Returns 0 with FINAL_STATUS (and PAUSE_REASON for a limit or a timeout) set when it did,
+# 1 when none of them happened. Shared by the
 # start-of-run review and the mid-run stall; the caller breaks out of the loop on 0, having
 # written the stall marker first so the next run tries the rescue again.
 checkpoint_paused() {
@@ -1211,6 +1294,11 @@ checkpoint_paused() {
   fi
   if [ "$PAUSE_REQUESTED" -eq 1 ]; then
     finish_paused
+    return 0
+  fi
+  # The checkpoint turn itself ran past FOREMAN_TURN_TIMEOUT_MINUTES: a pause too, for the same reason.
+  if [ "$TURN_TIMED_OUT" -eq 1 ]; then
+    finish_paused "$TURN_TIMEOUT_REASON"
     return 0
   fi
   return 1
@@ -1635,6 +1723,8 @@ while true; do
   mark_turn_in_flight
   run_turn "$FOREMAN_PROMPT" "$TICKET_FILE"
   agent_status=$TURN_STATUS
+  # Kept apart: a checkpoint turn below runs run_turn again, and sets TURN_TIMED_OUT for itself.
+  timed_out=$TURN_TIMED_OUT
   check_stop_file
   result=$(cat "$PAYLOAD_FILE")
   # The live view's row goes blank until the next agent starts, rather than showing a clock
@@ -1724,6 +1814,47 @@ while true; do
 
   if [ "$PAUSE_REQUESTED" -eq 1 ]; then
     finish_paused
+    break
+  fi
+
+  # 1a. The turn ran past FOREMAN_TURN_TIMEOUT_MINUTES, and its watchdog ended it (see
+  #     turn_watchdog). A hung agent, or one that will not finish in the time it was given:
+  #     either way not something to send another turn after unattended. What it left
+  #     uncommitted goes through the stall's checkpoint turn first, so that it is kept, and then
+  #     the run pauses for someone to look. Below the stop and the limit: when one of those came
+  #     at the same moment, it is the outcome, as it would have been without the timeout.
+  if [ "$timed_out" -eq 1 ]; then
+    warn ""
+    warn "$TICKET_FILE: $TURN_TIMEOUT_REASON, so foreman ended it."
+    if [ "$dirty" -eq 1 ]; then
+      warn "Running a checkpoint turn to commit the work it left, then pausing."
+      exec_show_dirty
+      run_checkpoint_turn
+      case "$CHECKPOINT_OUTCOME" in
+        stranded)
+          stranded_stop
+          break
+          ;;
+        discarded)
+          checkpoint_discarded_note
+          finish_needs_human
+          break
+          ;;
+        salvaged)
+          run_event salvaged "timed out, salvaged by a checkpoint turn" "$(git log -1 --format=%h "$HEAD_REF")"
+          ;;
+        *)
+          # Still uncommitted: the next run's review turn picks it up, as after a limit.
+          write_stall_marker "$TICKET_FILE" "$HEAD_REF"
+          warn "The checkpoint turn could not commit it either; the next run reviews it first."
+          ;;
+      esac
+      # A limit, a stop or a second timeout during the checkpoint turn is said as itself.
+      if checkpoint_paused; then
+        break
+      fi
+    fi
+    finish_paused "$TURN_TIMEOUT_REASON"
     break
   fi
 
