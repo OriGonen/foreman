@@ -281,15 +281,6 @@ test('stop: foreman stop <batch>; with now, --now before the batch', async () =>
   await assert.rejects(async () => f.stop('a b\\c'), (e) => e.kind === 'bad-batch');
 });
 
-test('controlIgnored asks git, from the repo root: 0 is ignored, 1 is not, anything else is an error', async () => {
-  const { f, calls } = setup({ code: 0, stdout: '', stderr: '' });
-  assert.equal(await f.controlIgnored('.scratch/gui'), true);
-  assert.deepEqual(calls[0].args, ['-c', 'git check-ignore -q -- "$1/.foreman-run/pid"', '_', '.scratch/gui']);
-  assert.equal(calls[0].opts.cwd, 'C:/Projects/app');
-  assert.equal((await setup({ code: 1, stdout: '', stderr: '' }).f.controlIgnored('b')), false);
-  await assert.rejects(setup({ code: 128, stdout: '', stderr: 'fatal: not a git repository\n' }).f.controlIgnored('b'), (e) => e.kind === 'exit');
-});
-
 // ---- time limits ----
 
 const { defaultRun, CALL_TIMEOUT_MS } = require('../foreman.cjs');
@@ -301,7 +292,6 @@ test('every CLI call is given a timeout and a kill signal; stop --now is given l
   await f.keys('b', '+');
   await f.stop('b');
   await f.stop('b', { now: true });
-  await f.controlIgnored('b');
   for (const c of calls) {
     assert.equal(c.opts.killSignal, 'SIGKILL', c.args.join(' '));
     assert.ok(c.opts.timeout >= 30000, `a generous timeout: ${c.args.join(' ')}`);
@@ -329,7 +319,7 @@ test('defaultRun still resolves with the exit code and streams for a process tha
 test('a timed-out call is a timeout, not "could not start bash", whichever call it was', async () => {
   const hung = () => { throw new ForemanError('timeout', 'foreman did not answer within 60 s and was stopped'); };
   const { f } = setup(hung);
-  for (const ask of [() => f.status('b'), () => f.keys('b', '+'), () => f.stop('b'), () => f.controlIgnored('b'), () => f.doctor()]) {
+  for (const ask of [() => f.status('b'), () => f.keys('b', '+'), () => f.stop('b'), () => f.doctor()]) {
     await assert.rejects(ask(), (e) => e.kind === 'timeout' && !/could not start/.test(e.message));
   }
   await assert.rejects(findRepoRoot({ bash: 'b', dir: 'd', run: hung }), (e) => e.kind === 'timeout');

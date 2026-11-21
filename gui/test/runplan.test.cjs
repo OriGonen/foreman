@@ -177,10 +177,9 @@ test('a cap that is not a whole number of minutes or dollars with two decimals i
   assert.equal(iter.blocked, iter.iterations.error);
 });
 
-test('Start is off, with the words, when the control directory is not ignored, a run is in flight, or nothing would run', () => {
-  const f = facts({ ignored: false });
-  assert.equal(R.view(f, base(f)).blocked, 'Starting from the app needs `doctor --fix`');
-  assert.equal(R.view(f, base(f)).button, 'Starting from the app needs `doctor --fix`', 'the disabled button itself reads it');
+test('Start is off, with the words, when a run is in flight or nothing would run; the ignore line is not needed', () => {
+  const f = facts();
+  assert.equal(R.view(f, base(f)).blocked, null);
   assert.match(R.view(facts({ inFlight: true }), base(f)).button, /^Start run · /, 'other reasons leave the button as it is');
   const g = facts({ inFlight: true });
   assert.match(R.view(g, base(g)).blocked, /already in flight/);
@@ -188,9 +187,12 @@ test('Start is off, with the words, when the control directory is not ignored, a
   dry.would_run.remaining = dry.would_run.remaining.slice(2);   // 07 (human) is next
   const h = facts({ dry });
   assert.match(R.view(h, base(h)).blocked, /Nothing would run/);
-  // the doctor reason wins over the rest: it is the one a person can act on
-  const both = facts({ ignored: false, inFlight: true });
-  assert.equal(R.view(both, base(both)).blocked, 'Starting from the app needs `doctor --fix`');
+  // a repository that does not ignore .foreman-run/ keeps the run's control directory under .git: Start works
+  const open = facts({ ignored: false });
+  assert.equal(R.view(open, base(open)).blocked, null);
+  assert.match(R.view(open, base(open)).button, /^Start run · /);
+  const busy = facts({ ignored: false, inFlight: true });
+  assert.match(R.view(busy, base(busy)).blocked, /already in flight/);
 });
 
 test('can reach: runnable tickets within the budget, then the human stop or the end of the budget', () => {

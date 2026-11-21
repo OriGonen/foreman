@@ -139,7 +139,7 @@ test('electron is the only dependency, pinned to an exact version, with no nativ
   }
 });
 
-test('the app writes the handoff and the run\'s own output file, and nothing else: only ticket.cjs writes, and runner.cjs only makes <batch>/.foreman-run/ and opens out', () => {
+test('the app writes the handoff and the run\'s own output file, and nothing else: only ticket.cjs writes, and runner.cjs only makes the control directory and opens out', () => {
   const writes = /\b(writeFile|writeFileSync|appendFile|appendFileSync|createWriteStream|mkdir|mkdirSync|rename|renameSync|unlink|unlinkSync|rm|rmSync|rmdir|rmdirSync|copyFile|copyFileSync|truncate|truncateSync)\b\s*\(/;
   const strip = (f) => read(f).replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
   for (const f of fs.readdirSync(here('.')).filter((n) => /\.(cjs|js)$/.test(n))) {
@@ -148,17 +148,18 @@ test('the app writes the handoff and the run\'s own output file, and nothing els
   }
   assert.match(strip('ticket.cjs'), /writeFileSync/, 'ticket.cjs is where the handoff is written');
 
-  // The run's stdout and stderr go to `<batch>/.foreman-run/out` (spec: Spawn). That is the only thing
+  // The run's stdout and stderr go to `out` in the run's control directory (`<batch>/.foreman-run/`, or under .git: spec: Spawn). That is the only thing
   // runner.cjs creates: the directory, and the file the process is handed. It writes no other file, and
   // never foreman.conf.
   const r = strip('runner.cjs');
   const used = [...r.matchAll(new RegExp(writes.source, 'g'))].map((m) => m[1]);
   assert.deepEqual([...new Set(used)], ['mkdirSync'], 'runner.cjs creates one directory and no file by writing');
-  assert.equal([...r.matchAll(/mkdirSync\(([^)]*)\)/g)].every((m) => /^ctlDir\(batch$/.test(m[1])), true, 'and that directory is the control directory');
-  assert.match(r, /ctlDir = \(batch\) => `\$\{repoRoot\}\/\$\{batch\}\/\$\{Ctl\.DIRNAME\}`/, 'which is <batch>/.foreman-run (lib/foreman-ctl.cjs)');
+  assert.equal([...r.matchAll(/mkdirSync\(([^)]*)\)/g)].every((m) => /^dir, \{ recursive: true \}$/.test(m[1])), true, 'and that directory is the control directory');
+  assert.match(r, /dir = ctlDir\(batch\)/, 'which is the one the CLI resolves');
+  assert.match(r, /ctlDir = \(batch\) => Ctl\.fullPath\(repoRoot, Ctl\.resolveDir\(repoRoot, batch, git\)\.dir\)/, '<batch>/.foreman-run or under .git (lib/foreman-ctl.cjs resolveDir)');
   assert.equal(require('../../lib/foreman-ctl.cjs').DIRNAME, '.foreman-run');
   assert.equal([...r.matchAll(/\bopenSync\(/g)].length, 1, 'runner.cjs opens one file');
-  assert.match(r, /openSync\(outPath\(batch\), 'w'\)/, 'and it is out, for writing');
+  assert.match(r, /openSync\(out, 'w'\)/, 'and it is out, for writing');
   assert.doesNotMatch(r, /foreman\.conf/, 'runner.cjs never names foreman.conf');
 });
 

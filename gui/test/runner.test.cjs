@@ -7,10 +7,15 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { EventEmitter } = require('node:events');
-const { createRunner, spawnPlan, checkRequest } = require('../runner.cjs');
+const { spawnSync } = require('node:child_process');
+const { createRunner, spawnPlan, checkRequest, bashGit } = require('../runner.cjs');
 
 const BASH = 'C:\\Program Files\\Git\\bin\\bash.exe';
 const ENV = { PATH: 'C:\\Windows', SECRET_TOKEN: 'hunter2', FOREMAN_SHOW: 'always', FOREMAN_COLOR: 'always', GIT_OPTIONAL_LOCKS: '1', SystemRoot: 'C:\\Windows' };
+
+// What git says in a repository that ignores **/.foreman-run/ (check-ignore exits 0): the control
+// directory is the batch's own, as it always was.
+const IGNORED = () => ({ status: 0, stdout: '' });
 
 function rig(over = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runner-'));
@@ -24,7 +29,7 @@ function rig(over = {}) {
     else setImmediate(() => child.emit('spawn'));
     return child;
   };
-  const runner = createRunner({ bash: BASH, checkout: 'C:\\tools\\foreman', repoRoot: root.replace(/\\/g, '/'), env: ENV, spawn });
+  const runner = createRunner({ bash: BASH, checkout: 'C:\\tools\\foreman', repoRoot: root.replace(/\\/g, '/'), env: ENV, spawn, git: over.git || IGNORED });
   return { root, spawned, runner };
 }
 
@@ -172,4 +177,107 @@ test('main.cjs hands start() an exitNotifier made from the runner it captured, a
   const m = fs.readFileSync(path.join(__dirname, '..', 'main.cjs'), 'utf8');
   assert.match(m, /const runner = ctx\.runner;\s*\n\s*const started = await runner\.start\(batch, request, exitNotifier\(\{/);
   assert.doesNotMatch(m, /ctx\.runner\.readOut/);
+});
+
+// ---- the control directory is where the CLI's resolver puts it (D4) ----
+
+const GIT = (cwd, args) => { const r = spawnSync('git', args, { cwd, encoding: 'utf8', windowsHide: true }); return { status: r.status, stdout: r.stdout }; };
+const sh = (cwd, ...args) => {
+  const r = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd, encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+};
+const fakeSpawn = (pid, spawned = []) => (file, args, opts) => {
+  const child = new EventEmitter();
+  child.pid = pid; child.unref = () => {};
+  spawned.push({ file, args, opts, child });
+  setImmediate(() => child.emit('spawn'));
+  return child;
+};
+const forward = (p) => p.replace(/\\/g, '/');
+
+function realRepo({ ignoreLine }) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runner-git-'));
+  sh(root, 'init', '-q');
+  fs.mkdirSync(path.join(root, '.scratch', 'b'), { recursive: true });
+  if (ignoreLine) fs.writeFileSync(path.join(root, '.gitignore'), '**/.foreman-run/\n');
+  const spawned = [];
+  const runner = createRunner({ bash: BASH, checkout: 'C:\\tools\\foreman', repoRoot: forward(root), env: ENV, spawn: fakeSpawn(7, spawned), git: GIT });
+  return { root, spawned, runner };
+}
+
+test('without the ignore line, a run starts, and its words go to <git-dir>/foreman-run/<key>/out, not into the batch', async () => {
+  const { root, spawned, runner } = realRepo({ ignoreLine: false });
+  const batch = '.scratch/b';
+  const r = await runner.start(batch, { iterations: 1, live: true });
+  assert.equal(r.pid, 7, 'not refused');
+  assert.equal(spawned.length, 1);
+  const out = path.join(root, '.git', 'foreman-run', '%2Escratch%2Fb', 'out');
+  assert.ok(fs.existsSync(out), 'the file exists for the run to write to, under the git directory');
+  assert.equal(fs.existsSync(path.join(root, batch, '.foreman-run')), false, 'nothing is put in the batch');
+  fs.writeFileSync(out, 'preflight: the working tree is dirty.\n');
+  assert.equal(runner.readOut(batch), 'preflight: the working tree is dirty.');
+  await runner.start(batch, { iterations: 1, live: true });
+  assert.equal(fs.readFileSync(out, 'utf8'), '', 'the previous run\'s text is replaced here too');
+});
+
+test('with the ignore line, the words still go to <batch>/.foreman-run/out', async () => {
+  const { root, runner } = realRepo({ ignoreLine: true });
+  await runner.start('.scratch/b', { iterations: 1, live: true });
+  assert.ok(fs.existsSync(path.join(root, '.scratch', 'b', '.foreman-run', 'out')));
+  assert.equal(fs.existsSync(path.join(root, '.git', 'foreman-run')), false);
+  assert.equal(runner.readOut('.scratch/b'), '');
+});
+
+test('in a worktree the control directory is under that worktree\'s own git directory (absolute)', async () => {
+  const main = fs.mkdtempSync(path.join(os.tmpdir(), 'runner-wt-main-'));
+  sh(main, 'init', '-q');
+  fs.mkdirSync(path.join(main, 'b'));
+  fs.writeFileSync(path.join(main, 'b', 'x'), 'x');
+  sh(main, 'add', '.');
+  sh(main, 'commit', '-q', '-m', 'one');
+  const wt = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'runner-wt-')), 'w');
+  sh(main, 'worktree', 'add', '-q', '-b', 'wtb', wt);
+  const runner = createRunner({ bash: BASH, checkout: 'C:\\tools\\foreman', repoRoot: forward(wt), env: ENV, spawn: fakeSpawn(8), git: GIT });
+  await runner.start('b', { iterations: 1 });
+  const gitDir = GIT(wt, ['rev-parse', '--git-dir']).stdout.trim();
+  assert.ok(path.isAbsolute(gitDir), 'a worktree has an absolute git dir');
+  const out = path.join(gitDir, 'foreman-run', 'b', 'out');
+  assert.ok(fs.existsSync(out), out);
+  assert.equal(runner.readOut('b'), '');
+});
+
+test('the end-of-run read finds out where start put it, even if the repository changed its mind meanwhile', async () => {
+  let ignored = false;
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runner-stick-'));
+  sh(root, 'init', '-q');
+  fs.mkdirSync(path.join(root, 'b'));
+  const git = (cwd, args) => (ignored && args[0] === 'check-ignore' ? { status: 0, stdout: '' } : GIT(cwd, args));
+  const runner = createRunner({ bash: BASH, checkout: 'C:\\tools\\foreman', repoRoot: forward(root), env: ENV, spawn: fakeSpawn(9), git });
+  await runner.start('b', { iterations: 1 });
+  fs.writeFileSync(path.join(root, '.git', 'foreman-run', 'b', 'out'), 'said this');
+  ignored = true;                                   // .gitignore gained the line while the run went
+  assert.equal(runner.readOut('b'), 'said this');
+});
+
+test('a repository with no git directory is reported, and nothing is started', async () => {
+  const bad = rig({ git: (cwd, args) => (args[0] === 'check-ignore' ? { status: 1, stdout: '' } : { status: 128, stdout: '' }) });
+  await assert.rejects(bad.runner.start('b', { iterations: 1 }), (e) => e.kind === 'spawn' && /no git directory/.test(e.message));
+  assert.equal(bad.spawned.length, 0);
+  assert.equal(bad.runner.readOut('b'), null);
+});
+
+test('bashGit runs git through Git Bash from the given directory, the way the app runs everything else', () => {
+  const calls = [];
+  const git = bashGit({ bash: BASH, env: ENV, spawnSync: (file, args, opts) => { calls.push({ file, args, opts }); return { status: 0, stdout: '.git\n' }; } });
+  assert.deepEqual(git('C:/p', ['rev-parse', '--git-dir']), { status: 0, stdout: '.git\n' });
+  assert.equal(calls[0].file, BASH);
+  assert.deepEqual(calls[0].args, ['-c', 'git "$@"', '_', 'rev-parse', '--git-dir']);
+  assert.equal(calls[0].opts.cwd, 'C:/p');
+  assert.equal(calls[0].opts.windowsHide, true);
+});
+
+test('main.cjs no longer refuses to start without the ignore line', () => {
+  const m = fs.readFileSync(path.join(__dirname, '..', 'main.cjs'), 'utf8');
+  assert.doesNotMatch(m, /not-ignored/);
+  assert.doesNotMatch(m, /controlIgnored/);
 });

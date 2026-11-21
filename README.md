@@ -970,9 +970,9 @@ variable, as `FOREMAN_MAX_COST_USD=10 foreman run <batch>` would be; the app nev
 `foreman.conf`, and the next confirmation starts again from the file. **Stop after this one**
 lets the iteration in flight finish (and be paid for); **Stop now…** asks first.
 
-Start run needs the control directory to be in the batch (below), because the app keeps the run's own
-output there (`out`). Without it the button reads
-"Starting from the app needs `doctor --fix`", and the overview says "Steering needs `doctor --fix`".
+Start run works with or without the ignore line (below). The app keeps the run's own output (`out`)
+in the run's control directory, wherever the CLI puts it: `<batch>/.foreman-run/` when the repository
+ignores that, else under the git directory.
 
 ### What it added to the CLI
 
@@ -1116,8 +1116,7 @@ The ignore line is `**/.foreman-run/`, with a comment above it. `foreman doctor`
 `doctor --fix` appends it, and `foreman init` writes it, **only when the app is installed**. On a
 machine without the app, `doctor`, `init` and `--fix` behave and print exactly as before. The line
 is recommended, not required: without it the run keeps its control directory under the git
-directory, and the one-run lock, `keys`, `stop` and the app's live view work the same. Only the
-app's Start run asks for it.
+directory, and the one-run lock, `keys`, `stop`, the app's live view and its Start run work the same.
 
 #### `foreman keys`
 

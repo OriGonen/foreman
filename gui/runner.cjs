@@ -6,14 +6,16 @@
 //
 //   <bash.exe> <checkout>/bin/foreman run <batch> <n|--unlimited> [--live]
 //
-// with its working directory the repository root, stdin ignored, stdout and stderr in
-// `<batch>/.foreman-run/out` (which the CLI leaves alone when the run ends, so a preflight failure can
-// still be read), and in its environment the app's own, whole — what a run started in a terminal has, RALPH_* knobs, proxy,
+// with its working directory the repository root, stdin ignored, stdout and stderr in `out` in the
+// run's control directory (which the CLI leaves alone when the run ends, so a preflight failure can
+// still be read): `<batch>/.foreman-run/` when the repository ignores that, else under the git
+// directory (`.git/foreman-run/<key>`), the one answer lib/foreman-ctl.cjs resolveDir gives the CLI,
+// asked of git through Git Bash when the run starts. And in its environment the app's own, whole — what a run started in a terminal has, RALPH_* knobs, proxy,
 // ssh agent and credentials included (the whitelist is for the read-only `--json` calls only) — with
 // FOREMAN_SHOW=never, FOREMAN_COLOR=never, GIT_OPTIONAL_LOCKS=0, and the caps the person edited for this run only.
 // foreman.conf is never written.
 const nodeFs = require('fs');
-const { spawn: nodeSpawn } = require('child_process');
+const { spawn: nodeSpawn, spawnSync: nodeSpawnSync } = require('child_process');
 const RP = require('./runplan.js');
 // The control directory's names; the app runs from the git checkout (ADR 0004), so lib/ is beside it.
 const Ctl = require('../lib/foreman-ctl.cjs');
@@ -33,6 +35,15 @@ function runEnv(base, plan) {
   const env = {};
   for (const [k, v] of Object.entries(base)) if (v !== undefined) env[k] = v;
   return Object.assign(env, RUN_FORCED, RP.capEnv(plan));
+}
+
+// git, as resolveDir wants it: `(cwd, args) => { status, stdout }`, run through Git Bash like every other
+// call the app makes, so it needs no git on the app's own PATH. The tests hand in their own.
+function bashGit({ bash, env = process.env, spawnSync = nodeSpawnSync }) {
+  return (cwd, args) => {
+    const r = spawnSync(bash, ['-c', 'git "$@"', '_', ...args], { cwd, env, encoding: 'utf8', windowsHide: true });
+    return { status: r.status, stdout: r.stdout };
+  };
 }
 
 // What to do when the run ends: the callback `start` is given. It is bound to the runner (and so the
@@ -59,9 +70,13 @@ function spawnPlan({ bash, checkout, repoRoot, batch, plan, env = process.env })
   };
 }
 
-function createRunner({ bash, checkout, repoRoot, env = process.env, spawn = nodeSpawn, fs = nodeFs }) {
-  const ctlDir = (batch) => `${repoRoot}/${batch}/${Ctl.DIRNAME}`;
-  const outPath = (batch) => Ctl.filePath(ctlDir(batch), Ctl.FILES.out);
+function createRunner({ bash, checkout, repoRoot, env = process.env, spawn = nodeSpawn, fs = nodeFs, git = bashGit({ bash, env }) }) {
+  // The control directory the run of a batch uses, as a path to open: asked of resolveDir (it may throw
+  // when git names no git directory). Start remembers it, so the end of the run reads `out` from where
+  // the run put it even if the repository's ignore line changed meanwhile.
+  const started = new Map();
+  const ctlDir = (batch) => Ctl.fullPath(repoRoot, Ctl.resolveDir(repoRoot, batch, git).dir);
+  const outPath = (dir) => Ctl.filePath(dir, Ctl.FILES.out);
 
   return {
     // Start the run. Resolves with { pid, command } once the process exists (not when it ends), and
@@ -71,12 +86,15 @@ function createRunner({ bash, checkout, repoRoot, env = process.env, spawn = nod
       const p = spawnPlan({ bash, checkout, repoRoot, batch, plan, env });
       const command = RP.command(batch, plan).full;
       return new Promise((resolve, reject) => {
-        let fd;
+        let fd, dir, out = '';
         try {
-          fs.mkdirSync(ctlDir(batch), { recursive: true });
-          fd = fs.openSync(outPath(batch), 'w');          // the previous run's words are replaced, not appended to
+          dir = ctlDir(batch);
+          out = outPath(dir);
+          fs.mkdirSync(dir, { recursive: true });
+          fd = fs.openSync(out, 'w');                     // the previous run's words are replaced, not appended to
+          started.set(batch, dir);
         } catch (e) {
-          reject(new ForemanError('spawn', `could not open ${outPath(batch)}: ${e.message}`, { cause: e }));
+          reject(new ForemanError('spawn', `could not open ${out || `the control directory of ${batch}`}: ${e.message}`, { cause: e }));
           return;
         }
         const done = () => { try { fs.closeSync(fd); } catch { /* already closed */ } };
@@ -104,11 +122,14 @@ function createRunner({ bash, checkout, repoRoot, env = process.env, spawn = nod
     // text for a run that never began. null when there is no such file.
     readOut(batch, max = 4000) {
       let text;
-      try { text = fs.readFileSync(outPath(checkBatchPath(batch)), 'utf8'); } catch { return null; }
+      try {
+        const ok = checkBatchPath(batch);
+        text = fs.readFileSync(outPath(started.get(ok) || ctlDir(ok)), 'utf8');
+      } catch { return null; }
       const tail = text.length > max ? text.slice(text.length - max) : text;
       return plainText(tail);
     },
   };
 }
 
-module.exports = { createRunner, spawnPlan, checkRequest, exitNotifier, RUN_FORCED };
+module.exports = { createRunner, spawnPlan, checkRequest, exitNotifier, bashGit, RUN_FORCED };

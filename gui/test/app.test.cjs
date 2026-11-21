@@ -1613,13 +1613,11 @@ test('the dry run screen\'s Start run… opens the same confirmation', async () 
   assert.ok(text(app).includes('Start a run'));
 });
 
-test('without **/.foreman-run/ ignored, Start run is off and says why; so it is while a run is in flight', async () => {
-  const off = await openConfirmation(fakeApi(data(), undefined, undefined, {}, {}, { confirm: () => ({ ok: true, doc: confirmFacts({ ignored: false }) }) }));
-  assert.equal(startButton(off.app).disabled, true);
-  assert.ok(text(off.app).includes('Starting from the app needs `doctor --fix`'));
-  assert.equal(startButton(off.app).title, 'Starting from the app needs `doctor --fix`');
-  assert.equal(startButton(off.app).textContent, 'Starting from the app needs `doctor --fix`', 'the button reads it');
-  assert.equal(text(off.app).split('Starting from the app needs `doctor --fix`').length - 1, 1, 'said on the button, not again in a note beside it');
+test('without **/.foreman-run/ ignored, Start run is on (the control directory is under .git); it is off while a run is in flight', async () => {
+  const open = await openConfirmation(fakeApi(data(), undefined, undefined, {}, {}, { confirm: () => ({ ok: true, doc: confirmFacts({ ignored: false }) }) }));
+  assert.equal(startButton(open.app).disabled, false);
+  assert.ok(!text(open.app).includes('doctor --fix'));
+  assert.match(startButton(open.app).textContent, /^Start run · /);
   const busy = await openConfirmation(fakeApi(data(), undefined, undefined, {}, {}, { confirm: () => ({ ok: true, doc: confirmFacts({ inFlight: true }) }) }));
   assert.equal(startButton(busy.app).disabled, true);
 });

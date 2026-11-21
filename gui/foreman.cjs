@@ -17,7 +17,6 @@
 // `keys` and `stop`, which print words, not JSON, and are free (they only write the run's control files).
 // Starting a run is runner.cjs.
 const { execFile } = require('child_process');
-const Ctl = require('../lib/foreman-ctl.cjs');
 
 const SUPPORTED_JSON = 1;
 
@@ -196,22 +195,6 @@ function createForeman({ bash, checkout, repoRoot, run = defaultRun, env = proce
     // keeps the ticket's uncommitted work, and the next run reviews it). `stop --now` waits for the run
     // to end, up to a minute. Free.
     stop: (batch, { now = false } = {}) => words('stop', [...(now ? ['--now'] : []), checkBatchPath(batch)], now ? STOP_NOW_TIMEOUT_MS : CALL_TIMEOUT_MS),
-    // Whether the repository ignores the batch's control directory (`**/.foreman-run/`): without it a
-    // run cannot be steered from here, and the app's own `out` would show up as a change. Asked of git,
-    // as the loop asks it.
-    controlIgnored: async (batch) => {
-      let out;
-      try {
-        out = await run(bash, ['-c', `git check-ignore -q -- "$1/${Ctl.DIRNAME}/${Ctl.FILES.pid}"`, '_', checkBatchPath(batch)], {
-          cwd: repoRoot, env: cliEnv(env), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], timeout: CALL_TIMEOUT_MS, killSignal: 'SIGKILL',
-        });
-      } catch (e) {
-        throw startFailure(bash, e);
-      }
-      if (out.code === 0) return true;
-      if (out.code === 1) return false;
-      throw new ForemanError('exit', plainText(out.stderr) || `git check-ignore exited ${out.code}`, { code: out.code });
-    },
     doctor: () => call('doctor', ['--json']),
     doctorFix: () => call('doctor', ['--fix', '--json']),
   };

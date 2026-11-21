@@ -37,8 +37,8 @@ contextBridge.exposeInMainWorld('foreman', {
   // was written; saving again with base = disk overwrites), or { ok: false, error }.
   saveHandoff: (batch, name, text, base) => ipcRenderer.invoke('ticket:save', batch, name, text, base === undefined ? null : base),
   // ---- starting, watching and steering a run ----
-  // What the confirmation says: `dry-run --json`, whether `**/.foreman-run/` is ignored, whether a run is
-  // already going, the batch's foreman.conf and the caps the app's environment carries. Free.
+  // What the confirmation says: `dry-run --json`, whether a run is already going, the batch's
+  // foreman.conf and the caps the app's environment carries. Free.
   // Answers { ok: true, doc } or { ok: false, error }.
   runConfirm: (batch) => ipcRenderer.invoke('run:confirm', batch),
   // Start a run — the only call that costs money. `request` is { iterations: n | null, live, caps: { cost,

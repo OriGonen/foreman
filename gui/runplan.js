@@ -141,7 +141,7 @@
   // The starting state of the confirmation, from what main read; and `view` to turn that and the
   // person's edits into what is drawn. `facts` is
   //   { dry: <dry-run --json>, confText, env: { FOREMAN_MAX_COST_USD, FOREMAN_MAX_MINUTES },
-  //     ignored: bool (`**/.foreman-run/` is ignored), inFlight: bool }
+  //     inFlight: bool }
   // `edits` is { iterations: text | 'unlimited', cost: text | null, minutes: text | null, live: bool }.
   function start(facts) {
     const s = facts.dry.settings;
@@ -196,14 +196,12 @@
 
     const cmd = command(batch, plan);
     const spendCap = costF.error ? null : costF.value;
-    const NEEDS_FIX = 'Starting from the app needs `doctor --fix`';
-    let button = costF.error ? 'Start run' : (spendCap > 0 ? `Start run · up to ${usd(spendCap)}` : 'Start run · no spend cap');
+    const button = costF.error ? 'Start run' : (spendCap > 0 ? `Start run · up to ${usd(spendCap)}` : 'Start run · no spend cap');
 
-    // Why Start is off, if it is — the first reason only. Without the ignore line the button itself
-    // says so; the other reasons are said beside it.
+    // Why Start is off, if it is — the first reason only, said beside the button. (The ignore line is
+    // not one: without it the run's control directory is under .git.)
     let blocked = null;
-    if (!facts.ignored) { blocked = NEEDS_FIX; button = NEEDS_FIX; }
-    else if (facts.inFlight) blocked = 'A run is already in flight in this batch';
+    if (facts.inFlight) blocked = 'A run is already in flight in this batch';
     else if (!it.ok) blocked = it.message;
     else if (costF.error) blocked = costF.error;
     else if (minF.error) blocked = minF.error;

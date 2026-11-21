@@ -234,9 +234,8 @@ ipcMain.handle('ticket:save', async (event, batch, name, text, base) => {
 
 // ---- starting, watching and steering a run (ticket 10) ----
 //
-// The confirmation's facts: what a run would do (`dry-run --json`, free), whether the repository ignores
-// the control directory, whether a run is already going, the batch's foreman.conf and the caps the
-// app's own environment carries (for "where it is set"). The page words them (runplan.js).
+// The confirmation's facts: what a run would do (`dry-run --json`, free), whether a run is already going,
+// the batch's foreman.conf and the caps the app's own environment carries (for "where it is set"). The page words them (runplan.js).
 function readConf(batch) {
   try { return Conf.readBatchConf(fs, `${ctx.repoRoot}/${checkBatchPath(batch)}`) || ''; } catch { return ''; }
 }
@@ -246,27 +245,25 @@ ipcMain.handle('run:confirm', async (event, batch) => {
   try {
     if (!ctx) await setup();
     checkBatchPath(batch);
-    const [dry, ignored] = await Promise.all([ctx.foreman.dryRun(batch), ctx.foreman.controlIgnored(batch)]);
+    const dry = await ctx.foreman.dryRun(batch);
     const known = ctx.overview.statusOf(batch);
     const env = {};
     for (const k of ['MAX_COST_USD', 'MAX_MINUTES']) for (const p of ['FOREMAN', 'RALPH']) env[`${p}_${k}`] = process.env[`${p}_${k}`];
-    return { ok: true, doc: { dry, ignored, inFlight: !!(known && known.run && known.run.in_flight), confText: readConf(batch), env } };
+    return { ok: true, doc: { dry, inFlight: !!(known && known.run && known.run.in_flight), confText: readConf(batch), env } };
   } catch (e) {
     return { ok: false, error: describe(e) };
   }
 });
 
-// The one place a run is started. The request is checked again here (runplan.js), the control
-// directory and the run in flight are asked afresh, and the process is detached: the window closing
+// The one place a run is started. The request is checked again here (runplan.js), the run in flight is
+// asked afresh (the control directory is the runner's to resolve, in the batch or under .git: no ignore
+// line is needed), and the process is detached: the window closing
 // does not stop it.
 ipcMain.handle('run:start', async (event, batch, request) => {
   if (!trusted(event)) return { ok: false, error: describe(new Error('refused')) };
   try {
     if (!ctx) await setup();
     checkBatchPath(batch);
-    if (!(await ctx.foreman.controlIgnored(batch))) {
-      throw new ForemanError('not-ignored', 'Starting from the app needs `doctor --fix`: the repository does not ignore **/.foreman-run/.');
-    }
     const status = await ctx.foreman.status(batch);
     if (status.run && status.run.in_flight) throw new ForemanError('in-flight', 'A run is already in flight in this batch.');
     // The run's own runner, taken now: when it ends the app may have been pointed at another repository.
