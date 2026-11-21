@@ -19,7 +19,7 @@ const { createWatcher } = require('./watch.cjs');
 const { createOverview } = require('./overview.cjs');
 const { createTicketFiles } = require('./ticket.cjs');
 const { createRunner, exitNotifier } = require('./runner.cjs');
-const { createLive, onlyControlFiles } = require('./live.cjs');
+const { createLive, onlyControlFiles, controlWatchDir } = require('./live.cjs');
 const { checkBatchPath } = require('./foreman.cjs');
 const { createConditions } = require('./conditions.cjs');
 const Conf = require('./conf.js');
@@ -71,12 +71,18 @@ async function setup() {
   watcher = createWatcher({
     // A change to anything in a batch — a status line flipped in an editor, the loop landing a
     // ticket — is a reason to read again. A change only to a run's feed, activity or budget is a
-    // reason to read the control directory again, and nothing else.
-    dirs: async () => (await overview.dirs()).map((p) => repoPath(repoRoot, p)),
+    // reason to read the control directory again, and nothing else. A run whose control directory is
+    // under the git directory (the repository does not ignore .foreman-run/) has it watched too.
+    dirs: async () => {
+      const batches = (await overview.dirs()).map((p) => repoPath(repoRoot, p));
+      const known = overview.selected ? overview.statusOf(overview.selected) : null;
+      const ctl = controlWatchDir(repoRoot, known && known.run);
+      return ctl ? batches.concat(ctl) : batches;
+    },
     read: async (changes) => {
       const batch = overview.selected;
       const known = batch ? overview.statusOf(batch) : null;
-      if (known && known.run && known.run.in_flight && onlyControlFiles(changes)) {
+      if (known && known.run && known.run.in_flight && onlyControlFiles(changes, controlWatchDir(repoRoot, known.run))) {
         return { overview: null, run: await ctx.live.read({ batch, run: known.run, next: known.next, record: false }) };
       }
       const data = await overview.refresh();

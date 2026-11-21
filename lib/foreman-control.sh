@@ -15,11 +15,12 @@
 #   -  _    one fewer — never below the iteration already running
 #   L  l    live view on / off
 #
-# They can only reach a run whose control directory is `<batch>/.foreman-run/`, which is where the
-# loop puts it when the repository ignores `**/.foreman-run/` (see foreman-loop.sh). Without a run
-# in flight there, each exits 1 with one line saying so. A run is in flight when the pid in the
-# directory's `pid` file is alive and is still that run (run_pid_alive, foreman-config.sh): a stale
-# file whose pid another program has taken is no run, and that program is never signalled.
+# They find the run's control directory where the loop put it, by the same question (ctl_dir in
+# foreman-ctl.sh): `<batch>/.foreman-run/` when the repository ignores that name, under the git
+# directory otherwise. Without a run in flight there, each exits 1 with one line saying so. A run is
+# in flight when the pid in the directory's `pid` file is alive and is still that run (run_pid_alive,
+# foreman-ctl.sh): a stale file whose pid another program has taken is no run, and that program is
+# never signalled.
 #
 # `stop --now` is for a run that has no terminal to press Ctrl-C in: the app starts it detached, with
 # no console. Ctrl-C does three things, and this does the same three from outside, keeping the loop's
@@ -88,8 +89,8 @@ esac
 # shellcheck source=foreman-config.sh
 source "$FOREMAN_TOOL_DIR/foreman-config.sh" || exit 1
 
-ctl_rel_dir "$BATCH_DIR" CTL
-CTL="$REPO_ROOT/$CTL"
+ctl_dir "$BATCH_DIR" CTL || { echo "foreman $CMD: git names no git directory for $REPO_ROOT" >&2; exit 1; }
+ctl_full "$CTL" CTL
 
 ctl_read_pid "$CTL"
 loop_pid="$CTL_PID_MSYS" loop_win="$CTL_PID_WIN"
@@ -98,7 +99,7 @@ loop_pid="$CTL_PID_MSYS" loop_win="$CTL_PID_WIN"
 # taken, and that program is never signalled.
 loop_alive() { run_pid_alive "$loop_pid" "$loop_win"; }
 if ! loop_alive; then
-  echo "foreman $CMD: no run in flight in $BATCH_DIR, or its control directory is not in the batch (that needs **/.foreman-run/ in .gitignore)" >&2
+  echo "foreman $CMD: no run in flight in $BATCH_DIR" >&2
   exit 1
 fi
 

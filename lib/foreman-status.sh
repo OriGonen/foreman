@@ -95,12 +95,14 @@ status_json_facts() {
     printf 'ticket\t%s\t%s\t%s\t%s\t%s\t%s\n' "$state" "${ticket//\\//}" "$done_t" "$human_t" "$checks_t" "${line//\\//}"
   done < <(next_sh --all)
   printf 'humans\t%s\n' "$humans"
-  # Where a run in flight would keep its control directory in this batch (see where the run makes
-  # it), and whether the run its `pid` file names is alive, by the rule `foreman stop` and the start
-  # guard use (run_pid_alive): foreman-json.cjs only reads the rest of the directory's files.
-  ctl_rel_dir "$BATCH_DIR" line
+  # Where a run in flight in this batch keeps its control directory (ctl_dir, the loop's own answer:
+  # repo-relative, or absolute for a worktree's git directory), and whether the run its `pid` file
+  # names is alive, by the rule `foreman stop` and the start guard use (run_pid_alive):
+  # foreman-json.cjs only reads the rest of the directory's files.
+  ctl_dir "$BATCH_DIR" line
   printf 'runctl\t%s\n' "${line//\\//}"
-  ctl_read_pid "$REPO_ROOT/$line"
+  ctl_full "$line" line
+  ctl_read_pid "$line"
   if run_pid_alive "$CTL_PID_MSYS" "$CTL_PID_WIN"; then printf 'runalive\t1\n'; else printf 'runalive\t0\n'; fi
   if [ -n "$stop" ]; then printf 'until\t%s\t%s\n' "$until_count" "$stop"; fi
   if [ -n "$next" ] && foreman_ticket_needs_human "$next"; then

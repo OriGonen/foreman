@@ -1758,7 +1758,7 @@ fi
 
 # A repository of $2 tickets whose .gitignore also ignores `**/.foreman-run/` (as `doctor --fix` does
 # once the app is installed), so a run keeps its control directory in the batch. `plain` leaves the
-# line out, and the run keeps a temporary directory, as it always did.
+# line out, and the run keeps it under the git directory, `.git/foreman-run/<key>` (foreman-ctl.sh).
 ctl_repo() {    # ctl_repo REPO TICKETS [ignored|plain]
   copy_fixture "$WORK/template" "$1" "$2"
   if [ "${3:-ignored}" = ignored ]; then
@@ -1828,20 +1828,25 @@ if case_is "control directory: in the batch when .foreman-run/ is ignored, with 
   [ -e "$ctl" ] && fail "the directory is gone when the run ends" || pass
 fi
 
-if case_is "control directory: a repo that does not ignore .foreman-run/ keeps today's temporary directory, and nothing else changes"; then
-  repo="$WORK/ctl-out"; ctl_repo "$repo" 2 plain
+if case_is "control directory: a repo that does not ignore .foreman-run/ keeps it under .git, steerable, and nothing else changes"; then
+  repo="$WORK/ctl-out"; ctl_repo "$repo" 3 plain
+  ctl="$repo/.git/foreman-run/batch"
   rm -rf "$WORK"/tmp.*
   BG_ENV=(FOREMAN_FAKE_SLEEP=2); bg_run "$repo" batch 1
-  wait_until 30 bash -c "ls '$WORK'/tmp.*/pid >/dev/null 2>&1" && pass || fail "the run keeps a mktemp directory"
+  wait_until 30 file_is "$ctl/iteration" 1 && pass || fail "the run is at iteration 1 in .git/foreman-run/batch"
+  [ -s "$ctl/pid" ] && [ -s "$ctl/run" ] && pass || fail "with its pid and run files there"
   [ -e "$repo/batch/.foreman-run" ] && fail "nothing is made in the batch" || pass
+  # (Directories only: the loop's verdict and payload files are temporary files, as they always were.)
+  assert_eq "$(find "$WORK" -maxdepth 1 -type d -name 'tmp.*' 2>/dev/null | wc -l | tr -d ' ')" 0 "nor a temporary directory"
   assert_eq "$(git -C "$repo" status --porcelain)" "" "and the tree is clean"
-  bg_wait
-  assert_eq "$BG_ST" 10 "the run ends as it always did"
-  assert_eq "$(ls -d "$WORK"/tmp.* 2>/dev/null | wc -l | tr -d ' ')" 0 "and the temporary directory is removed"
-
-  # Not steerable, and the answer says so in one line.
+  # Steerable from outside, as in the batch.
   run_foreman "$repo" keys batch +
-  assert_eq "$ST" 1 "keys: a run whose directory is outside the batch cannot be reached"
+  assert_eq "$ST" 0 "keys: the run is reached"
+  assert_eq "$(cat "$ctl/budget")" 2 "+: the budget is 2"
+  bg_wait
+  assert_eq "$BG_ST" 10 "the run pauses at the budget the key left it"
+  assert_contains "$BG_OUT" "iterations run:        2" "after two iterations"
+  [ -e "$repo/.git/foreman-run" ] && fail "and nothing is left under .git/foreman-run" || pass
 fi
 
 if case_is "control directory: a live run in the batch keeps its directory, and a run that was killed leaves nothing in the way"; then
@@ -1989,11 +1994,12 @@ if case_is "foreman keys: no run in flight, a directory not in the batch, a dead
   assert_eq "$(jv "$OUT" 'j.run.in_flight')" false "status --json: a dead run is not in flight"
   assert_eq "$(jv "$OUT" 'j.run.control_dir')" null "status --json: and has no control directory to show"
 
-  # A run that keeps its directory outside the batch: the repo does not ignore the name.
+  # A repo that does not ignore the name keeps the directory under .git: with no run there, the same line.
   repo="$WORK/keys-plain"; ctl_repo "$repo" 2 plain
   run_foreman "$repo" keys batch +
-  assert_eq "$ST" 1 "a directory outside the batch: exits 1"
-  assert_contains "$ERR" ".foreman-run/ in .gitignore" "it says what the batch lacks"
+  assert_eq "$ST" 1 "no run, directory under .git: exits 1"
+  assert_contains "$ERR" "foreman keys: no run in flight in batch" "no run, directory under .git: says so"
+  assert_missing "$ERR" ".gitignore" "and asks for no .gitignore line"
 
   run_foreman "$repo" keys batch x
   assert_eq "$ST" 1 "an unknown key: exits 1"

@@ -1,6 +1,7 @@
 'use strict';
 // Rebuilds the live run screen from files, whenever it is asked to: the run's control directory
-// (`<batch>/.foreman-run/`: budget, iteration, live, activity, feed — see lib/foreman-ctl.sh), the
+// (`<batch>/.foreman-run/`, or under the git directory when the repository does not ignore that:
+// budget, iteration, live, activity, feed — see lib/foreman-ctl.sh), the
 // iterations the run has finished with the words the CLI uses for how each came out (`report --json
 // --run <id>`, which reads foreman-runs.jsonl), and the run that `status --json` found in flight. It
 // keeps nothing the files do not have, apart from the last report it read — an iteration only ends
@@ -10,6 +11,7 @@
 // appended to), or says something odd reads as absent, never as an error: the screen shows what it
 // has and the next change reads again.
 const nodeFs = require('fs');
+const path = require('path');
 const Conf = require('./conf.js');
 // The control directory's names. The app runs from the git checkout (ADR 0004, `main.cjs` finds bin/foreman
 // at `..`), so lib/ is always beside it.
@@ -85,7 +87,7 @@ function createLive({ repoRoot, foreman, fs = nodeFs, env = process.env }) {
     // record. `next` is `status.next` (the ticket the loop would take, which is the one running).
     async read({ batch, run, next = null, record = true }) {
       if (!run || !run.in_flight) { lastReport = null; return null; }
-      const dir = run.control_dir ? `${repoRoot}/${run.control_dir}` : null;
+      const dir = run.control_dir ? Ctl.fullPath(repoRoot, run.control_dir) : null;
       const control = dir ? readControl(dir, fs) : null;
       let rep = lastReport && lastReport.batch === batch && lastReport.runId === run.id ? lastReport : null;
       if (record || !rep) rep = await iterations(batch, run.id);
@@ -105,12 +107,28 @@ function createLive({ repoRoot, foreman, fs = nodeFs, env = process.env }) {
 // goes (the feed, the activity line, the budget...) are the many, and cost nothing to read: main reads
 // them from disk, with no process. The ones that say a run began or ended (`pid`, `run`) and anything
 // outside the directory (a ticket, the record, the log) are a reason to ask foreman again. `changes` is
-// what watch.cjs hands its read: [{ dir, name }].
+// what watch.cjs hands its read: [{ dir, name }]. `controlDir` is the run's control directory when it
+// is watched on its own (controlWatchDir): a change there, named relative to it, is one of its files.
 const CONTROL_PREFIX = `${Ctl.DIRNAME}/`;
-const CONTROL_STARTS_OR_ENDS = new Set([Ctl.FILES.pid, Ctl.FILES.run].map((n) => `${CONTROL_PREFIX}${n}`));
-function onlyControlFiles(changes) {
-  return Array.isArray(changes) && changes.length > 0
-    && changes.every((c) => c && typeof c.name === 'string' && c.name.startsWith(CONTROL_PREFIX) && !CONTROL_STARTS_OR_ENDS.has(c.name));
+const STARTS_OR_ENDS = new Set([Ctl.FILES.pid, Ctl.FILES.run]);
+function onlyControlFiles(changes, controlDir = null) {
+  const one = (c) => {
+    if (!c || typeof c.name !== 'string') return false;
+    if (controlDir && c.dir === controlDir) return !STARTS_OR_ENDS.has(c.name);
+    return c.name.startsWith(CONTROL_PREFIX) && !STARTS_OR_ENDS.has(c.name.slice(CONTROL_PREFIX.length));
+  };
+  return Array.isArray(changes) && changes.length > 0 && changes.every(one);
 }
 
-module.exports = { onlyControlFiles, createLive, readControl, parseFeed, capsFromConf };
+// The directory to watch for a run in flight besides the batches, as a Windows path (the way main
+// spells the batches it watches): its control directory when that is not in the batch, which is when
+// the repository does not ignore `.foreman-run/` and the loop keeps it under the git directory
+// (lib/foreman-ctl.sh ctl_dir). null otherwise: a `<batch>/.foreman-run/` is in the batch's own watch.
+function controlWatchDir(repoRoot, run) {
+  if (!run || !run.in_flight || !run.control_dir) return null;
+  const dir = String(run.control_dir);
+  if (dir === Ctl.DIRNAME || dir.endsWith(`/${Ctl.DIRNAME}`)) return null;
+  return path.win32.normalize(Ctl.fullPath(repoRoot, dir).replace(/\//g, '\\'));
+}
+
+module.exports = { onlyControlFiles, controlWatchDir, createLive, readControl, parseFeed, capsFromConf };

@@ -970,7 +970,8 @@ variable, as `FOREMAN_MAX_COST_USD=10 foreman run <batch>` would be; the app nev
 `foreman.conf`, and the next confirmation starts again from the file. **Stop after this one**
 lets the iteration in flight finish (and be paid for); **Stop now…** asks first.
 
-Start run needs the control directory to be in the batch (below). Without it the button reads
+Start run needs the control directory to be in the batch (below), because the app keeps the run's own
+output there (`out`). Without it the button reads
 "Starting from the app needs `doctor --fix`", and the overview says "Steering needs `doctor --fix`".
 
 ### What it added to the CLI
@@ -1094,9 +1095,12 @@ of one, is never in it. `doctor --fix --json` adds a `fix` object saying what it
 #### The control directory
 
 A running loop keeps its live budget, live switch, iteration and the rest in a **control
-directory**. In a terminal it is a temporary directory only that terminal's keys can reach. When
-the repository ignores `**/.foreman-run/`, it is `<batch>/.foreman-run/` instead, and that is what
-lets another process (the app, `foreman keys`, `foreman stop`) steer the run. It holds today's
+directory**, where another process (the app, `foreman keys`, `foreman stop`, `status --json`) finds
+it to watch or steer the run. When the repository ignores `**/.foreman-run/`, it is
+`<batch>/.foreman-run/`. Otherwise it is `<git-dir>/foreman-run/<key>` (`.git/foreman-run/<key>` in a
+plain checkout, the worktree's own git directory in a worktree), where git never shows it as a change.
+The key is the batch's repo-relative path as one name: letters, digits, `_`, `-` and anything outside
+ASCII stay, every other character becomes `%XX` (`.scratch/site` is `%2Escratch%2Fsite`). It holds today's
 files (`budget`, `live`, `iteration`, `screen`, `activity`, `foot`, `spent`) and three new ones:
 
 | file | holds |
@@ -1110,9 +1114,10 @@ of a run the app started. It is disposable and never a record of anything, like 
 
 The ignore line is `**/.foreman-run/`, with a comment above it. `foreman doctor` checks for it,
 `doctor --fix` appends it, and `foreman init` writes it, **only when the app is installed**. On a
-machine without the app, `doctor`, `init` and `--fix` behave and print exactly as before. Without
-the line the run keeps the temporary directory: the app can show it but cannot steer it, and
-`keys` and `stop` say so.
+machine without the app, `doctor`, `init` and `--fix` behave and print exactly as before. The line
+is recommended, not required: without it the run keeps its control directory under the git
+directory, and the one-run lock, `keys`, `stop` and the app's live view work the same. Only the
+app's Start run asks for it.
 
 #### `foreman keys`
 
@@ -1123,10 +1128,10 @@ foreman keys .scratch/site L       # the live view, on or off
 ```
 
 Applies keys to the batch's running loop as if they were pressed in its terminal. It is free.
-With no run in flight, or the control directory not in the batch, it prints one line and exits 1:
+With no run in flight, it prints one line and exits 1:
 
 ```text
-foreman keys: no run in flight in .scratch/site, or its control directory is not in the batch (that needs **/.foreman-run/ in .gitignore)
+foreman keys: no run in flight in .scratch/site
 ```
 
 #### `foreman stop`
@@ -1141,8 +1146,8 @@ would: the run finishes that iteration and pauses (exit 10, "budget reached"). W
 what Ctrl-C does, for a run that has no terminal to press it in: the loop's own interrupt handling
 runs, the stall marker stays, and the next run's review turn picks the ticket up. The ticket's
 uncommitted work is kept. `stop --now` waits until the loop has finished (60 seconds at most,
-`FOREMAN_STOP_WAIT`) and, if it has not, says so and does not kill it. Both are free, and both need
-the control directory in the batch, like `keys`.
+`FOREMAN_STOP_WAIT`) and, if it has not, says so and does not kill it. Both are free, and find the
+run's control directory where the loop put it, like `keys`.
 
 #### `# reason:`
 
@@ -1180,7 +1185,7 @@ to show you what a run cost.
 | `lib/foreman-status.sh` | `foreman status`: plain text, the picture and the `--json` facts, and the facts `dry-run --json` is made of — sourced by the loop, never run |
 | `lib/foreman-dryrun.sh` | `foreman dry-run`: the plan and the prompt that would be sent — sourced by the loop after the preflight, never run |
 | `lib/foreman-config.sh` | resolves a batch into FOREMAN_* — sourced, never run |
-| `lib/foreman-ctl.sh` / `lib/foreman-ctl.cjs` | the run's control directory (`.foreman-run/`): its file names, the pid file and the one liveness rule, for bash and for node and the app — sourced / required, never run |
+| `lib/foreman-ctl.sh` / `lib/foreman-ctl.cjs` | the run's control directory (`.foreman-run/`, or under `.git`): where it is, its file names, the pid file and the one liveness rule, for bash and for node and the app — sourced / required, never run |
 | `lib/foreman-exec.sh` | the seam between the loop and where the agent runs — sourced, never run |
 | `lib/exec/*.sh` | one adapter per `FOREMAN_EXEC` mode; `_`-prefixed files are shared implementation |
 | `lib/foreman-repo.sh` | repo root and batch-relative path: the one place that crosses Windows path syntax — sourced, never run |

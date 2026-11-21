@@ -119,6 +119,42 @@ test('a run whose control directory is not known has no control files, and still
   assert.equal(out.iterations.length, 4);
 });
 
+test('a control directory under the git directory is read where status --json says: repo-relative, or absolute in a worktree', async () => {
+  const { root } = repo();
+  fs.mkdirSync(`${root}/.git/foreman-run/b`, { recursive: true });
+  fs.writeFileSync(`${root}/.git/foreman-run/b/budget`, '7\n');
+  const elsewhere = fs.mkdtempSync(path.join(os.tmpdir(), 'live-wt-')).replace(/\\/g, '/');
+  fs.writeFileSync(`${elsewhere}/budget`, '9\n');
+  const foreman = { report: async () => reportRunSample() };
+  const rel = await createLive({ repoRoot: root, foreman, env: {} }).read({ batch: 'b', run: { ...RUN, control_dir: '.git/foreman-run/b' } });
+  assert.equal(rel.control.budget, 7);
+  const abs = await createLive({ repoRoot: root, foreman, env: {} }).read({ batch: 'b', run: { ...RUN, control_dir: elsewhere } });
+  assert.equal(abs.control.budget, 9, 'an absolute control_dir is not put under the repository root');
+});
+
+test('the control directory to watch besides the batches: only one outside the batch, of a run in flight', () => {
+  const { controlWatchDir } = require('../live.cjs');
+  assert.equal(controlWatchDir('C:/r', null), null);
+  assert.equal(controlWatchDir('C:/r', { ...RUN, in_flight: false }), null);
+  assert.equal(controlWatchDir('C:/r', { ...RUN, control_dir: null }), null);
+  assert.equal(controlWatchDir('C:/r', RUN), null, 'in the batch: the batch\'s own watch sees it');
+  assert.equal(controlWatchDir('C:/r', { ...RUN, control_dir: '.foreman-run' }), null, 'a batch at the root');
+  assert.equal(controlWatchDir('C:/r', { ...RUN, control_dir: '.git/foreman-run/b' }), 'C:\\r\\.git\\foreman-run\\b');
+  assert.equal(controlWatchDir('C:/r', { ...RUN, control_dir: 'C:/r/.git/worktrees/w/foreman-run/b' }), 'C:\\r\\.git\\worktrees\\w\\foreman-run\\b');
+});
+
+test('changes in a watched control directory outside the batch are only control files too, but for the pid and the run', () => {
+  const { onlyControlFiles } = require('../live.cjs');
+  const ctl = 'C:\\r\\.git\\foreman-run\\b';
+  const at = (...names) => names.map((name) => ({ dir: ctl, name }));
+  assert.equal(onlyControlFiles(at('feed', 'activity', 'budget.tmp', 'budget'), ctl), true);
+  assert.equal(onlyControlFiles(at('feed').concat([{ dir: 'b', name: 'foreman-runs.jsonl' }]), ctl), false);
+  assert.equal(onlyControlFiles(at('pid'), ctl), false, 'a run began or ended');
+  assert.equal(onlyControlFiles(at('run'), ctl), false);
+  assert.equal(onlyControlFiles(at(null), ctl), false, 'the directory went: anything');
+  assert.equal(onlyControlFiles(at('feed')), false, 'without the directory named, a bare name is not a control file');
+});
+
 test('which changes are only a run\'s control files: the feed and the budget are, the pid and the record are not', () => {
   const { onlyControlFiles } = require('../live.cjs');
   const c = (...names) => names.map((name) => ({ dir: 'b', name }));

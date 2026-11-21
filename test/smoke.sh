@@ -8539,7 +8539,8 @@ fi
 
 # ---------------------------------------------------------------------------
 # One run per batch: the start guard, and what counts as a run (run_pid_alive). The control directory
-# is only in the batch when the repository ignores it, as `doctor --fix` leaves it with the app installed.
+# is in the batch when the repository ignores it, as `doctor --fix` leaves it with the app installed,
+# and under the git directory otherwise (the cases after these).
 ctl_ignored_repo() {    # ctl_ignored_repo TICKETS NAME : prints the repo's path
   local repo
   repo="$(make_repo "$1" "$2")"
@@ -8615,6 +8616,66 @@ if case_is "a pid file naming a live program that is not the run is no run: stop
     assert_missing "$OUT" "already in flight" "without being refused"
   fi
   kill "$other" 2>/dev/null; wait "$other" 2>/dev/null
+fi
+
+# A repository that does not ignore `.foreman-run/` keeps a run's control directory under its git
+# directory instead (foreman-ctl.sh ctl_dir): `.git/foreman-run/<key>`, and `batch` is its own key.
+# The same lock, `stop` and status as in the batch.
+ctl_git_run() {    # ctl_git_run NAME TICKETS SLEEP : sets repo, ctl and first; the run's exit lands in $WORK/NAME.st
+  repo="$(make_repo "$2" "$1")"
+  ctl="$repo/.git/foreman-run/batch"
+  rm -f "$WORK/$1.st"
+  ( cd "$repo" && env FOREMAN_FAKE_SLEEP="$3" "$FOREMAN" run batch --unlimited > "$WORK/$1.out" 2>&1
+    echo $? > "$WORK/$1.st" ) &
+  first=$!
+  n=200; while [ "$n" -gt 0 ] && [ ! -s "$ctl/pid" ]; do sleep 0.1; n=$((n - 1)); done
+  [ -s "$ctl/pid" ] && pass || fail "the run is up, with a pid file under .git/foreman-run/batch"
+  [ -e "$repo/batch/.foreman-run" ] && fail "nothing is made in the batch" || pass
+}
+ctl_git_run_json() {    # ctl_git_run_json FIELDS : the `run` of status --json in $OUT, as space-separated words
+  printf '%s' "$OUT" | node -e 'let s="";process.stdin.on("data",(d)=>{s+=d;}).on("end",()=>{const r=JSON.parse(s).run;console.log(process.argv[1].split(",").map((k)=>String(k==="pid"?r.pid&&r.pid.msys:r[k])).join(" "));});' "$1"
+}
+
+if case_is "a second run on a batch that does not ignore .foreman-run/ is refused: its control directory is under .git"; then
+  ctl_git_run git-ctl-two 2 10
+  head="$(git -C "$repo" rev-parse HEAD)"
+  assert_eq "$(git -C "$repo" status --porcelain)" "" "the control directory under .git is no change to the tree"
+  pidfile="$(cat "$ctl/pid")"
+  run_foreman "$repo" run batch --unlimited
+  assert_eq "$ST" 1 "the second run exits 1"
+  assert_contains "$OUT" "a run is already in flight on this batch (pid ${pidfile%% *})" "and says a run is already in flight"
+  assert_eq "$(git -C "$repo" rev-parse HEAD)" "$head" "no commit"
+  assert_eq "$(cat "$ctl/pid" 2>/dev/null)" "$pidfile" "the first run's pid file is as it was"
+  wait "$first"
+  assert_eq "$(cat "$WORK/git-ctl-two.st")" 0 "the first run finishes the batch"
+  [ -d "$repo/DONE_batch" ] && pass || fail "and the batch is renamed DONE_"
+  [ -e "$repo/.git/foreman-run" ] && fail "nothing is left under .git/foreman-run" || pass
+  assert_eq "$(git -C "$repo" status --porcelain)" "" "and the tree is clean"
+fi
+
+if case_is "foreman stop reaches a run in flight on a batch that does not ignore .foreman-run/"; then
+  ctl_git_run git-ctl-stop 3 3
+  run_foreman "$repo" stop batch
+  assert_eq "$ST" 0 "stop: exits 0"
+  assert_contains "$OUT" "stops after this iteration" "and says so"
+  wait "$first"
+  assert_eq "$(cat "$WORK/git-ctl-stop.st")" 10 "the run ends paused"
+  assert_contains "$(cat "$WORK/git-ctl-stop.out")" "PAUSED: iteration budget reached (1)" "after the iteration in flight"
+  [ -e "$repo/.git/foreman-run" ] && fail "nothing is left under .git/foreman-run" || pass
+  run_foreman "$repo" stop batch
+  assert_eq "$ST" 1 "with no run: exits 1"
+  assert_contains "$OUT" "foreman stop: no run in flight in batch" "and says so"
+fi
+
+if case_is "foreman status --json shows the run in flight on a batch that does not ignore .foreman-run/"; then
+  ctl_git_run git-ctl-status 2 3
+  run_foreman "$repo" status batch --json
+  assert_eq "$ST" 0 "status --json: exits 0"
+  assert_eq "$(ctl_git_run_json in_flight,control_dir,pid)" "true .git/foreman-run/batch $(cut -d' ' -f1 "$ctl/pid")" \
+    "in flight, with the control directory under .git and the loop's pid"
+  wait "$first"
+  run_foreman "$repo" status DONE_batch --json
+  assert_eq "$(ctl_git_run_json in_flight,control_dir)" "false null" "and not in flight once it is over"
 fi
 
 # Signals to a run in flight (the loop's trap in foreman-loop.sh). A run started here from a

@@ -5,8 +5,10 @@
 # foreman-stream.cjs, foreman-json.cjs and the app; test/node/ctl.test.cjs holds the two lists together.
 #
 # The directory is `<batch>/.foreman-run/` when the repository ignores that name (`**/.foreman-run/`),
-# and a temporary one otherwise (foreman-loop.sh); only the first can be reached by `foreman keys` and
-# `foreman stop`, from another terminal or the app. The loop removes it when the run ends, except `out`.
+# and `<git-dir>/foreman-run/<key>` otherwise (ctl_dir, below): either way the loop, `foreman keys` /
+# `foreman stop`, the status facts and the app find it by asking the same question, so the one-run
+# lock, steering and the live view work with or without the ignore line. The loop removes it when the
+# run ends, except `out`.
 #
 # The loop, the key reader (foreman-keys.sh), `foreman keys` / `foreman stop` and the stream filter
 # talk through small files in it, so none has to signal another:
@@ -47,6 +49,7 @@
 _FOREMAN_CTL_LOADED=1
 
 readonly CTL_DIRNAME=.foreman-run
+readonly CTL_GITDIRNAME=foreman-run
 readonly CTL_F_BUDGET=budget
 readonly CTL_F_LIVE=live
 readonly CTL_F_ITERATION=iteration
@@ -66,6 +69,61 @@ CTL_FILES=("$CTL_F_BUDGET" "$CTL_F_LIVE" "$CTL_F_ITERATION" "$CTL_F_SCREEN" "$CT
 # repo-relative, `.` for a batch at the repo root).
 ctl_rel_dir() {
   if [ "$1" = . ]; then printf -v "$2" '%s' "$CTL_DIRNAME"; else printf -v "$2" '%s' "$1/$CTL_DIRNAME"; fi
+}
+
+# ctl_key BATCH_DIR VAR: sets VAR to the batch's repo-relative path as one directory name, the name of
+# its control directory under the git directory. Letters, digits, `_`, `-` and anything outside ASCII
+# stay; every other ASCII character becomes `%XX` (upper-case hex), `%` included, so it reverses and
+# never holds a `/`, a `.` or a character Windows refuses: `.scratch/b` is `%2Escratch%2Fb`, `.` is
+# `%2E`. foreman-ctl.cjs keyOf spells it the same. By code, not by class, so no locale changes it.
+ctl_key() {
+  local s="$1" out="" c n i
+  for ((i = 0; i < ${#s}; i++)); do
+    c="${s:i:1}"
+    printf -v n '%d' "'$c"
+    if [ "$n" -ge 0 ] && [ "$n" -lt 128 ] && ! { [ "$n" -ge 48 ] && [ "$n" -le 57 ]; } &&
+       ! { [ "$n" -ge 65 ] && [ "$n" -le 90 ]; } && ! { [ "$n" -ge 97 ] && [ "$n" -le 122 ]; } &&
+       [ "$n" -ne 95 ] && [ "$n" -ne 45 ]; then
+      printf -v c '%%%02X' "$n"
+    fi
+    out+="$c"
+  done
+  printf -v "$2" '%s' "$out"
+}
+
+# ctl_dir BATCH_DIR VAR: sets VAR to where the batch's run keeps its control directory, and CTL_WHERE
+# to `batch` or `git`. Asked from the repository root (where every caller stands; BATCH_DIR is
+# repo-relative). THE one answer, for the loop that makes it and for everything that reads it:
+#   - `<batch>/.foreman-run` when the repository ignores it (git check-ignore on its `pid`), as
+#     `doctor --fix` leaves a repository: repo-relative.
+#   - otherwise `<git-dir>/foreman-run/<key>` (ctl_key): a place git never shows as a change, so a run
+#     needs no ignore line to be locked, stopped or watched. `git rev-parse --git-dir` is `.git` in a
+#     plain checkout (repo-relative again) and the worktree's own git directory, absolute (`C:/...`
+#     from Git for Windows), in a worktree: one control directory per checkout of a batch.
+# Fails, with VAR empty, only when git knows no git directory here, which in a repository it always does.
+ctl_dir() {
+  local rel gd key
+  ctl_rel_dir "$1" rel
+  if git check-ignore -q -- "$rel/$CTL_F_PID" 2>/dev/null; then
+    CTL_WHERE=batch
+    printf -v "$2" '%s' "$rel"
+    return 0
+  fi
+  CTL_WHERE=git
+  printf -v "$2" '%s' ""
+  gd="$(git rev-parse --git-dir 2>/dev/null)" && [ -n "$gd" ] || return 1
+  gd="${gd//\\//}"
+  ctl_key "$1" key
+  printf -v "$2" '%s' "${gd%/}/$CTL_GITDIRNAME/$key"
+}
+
+# ctl_full DIR VAR: sets VAR to the path to open for a control directory as ctl_dir gives it: an absolute
+# one as it is, a repo-relative one under REPO_ROOT.
+ctl_full() {
+  case "$1" in
+    /*|[A-Za-z]:[\\/]*) printf -v "$2" '%s' "$1" ;;
+    *) printf -v "$2" '%s' "$REPO_ROOT/$1" ;;
+  esac
 }
 
 # ctl_write DIR NAME VALUE: writes VALUE and a newline to DIR/NAME whole, a temp file plus mv, so no

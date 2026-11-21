@@ -174,8 +174,10 @@ foreman_app_in_sync() {
 }
 
 # The one line the desktop app needs in .gitignore, and the comment that goes with it: a run's control
-# directory lives in its batch when the repository ignores this, and that is what lets the app (and
-# `foreman keys`) steer a run. `foreman doctor` checks for it and `--fix` appends it, `foreman init`
-# writes it, and each only when foreman_app_installed.
+# directory lives in its batch when the repository ignores this, and under the git directory otherwise
+# (ctl_dir, foreman-ctl.sh), where `foreman keys` / `stop` and the live view find it just the same. The
+# app's Start run still asks for it, because it puts the run's own output in `<batch>/.foreman-run/out`.
+# `foreman doctor` checks for it and `--fix` appends it, `foreman init` writes it, and each only when
+# foreman_app_installed.
 FOREMAN_RUN_IGNORE='**/.foreman-run/'
 FOREMAN_RUN_IGNORE_BLOCK="# Foreman desktop app: the control directory of a run (its keys, its pid, the live feed), in its batch."$'\n'"# Disposable, and ignored so that steering a run from the app never shows up as a change."$'\n'"$FOREMAN_RUN_IGNORE"

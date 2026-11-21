@@ -678,12 +678,15 @@ source "$FOREMAN_TOOL_DIR/foreman-status.sh" || exit 1
 # A run that is already in flight in this batch is not started twice: two loops on one batch take
 # each other's work for a stall and rename the batch under one another. The first thing a run
 # does, before the preflight and before the start-of-run sweep (which renames and commits), so that
-# a refusal changes nothing. Only a run in a control directory in the batch can be seen (see where
-# the run makes it, below); the pid file of one that was killed too hard to clean up is not a run
-# (run_pid_alive), and the run that follows clears it.
-ctl_rel_dir "$BATCH_DIR" RUN_CTL_REL
-if [ "$MODE" = "run" ] && git check-ignore -q -- "$RUN_CTL_REL/$CTL_F_PID" 2>/dev/null; then
-  ctl_read_pid "$REPO_ROOT/$RUN_CTL_REL"
+# a refusal changes nothing. The batch's control directory is where ctl_dir says (in the batch, or
+# under the git directory), the same answer every run and every reader gets; the pid file of a run
+# that was killed too hard to clean up is not a run (run_pid_alive), and the run that follows clears it.
+RUN_CTL_REL=""
+if [ "$MODE" = "run" ]; then
+  ctl_dir "$BATCH_DIR" RUN_CTL_REL || { warn_preflight "git names no git directory for $REPO_ROOT, so the run has nowhere to keep its control directory"; exit 1; }
+  RUN_CTL_WHERE="$CTL_WHERE"
+  ctl_full "$RUN_CTL_REL" RUN_CTL_DIR
+  ctl_read_pid "$RUN_CTL_DIR"
   if run_pid_alive "$CTL_PID_MSYS" "$CTL_PID_WIN"; then
     warn_preflight "a run is already in flight on this batch (pid $CTL_PID_MSYS). Stop it with: $FOREMAN_INVOKE stop $BATCH_DIR"
     exit 1
@@ -849,23 +852,18 @@ PAYLOAD_FILE="$(mktemp)"
 # `feed` (see foreman-ctl.sh for each). See refresh_budget.
 #
 # It is `<batch>/.foreman-run/` when the repository ignores that name (`**/.foreman-run/`, which
-# `foreman doctor --fix` appends when the desktop app is installed), so that `foreman keys` and the
-# app can reach it from outside this terminal. Otherwise it is a temporary directory, as it always
-# was. A batch's directory is never shared: a run that finds another one alive in it (its `pid` file)
-# has already been refused, at the top of the run (see "a run that is already in flight").
+# `foreman doctor --fix` appends), and `<git-dir>/foreman-run/<key>` otherwise: ctl_dir in
+# foreman-ctl.sh, worked out at the top of the run (RUN_CTL_REL, and RUN_CTL_DIR the path to it), so
+# that `foreman keys`, `foreman stop` and the app reach it from outside this terminal either way. A
+# batch's directory is never shared: a run that finds another one alive in it (its `pid` file) has
+# already been refused, at the top of the run (see "a run that is already in flight").
 #
 # `out`, if the app put one there (the run's own stdout and stderr), outlives the run; everything
 # else is removed when it ends (run_ctl_end), whichever way, and before the batch can be renamed.
-RUN_CTL_DIR=""
-if git check-ignore -q -- "$RUN_CTL_REL/$CTL_F_PID" 2>/dev/null; then
-  if mkdir -p "$REPO_ROOT/$RUN_CTL_REL" 2>/dev/null; then
-    RUN_CTL_DIR="$REPO_ROOT/$RUN_CTL_REL"
-    # What a run that was killed too hard to clean up after itself left behind.
-    ctl_clear "$RUN_CTL_DIR"
-    mkdir -p "$RUN_CTL_DIR" 2>/dev/null
-  fi
-fi
-[ -n "$RUN_CTL_DIR" ] || RUN_CTL_DIR="$(mktemp -d)"
+# What a run that was killed too hard to clean up after itself left behind goes first.
+ctl_clear "$RUN_CTL_DIR"
+# (Twice: a run of another batch ending this moment may take an empty foreman-run/ from under the first.)
+mkdir -p "$RUN_CTL_DIR" 2>/dev/null || mkdir -p "$RUN_CTL_DIR" 2>/dev/null || { warn "cannot make the control directory $RUN_CTL_DIR"; exit 1; }
 printf '%s\n' "$MAX_ITERATIONS" > "$RUN_CTL_DIR/$CTL_F_BUDGET"
 printf '0\n' > "$RUN_CTL_DIR/$CTL_F_ITERATION"
 printf '%s\n' "$FOREMAN_STREAM" > "$RUN_CTL_DIR/$CTL_F_LIVE"
@@ -897,6 +895,8 @@ run_ctl_end() {
   fi
   read -r BAR_CLOSE_ROWS _ BAR_CLOSE_KEPT 2>/dev/null < "$RUN_CTL_DIR/$CTL_F_SCREEN"
   ctl_clear "$RUN_CTL_DIR"
+  # Under the git directory, `foreman-run/` itself goes too once no batch has a directory left in it.
+  [ "$RUN_CTL_WHERE" != git ] || rmdir "${RUN_CTL_DIR%/*}" 2>/dev/null
 }
 on_exit() {
   run_ctl_end
