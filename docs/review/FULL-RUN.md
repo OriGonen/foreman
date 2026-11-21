@@ -70,3 +70,26 @@ Failures keyed by (case, assertion) against the base logs: every base key still 
 - smoke.sh "a second run on a batch with a run in flight is refused…": a race in the test itself (it waited on `iteration`, which the loop writes before `pid` on purpose, and a 4 s fake turn let the first run commit under load). Fixed in `87593eb`; passes alone and twice concurrently.
 
 No product regression at the tip. R3 (on branch `review/r3`) was not part of this run.
+
+## Third full run: tip `03ffcc5` (adds D1–D7, D4b), 2026-11-21
+
+Same base (`6d01ff8`), default jobs (8), run one after the other. Logs: scratchpad `full3/logs/`.
+
+| suite                  | base 6d01ff8   | head 03ffcc5   |
+|------------------------|----------------|----------------|
+| test/smoke.sh          | 2516 / 85      | 2864 / 84      |
+| test/smoke-json.sh     | 685 / 34       | 715 / 34       |
+| gui `node --test`      | 462 / 0 / 1 skip (463) | 499 / 0 / 1 skip (500) |
+| node `test/node`       | n/a            | 59 / 0         |
+
+smoke-json: same 34 failure keys as the base (all environment). smoke: four failure keys appear only in head:
+- "foreman order draws the stake line" and "SIGTERM during a turn ends the turn at once" are on the known-flaky list.
+  They pass alone.
+- The two D2 cases "turn timeout: a turn that runs past …" and "… uncommitted work is checkpointed" failed on
+  their timing bound: the run took 30 s against 20 s, and 32 s against 30 s. Rerun alone, the clean case
+  still failed once in three runs, at 21 s. The bound was too tight for a Windows run's own start-up plus the stop
+  grace. Fixed in `60dd2a2`: the turn now sleeps 89 s, and both cases allow 60 s. A turn the watchdog fails
+  to end still fails the case. After the fix, 3/3 runs passed (33/33 each).
+
+Five base failure keys pass in head (fixed by T-tickets, as in the second run).
+**Conclusion:** no regressions from D1–D7.
