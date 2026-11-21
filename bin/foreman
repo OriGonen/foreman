@@ -138,11 +138,24 @@ convert() {
 cmd="${1:-help}"
 [ $# -gt 0 ] && shift
 
+# `run` is the loop's default mode; the loop can't tell a user's --status from the one the
+# dispatcher appends for `status`, so the conflict with `run` is caught here. --help still wins.
+run_rejects_modes() {
+  local arg mode=""
+  for arg in "$@"; do
+    case "$arg" in
+      --help|-h) return 0 ;;
+      --status|--dry-run) [ -n "$mode" ] || mode="${arg#--}" ;;
+    esac
+  done
+  [ -z "$mode" ] || { echo "foreman: conflicting modes: run and $mode (a command takes one mode)" >&2; exit 1; }
+}
+
 case "$cmd" in
   init)      exec bash "$LIB/foreman-init.sh" "$@" ;;
   order)     exec bash "$LIB/foreman-order.sh" "$@" ;;
   commands)  exec bash "$LIB/foreman-commands.sh" "$@" ;;
-  run)       exec bash "$LIB/foreman-loop.sh" "$@" ;;
+  run)       run_rejects_modes "$@"; exec bash "$LIB/foreman-loop.sh" "$@" ;;
   status)    exec bash "$LIB/foreman-loop.sh" "$@" --status ;;
   dry-run)   exec bash "$LIB/foreman-loop.sh" "$@" --dry-run ;;
   next)      exec bash "$LIB/foreman-next.sh" "$@" ;;

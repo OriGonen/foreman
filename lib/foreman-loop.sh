@@ -111,6 +111,8 @@ LIVE_FLAG=0        # --live was given, so the rerun commands this run prints car
 STATUS_JSON=0      # --json (status or dry-run): the batch as one JSON object, for a program (foreman-json.cjs).
 STATUS_ALL=0       # status --json --all: every batch in the repository, counts only.
 BATCH_ARG_GIVEN=0  # a batch was named on the command line (--all takes none).
+MODE_SET=0         # a mode flag was given (MODE=run is the default, not a choice).
+MODE_CONFLICT=""   # "<first> <second>" when two different mode flags were given; reported after --help.
 
 # The header comment above is the help text. Stop at the first non-comment line rather
 # than at a fixed line number, which drifts every time the header grows.
@@ -118,8 +120,14 @@ show_help() { awk 'NR==1 { next } !/^#/ { exit } { sub(/^# ?/, ""); print }' "$0
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --status)    MODE=status ;;
-    --dry-run)   MODE=dry-run ;;
+    # The dispatcher appends its own mode flag after the user's, so a user's other mode flag
+    # lands here as a second, different one. The same mode twice is harmless. The conflict is
+    # only recorded: --help later in the line still wins, and is checked once parsing is done.
+    --status|--dry-run)
+      if [ "$MODE_SET" = 1 ] && [ "$MODE" != "${1#--}" ] && [ -z "$MODE_CONFLICT" ]; then
+        MODE_CONFLICT="$MODE ${1#--}"
+      fi
+      MODE="${1#--}"; MODE_SET=1 ;;
     --unlimited) MAX_ITERATIONS=0 ;;
     # Exported rather than set, so it lands in foreman-config.sh's environment snapshot and
     # beats a FOREMAN_STREAM in the batch's foreman.conf — the same precedence every other knob
@@ -145,6 +153,11 @@ while [ $# -gt 0 ]; do
   shift
 done
 unset FOREMAN_BATCH_FROM_ARG
+
+if [ -n "$MODE_CONFLICT" ]; then
+  echo "foreman: conflicting modes: ${MODE_CONFLICT% *} and ${MODE_CONFLICT#* } (a command takes one mode)" >&2
+  exit 1
+fi
 
 # --json belongs to `status` and `dry-run`, and --all to `status --json` with no batch named;
 # anywhere else they are the unknown flags they were before, and get the usage line they always got.
@@ -709,13 +722,22 @@ foreman_tickets_hold || preflight_failed=1
 # Not when the stall marker vouches for it: that tree is about to be checkpointed before any
 # iteration starts (see "Start of run" in the loop), so it is not the reviewer's problem.
 # Nor under --adopt-dirty, which asks for exactly that checkpoint without a marker.
+#
+# `dry-run` changes nothing and has no review base to poison, so it carries on and says what a
+# real run would do. (`status` never gets this far.)
 if [ "$FOREMAN_ALLOW_DIRTY" != "1" ] && [ "$ADOPT_DIRTY" != "1" ] && tree_is_dirty &&
    ! stall_marker_matches "$(next_sh 2>/dev/null)"; then
-  warn_preflight "the working tree is dirty. Commit or set aside first, so this"
-  warn "           iteration's review sees only what this iteration wrote."
-  warn "           Override with FOREMAN_ALLOW_DIRTY=1."
-  git status --short >&2
-  preflight_failed=1
+  if [ "$MODE" = "dry-run" ]; then
+    # Not under --json: stdout is one object, and a program reading stderr is not the reader.
+    [ "$STATUS_JSON" = 1 ] ||
+      warn "note: the working tree is dirty, so $FOREMAN_INVOKE run would refuse until it is clean (or run with --adopt-dirty)."
+  else
+    warn_preflight "the working tree is dirty. Commit or set aside first, so this"
+    warn "           iteration's review sees only what this iteration wrote."
+    warn "           Override with FOREMAN_ALLOW_DIRTY=1."
+    git status --short >&2
+    preflight_failed=1
+  fi
 fi
 
 # The run state every turn writes into the batch directory must be ignored. Unignored, the

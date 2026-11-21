@@ -333,6 +333,70 @@ if case_is "status and dry-run spend nothing and need no runner"; then
   assert_eq "$(git -C "$repo" log --oneline | wc -l)" "1" "dry-run committed nothing"
 fi
 
+if case_is "dry-run proceeds on a dirty tree and notes that run would refuse"; then
+  repo="$(make_repo 2 dirty-dryrun-repo)"
+  echo scribble > "$repo/stray.txt"
+  [ -n "$(git -C "$repo" status --porcelain)" ] && pass || fail "the tree is dirty"
+
+  run_foreman "$repo" dry-run batch
+  assert_eq "$ST" 0 "dry-run exits 0 on a dirty tree"
+  assert_contains "$OUT" "=== end prompt" "and still prints the prompt"
+  assert_contains "$OUT" "foreman run would refuse" "and says run would refuse"
+  assert_contains "$OUT" "--adopt-dirty" "and names the way past it"
+  assert_eq "$(printf '%s\n' "$OUT" | grep -c 'would refuse')" "1" "in one note"
+  assert_eq "$(git -C "$repo" log --oneline | wc -l)" "1" "dry-run committed nothing"
+  [ -f "$repo/stray.txt" ] && pass || fail "the stray file is untouched"
+
+  run_foreman "$repo" run batch
+  assert_eq "$ST" 1 "run on the same tree still fails the preflight"
+  assert_contains "$OUT" "the working tree is dirty" "with the dirty-tree message"
+
+  rm -f "$repo/stray.txt"
+  run_foreman "$repo" dry-run batch
+  assert_eq "$ST" 0 "a clean tree dry-runs"
+  assert_missing "$OUT" "would refuse" "with no note"
+fi
+
+if case_is "a second, conflicting mode flag is an error naming both modes"; then
+  repo="$(make_repo 2 modes-repo)"
+
+  run_foreman "$repo" status batch --dry-run
+  assert_eq "$ST" 1 "status --dry-run exits 1"
+  assert_contains "$OUT" "status" "names status"
+  assert_contains "$OUT" "dry-run" "names dry-run"
+  assert_contains "$OUT" "conflicting" "and calls it a conflict"
+  assert_missing "$OUT" "Tickets done" "and prints no status"
+
+  run_foreman "$repo" dry-run batch --status
+  assert_eq "$ST" 1 "dry-run --status exits 1"
+  assert_contains "$OUT" "conflicting" "dry-run --status is a conflict too"
+  assert_missing "$OUT" "=== end prompt" "and prints no prompt"
+
+  run_foreman "$repo" run batch --status
+  assert_eq "$ST" 1 "run --status exits 1"
+  assert_contains "$OUT" "run" "names run"
+  assert_contains "$OUT" "status" "and status"
+  assert_contains "$OUT" "conflicting" "as a conflict"
+  assert_missing "$OUT" "Tickets done" "and prints no status"
+
+  run_foreman "$repo" run batch --dry-run
+  assert_eq "$ST" 1 "run --dry-run exits 1"
+  assert_contains "$OUT" "conflicting" "as a conflict"
+  assert_missing "$OUT" "=== end prompt" "and prints no prompt"
+  assert_eq "$(git -C "$repo" log --oneline | wc -l)" "1" "no run happened"
+
+  run_foreman "$repo" status batch --status
+  assert_eq "$ST" 0 "repeating the same mode is tolerated"
+  assert_contains "$OUT" "Tickets done: 0 / 2" "and prints status"
+
+  run_foreman "$repo" status --help
+  assert_eq "$ST" 0 "status --help still works"
+  run_foreman "$repo" status batch --dry-run --help
+  assert_eq "$ST" 0 "help wins over a conflict"
+  run_foreman "$repo" run --help
+  assert_eq "$ST" 0 "run --help still works"
+fi
+
 if case_is "one iteration is the default, and it lands one ticket"; then
   repo="$(make_repo 3 default-repo)"
   run_foreman "$repo" run batch

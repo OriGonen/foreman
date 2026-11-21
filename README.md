@@ -353,6 +353,11 @@ through a real browser, say.
 `foreman dry-run` prints the exact assembled prompt and sends nothing. Read it once before the
 first real run of any new batch.
 
+`dry-run` also works on a dirty working tree, where `foreman run` would refuse: it prints one note
+saying so (a run needs the tree clean, or `--adopt-dirty`). A command takes one mode: `foreman
+status --dry-run`, `dry-run --status` and `run --status` / `run --dry-run` exit 1 with a message
+naming both modes.
+
 ## Where the agent runs — `FOREMAN_EXEC`
 
 | mode | what happens | when |

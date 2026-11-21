@@ -595,6 +595,20 @@ if case_is "dry-run --json: one object, versioned, naming its command"; then
     '"foreman_json,command,repo_root,batch,counts,would_run,settings,warnings,prompt"' "the keys, in this order"
 fi
 
+if case_is "dry-run --json: a dirty tree is read, not refused"; then
+  repo="$WORK/dry-dirty-repo"
+  make_status_repo "$repo"
+  echo scribble > "$repo/stray.txt"
+  run_foreman "$repo" dry-run batch --json
+  assert_eq "$ST" 0 "exits 0 on a dirty tree"
+  assert_eq "$ERR" "" "and says nothing on stderr: the note belongs to the plain output"
+  assert_eq "$(jv "$OUT" 'j.command')" '"dry-run"' "one dry-run object"
+  run_foreman "$repo" status batch --json --dry-run
+  assert_eq "$ST" 1 "status --json --dry-run is a conflict"
+  assert_contains "$ERR" "conflicting modes" "and says so"
+  assert_eq "$OUT" "" "with nothing on stdout"
+fi
+
 if case_is "dry-run --json: its facts are the plain dry-run's"; then
   repo="$WORK/dry-facts-repo"
   make_status_repo "$repo"
@@ -770,17 +784,18 @@ if case_is "dry-run --json: sends nothing and starts no sandbox"; then
   unset FOREMAN_FAKE_PROMPT_LOG
 fi
 
-if case_is "dry-run --json: a batch that cannot be read, a dirty tree: the plain dry-run's own message, no JSON"; then
+if case_is "dry-run --json: a batch that cannot be read: the plain dry-run's own message, no JSON"; then
+  # (This used a dirty tree as the unreadable batch until dry-run learned to carry on over one.)
   repo="$WORK/dry-error-repo"
   make_status_repo "$repo"
-  printf 'x\n' > "$repo/stray.txt"
-  run_foreman "$repo" dry-run batch
+  run_foreman "$repo" dry-run no-such-batch
   plain_st="$ST"; plain_err="$ERR"
-  run_foreman "$repo" dry-run batch --json
+  run_foreman "$repo" dry-run no-such-batch --json
   assert_eq "$ST" "$plain_st" "the same exit status"
+  assert_eq "$plain_st" 1 "which is a failure"
   assert_eq "$OUT" "" "no JSON is printed"
   assert_eq "$ERR" "$plain_err" "and the same words on stderr"
-  assert_contains "$ERR" "working tree is dirty" "which say why"
+  assert_contains "$ERR" "no such directory" "which say why"
 fi
 
 # ---------------------------------------------------------------------------
