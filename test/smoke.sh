@@ -2016,6 +2016,28 @@ if case_is "a denied tool call names permissions, not the dirty tree it caused";
 
   runlog="$(cat "$repo/batch/foreman-runs.log")"
   assert_contains "$runlog" "PERMISSION DENIED SIGNAL DETECTED" "recorded as its own signal"
+  assert_contains "$OUT" "Denied: Bash: git commit -m fake" "names the denied call"
+  assert_contains "$runlog" "denied Bash: git commit -m fake" "and the runs log carries it"
+fi
+
+if case_is "a denied call that is not git is named in the permission stop, without the git allowlist line"; then
+  # A real run: the ticket asked for `sleep 1200`, claude's own tool rules refused it, and the stop
+  # told the user to add the git allowlist line the conf ALREADY had — wrong cause, no way to tell
+  # which call was denied.
+  repo="$(make_repo 2 permdenied-sleep-repo)"
+  printf 'FOREMAN_CLAUDE_ARGS=(--allowed-tools "Bash(git add:*)" "Bash(git commit:*)" "Bash(sleep:*)")\n' \
+    >> "$repo/batch/foreman.conf"
+  git -C "$repo" commit --quiet -am "allowlist"
+  FOREMAN_FAKE_BEHAVIOUR=permission-denied-sleep run_foreman "$repo" run batch --unlimited
+
+  assert_eq "$ST" 20 "still exits needs-a-human"
+  assert_contains "$OUT" "stopped by a permission denial" "still names the denial"
+  assert_contains "$OUT" "Denied: Bash: sleep 1200" "names the denied call"
+  assert_missing "$OUT" 'Bash(git commit:*)' "does not suggest the git allowlist line"
+  assert_missing "$OUT" "including the \`git commit\`" "nor blame the commit"
+  assert_contains "$OUT" "Claude's own tool rules" "says the allowlist may not be the cause"
+  assert_contains "$OUT" 'Bash(sleep:*)")' "suggests a rule for that call"
+  assert_contains "$OUT" "bypassPermissions" "keeps the no-gate alternative"
 fi
 
 if case_is "the permission mode defaults to what the execution mode needs"; then

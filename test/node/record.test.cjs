@@ -171,6 +171,38 @@ test('record: on a failed turn the permission text fallback reads error text onl
   assert.equal(kv(verdictOf('claude: Bash(git commit) requires approval\n', { exit: 1 }), 'permission_denied'), '1');
 });
 
+test('record: permission_denied_calls names a denied Bash command, an Edit path, and an unknown tool', () => {
+  const denials = [
+    { tool_name: 'Bash', tool_use_id: 't1', tool_input: { command: 'sleep 1200' } },
+    { tool_name: 'Edit', tool_use_id: 't2', tool_input: { file_path: '/repo/src/a.js', old_string: 'x', new_string: 'y' } },
+    { tool_name: 'WebFetch', tool_use_id: 't3', tool_input: { url: 'https://example.com' } }
+  ];
+  const v = verdictOf(result({ result: 'blocked', permission_denials: denials }), { dirty: true });
+  assert.equal(kv(v, 'permission_denied'), '1');
+  assert.equal(kv(v, 'permission_denied_calls'), 'Bash: sleep 1200 | Edit: /repo/src/a.js | WebFetch');
+});
+
+test('record: permission_denied_calls is one short line whatever the command holds', () => {
+  const messy = { tool_name: 'Bash', tool_input: { command: 'echo a\n\techo b\r\nkey=value \u001b[31m' } };
+  const long = { tool_name: 'Bash', tool_input: { command: 'echo ' + 'x'.repeat(500) } };
+  const v = verdictOf(result({ permission_denials: [messy, long, messy, messy, messy] }), { dirty: true });
+  const calls = kv(v, 'permission_denied_calls');
+  assert.match(calls, /^Bash: echo a echo b key=value \[31m \| Bash: echo x+/);
+  assert.match(calls, / \(\+2 more\)$/);
+  assert.ok(calls.replace(/ \(\+2 more\)$/, '').length <= 200, `too long: ${calls.length}`);
+  // the verdict is still one key=value per line
+  assert.ok(v.trim().split('\n').every((l) => /^[a-z_]+=/.test(l)), v);
+});
+
+test('record: permission_denied_calls is empty without structured denials', () => {
+  assert.equal(kv(verdictOf(result({ result: 'fine' }), { dirty: true }), 'permission_denied_calls'), '');
+  assert.equal(kv(verdictOf(result({ result: 'fine', permission_denials: [] }), { dirty: true }), 'permission_denied_calls'), '');
+  // the text fallback has no calls to name, but still flags the denial
+  const v = verdictOf('claude: Bash(git commit) requires approval\n', { exit: 1 });
+  assert.equal(kv(v, 'permission_denied'), '1');
+  assert.equal(kv(v, 'permission_denied_calls'), '');
+});
+
 test('record: the billing and rate-limit words in an error_max_turns reply are not a usage limit', () => {
   for (const reply of ['Ran out of turns while refactoring the billing module.', 'Stopped: the rate limit handling tests crashed.']) {
     const v = verdictOf(result({ subtype: 'error_max_turns', is_error: true, result: reply }), { exit: 1 });

@@ -222,6 +222,31 @@ MAX_CONTINUATIONS="$FOREMAN_MAX_CONTINUATIONS"
 say()  { printf '%s\n' "$*"; }
 warn() { printf '%s\n' "$*" >&2; }
 
+# Is the git allowlist line the right advice for a permission stop? Yes when a denied call is a
+# `git add` / `git commit`, or when the calls are unknown (the text-fallback path) and
+# FOREMAN_CLAUDE_ARGS does not already allow both. Otherwise the line is already applied or beside
+# the point, and printing it names the wrong cause.
+permission_hint_is_git() {
+  local calls="$1" args
+  case "$calls" in *"git add"*|*"git commit"*) return 0 ;; esac
+  [ -n "$calls" ] && return 1
+  args=" ${FOREMAN_CLAUDE_ARGS+${FOREMAN_CLAUDE_ARGS[*]}} "
+  case "$args" in *"--dangerously-skip-permissions"*|*"Bash(git:"*) return 1 ;; esac
+  case "$args" in *"git add"*"git commit"*|*"git commit"*"git add"*) return 1 ;; esac
+  return 0
+}
+
+# ` (for example --allowed-tools "Bash(sleep:*)")` for a denied Bash call, from the first call's
+# command word; nothing for any other tool or an odd-looking word.
+permission_example_rule() {
+  local first="${1%% | *}" word
+  case "$first" in "Bash: "*) ;; *) return 0 ;; esac
+  word="${first#Bash: }"
+  word="${word%% *}"
+  [[ "$word" =~ ^[A-Za-z0-9._/-]+$ ]] || return 0
+  printf ' (for example --allowed-tools "Bash(%s:*)")' "$word"
+}
+
 # Bash has no floats. Every cost comparison and accumulation goes through awk.
 fadd() { awk -v a="$1" -v b="$2" 'BEGIN { printf "%.6f", a + b }'; }
 fsub() { awk -v a="$1" -v b="$2" 'BEGIN { printf "%.6f", a - b }'; }
@@ -1765,6 +1790,7 @@ while true; do
   context_exhausted=$(verdict_get "$VERDICT_FILE" context_exhausted)
   auth_failed=$(verdict_get "$VERDICT_FILE" auth_failed)
   permission_denied=$(verdict_get "$VERDICT_FILE" permission_denied)
+  permission_denied_calls=$(verdict_get "$VERDICT_FILE" permission_denied_calls)
   is_error=$(verdict_get "$VERDICT_FILE" is_error)
   PREV_CONTEXT_EXHAUSTED="${context_exhausted:-0}"
   result_count=$(verdict_get "$VERDICT_FILE" result_count)
@@ -1890,12 +1916,25 @@ while true; do
     warn ""
     NEEDS_REASON="$TICKET_FILE was stopped by a permission denial, not by its own work."
     warn "$NEEDS_REASON"
-    warn "\`claude --print\` has no one to approve a tool call, so anything outside the"
-    warn "allowlist is denied outright — including the \`git commit\` this prompt asks for,"
-    warn "after the ticket's work has been done and paid for."
-    warn ""
-    warn "Add this line to $FOREMAN_CONF, then rerun:"
-    warn "  FOREMAN_CLAUDE_ARGS=(--allowed-tools \"Bash(git add:*)\" \"Bash(git commit:*)\")"
+    [ -n "$permission_denied_calls" ] && warn "Denied: $permission_denied_calls"
+    if permission_hint_is_git "$permission_denied_calls"; then
+      warn "\`claude --print\` has no one to approve a tool call, so anything outside the"
+      warn "allowlist is denied outright — including the \`git commit\` this prompt asks for,"
+      warn "after the ticket's work has been done and paid for."
+      warn ""
+      warn "Add this line to $FOREMAN_CONF, then rerun:"
+      warn "  FOREMAN_CLAUDE_ARGS=(--allowed-tools \"Bash(git add:*)\" \"Bash(git commit:*)\")"
+    else
+      # The git line would be wrong advice here: the denied call is not a commit, or the conf
+      # already allows both and the denial came from somewhere else.
+      warn "\`claude --print\` has no one to approve a tool call, so one outside the allowlist"
+      warn "is denied outright. Claude's own tool rules can refuse a call too (a standalone"
+      warn "\`sleep\`, for one), and no allowlist entry changes that."
+      warn ""
+      warn "If it is the allowlist, add an allow rule for that call to FOREMAN_CLAUDE_ARGS in"
+      warn "$FOREMAN_CONF$(permission_example_rule "$permission_denied_calls"), then rerun."
+      warn "Otherwise reword the ticket so the agent does not make that call."
+    fi
     warn "(Or set FOREMAN_PERMISSION_MODE=bypassPermissions there if you want no gate at all.)"
     exec_show_dirty
     finish_needs_human

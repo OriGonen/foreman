@@ -40,6 +40,8 @@
 #     permission-denied  the shape a denied Bash call actually has: the work is done and
 #              sitting in the tree, the commit was refused, and the turn ends exit 0 /
 #              subtype success with the refusal only mentioned in the reply
+#     permission-denied-sleep  the same stop with the commit done: the denied call is a
+#              standalone `sleep 1200`, so the message must name it, not blame `git commit`
 #     crash    exit non-zero with output that is not JSON and carries no signal at all —
 #              indistinguishable from a logic failure, so the loop should NOT retry it
 #     context  exit non-zero with an unparseable context-overflow string: the CLI died
@@ -426,6 +428,18 @@ exec_run() {
       _fake_payload success false \
         "I implemented the ticket, but Bash(git commit) requires approval and I could not obtain it, so the work is uncommitted." \
         '"permission_denials":[{"tool_name":"Bash","tool_use_id":"fake-1","tool_input":{"command":"git commit -m fake"}}]'
+      ;;
+    permission-denied-sleep)
+      # The commit WENT THROUGH; what claude refused was a standalone `sleep` (its own tool
+      # rule, not the allowlist). Same exit 0 / subtype success shape as above, so the stop
+      # fires on the denial list — and must name this call rather than blame `git commit`.
+      printf 'work the fake adapter did commit\n' >> .foreman-fake-partial
+      git add -A >/dev/null 2>&1
+      git -c user.name=foreman-fake -c user.email=fake@foreman.invalid \
+        commit --quiet -m "wip: $ticket — remaining: the rest" >/dev/null 2>&1
+      _fake_payload success false \
+        "I committed the work, but the standalone sleep 1200 was blocked, so I could not finish." \
+        '"permission_denials":[{"tool_name":"Bash","tool_use_id":"fake-1","tool_input":{"command":"sleep 1200"}}]'
       ;;
     crash)
       printf 'claude: unexpected failure, no output\n'
