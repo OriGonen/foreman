@@ -151,8 +151,13 @@ Stop and ask the owner before any change to the public CLI interface, the config
 
 Done and committed on `review/deep-refactor`: T01–T13, R1–R5 (R4 narrowed), D1–D7 plus D4b. Nothing pushed.
 
+## Found in the hand checks (2026-11-22)
+
+- **H1 — Windows: ending a turn left the agent's commands running** (`76db2ab`). A turn timeout, `foreman stop --now` or SIGTERM ended `claude.exe` but orphaned its Bash tool's `bash.exe` and that bash's children. MSYS `kill` on a native process is TerminateProcess on that one process, and `taskkill /T` alone stops at the MSYS bash, because an MSYS process's Windows parent is its short-lived fork stub. `proc_is_native` and `proc_kill_tree` in `foreman-ctl.sh` take a `/proc` snapshot, run `taskkill /F /T`, then end everything MSYS-below what taskkill ended. Regression cases (Windows only) in `smoke.sh` and `smoke-json.sh` use the fake `hang-native`. Verified by hand with the real `claude.exe` running a 20-minute command: after the turn timeout and after `stop --now`, nothing is left.
+- **H2 — The permission stop named the wrong fix** (`d2822a7`). A denied `sleep` got the git allowlist suggestion. The stop now names the denied calls (`permission_denied_calls` in the verdict) and suggests the git allowlist only when a git call was denied; otherwise it gives an allow rule for the call that was denied.
+
 Left to do, all by hand (needs access the agents did not have):
-- **T13 / D2:** on Windows with the real `claude.exe`, check that `foreman stop`, SIGTERM and a turn timeout (`FOREMAN_TURN_TIMEOUT_MINUTES=1`) end the agent: a native process may ignore TERM, so the forced `taskkill /T` stage is what matters. Ctrl-C on macOS bash 3.2.
+- **T13 / D2:** done on Windows with the real `claude.exe` (H1 above). Still to check: Ctrl-C on macOS bash 3.2.
 - **T11 / D4b:** open the Electron app, check that inline spacing renders under the CSP, and press Start run in a batch without the `.foreman-run/` ignore line.
 - **D3:** with a real `sbx`, run `foreman order` under `FOREMAN_EXEC=sandbox` and `sandbox-mount`: the sandbox is created if missing, and the claude inside it is installed and logged in.
 
