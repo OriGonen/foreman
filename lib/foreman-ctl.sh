@@ -174,3 +174,78 @@ run_pid_alive() {    # run_pid_alive MSYS_PID WIN_PID
   fi
   return 0
 }
+
+# Ending what a run started, for the loop (end_turn) and `foreman stop --now` (stop_now, stop_force),
+# which both walk the MSYS process tree below the run. Under MSYS that tree has a hole: a native
+# Windows program (claude.exe, node.exe, cmd.exe: it does not load the MSYS runtime) shows in /proc
+# under the MSYS process that started it, but what IT starts — the MSYS bash.exe its Bash tool runs,
+# and that bash's own children — are Windows children of it and are not in /proc beneath it. `kill`
+# on a native process is TerminateProcess on that one process, so once it is gone those are orphans
+# that nothing can reach from the turn any more. The native process's Windows tree has to be taken
+# down while it is still there to hang from: `taskkill /T`. That alone is not enough, though: an MSYS
+# process's Windows parent is the short-lived process its fork became (the bash's `sleep` is a child of
+# a Windows process that is already gone), so `taskkill /T` stops at the MSYS bash it reaches. What
+# that bash started is found by its MSYS parent instead, from a /proc snapshot taken before the kill
+# (afterwards they are all re-parented to init). Off Windows (no winpid, no taskkill) there is no
+# native process, and none of this applies.
+
+# Whether the MSYS pid is a native Windows process: one with a Windows pid, on a host with taskkill,
+# that has not loaded the MSYS runtime (the DLL's mapping is what tells an MSYS program apart). A
+# process that cannot be read, or has just gone, is not one: it gets the signal it always did.
+proc_is_native() {    # proc_is_native PID
+  local winpid="" maps=""
+  [ -r "/proc/$1/winpid" ] && command -v taskkill >/dev/null 2>&1 || return 1
+  read -r winpid 2>/dev/null < "/proc/$1/winpid"
+  [[ "$winpid" =~ ^[0-9]+$ ]] || return 1
+  IFS= read -r -d '' maps 2>/dev/null < "/proc/$1/maps"
+  [ -n "$maps" ] || return 1
+  [[ "$maps" != *msys-2.0.dll* && "$maps" != *cygwin1.dll* ]]
+}
+
+# Ends PID without its signal handlers: the Windows way where it has a Windows pid (`taskkill /F /T`
+# takes the process's Windows tree with it), and `kill -9` as well, which is all there is where it has
+# not. A NATIVE process also takes with it what its MSYS children started (see above): the table of
+# /proc is read first, `taskkill` says which Windows pids it ended, and everything that was below any
+# of those in the table is ended too — native ones with their own trees, MSYS ones with `kill -9`.
+proc_kill_tree() {    # proc_kill_tree PID
+  local winpid="" out="" line rest a b w p i d grew killed=" "
+  local -a pid=() par=() win=() found=()
+  read -r winpid 2>/dev/null < "/proc/$1/winpid"
+  if [[ "$winpid" =~ ^[0-9]+$ ]] && command -v taskkill >/dev/null 2>&1; then
+    if proc_is_native "$1"; then
+      for p in /proc/[0-9]*; do
+        p="${p#/proc/}"
+        read -r line 2>/dev/null < "/proc/$p/stat" || continue
+        rest="${line##*) }"
+        read -r a b _ <<< "$rest"
+        [[ "$b" =~ ^[0-9]+$ ]] || continue
+        w=""; read -r w 2>/dev/null < "/proc/$p/winpid"
+        pid+=("$p"); par+=("$b"); win+=("$w")
+      done
+    fi
+    out="$(MSYS_NO_PATHCONV=1 taskkill /F /T /PID "$winpid" 2>&1)"
+    # One line per process ended, the first number on it that process's own pid, in whatever language.
+    while IFS= read -r line; do
+      [[ "$line" =~ ([0-9]+) ]] && killed+="${BASH_REMATCH[1]} "
+    done <<< "$out"
+    for i in "${!pid[@]}"; do
+      [ "${pid[$i]}" != "$1" ] && [ -n "${win[$i]}" ] && [[ "$killed" == *" ${win[$i]} "* ]] && found+=("${pid[$i]}")
+    done
+    grew=1
+    while [ "$grew" -eq 1 ] && [ "${#found[@]}" -gt 0 ]; do
+      grew=0
+      for i in "${!pid[@]}"; do
+        [ -n "${pid[$i]}" ] || continue
+        for p in "${found[@]}"; do
+          if [ "${par[$i]}" = "$p" ]; then found+=("${pid[$i]}"); pid[i]=""; grew=1; break; fi
+        done
+      done
+    done
+    for d in ${found[@]+"${found[@]}"}; do
+      kill -0 "$d" 2>/dev/null || continue
+      if proc_is_native "$d"; then proc_kill_tree "$d"; else kill -9 "$d" 2>/dev/null; fi
+    done
+  fi
+  kill -9 "$1" 2>/dev/null
+  return 0
+}

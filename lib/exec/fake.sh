@@ -26,6 +26,9 @@
 #              then sends the loop SIGINT, as the terminal would. The same pause.
 #     hang-dirty  writes an uncommitted file, then waits on `sleep $FOREMAN_FAKE_HANG` (default 600) as an
 #              agent mid-turn does, until something ends it: `foreman stop --now`'s tests
+#     hang-native  as hang-dirty, but the wait is a native Windows process tree, as a real agent's is:
+#              `cmd.exe` (native, like claude.exe) running an MSYS bash that runs `sleep $FOREMAN_FAKE_HANG`.
+#              Windows only; tests that the turn's end takes the whole tree, not just the native process
 #     stop-file-dirty  writes an uncommitted file, then leaves a `stop` file in the run's control
 #              directory, as `foreman stop --now` does, and ends the turn cleanly
 #     session-limit  the same event as the CLI words it today — valid JSON whose reply is
@@ -370,6 +373,18 @@ exec_run() {
     hang-dirty)
       printf 'half-written by the fake adapter (call %s)\n' "$call" >> .foreman-fake-leftover
       sleep "${FOREMAN_FAKE_HANG:-600}"
+      printf 'claude: stopped\n'
+      return 130
+      ;;
+    hang-native)
+      # What the real agent is on Windows: a NATIVE process (cmd.exe, as claude.exe is) running an MSYS
+      # bash that runs `sleep $FOREMAN_FAKE_HANG`. The bash and the sleep are Windows children of the
+      # native process, so MSYS shows them under nothing — they outlive it unless its Windows tree is ended.
+      printf 'half-written by the fake adapter (call %s)\n' "$call" >> .foreman-fake-leftover
+      _fake_native_script="$(mktemp)"
+      printf 'sleep %s\n' "${FOREMAN_FAKE_HANG:-600}" > "$_fake_native_script"
+      cmd.exe //c "bash $_fake_native_script"
+      rm -f "$_fake_native_script"
       printf 'claude: stopped\n'
       return 130
       ;;

@@ -2171,6 +2171,40 @@ if case_is "foreman stop --now: a run whose SIGINT is ignored is stopped by the 
   agent_left 732 && fail "no agent process is left" || pass
 fi
 
+# Whether a `sleep N` is running, by /proc (there is no pgrep under Git Bash), and ending it: for the
+# case below, where what is left is a process no tree reaches. Prints its pid when it is.
+sleep_left() {    # sleep_left N
+  local f a b p found=1
+  for f in /proc/[0-9]*/cmdline; do
+    a="" b=""
+    { IFS= read -r -d '' a; IFS= read -r -d '' b; } 2>/dev/null < "$f"
+    [ "${a##*/}$b" = "sleep$1" ] || continue
+    p="${f#/proc/}"; printf '%s\n' "${p%/cmdline}"; found=0
+  done
+  return "$found"
+}
+
+if case_is "foreman stop --now: what a native Windows agent started is ended with it, not left running (Windows only)"; then
+  # claude.exe is a native process; MSYS cannot signal it, and the bash its Bash tool runs, with that
+  # bash's `sleep`, hang below it in Windows only. hang-native is that shape: cmd.exe > bash > sleep 734.
+  if [ -r "/proc/$$/winpid" ] && command -v taskkill >/dev/null 2>&1 && command -v cmd.exe >/dev/null 2>&1; then
+    repo="$WORK/now-native"; ctl_repo "$repo" 2
+    BG_ENV=(FOREMAN_FAKE_BEHAVIOUR=hang-native FOREMAN_FAKE_HANG=734 FOREMAN_STOP_GRACE=2); bg_run "$repo" batch --unlimited
+    wait_until 30 test -f "$repo/.foreman-fake-leftover" && pass || fail "the agent is mid-turn"
+    wait_until 10 sleep_left 734 >/dev/null && pass || fail "the native agent's descendants are running"
+    run_foreman "$repo" stop --now batch
+    assert_eq "$ST" 0 "exits 0"
+    wait_until 30 test -s "$WORK/bg.st"
+    bg_wait
+    assert_eq "$BG_ST" 10 "the run is paused, as by Ctrl-C"
+    # Looked for after a moment: a killed Windows process leaves the table late.
+    wait_until 5 eval '! sleep_left 734 >/dev/null' && pass || fail "nothing of the native agent's tree is left (sleep 734 is still running)"
+    for p in $(sleep_left 734); do kill -9 "$p" 2>/dev/null; done
+  else
+    printf '  (skipped: not Windows, or no cmd.exe / taskkill)\n'
+  fi
+fi
+
 if case_is "a stop file in the control directory pauses the run as Ctrl-C does, and nothing else sees it"; then
   repo="$WORK/now-file"; ctl_repo "$repo" 3
   run_foreman_env "$repo" "FOREMAN_FAKE_BEHAVIOUR=stop-file-dirty" run batch --unlimited

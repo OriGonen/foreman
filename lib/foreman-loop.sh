@@ -1094,22 +1094,26 @@ run_turn() {    # run_turn PROMPT TICKET
 # the agent started get the signal, as the terminal gives Ctrl-C to its whole group. The group that
 # runs them is left alone, to write the status. Everything after is the pause path an interrupt takes.
 #
-# --force is for what TERM did not end (MSYS cannot hand a signal to a native Windows process):
-# `foreman stop --now`'s last step, stop_force in foreman-control.sh, which cannot be sourced —
-# `taskkill /F /T` on the Windows pid where there is one (it takes a native process's own children
-# with it), `kill -9` as well. Still never the group itself, which writes the status if it can.
+# A native Windows process among them (claude.exe, the filter's node.exe: see proc_is_native in
+# foreman-ctl.sh) is not sent TERM, which MSYS turns into TerminateProcess on that one process and
+# which leaves everything IT started — the bash its Bash tool runs, that bash's `sleep` — running
+# with no parent to find them by. It gets `taskkill /F /T` at once, which takes its whole Windows
+# tree with it; it had no way to exit gracefully on TERM anyway. MSYS processes (the shell wrappers)
+# still get TERM, so their traps run.
+#
+# --force is for what TERM did not end: `foreman stop --now`'s last step, stop_force in
+# foreman-control.sh, which cannot be sourced — proc_kill_tree: `taskkill /F /T` on the Windows pid
+# where there is one, `kill -9` as well. Still never the group itself, which writes the status if
+# it can. Off Windows it is TERM, then KILL, as ever.
 end_turn() {    # end_turn [--force]
-  local p winpid
+  local p
   [ -n "$TURN_PID" ] || return 0
   for p in $(loop_descendants "$TURN_PID"); do
     if [ "${1:-}" = --force ]; then
       kill -0 "$p" 2>/dev/null || continue
-      winpid=""
-      read -r winpid 2>/dev/null < "/proc/$p/winpid"
-      if [[ "$winpid" =~ ^[0-9]+$ ]] && command -v taskkill >/dev/null 2>&1; then
-        MSYS_NO_PATHCONV=1 taskkill /F /T /PID "$winpid" >/dev/null 2>&1
-      fi
-      kill -9 "$p" 2>/dev/null
+      proc_kill_tree "$p"
+    elif proc_is_native "$p"; then
+      proc_kill_tree "$p"
     else
       kill -TERM "$p" 2>/dev/null
     fi

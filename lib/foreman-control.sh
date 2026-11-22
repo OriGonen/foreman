@@ -141,16 +141,12 @@ stop_descendants() {    # stop_descendants PID
   done
 }
 
-# Ends PID without its signal handlers: the Windows way where it has a Windows pid (and takes the
-# native children of a native process with it), `kill -9` where it has not.
+# Ends PID without its signal handlers: proc_kill_tree (foreman-ctl.sh) — `taskkill /F /T` on its
+# Windows pid where it has one, which takes the process's whole Windows tree with it, including what a
+# native process started that is no MSYS descendant of anything here; `kill -9` as well, which is all
+# there is where it has not.
 stop_force() {    # stop_force PID
-  local winpid=""
-  read -r winpid 2>/dev/null < "/proc/$1/winpid"
-  if [[ "$winpid" =~ ^[0-9]+$ ]] && command -v taskkill >/dev/null 2>&1; then
-    MSYS_NO_PATHCONV=1 taskkill /F /T /PID "$winpid" >/dev/null 2>&1
-  fi
-  kill -9 "$1" 2>/dev/null
-  return 0
+  proc_kill_tree "$1"
 }
 
 # Whether any of the pids is still running.
@@ -170,10 +166,15 @@ stop_now() {
   ctl_write "$CTL" "$CTL_F_STOP" "$$" ||
     { echo "foreman stop: could not write $CTL/$CTL_F_STOP" >&2; exit 1; }
 
-  # 2. The signal, to the loop and to everything under it, as the terminal sends it to its group.
+  # 2. The signal, to the loop and to everything under it, as the terminal sends it to its group. A
+  # native Windows process (the agent itself) cannot take a signal from MSYS, and what it started
+  # is out of reach once it is gone (see proc_is_native, foreman-ctl.sh): it is ended here, with its
+  # whole Windows tree, rather than left for the force step to find with nothing to start from.
   mapfile -t below < <(stop_descendants "$loop_pid")
   kill -INT "$loop_pid" 2>/dev/null
-  for p in ${below[@]+"${below[@]}"}; do kill -INT "$p" 2>/dev/null; done
+  for p in ${below[@]+"${below[@]}"}; do
+    if proc_is_native "$p"; then stop_force "$p"; else kill -INT "$p" 2>/dev/null; fi
+  done
 
   # 3. Whatever has not taken it by the end of the grace period is ended. Early if nothing is left.
   n=$((grace * 5))

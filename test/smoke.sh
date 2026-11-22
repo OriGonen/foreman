@@ -8728,6 +8728,9 @@ proc_running() {    # proc_running 'sleep 733' : a process whose command line is
 proc_kill() {    # proc_kill 'sleep 733' : ends what proc_running finds
   proc_each "$1" kill -9
 }
+proc_gone() {    # proc_gone 'sleep 733' : succeeds once nothing is running by that command line
+  ! proc_running "$1"
+}
 # Runs the rest, with its pid, for each process whose first two words are $1's; fails if there is none.
 # Builtins only (a process per process is slow here), and the words are joined without their
 # separator: MSYS shows the arguments of some processes with none.
@@ -8821,6 +8824,35 @@ if case_is "turn timeout: a timed-out turn's uncommitted work is checkpointed, t
   proc_running 'sleep 731' && { fail "the agent's process is ended"; proc_kill 'sleep 731'; } || pass
   tag_running d2-dirty && fail "nothing of the run is left running" || pass
   rm -f "$WORK"/foreman-fake-*.calls
+fi
+
+if case_is "turn timeout: what a native Windows agent started is ended with it, not left running (Windows only)"; then
+  # The real agent on Windows is claude.exe, a native process: MSYS `kill` is TerminateProcess on it
+  # alone, and the bash its Bash tool runs, with that bash's `sleep`, are Windows children no MSYS
+  # tree reaches. The fake's hang-native is that shape: cmd.exe (native) > bash > sleep 735.
+  if [ -r "/proc/$$/winpid" ] && command -v taskkill >/dev/null 2>&1 && command -v cmd.exe >/dev/null 2>&1; then
+    repo="$(make_repo 2 timeout-native-repo)"
+    SECONDS=0
+    # Output to a file, not through `$(...)`: a sleep left behind holds a pipe open, and the case
+    # would wait out its 735 seconds instead of failing.
+    rm -f "$WORK/native.st"
+    ( cd "$repo" && env FOREMAN_TURN_TIMEOUT_MINUTES=1 FOREMAN_TIMEOUT_UNIT_SECONDS=2 FOREMAN_FAKE_BEHAVIOUR=hang-native \
+        FOREMAN_FAKE_HANG=735 FOREMAN_SMOKE_TAG=d2-native "$FOREMAN" run batch --unlimited > "$WORK/native.out" 2>&1
+      echo $? > "$WORK/native.st" )
+    waited=$SECONDS
+    ST="$(cat "$WORK/native.st" 2>/dev/null)"; OUT="$(cat "$WORK/native.out" 2>/dev/null)"
+    assert_eq "$ST" 10 "it pauses: exit 10"
+    [ "$waited" -le 60 ] && pass || fail "the turn was ended at its timeout (the run took $waited s of the hang's 735)"
+    assert_contains "$OUT" "PAUSED: the turn ran past FOREMAN_TURN_TIMEOUT_MINUTES=1" "with the timeout as the reason"
+    # Nothing of the native tree is left, not the sleep (an MSYS process whose parent is gone) and
+    # not the bash that ran it. Looked for after a moment: a killed Windows process leaves the table late.
+    sig_poll 5 proc_gone 'sleep 735' && pass || fail "the native agent's descendants are ended (sleep 735 is still running)"
+    proc_running 'sleep 735' && proc_kill 'sleep 735'
+    tag_running d2-native && { fail "nothing of the run is left running"; } || pass
+    rm -f "$WORK"/foreman-fake-*.calls
+  else
+    printf '  (skipped: not Windows, or no cmd.exe / taskkill)\n'
+  fi
 fi
 
 if case_is "turn timeout: turns that end in time are untouched, and no watchdog outlives the run"; then
