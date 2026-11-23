@@ -5,8 +5,8 @@
 #   bash install.sh --to <dir>      install the shims into <dir> instead
 #   bash install.sh --force         overwrite a `foreman` or a skill dir not written by this installer
 #   bash install.sh --no-skill      install only the shims, not the skills
-#   bash install.sh --gui           also install the desktop app (npm ci in gui/, and a
-#                                   Start-menu shortcut), without asking
+#   bash install.sh --gui           also install the desktop app (npm ci in gui/, Electron's own
+#                                   download of its program, and a Start-menu shortcut), without asking
 #   bash install.sh --no-gui        install the CLI only, and remove the app and its shortcut
 #                                   if they are there, without asking
 #   bash install.sh --uninstall     remove the shims, the skill copies, the app and its shortcut
@@ -14,7 +14,8 @@
 # With neither --gui nor --no-gui, it asks one question — CLI only, or CLI and the desktop
 # app — when both stdin and stdout are terminals, and the app is not already installed. Anywhere
 # else (a pipe, CI, a test's capture) it asks nothing and installs the CLI, as it always did.
-# Whether the app is installed is read from disk: gui/node_modules/electron, and the shortcut.
+# Whether the app is installed is read from disk: Electron's program under
+# gui/node_modules/electron/dist, and the shortcut.
 #
 # It writes two small forwarding scripts, not symlinks — Windows symlinks need elevation
 # or developer mode, and a forwarder survives moving this checkout being the only thing
@@ -32,8 +33,10 @@
 #   foreman-human-followup-tickets   you type it, after to-tickets and before `foreman init`
 #   foreman-conf-commands            `foreman init` runs it, to fill in foreman.conf's commands
 #
-# The desktop app, when you ask for it, is `npm ci` in this checkout's gui/ (which writes only
-# gui/node_modules) and, on Windows, a shortcut at
+# The desktop app, when you ask for it, is `npm ci` in this checkout's gui/ and then Electron's
+# own install step (node_modules/electron/install.js, which downloads about 100 MB into
+# gui/node_modules/electron/dist — since Electron 45 npm ci no longer does that). Both write only
+# under gui/node_modules. On Windows there is also a shortcut at
 # %APPDATA%\Microsoft\Windows\Start Menu\Programs\Foreman.lnk, written through
 # powershell.exe and WScript.Shell. --uninstall and --no-gui remove both.
 #
@@ -149,7 +152,7 @@ _foreman_legacy_cleanup() {
 }
 
 # ---------------------------------------------------------------------------------------
-# The desktop app: gui/node_modules (npm ci) and a Start-menu shortcut.
+# The desktop app: gui/node_modules (npm ci, then Electron's program) and a Start-menu shortcut.
 # ---------------------------------------------------------------------------------------
 APP_FAILED=0    # set when the app could not be installed or removed: the installer then exits 1
 GUI_DIR="$FOREMAN_HOME/gui"
@@ -172,10 +175,22 @@ _foreman_winpath() {
 # Whether the shortcut is part of "installed": only where it could have been written.
 _foreman_can_shortcut() { [ -n "$SHORTCUT" ] && command -v powershell.exe >/dev/null 2>&1; }
 
-# Success when the app is installed, read from disk: electron under gui/node_modules, and the
-# shortcut where a shortcut can be written. Either one missing is a piece to offer again.
+# Success when Electron's program is there: the same two names, tested the same way, as
+# find_exe in lib/foreman-gui.sh, which is what `foreman gui` will start.
+_foreman_electron_exe_present() {
+  local f
+  for f in "$ELECTRON_DIR/dist/electron.exe" "$ELECTRON_DIR/dist/electron"; do
+    if [ -f "$f" ] && [ -x "$f" ]; then return 0; fi
+  done
+  return 1
+}
+
+# Success when the app is installed, read from disk: Electron's program under gui/node_modules
+# (not just the package directory — npm ci alone leaves that without the program, and an app in
+# that state has to be offered again), and the shortcut where a shortcut can be written. Either
+# one missing is a piece to offer again.
 _foreman_app_installed() {
-  [ -d "$ELECTRON_DIR" ] || return 1
+  _foreman_electron_exe_present || return 1
   _foreman_can_shortcut || return 0
   [ -e "$SHORTCUT" ]
 }
@@ -233,9 +248,13 @@ _foreman_write_shortcut() {
   fi
 }
 
-# Installs the app: npm ci in gui/, then the shortcut. Without npm it says so and leaves the
-# CLI as it is — the CLI is already installed by now. A failure is reported and makes the
-# installer exit 1 at the end, after everything else has been done.
+# Installs the app: npm ci in gui/, then Electron's own install step, then the shortcut. npm ci
+# alone is not enough: since Electron 45 the electron package has no postinstall script, so npm
+# ci unpacks it without the program, and the program is a separate download that
+# node_modules/electron/install.js makes (it does nothing when the program is already there).
+# Without npm it says so and leaves the CLI as it is — the CLI is already installed by now. A
+# failure is reported and makes the installer exit 1 at the end, after everything else has been
+# done; the shortcut is only written for a program that is really there.
 _foreman_install_app() {
   if ! command -v npm >/dev/null 2>&1; then
     echo "note: the desktop app needs Node's npm, and npm is not on your PATH. Installed the CLI only."
@@ -251,6 +270,17 @@ _foreman_install_app() {
   fi
   if [ ! -d "$ELECTRON_DIR" ]; then
     echo "install: npm ci finished but $ELECTRON_DIR is not there, so the desktop app is not installed." >&2
+    APP_FAILED=1
+    return 0
+  fi
+  echo "downloading Electron's program into $ELECTRON_DIR/dist (about 100 MB)"
+  if ! (cd "$GUI_DIR" && node node_modules/electron/install.js); then
+    echo "install: Electron's download failed in $GUI_DIR, so the desktop app is not installed. The CLI is." >&2
+    APP_FAILED=1
+    return 0
+  fi
+  if ! _foreman_electron_exe_present; then
+    echo "install: Electron's install step finished but there is no electron.exe under $ELECTRON_DIR/dist, so the desktop app is not installed." >&2
     APP_FAILED=1
     return 0
   fi

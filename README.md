@@ -931,7 +931,8 @@ bash install.sh --no-gui       # CLI only, and remove the app if it is there, wi
 The question is the **wizard**. It is asked only when both stdin and stdout are terminals and
 the app is not already installed; a pipe, CI and a script's capture are never asked, and get the
 CLI as they always did. `--gui` runs `npm ci` in the checkout's `gui/` (about 250 MB, Electron is
-the app's one dependency) and writes a Start-menu shortcut, `Foreman`. The app has no installer
+the app's one dependency), then Electron's own install step, which downloads its program (about
+100 MB), and writes a Start-menu shortcut, `Foreman`. The app has no installer
 of its own: it runs from the checkout, like the rest of foreman.
 
 **Update** it the way you update the CLI:

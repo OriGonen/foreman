@@ -1208,14 +1208,29 @@ if case_is "golden: install.sh is byte for byte what it was when nothing asks"; 
 fi
 
 # Stubs on PATH: an `npm` that logs its arguments and directory and makes gui/node_modules/electron
-# (or fails, with FAKE_NPM_FAIL set), and a `powershell.exe` that logs its arguments and the
-# variables the shortcut is made from, and makes the .lnk at $FOREMAN_LNK.
+# the way Electron 45 and later unpack it — the package, with its install.js, and no dist/ (or
+# fails, with FAKE_NPM_FAIL set), and a `powershell.exe` that logs its arguments and the
+# variables the shortcut is made from, and makes the .lnk at $FOREMAN_LNK. The install.js it
+# leaves is a stand-in for Electron's, run by the real node: it logs, and makes dist/electron.exe
+# and path.txt without downloading anything (FAKE_ELECTRON_FAIL makes it exit 1, and
+# FAKE_ELECTRON_NOEXE makes it exit 0 having made nothing). Nothing in the tests touches the network.
 install_stubs() {
   cat > "$IN_STUBS/npm" <<'STUB'
 #!/bin/bash
 printf 'npm %s | %s\n' "$*" "$PWD" >> "$FAKE_LOG"
 [ -z "${FAKE_NPM_FAIL:-}" ] || exit 1
-mkdir -p node_modules/electron/dist && : > node_modules/electron/dist/electron.exe
+mkdir -p node_modules/electron
+printf '{"name":"electron","version":"45.3.1"}\n' > node_modules/electron/package.json
+cat > node_modules/electron/install.js <<'JS'
+const fs = require('fs'), path = require('path');
+fs.appendFileSync(process.env.FAKE_LOG, 'electron-install | ' + path.basename(process.cwd()) + '\n');
+if (process.env.FAKE_ELECTRON_FAIL) process.exit(1);
+if (process.env.FAKE_ELECTRON_NOEXE) process.exit(0);
+const dist = path.join(__dirname, 'dist');
+fs.mkdirSync(dist, { recursive: true });
+fs.writeFileSync(path.join(dist, 'electron.exe'), '', { mode: 0o755 });
+fs.writeFileSync(path.join(__dirname, 'path.txt'), 'electron.exe');
+JS
 STUB
   cat > "$IN_STUBS/powershell.exe" <<'STUB'
 #!/bin/bash
@@ -1260,6 +1275,12 @@ if case_is "install --gui: npm ci in gui/, then the shortcut through powershell.
   install_plain --gui
   assert_eq "$ST" 0 "--gui exits 0"
   assert_eq "$(grep '^npm ' "$FAKE_LOG")" "npm ci | $IN_CHECKOUT/gui" "npm ci ran once, in the checkout's gui/"
+  # Electron 45 and later: npm ci leaves electron without its program, and Electron's own
+  # install.js, run after it, puts it there.
+  assert_eq "$(grep '^electron-install ' "$FAKE_LOG")" "electron-install | gui" "Electron's install.js ran once, in gui/ (node reports the directory in Windows form, so only its name is compared)"
+  assert_contains "$OUT" "downloading Electron's program" "it says it is downloading Electron's program"
+  [ -f "$IN_CHECKOUT/gui/node_modules/electron/dist/electron.exe" ] && pass || fail "dist/electron.exe is there after the install"
+  [ -f "$IN_CHECKOUT/gui/node_modules/electron/path.txt" ] && pass || fail "and so is path.txt"
   assert_contains "$OUT" "installed the desktop app" "it says the app is installed"
   assert_contains "$OUT" "installed shortcut" "and that the shortcut is"
   assert_missing "$OUT" "What should this install" "it did not ask"
@@ -1296,6 +1317,25 @@ if case_is "install --gui: no npm says so and installs the CLI only; a failing n
   assert_contains "$OUT" "npm ci failed" "and says so"
   [ -e "$IN_BIN/foreman" ] && pass || fail "the CLI is installed all the same"
   [ ! -e "$IN_LNK" ] && pass || fail "and no shortcut is written for an app that is not there"
+fi
+
+if case_is "install --gui: Electron's own install step failing, or leaving no electron.exe, is reported and writes no shortcut"; then
+  install_setup elfail; install_stubs
+  FAKE_ELECTRON_FAIL=1 install_plain --gui
+  assert_eq "$ST" 1 "a failing Electron install step makes the installer exit 1"
+  assert_contains "$OUT" "Electron's download failed" "and says so"
+  assert_missing "$OUT" "installed the desktop app" "it does not claim the app is installed"
+  assert_eq "$(install_calls)" 1 "npm ci ran once"
+  [ -e "$IN_BIN/foreman" ] && pass || fail "the CLI is installed all the same"
+  [ ! -e "$IN_LNK" ] && pass || fail "and no shortcut is written for an app that has no program"
+
+  install_setup elnoexe; install_stubs
+  FAKE_ELECTRON_NOEXE=1 install_plain --gui
+  assert_eq "$ST" 1 "an Electron install step that leaves no electron.exe makes the installer exit 1"
+  assert_contains "$OUT" "no electron.exe under" "and says so"
+  assert_missing "$OUT" "installed the desktop app" "it does not claim the app is installed"
+  [ -e "$IN_BIN/foreman" ] && pass || fail "the CLI is installed all the same"
+  [ ! -e "$IN_LNK" ] && pass || fail "and no shortcut is written"
 fi
 
 if case_is "install: --gui and --no-gui together are refused, and nothing is written"; then
@@ -1472,6 +1512,10 @@ if case_is "install wizard: a rerun offers only the piece that is missing"; then
     install_stubs; : > "$IN_LNK"; rm -rf "$IN_CHECKOUT/gui/node_modules"
     install_tty "n\n" ""
     assert_contains "$PLAIN" "Add the desktop app too?" "no electron: the app is offered"
+    # The package without its program (what npm ci alone leaves from Electron 45) is not installed.
+    mkdir -p "$IN_CHECKOUT/gui/node_modules/electron"
+    install_tty "n\n" ""
+    assert_contains "$PLAIN" "Add the desktop app too?" "electron without its program: the app is offered again"
   else
     printf '  (no usable script(1): the rerun is not run)\n'
   fi
