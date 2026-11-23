@@ -155,10 +155,13 @@ Done and committed on `review/deep-refactor`: T01–T13, R1–R5 (R4 narrowed), 
 
 - **H1 — Windows: ending a turn left the agent's commands running** (`76db2ab`). A turn timeout, `foreman stop --now` or SIGTERM ended `claude.exe` but orphaned its Bash tool's `bash.exe` and that bash's children. MSYS `kill` on a native process is TerminateProcess on that one process, and `taskkill /T` alone stops at the MSYS bash, because an MSYS process's Windows parent is its short-lived fork stub. `proc_is_native` and `proc_kill_tree` in `foreman-ctl.sh` take a `/proc` snapshot, run `taskkill /F /T`, then end everything MSYS-below what taskkill ended. Regression cases (Windows only) in `smoke.sh` and `smoke-json.sh` use the fake `hang-native`. Verified by hand with the real `claude.exe` running a 20-minute command: after the turn timeout and after `stop --now`, nothing is left.
 - **H2 — The permission stop named the wrong fix** (`d2822a7`). A denied `sleep` got the git allowlist suggestion. The stop now names the denied calls (`permission_denied_calls` in the verdict) and suggests the git allowlist only when a git call was denied; otherwise it gives an allow rule for the call that was denied.
+- **H3 — `install.sh --gui` never got Electron's program** (`9a0383c`). Since Electron 45 the `electron` package has no postinstall, so `npm ci` leaves it without `dist/electron.exe`; the installer said "installed" and `foreman gui`'s repair loop ran `npm ci` again forever. The installer now runs `node_modules/electron/install.js` after `npm ci` and checks the program is there before writing the shortcut.
+- **H4 — Open ticket opened the OS editor** (`d6dff62`). The batch screen's Next card and the exit-20 run-end scene now open the in-app ticket page; "Open ticket in editor" is unchanged.
+- **H5 — The dry-run prompt could not scroll** (`cecea29`). `.row.top` outweighed `.dryrow`'s `align-items: stretch`, so the prompt card grew to its full length and was clipped. The report view had the same defect and is fixed with it.
 
 Left to do, all by hand (needs access the agents did not have):
-- **T13 / D2:** done on Windows with the real `claude.exe` (H1 above). Still to check: Ctrl-C on macOS bash 3.2.
-- **T11 / D4b:** open the Electron app, check that inline spacing renders under the CSP, and press Start run in a batch without the `.foreman-run/` ignore line.
+- **T13 / D2:** done on Windows with the real `claude.exe` (H1 above). Ctrl-C on macOS bash 3.2 is unchecked: no Mac available.
+- **T11 / D4b:** done by hand (2026-11-23): inline spacing renders under the CSP, and Start run without the ignore line keeps the control dir under `.git/foreman-run/` and removes it when the run ends.
 - **D3:** with a real `sbx`, run `foreman order` under `FOREMAN_EXEC=sandbox` and `sandbox-mount`: the sandbox is created if missing, and the claude inside it is installed and logged in.
 
 Full-suite results are in `FULL-RUN.md`.
