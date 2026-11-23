@@ -56,7 +56,7 @@ happened. The unit the user's `<n>` budget is spent in.
 _Avoid_: Cycle, round, step
 
 **Turn**:
-One `claude --print` invocation. It prints a single JSON object and exits; there is no
+One headless invocation of an agent. It prints a single JSON object and exits; there is no
 second turn. An iteration normally contains exactly one, and a stalled iteration
 contains two — its own and a checkpoint turn.
 _Avoid_: Call, request, agent run
@@ -131,6 +131,36 @@ The fixed key/value summary of one turn that the recorder writes for the loop to
 the loop's only structured view of what the model did.
 _Avoid_: Result, outcome, report
 
+### Which agent does the work
+
+**Agent**:
+The coding program a turn invokes — Claude Code (`claude`) or Google's Antigravity CLI
+(`agy`). Chosen per batch, with a model of its own; the model is not the agent, so "a
+Gemini agent" means Antigravity running a Gemini model.
+_Avoid_: Provider, vendor, backend, LLM, model (that is what the agent runs)
+
+**Effort**:
+How hard the model reasons on a turn, on its agent's own scale (`low` to `max`). The names
+match across agents but the amounts behind them do not, and not every model offers every
+level. Set once per batch; the fallback agent uses the same level, or the highest one its
+model has below it.
+_Avoid_: Thinking budget, reasoning level, quality
+
+**Agent cache**:
+What foreman has learned from an agent about its models — their names, effort levels and
+defaults — saved once per agent in the user's cache directory and refreshed when it is a
+week old, the agent's login changes, or a batch names a model it does not know. Disposable
+like the stall marker: deleting it costs one lookup.
+_Avoid_: Registry, catalogue, model list (that is what `foreman agents` prints)
+
+**Fallback agent**:
+A second agent, and its model, that a batch may name to take over when its agent hits a
+usage limit mid-run. It keeps the work for the rest of that run, starting with a review
+turn on whatever the first agent left uncommitted; the next run starts with the batch's own
+agent again. Nothing but a usage limit hands over — a lost login, a denied tool call or an
+overflowing context still stops the run. None by default.
+_Avoid_: Backup, secondary, failover
+
 ### Where the agent runs
 
 **Adapter**:
@@ -145,8 +175,9 @@ Commits reach the host from it by bundle; an uncommitted change in it is a lost 
 _Avoid_: Workspace, container repo
 
 **Sandbox**:
-The `sbx` container the agent runs in. One per **repository**, not per batch — several
-batches in the same repository share it.
+The `sbx` container the agent runs in. One per **repository and agent**, not per batch —
+several batches in the same repository share it, and a batch with a fallback agent uses
+two. The agent is fixed when the sandbox is created.
 _Avoid_: Environment, box, VM
 
 ### Resuming
