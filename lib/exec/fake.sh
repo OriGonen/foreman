@@ -78,6 +78,8 @@
 #     ok           (default) a success payload whose reply is FOREMAN_FAKE_ASK_REPLY
 #     error        an is_error payload, exit 1
 #     unavailable  exit 125, as a sandbox that is not there or has no claude in it
+#   FOREMAN_FAKE_ASK_STDERR  a line exec_ask writes to stderr while it works, as progress, after
+#              FOREMAN_FAKE_SLEEP seconds (and waits that long again before answering). Optional.
 #   FOREMAN_FAKE_ASK_REPLY   the reply's text. Default: a sentence, which orders nothing.
 #   Each question is recorded in FOREMAN_FAKE_PROMPT_LOG, under `===== fake ask =====`, with an
 #   `args:` line of the model, effort and permission mode a real adapter would pass.
@@ -133,6 +135,13 @@ exec_ask() {
       printf 'args: --model %s --effort %s --permission-mode %s\n' \
         "$FOREMAN_MODEL" "$FOREMAN_EFFORT" "$FOREMAN_PERMISSION_MODE"
       printf '%s\n' "$prompt"; } >> "$FOREMAN_FAKE_PROMPT_LOG"
+  fi
+  # Progress on stderr, as a sandbox's creation says its piece: FOREMAN_FAKE_SLEEP seconds into the
+  # call, so a caller drawing a spinner has drawn it, and the same again before the answer.
+  if [ -n "${FOREMAN_FAKE_ASK_STDERR:-}" ]; then
+    [ "${FOREMAN_FAKE_SLEEP:-0}" = 0 ] || sleep "$FOREMAN_FAKE_SLEEP"
+    printf '%s\n' "$FOREMAN_FAKE_ASK_STDERR" >&2
+    [ "${FOREMAN_FAKE_SLEEP:-0}" = 0 ] || sleep "$FOREMAN_FAKE_SLEEP"
   fi
   case "${FOREMAN_FAKE_ASK:-ok}" in
     unavailable)

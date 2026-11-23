@@ -220,6 +220,10 @@ order_draw() {    # order_draw SCENE
   printf '%s' "${out%x*}"
 }
 
+# Whether FD is a terminal. _FOREMAN_TEST_ORDER_TTY=1 says both are, for the smoke suite, which has no
+# pty to run in on every platform (no `script` under Git Bash); it is not a setting and nothing else reads it.
+order_tty() { [ -t "$1" ] || [ -n "${_FOREMAN_TEST_ORDER_TTY:-}" ]; }
+
 # The wait, on one line: a spinner and the seconds, redrawn until the agent is done. It runs in the
 # background and is only ever started on a terminal: there is nothing to redraw on a pipe.
 order_spinner() {
@@ -245,8 +249,47 @@ order_stop_spinner() {
   printf '\r\033[2K'
 }
 
+# What the executor says on stderr while the spinner is up ("Creating sandbox …") would land at the
+# end of the spinner's line, which the spinner then redraws around. So it goes through here: each
+# line clears the spinner's line first and ends with its own newline, and the spinner's next frame
+# is drawn below it. One printf is one write, so it never lands in the middle of a frame.
+order_relay() {
+  local line
+  while IFS= read -r line || [ -n "$line" ]; do
+    printf '\r\033[2K%s\n' "$line" >&2
+  done
+}
+
+ORDER_RELAY_FD=""
+ORDER_RELAY_PID=""
+# Sends the executor's stderr through order_relay, from here until order_relay_stop. Only while the
+# spinner is up and stderr is a terminal too: otherwise there is nothing to collide with, and
+# stderr stays the stream it was.
+order_relay_start() {
+  [ -n "$ORDER_SPINNER_PID" ] && order_tty 2 || return 0
+  exec {ORDER_RELAY_FD}> >(order_relay)
+  ORDER_RELAY_PID=$!
+}
+
+# Closes the relay and waits until it has printed every line it was given, so that nothing the
+# executor said is cut off by what is printed next. The wait is bounded: a process the executor
+# left running keeps the pipe open, and the relay with it, which must not hold the order up.
+order_relay_stop() {
+  local i
+  [ -z "$ORDER_RELAY_FD" ] || exec {ORDER_RELAY_FD}>&-
+  ORDER_RELAY_FD=""
+  [ -n "$ORDER_RELAY_PID" ] || return 0
+  for ((i = 0; i < 40; i++)); do
+    kill -0 "$ORDER_RELAY_PID" 2>/dev/null || break
+    sleep 0.05
+  done
+  kill "$ORDER_RELAY_PID" 2>/dev/null
+  ORDER_RELAY_PID=""
+}
+
 ORDER_OWN_FACTS=""
 order_exit() {
+  order_relay_stop
   order_stop_spinner
   [ -z "$ORDER_OWN_FACTS" ] || rm -f "$ORDER_OWN_FACTS"
 }
@@ -271,7 +314,7 @@ was=""
 [ -z "${FOREMAN_ORDER_RESULT:-}" ] || was="$(foreman_next_answer --all 2>/dev/null)"
 
 if [ "$ORDER_SHOW" -eq 1 ] && printf 'batch\t%s\ntickets\t%s\nmodel\t%s\n' "$BATCH_DIR" "${#tickets[@]}" "$MODEL" | order_draw order-head; then
-  [ ! -t 1 ] || { order_spinner & ORDER_SPINNER_PID=$!; }
+  ! order_tty 1 || { order_spinner & ORDER_SPINNER_PID=$!; }
 else
   # No picture to draw it in: today's line, and from here on a plain run.
   if [ "$ORDER_SHOW" -eq 1 ]; then ORDER_SHOW=0; FOREMAN_ORDER_RESULT=""; fi
@@ -281,9 +324,11 @@ fi
 # The ordering model and effort, for this one call: the executor reads FOREMAN_MODEL and
 # FOREMAN_EFFORT, as it does for a turn.
 order_start=$SECONDS
-RESPONSE=$(FOREMAN_MODEL="$MODEL" FOREMAN_EFFORT="$EFFORT" exec_ask "$PROMPT")
+order_relay_start
+RESPONSE=$(FOREMAN_MODEL="$MODEL" FOREMAN_EFFORT="$EFFORT" exec_ask "$PROMPT" 2>&"${ORDER_RELAY_FD:-2}")
 status=$?
 order_seconds=$((SECONDS - order_start))
+order_relay_stop
 order_stop_spinner
 
 # 125: the executor could not ask at all, and its reply is why.

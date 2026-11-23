@@ -6842,6 +6842,46 @@ if case_is "foreman order on a real terminal shows without being forced, redraws
   fi
 fi
 
+# What the executor says on stderr while the spinner is up (a sandbox's "Creating sandbox …") must come
+# out on a line of its own, above the spinner, which goes on below it. The suite has no pty on every
+# platform, so _FOREMAN_TEST_ORDER_TTY says the streams are terminals (see order_tty); the show is forced.
+if case_is "foreman order puts what the executor says on stderr on its own line, above the spinner"; then
+  ESC=$'\033'
+  repo="$(make_repo 3 order-stderr-repo)"
+  { echo "<!-- ORDER:BEGIN -->"; for f in "$repo"/batch/issues/*.md; do echo "batch/issues/$(basename "$f")"; done; echo "<!-- ORDER:END -->"; } > "$repo/batch/order.md"
+  say="Creating sandbox 'fm-hc-clone'…"
+  spin_env=(env FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=100 _FOREMAN_TEST_ORDER_TTY=1
+    FOREMAN_EXEC=fake FOREMAN_FAKE_SLEEP=0.5 FOREMAN_FAKE_ASK_STDERR="$say")
+
+  "${spin_env[@]}" FOREMAN_FAKE_ASK_REPLY="$(printf '%s\n' '<!-- ORDER:BEGIN -->' batch/issues/02-ticket.md batch/issues/01-ticket.md batch/issues/03-ticket.md '<!-- ORDER:END -->')" \
+    bash -c 'cd "$1" && shift && "$@" 2>&1' _ "$repo" "$FOREMAN" order batch > "$WORK/order-stderr.out"
+  ST=$?
+  OUT="$(cat "$WORK/order-stderr.out")"
+  assert_eq "$ST" 0 "the order is written"
+  assert_contains "$OUT" "reading the tickets" "the spinner was up"
+  assert_contains "$OUT" "$say" "and the executor's line reached the screen"
+  head="${OUT%%"$say"*}"
+  tail="${OUT#*"$say"}"
+  case "$head" in *$'\r'"${ESC}[2K") pass ;; *) fail "the spinner line is cleared right before the line, not left in front of it" ;; esac
+  case "$tail" in $'\n'*) pass ;; *) fail "the line ends its own line" ;; esac
+  assert_contains "$tail" "reading the tickets" "and the spinner goes on below it"
+
+  # A call that fails says its piece too, and the failure still follows.
+  "${spin_env[@]}" FOREMAN_FAKE_ASK=error bash -c 'cd "$1" && shift && "$@" 2>&1' _ "$repo" "$FOREMAN" order batch > "$WORK/order-stderr.out"
+  ST=$?
+  OUT="$(cat "$WORK/order-stderr.out")"
+  assert_eq "$ST" 1 "a failed ask exits 1"
+  head="${OUT%%"$say"*}"
+  case "$head" in *$'\r'"${ESC}[2K") pass ;; *) fail "the line is on its own, before a failure too" ;; esac
+  assert_contains "${OUT#*"$say"}" "the agent call failed" "and the failure is still said"
+
+  # Not on a terminal there is no spinner, and the line is just a line.
+  OUT="$(cd "$repo" && FOREMAN_EXEC=fake FOREMAN_FAKE_ASK_STDERR="$say" "$FOREMAN" order batch 2>&1)"
+  assert_contains "$OUT" "$say" "on a pipe the line is there"
+  assert_missing "$OUT" $'\r' "with nothing drawn around it"
+  assert_missing "$OUT" "reading the tickets" "and no spinner"
+fi
+
 # --- ticket 10: foreman next --all, the stake row ------------------------------------------
 
 # The 9b design's batch as the renderer's facts: ten tickets, six done, the next a human ticket
