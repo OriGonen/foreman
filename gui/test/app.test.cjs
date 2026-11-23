@@ -1268,6 +1268,37 @@ test('the inspector is CSS only: app.js has no timer and the stylesheet plays th
   assert.ok(!/@import|url\(http/.test(css), 'no library');
 });
 
+// A two-column screen that scrolls inside the window: .row.top (align-items: flex-start) is on the row, so a
+// rule for the row's own class loses to it unless it is as specific. Then a column is as tall as its content, the
+// 155-line prompt grows past the window, and `.main.dry { overflow: hidden }` cuts it off with nothing to scroll.
+test('the dry run and the report columns are as tall as their row, so the prompt and the ledger scroll inside it', () => {
+  const css = fs.readFileSync(path.join(__dirname, '..', 'app.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const rules = [];
+  for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    for (const sel of m[1].split(',')) rules.push({ sel: sel.trim(), body: m[2], at: rules.length });
+  }
+  const specificity = (sel) => (sel.match(/\.[\w-]+/g) || []).length;
+  // the declaration that wins for an element with exactly these classes (class selectors only, as the sheet's are)
+  const effective = (classes, prop) => {
+    const hits = rules.filter((r) => /^(\.[\w-]+)+$/.test(r.sel) && r.sel.slice(1).split('.').every((c) => classes.includes(c))
+      && new RegExp('(?:^|[;\\s])' + prop + '\\s*:\\s*([^;]+)').test(r.body))
+      .sort((a, b) => specificity(a.sel) - specificity(b.sel) || a.at - b.at);
+    const last = hits[hits.length - 1];
+    return last ? new RegExp('(?:^|[;\\s])' + prop + '\\s*:\\s*([^;]+)').exec(last.body)[1].trim() : null;
+  };
+  for (const row of ['dryrow', 'reportrow']) {
+    assert.equal(effective(['row', 'top', row], 'align-items'), 'stretch', row + ' is stretched, not flex-start');
+    assert.equal(effective(['row', 'top', row], 'min-height'), '0', row + ' may shrink below its content');
+  }
+  assert.equal(effective(['code'], 'overflow'), 'auto', 'the prompt scrolls, sideways too (the numbers stay put)');
+  assert.equal(effective(['code'], 'min-height'), '0');
+  assert.equal(effective(['promptcard'], 'min-height'), '0');
+  assert.equal(effective(['main', 'dry'], 'overflow'), 'hidden', 'the header and the left column stay put');
+  // and the markup the rules are for
+  const js = fs.readFileSync(path.join(__dirname, '..', 'app.js'), 'utf8');
+  assert.match(js, /cls: 'row top dryrow'/); assert.match(js, /cls: 'row top reportrow'/);
+});
+
 test('Run again reads the sheet again and the inspector runs again: a new track, not the old one', async () => {
   const api = fakeApi(data());
   const { app } = await openDoctor(api);

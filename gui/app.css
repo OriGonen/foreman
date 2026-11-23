@@ -131,7 +131,9 @@ button { font: inherit; color: inherit; }
 /* the dry run: what would run and the settings on the left, the exact prompt on the right */
 .h2 { font: 600 15px var(--ui); margin: 0; }
 .main.dry { overflow: hidden; }
-.dryrow { flex: 1; min-height: 0; gap: 14px; align-items: stretch; }
+/* `.row.top` says flex-start and outweighs a single class, so the three-class selector: the two columns have to be
+   as tall as the row for the prompt to scroll inside it (instead of growing to its 155 lines and being cut off) */
+.row.top.dryrow { flex: 1; min-height: 0; gap: 14px; align-items: stretch; }
 .side { width: 330px; flex: none; gap: 12px; overflow: auto; min-height: 0; }
 .side .card { gap: 8px; }
 .wouldrow { overflow-wrap: anywhere; }
@@ -151,7 +153,7 @@ button { font: inherit; color: inherit; }
 
 /* the report: the bill on the left, the ledger on the right */
 .main.report { overflow: hidden; }
-.reportrow { flex: 1; min-height: 0; gap: 16px; align-items: stretch; }
+.row.top.reportrow { flex: 1; min-height: 0; gap: 16px; align-items: stretch; }
 .billcol { width: 260px; flex: none; overflow: auto; min-height: 0; padding-bottom: 12px; }
 /* the bill: a receipt edge */
 .bill { background: var(--panel); border: 1px solid var(--line); border-bottom: 0; border-radius: 8px 8px 0 0; padding: 16px 18px 22px; position: relative; font-family: var(--mono); }
