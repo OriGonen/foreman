@@ -176,7 +176,7 @@ with, says which, and never changes it.
 ### Getting started and the unknowns
 
 86. As a user, I want the work to begin with a human ticket in which I install `agy`, sign in with my Plus account and create an AI Studio key, so that a real Antigravity is there to learn from.
-87. As a maintainer, I want the followup ticket to run a smoke test against the real `agy` and record its actual output, so that the Antigravity agent is written against what `agy` really prints, not what the docs say.
+87. As a maintainer, I want a capture script, run once by the user in that human ticket under both logins, to record the real `agy`'s actual output, so that the Antigravity agent is written against what `agy` really prints, not what the docs say.
 88. As a maintainer, I want the smoke test's findings written into this spec before any Antigravity code is written, so that every later ticket starts from facts.
 
 ### Adding an agent later
@@ -290,7 +290,7 @@ with, says which, and never changes it.
 ### Order of the work
 
 1. Move Claude behind the agent seam; goldens identical. (Independent of 2.)
-2. Human ticket: install `agy`, sign in with Plus, create an AI Studio key, fill in the handoff file. Followup ticket: the smoke test (below), its findings appended to this spec.
+2. A capture script for the smoke test (below); a human ticket to install `agy`, sign in with Plus, create an AI Studio key and run the script under both logins; its followup ticket; then the findings appended to this spec as "Smoke test findings".
 3. The Antigravity agent, the agent cache and `foreman agents`.
 4. Configuration, flags, preflight, cost estimate.
 5. The fallback agent, including the carry-over between sandboxes.
