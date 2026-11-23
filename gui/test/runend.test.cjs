@@ -74,7 +74,8 @@ test('exit 20: needs a human, the # reason: line as the CLI wrote it, and open t
   assert.equal(s.heading, 'It needs you to look');
   assert.equal(s.message, reason, 'passed through untouched');
   assert.deepEqual(labels(s), ['Open ticket', 'Open the log', 'Doctor', 'Resume…', 'Show iterations']);
-  assert.equal(action(s, 'open-file').file, 'batch/issues/04-fourth.md', 'the ticket the run last worked on');
+  assert.equal(action(s, 'open-ticket').file, 'batch/issues/04-fourth.md', 'the ticket the run last worked on, opened in the app');
+  assert.equal(action(s, 'open-file'), undefined, 'Open ticket is not handed to the OS editor; only the log is a file');
   assert.equal(action(s, 'open-log').file, '.scratch/b/foreman-runs.log');
   assert.deepEqual(action(s, 'doctor').tag, { cls: 'free', text: 'free' });
   assert.deepEqual(action(s, 'resume').tag, { cls: 'paid', text: 'costs money' });
@@ -83,7 +84,7 @@ test('exit 20: needs a human, the # reason: line as the CLI wrote it, and open t
 
 test('exit 20 with no iteration in the record opens the ticket the status says is next', () => {
   const s = choose(after('needs_human', 20, 'x'), { rows: [] });
-  assert.equal(action(s, 'open-file').file, '.scratch/b/issues/05-document-human-tickets.md');
+  assert.equal(action(s, 'open-ticket').file, '.scratch/b/issues/05-document-human-tickets.md');
 });
 
 test('exit 20 with no reason line has no message, and no invented one', () => {
@@ -169,9 +170,9 @@ test('a ticket the loop renamed to DONE_ since the iteration was recorded is ope
   const t = status.tickets.find((x) => x.number === '05');
   t.file = '.scratch/b/issues/DONE_05-document-human-tickets.md';
   const s = choose(status, { rows: [{ iteration: 1, kind: 'iteration', ticket: '.scratch/b/issues/05-document-human-tickets.md', outcome: 'unproductive' }] });
-  assert.equal(action(s, 'open-file').file, '.scratch/b/issues/DONE_05-document-human-tickets.md');
+  assert.equal(action(s, 'open-ticket').file, '.scratch/b/issues/DONE_05-document-human-tickets.md');
   const gone = choose(after('needs_human', 20, 'x'), { rows: [{ iteration: 1, kind: 'iteration', ticket: 'batch/issues/99-unknown.md' }] });
-  assert.equal(action(gone, 'open-file').file, 'batch/issues/99-unknown.md', 'a ticket the status does not list is opened as recorded');
+  assert.equal(action(gone, 'open-ticket').file, 'batch/issues/99-unknown.md', 'a ticket the status does not list is opened as recorded');
 });
 
 test('exit 20\'s fixed words point at what the next steps offer, and promise nothing about the work in the tree', () => {

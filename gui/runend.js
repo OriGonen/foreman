@@ -130,7 +130,7 @@
         actions: [],
       };
       if (ctx.login) { scene.actions = [SHOW]; return scene; }
-      if (ticket) scene.actions.push(act({ do: 'open-file', label: 'Open ticket', file: ticket }));
+      if (ticket) scene.actions.push(act({ do: 'open-ticket', label: 'Open ticket', file: ticket }));
       scene.actions.push(act({ do: 'open-log', label: 'Open the log', file: `${batch}/foreman-runs.log` }),
         act({ do: 'doctor', label: 'Doctor', tag: FREE }), act({ do: 'resume', label: 'Resume…', tag: PAID }), SHOW);
       return scene;

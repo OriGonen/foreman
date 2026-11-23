@@ -96,7 +96,7 @@
     if (o.next.lastRun) kv.append(h('span', { text: 'Last run' }), h('span', { text: o.next.lastRun }));
     card.append(kv);
 
-    card.append(h('div', { cls: 'row' }, button('Open ticket', { onClick: () => api.open(o.next.file) })));
+    card.append(h('div', { cls: 'row' }, button('Open ticket', { onClick: () => openTicket(ticketNameOf(o.next.file)) })));
     return card;
   }
 
@@ -1409,12 +1409,15 @@
   // What each next step does. The ones that go to another screen leave the scene; Resume… keeps it under the
   // confirmation, so Cancel comes back to it.
   function endAction(a, l) {
+    // Fill in handoff and Open ticket both go to the ticket's own page, which leaves the scene.
+    const openInApp = () => leaving(() => { const name = ticketNameOf(a.file); endLive(); return openTicket(name); });
     const go = {
       report: () => { endLive(); return openReport(); },
       'dry-run': () => { endLive(); return openDryRun(); },
       doctor: () => leaving(() => { endLive(); return openDoctor(); }),
       resume: () => openConfirm({ resume: true }),
-      handoff: () => leaving(() => { const name = ticketNameOf(a.file); endLive(); return openTicket(name); }),
+      handoff: openInApp,
+      'open-ticket': openInApp,
       'open-file': () => openFileFromScene(a.file),
       'open-log': () => openFileFromScene(a.file),
       iterations: () => { l.ended.listing = true; draw(); },

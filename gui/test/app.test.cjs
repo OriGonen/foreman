@@ -195,13 +195,23 @@ test('the rail lists every batch, marks the one shown, and a click on another as
   assert.ok(app.all().filter((e) => e.attrs['data-batch'])[1].className.includes('on'));
 });
 
-test('Open ticket and Open folder ask main to open a repo-relative path, nothing else', async () => {
+test('Open folder asks main to open a repo-relative path, nothing else', async () => {
+  const api = fakeApi(data());
+  const { app } = boot(api);
+  await tick();
+  buttonNamed(app, 'Open folder').click();
+  assert.deepEqual(api.calls.open, ['.scratch/b']);
+});
+
+test('Open ticket on the Next card opens the ticket\'s page in the app, not the OS editor', async () => {
   const api = fakeApi(data());
   const { app } = boot(api);
   await tick();
   buttonNamed(app, 'Open ticket').click();
-  buttonNamed(app, 'Open folder').click();
-  assert.deepEqual(api.calls.open, ['.scratch/b/issues/05-document-human-tickets.md', '.scratch/b']);
+  await tick(); await tick();
+  assert.deepEqual(api.calls.ticket, [['.scratch/b', '05-document-human-tickets']], 'the page of the next ticket is read');
+  assert.deepEqual(api.calls.open, [], 'and no file is handed to the operating system');
+  assert.ok(!buttonNamed(app, 'Open folder'), 'the overview is left');
 });
 
 test('a file changed on disk: the pushed overview replaces the one on screen, with no reload', async () => {
@@ -1820,6 +1830,17 @@ test('exit 10: paused, the loop\'s reason and the next ticket; Resume… costs m
   assert.deepEqual(api.calls.dryRun, ['.scratch/b']);
 });
 
+test('exit 20: Open ticket opens the ticket\'s page in the app, not the OS editor', async () => {
+  const { app, api } = await endRun('needs_human', 20, 'x');
+  api.ticket = async (b, n) => { api.calls.ticket.push([b, n]); return { ok: false, error: { kind: 'exit', message: 'no ticket handler' } }; };
+  endButton(app, 'open-ticket').click();
+  await tick(); await tick();
+  assert.equal(api.calls.ticket.length, 1, 'the page of the ticket is read');
+  assert.equal(api.calls.ticket[0][1], '04-fourth', 'the ticket the run last worked on');
+  assert.deepEqual(api.calls.open, [], 'and no file is handed to the operating system');
+  assert.ok(!sceneOf(app), 'the scene is left');
+});
+
 test('exit 0: done, a flag for each landed ticket, the facts of the run, and the report', async () => {
   const { app, api } = await endRun('complete', 0, null, { status: { counts: { done: 6, total: 6 } } });
   assert.equal(kindOfScene(app), 'done');
@@ -1839,12 +1860,9 @@ test('exit 20: needs a human, the # reason: line as it is, the ticket, the log a
   const t = text(sceneOf(app));
   for (const want of ['exit 20 · needs a human', 'It needs you to look', reason, 'Open ticket', 'Open the log', 'Doctor', 'Resume…']) assert.ok(t.includes(want), want);
   assert.ok(!app.all().some((e) => e.tagName === 'script'), 'text, never markup');
-  endButton(app, 'open-file').click();
-  await tick();
-  assert.deepEqual(api.calls.open, ['batch/issues/04-fourth.md']);
   endButton(app, 'open-log').click();
   await tick();
-  assert.deepEqual(api.calls.open, ['batch/issues/04-fourth.md', '.scratch/b/foreman-runs.log']);
+  assert.deepEqual(api.calls.open, ['.scratch/b/foreman-runs.log']);
   endButton(app, 'doctor').click();
   await tick(); await tick();
   assert.equal(api.calls.doctor, 1);
