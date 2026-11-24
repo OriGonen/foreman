@@ -111,7 +111,7 @@ function doctorSample(kind = 'fixable') {
       ] },
       { id: 'skill', title: 'Skill', info: [], rows: [
         { result: 'warn', label: 'foreman-conf-commands — installed copy differs from skills/foreman-conf-commands/SKILL.md', detail: '', fix: 'run: bash C:/tools/foreman/install.sh', auto: false, notes: [] },
-        ok('foreman-human-followup-tickets copy is current'),
+        ok('foreman-to-tickets copy is current'),
       ] },
       { id: 'batches', title: 'Batches', info: [], rows: [
         ok('gui', '3 of 14 done'),

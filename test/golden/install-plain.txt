@@ -9,8 +9,8 @@ installed skill
   <- ROOT/checkout/skills/foreman-conf-commands
 
 installed skill
-  ROOT/claude/skills/foreman-human-followup-tickets
-  <- ROOT/checkout/skills/foreman-human-followup-tickets
+  ROOT/claude/skills/foreman-to-tickets
+  <- ROOT/checkout/skills/foreman-to-tickets
 
 Open a new shell, then try it:
   foreman version
@@ -26,8 +26,8 @@ installed skill
   <- ROOT/checkout/skills/foreman-conf-commands
 
 installed skill
-  ROOT/claude/skills/foreman-human-followup-tickets
-  <- ROOT/checkout/skills/foreman-human-followup-tickets
+  ROOT/claude/skills/foreman-to-tickets
+  <- ROOT/checkout/skills/foreman-to-tickets
 
 Open a new shell, then try it:
   foreman version
@@ -36,7 +36,7 @@ Open a new shell, then try it:
 removed  ROOT/bin/foreman
 removed  ROOT/bin/foreman.cmd
 removed  ROOT/claude/skills/foreman-conf-commands
-removed  ROOT/claude/skills/foreman-human-followup-tickets
+removed  ROOT/claude/skills/foreman-to-tickets
 The toolkit itself is untouched at ROOT/checkout.
 == --uninstall with nothing left (exit 0)
 nothing to remove in ROOT/bin

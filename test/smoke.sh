@@ -2998,7 +2998,7 @@ if case_is "warning: a human ticket with no followup ticket"; then
   run_foreman "$repo" status batch
   assert_eq "$ST" 0 "warnings never change the exit code"
   assert_contains "$OUT" \
-    "warning: batch/issues/01-ticket.md is a human ticket with no ticket that Checks: it — run /foreman-human-followup-tickets" \
+    "warning: batch/issues/01-ticket.md is a human ticket with no ticket that Checks: it — run /foreman-to-tickets" \
     "warns about the missing checker"
 fi
 
@@ -3008,7 +3008,7 @@ if case_is "warning: a human ticket with no handoff file"; then
 
   run_foreman "$repo" status batch
   assert_eq "$ST" 0 "warnings never change the exit code"
-  assert_contains "$OUT" "warning: batch/issues/01-ticket.md has no Handoff: file — run /foreman-human-followup-tickets" \
+  assert_contains "$OUT" "warning: batch/issues/01-ticket.md has no Handoff: file — run /foreman-to-tickets" \
     "warns about the missing handoff"
 fi
 
@@ -3020,7 +3020,7 @@ if case_is "warning: a Handoff: line naming a file that does not exist"; then
 
   run_foreman "$repo" status batch
   assert_eq "$ST" 0 "warnings never change the exit code"
-  assert_contains "$OUT" "warning: batch/issues/01-ticket.md has no Handoff: file — run /foreman-human-followup-tickets" \
+  assert_contains "$OUT" "warning: batch/issues/01-ticket.md has no Handoff: file — run /foreman-to-tickets" \
     "warns the same way as a missing line"
 fi
 
@@ -3077,7 +3077,7 @@ if case_is "dry-run at a human ticket still shows the marked listing and warning
   assert_eq "$ST" 0 "exits 0"
   assert_contains "$OUT" "  1  01-ticket.md   [HUMAN]" "the listing is marked"
   assert_contains "$OUT" \
-    "warning: batch/issues/01-ticket.md is a human ticket with no ticket that Checks: it — run /foreman-human-followup-tickets" \
+    "warning: batch/issues/01-ticket.md is a human ticket with no ticket that Checks: it — run /foreman-to-tickets" \
     "and the warning is printed"
   assert_contains "$OUT" "Would stop before batch/issues/01-ticket.md" "still says it would stop"
 fi
@@ -3375,7 +3375,7 @@ if case_is "foreman order warns about a human ticket with no followup ticket, an
   PATH="$(make_claude_stub):$PATH" run_foreman "$repo" order batch
   assert_eq "$ST" 0 "warnings never change the exit code"
   assert_contains "$OUT" \
-    "warning: batch/issues/01-ticket.md is a human ticket with no ticket that Checks: it — run /foreman-human-followup-tickets" \
+    "warning: batch/issues/01-ticket.md is a human ticket with no ticket that Checks: it — run /foreman-to-tickets" \
     "and the warning is printed after ordering"
 fi
 
@@ -3637,7 +3637,7 @@ run_install() {
   ST=$?
 }
 
-skill_copy_dir() { printf '%s/skills/foreman-human-followup-tickets' "$1"; }
+skill_copy_dir() { printf '%s/skills/foreman-to-tickets' "$1"; }
 
 if case_is "install.sh installs the shims and a marked copy of the skill"; then
   checkout="$(make_foreman_checkout install-basic-checkout)"
@@ -3657,7 +3657,7 @@ if case_is "re-running install.sh after the checkout's SKILL.md changes replaces
   run_install "$checkout" install-update
   assert_eq "$ST" 0 "the first install exits 0"
 
-  printf '\n<!-- a line the pulled update added -->\n' >> "$checkout/skills/foreman-human-followup-tickets/SKILL.md"
+  printf '\n<!-- a line the pulled update added -->\n' >> "$checkout/skills/foreman-to-tickets/SKILL.md"
   run_install "$checkout" install-update
   assert_eq "$ST" 0 "the second install exits 0 without --force"
   assert_contains "$(cat "$(skill_copy_dir "$INSTALL_CONFIG")/SKILL.md")" \
@@ -3702,6 +3702,27 @@ if case_is "--uninstall removes a marked copy and leaves an unmarked one alone";
   OUT="$(HOME="$INSTALL_HOME" CLAUDE_CONFIG_DIR="$INSTALL_CONFIG" bash "$checkout/install.sh" --to "$INSTALL_BIN" --uninstall 2>&1)"; ST=$?
   assert_eq "$ST" 0 "uninstall still exits 0 when there is nothing of its own to remove"
   [ -f "$(skill_copy_dir "$INSTALL_CONFIG")/SKILL.md" ] && pass || fail "the unmarked directory is left alone"
+fi
+
+if case_is "install.sh removes a marked copy of the retired foreman-human-followup-tickets skill, not an unmarked one"; then
+  checkout="$(make_foreman_checkout install-retired-checkout)"
+  retired_dir() { printf '%s/skills/foreman-human-followup-tickets' "$1"; }
+
+  run_install "$checkout" install-retired-marked
+  mkdir -p "$(retired_dir "$INSTALL_CONFIG")"
+  printf 'old skill\n' > "$(retired_dir "$INSTALL_CONFIG")/SKILL.md"
+  printf 'foreman skill copy\n' > "$(retired_dir "$INSTALL_CONFIG")/.foreman-installed-from"
+  run_install "$checkout" install-retired-marked
+  assert_eq "$ST" 0 "the re-install exits 0"
+  [ -e "$(retired_dir "$INSTALL_CONFIG")" ] && fail "the marked retired copy was removed" || pass
+  assert_contains "$OUT" "(replaced by foreman-to-tickets)" "and it says why"
+
+  run_install "$checkout" install-retired-foreign
+  mkdir -p "$(retired_dir "$INSTALL_CONFIG")"
+  printf "someone else's skill\n" > "$(retired_dir "$INSTALL_CONFIG")/SKILL.md"
+  run_install "$checkout" install-retired-foreign --uninstall
+  assert_eq "$ST" 0 "uninstall exits 0"
+  [ -f "$(retired_dir "$INSTALL_CONFIG")/SKILL.md" ] && pass || fail "the unmarked directory is left alone"
 fi
 
 if case_is "--no-skill installs only the shims"; then
@@ -3758,17 +3779,17 @@ if case_is "foreman doctor warns when the installed skill copy is stale, and is 
   run_doctor() { OUT="$(cd "$repo" && HOME="$doctor_home" CLAUDE_CONFIG_DIR="$doctor_config" "$FOREMAN" doctor 2>&1)"; ST=$?; }
 
   run_doctor
-  assert_missing "$OUT" "foreman-human-followup-tickets" "silent before the skill is installed"
+  assert_missing "$OUT" "foreman-to-tickets" "silent before the skill is installed"
 
   HOME="$doctor_home" CLAUDE_CONFIG_DIR="$doctor_config" bash "$FOREMAN_HOME/install.sh" --to "$doctor_bin" >/dev/null
 
   run_doctor
   assert_missing "$OUT" "!" "no warning — the installed copy matches this checkout"
-  assert_contains "$(printf '%s\n' "$OUT" | box_words)" "■ foreman-human-followup-tickets copy is current" "and the box says it is current"
+  assert_contains "$(printf '%s\n' "$OUT" | box_words)" "■ foreman-to-tickets copy is current" "and the box says it is current"
 
   printf '\n<!-- drift -->\n' >> "$(skill_copy_dir "$doctor_config")/SKILL.md"
   run_doctor
-  assert_contains "$OUT" "! foreman-human-followup-tickets — installed copy differs" "warns once the installed copy drifts, and names the skill"
+  assert_contains "$OUT" "! foreman-to-tickets — installed copy differs" "warns once the installed copy drifts, and names the skill"
   assert_contains "$(printf '%s\n' "$OUT" | box_words)" "run: bash $FOREMAN_HOME/install.sh" "and says to re-run install.sh"
 fi
 
@@ -5698,7 +5719,7 @@ if case_is "foreman status draws the dome when the show is on, with none, some a
   make_human_ticket "$repo" 2 none
   show "$repo" status batch
   TEXT="$(printf '%s\n' "$OUT" | strip)"
-  assert_contains "$TEXT" "▲ batch/issues/02-ticket.md has no Handoff: file — run /foreman-human-followup-tickets" "a warning, without the word warning"
+  assert_contains "$TEXT" "▲ batch/issues/02-ticket.md has no Handoff: file — run /foreman-to-tickets" "a warning, without the word warning"
   assert_contains "$TEXT" "▲ batch/issues/02-ticket.md is a human ticket with no ticket that Checks: it" "and the other"
   assert_contains "$TEXT" "The loop will run 1 ticket, then stop at 02-ticket.md for a human." "the loop runs one, then stops at the human ticket"
   assert_missing "$TEXT" "next up is yours" "the human ticket is not next"
@@ -6080,7 +6101,7 @@ if case_is "foreman dry-run draws a human ticket next as a stop, with its warnin
   TEXT="$(printf '%s\n' "$OUT" | strip)"
   assert_contains "$TEXT" "▶ 01  ticket" "the human ticket is listed first"
   assert_contains "$TEXT" "■ would stop before 01  HUMAN   — no prompt would be sent; the handoff is batch/handoff/01-ticket.md" "and where it stops"
-  assert_contains "$TEXT" "▲ batch/issues/01-ticket.md is a human ticket with no ticket that Checks: it — run /foreman-human-followup-tickets" "its warning sits between the list and the settings"
+  assert_contains "$TEXT" "▲ batch/issues/01-ticket.md is a human ticket with no ticket that Checks: it — run /foreman-to-tickets" "its warning sits between the list and the settings"
   assert_missing "$TEXT" "PROMPT" "there is no prompt"
   assert_contains "$(printf '%s\n' "$TEXT" | tail -1)" "nothing was sent; no sandbox was started" "and the rule still closes it"
   assert_eq "$(git -C "$repo" log --oneline | wc -l)" "2" "committed nothing"
@@ -6596,7 +6617,7 @@ order_design_facts() {
   done
   printf 'human\t.scratch/human-tickets/issues/07-try-the-followup-skill-on-a-real-batch.md\n'
   printf 'check\t.scratch/human-tickets/issues/07a-followup-try-the-followup-skill.md\t.scratch/human-tickets/issues/07-try-the-followup-skill-on-a-real-batch.md\n'
-  printf 'warning\t.scratch/human-tickets/issues/07-try-the-followup-skill-on-a-real-batch.md has no Handoff: file — run /foreman-human-followup-tickets\n'
+  printf 'warning\t.scratch/human-tickets/issues/07-try-the-followup-skill-on-a-real-batch.md has no Handoff: file — run /foreman-to-tickets\n'
 }
 
 if case_is "movedTickets marks the tickets that changed place, and only those"; then
@@ -6631,7 +6652,7 @@ if case_is "foreman-draw order-head and order are the 8b design: the header, the
   assert_eq "$(printf '%s\n' "$OUT24" | node "$CELLS" --cells 96 --rows 2-11)" "$(node "$CELLS" --cells 96 --rows 8-17 < "$ANS")" "so are the ten stake lines, every cell of them"
   assert_eq "$(printf '%s\n' "$TEXT24" | sed -n '3,12p')" "$(sed -n '9,18p' "$TXT" | sed 's/ *$//')" "and they read as 08b-order.txt does"
   assert_eq "$(printf '%s\n' "$TEXT24" | sed -n '1p;2p;13p' | tr '\n' '|')" "order.md  ·  ordered in 31s for \$0.08|||" "the result line, and blank rows round the stake lines"
-  assert_eq "$(printf '%s\n' "$TEXT24" | sed -n '14,$p')" "▲ .scratch/human-tickets/issues/07-try-the-followup-skill-on-a-real-batch.md has no Handoff: file — run /foreman-human-followup-tickets
+  assert_eq "$(printf '%s\n' "$TEXT24" | sed -n '14,$p')" "▲ .scratch/human-tickets/issues/07-try-the-followup-skill-on-a-real-batch.md has no Handoff: file — run /foreman-to-tickets
 
 review it, then foreman dry-run .scratch/human-tickets" "the warning, whole, then the way on"
   assert_contains "$OUT24" "${ESC}[0;1;38;2;23;22;20;48;2;224;168;74m HUMAN " "HUMAN is bold ink on amber"
@@ -6724,8 +6745,8 @@ order.md  ·  ordered in 0s for \$0.08" "a blank row, the header, a blank row, a
   ├  2  03  ticket  moved   HUMAN   the loop stops here
   ├  3  02  ticket  moved
   └  4  04  ticket" "the new order, numbered, with the two tickets that changed place and the human one marked"
-  assert_contains "$TEXT" "▲ batch/issues/03-ticket.md is a human ticket with no ticket that Checks: it — run /foreman-human-followup-tickets" "the human-ticket warnings are the ones today's order prints"
-  assert_contains "$TEXT" "▲ batch/issues/03-ticket.md has no Handoff: file — run /foreman-human-followup-tickets" "all of them"
+  assert_contains "$TEXT" "▲ batch/issues/03-ticket.md is a human ticket with no ticket that Checks: it — run /foreman-to-tickets" "the human-ticket warnings are the ones today's order prints"
+  assert_contains "$TEXT" "▲ batch/issues/03-ticket.md has no Handoff: file — run /foreman-to-tickets" "all of them"
   assert_eq "$(printf '%s\n' "$TEXT" | tail -1)" "review it, then foreman dry-run batch" "and what to do next"
   assert_eq "$(printf '%s\n' "$TEXT" | grep -c .)" 9 "and nothing else: no line of the plain text"
   assert_missing "$OUT" "foreman order:" "none of its tagged lines"
@@ -6773,8 +6794,8 @@ if case_is "foreman order piped is the text it always was, down to the byte"; th
 foreman order: reading 3 ticket(s) in batch ...
 foreman order: wrote batch/order.md (cost $0.0831)
              review it — this is a first pass, not a guarantee.
-warning: batch/issues/02-ticket.md is a human ticket with no ticket that Checks: it — run /foreman-human-followup-tickets
-warning: batch/issues/02-ticket.md has no Handoff: file — run /foreman-human-followup-tickets
+warning: batch/issues/02-ticket.md is a human ticket with no ticket that Checks: it — run /foreman-to-tickets
+warning: batch/issues/02-ticket.md has no Handoff: file — run /foreman-to-tickets
 EOF
 )"
   export PATH="$stub:$PATH" STUB_OUT="$ORDER_REPLY"

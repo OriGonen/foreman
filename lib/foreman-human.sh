@@ -164,8 +164,8 @@ foreman_human_warnings() {
     if [ "$_FOREMAN_TICKET_HUMAN" = 1 ]; then
       checker="$(printf '%s\n' "$tickets" | _foreman_checkers_of "$ticket")"
       checker="${checker%%$'\n'*}"    # the first, if several check it
-      [ -n "$checker" ] || printf 'warning: %s is a human ticket with no ticket that Checks: it — run /foreman-human-followup-tickets\n' "$ticket"
-      [ -n "$(foreman_handoff_path "$ticket")" ] || printf 'warning: %s has no Handoff: file — run /foreman-human-followup-tickets\n' "$ticket"
+      [ -n "$checker" ] || printf 'warning: %s is a human ticket with no ticket that Checks: it — run /foreman-to-tickets\n' "$ticket"
+      [ -n "$(foreman_handoff_path "$ticket")" ] || printf 'warning: %s has no Handoff: file — run /foreman-to-tickets\n' "$ticket"
     fi
 
     # 3 & 4: a not-done followup ticket out of place, or naming nothing in the batch. Keyed on

@@ -30,7 +30,7 @@
 # marker, no --force needed: that is how a pulled update is installed. `--to` applies only to
 # the shims; the skills always go under CLAUDE_CONFIG_DIR (or ~/.claude). They are:
 #
-#   foreman-human-followup-tickets   you type it, after to-tickets and before `foreman init`
+#   foreman-to-tickets               you type it, to break a spec into a batch before `foreman init`
 #   foreman-conf-commands            `foreman init` runs it, to fill in foreman.conf's commands
 #
 # The desktop app, when you ask for it, is `npm ci` in this checkout's gui/ and then Electron's
@@ -134,7 +134,8 @@ SHIM="$TARGET/foreman"
 SHIM_CMD="$TARGET/foreman.cmd"
 
 # legacy: before the rename to Foreman this installed `ralph`, `ralph.cmd` and the
-# ralph-human-followup-tickets skill. Install and --uninstall both remove them — but only a
+# ralph-human-followup-tickets skill, and later the foreman-human-followup-tickets skill.
+# Install and --uninstall both remove them — but only a
 # shim that says it is this installer's and forwards to this checkout, and only a skill copy
 # carrying the old marker, exactly as for the new names.
 _foreman_legacy_cleanup() {
@@ -148,6 +149,12 @@ _foreman_legacy_cleanup() {
   f="$SKILL_HOME_DIR/skills/ralph-human-followup-tickets"
   if [ -f "$f/.ralph-installed-from" ]; then
     rm -rf "$f" && echo "removed  $f (from before the rename to Foreman)"
+  fi
+  # foreman-to-tickets replaced foreman-human-followup-tickets. The checkout no longer ships
+  # it, so the loops over FOREMAN_SKILL_NAMES would leave a marked copy behind.
+  f="$SKILL_HOME_DIR/skills/foreman-human-followup-tickets"
+  if [ -f "$f/$FOREMAN_SKILL_MARKER" ]; then
+    rm -rf "$f" && echo "removed  $f (replaced by foreman-to-tickets)"
   fi
 }
 
