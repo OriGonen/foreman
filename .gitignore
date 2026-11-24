@@ -23,3 +23,7 @@ Thumbs.db
 
 # The desktop app's one dependency (electron), installed by `npm install` in gui/.
 gui/node_modules/
+
+# Foreman desktop app: the control directory of a run (its keys, its pid, the live feed), in its batch.
+# Disposable, and ignored so that steering a run from the app never shows up as a change.
+**/.foreman-run/
