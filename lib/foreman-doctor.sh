@@ -540,6 +540,9 @@ _legacy_env=$(compgen -v RALPH_ 2>/dev/null | tr '\n' ' ')
 _legacy_skill="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/ralph-human-followup-tickets"
 [ ! -f "$_legacy_skill/.ralph-installed-from" ] || { _legacy_lines+=("old skill copy at $_legacy_skill — run: bash $FOREMAN_HOME/install.sh (it removes it)")
                                                     _legacy_fixes+=("run: bash $FOREMAN_HOME/install.sh"); }
+_retired_skill="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills/foreman-human-followup-tickets"
+[ ! -f "$_retired_skill/.foreman-installed-from" ] || { _legacy_lines+=("retired skill copy at $_retired_skill (now foreman-to-tickets) — run: bash $FOREMAN_HOME/install.sh (it removes it)")
+                                                       _legacy_fixes+=("run: bash $FOREMAN_HOME/install.sh"); }
 ! grep -qE '(^|/)\.?ralph-' .gitignore 2>/dev/null ||
   { _legacy_lines+=(".gitignore still lists ralph-* files; those lines can go once the foreman-* ones are in")
     _legacy_fixes+=("Delete the ralph-* lines from .gitignore"); }

@@ -102,7 +102,7 @@ Bash and PowerShell get the same command. `bash install.sh --to <dir>` picks the
 yourself.
 
 It also copies each of foreman's skills into `${CLAUDE_CONFIG_DIR:-~/.claude}/skills/<name>/` —
-`foreman-human-followup-tickets` (see "Human tickets" below) and `foreman-conf-commands` (see
+`foreman-to-tickets` (see "Human tickets" below) and `foreman-conf-commands` (see
 "Setting up a batch") — a copy, not a symlink, marked with the checkout it came from. Both
 are user-invoked only, so neither costs any context in a chat that does not use it.
 Re-running `install.sh` replaces a marked copy with whatever this checkout now has, no
@@ -275,13 +275,17 @@ only act on once a person has weighed in:
 3. **17 — apply the owner's feedback** (agent, `Blocked by: 16`): rewrites the copy to
    match what the owner asked for.
 
-**Writing the handoff files and followup tickets.** A person writes the human tickets
-themselves (with Matt Pocock's `to-tickets`, or by hand), but nothing writes their handoff
-files and followup tickets until `install.sh` puts the `foreman-human-followup-tickets` skill
-in `~/.claude/skills/`. Type `/foreman-human-followup-tickets`, usually right after `to-tickets`
-and before `foreman init`: it adds whichever of the three pieces above each human ticket is
-still missing, never overwrites a handoff file, and tells you what to run next. Running it
-again — on the same batch, or after adding one more human ticket — only adds what is new.
+**Writing the tickets, handoff files and followup tickets.** `install.sh` puts the
+`foreman-to-tickets` skill in `~/.claude/skills/`. Type `/foreman-to-tickets <spec>` before
+`foreman init`: it breaks the spec into tracer-bullet tickets (adapted from Matt Pocock's
+`to-tickets`), decides which of them only a person can do and marks them human, and shows
+you the breakdown to approve. Then it writes the batch, gives each human ticket its handoff
+file and its followup ticket, and points every ticket that uses the person's answers at the
+followup rather than the human ticket — the pattern above. Type
+`/foreman-to-tickets <batch>` on a batch that already has tickets (written by hand, or one
+that just grew a human ticket) and it only adds whichever of the three pieces each human
+ticket is still missing. It never overwrites a handoff file, and it tells you what to run
+next.
 
 ### Ordering
 
@@ -1285,7 +1289,7 @@ the old sandbox to remove.
 
 | Left behind | What happens now | What to do |
 | --- | --- | --- |
-| `ralph` / `ralph.cmd` shims, the `ralph-human-followup-tickets` skill | `bash install.sh` (and `--uninstall`) removes them, if this installer wrote them for this checkout | re-run `bash install.sh` |
+| `ralph` / `ralph.cmd` shims, the `ralph-human-followup-tickets` skill, the later `foreman-human-followup-tickets` skill (now `foreman-to-tickets`) | `bash install.sh` (and `--uninstall`) removes them, if this installer wrote them for this checkout | re-run `bash install.sh` |
 | `<batch>/ralph.conf` | read when the batch has no `foreman.conf`; `foreman init` keeps it rather than adding a second conf | `git mv <batch>/ralph.conf <batch>/foreman.conf` |
 | `RALPH_*` settings, in a conf or the environment | each is used when its `FOREMAN_*` name is unset, with one warning naming them | rename each to `FOREMAN_*` — the same name, new prefix |
 | `~/.config/ralph/env` | read when `~/.config/foreman/env` does not exist; `RALPH_DOCKER_*` keys in it still count | move it to `~/.config/foreman/env` and rename the keys |
