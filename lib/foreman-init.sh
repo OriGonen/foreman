@@ -281,9 +281,16 @@ if [ "$SHOW" -eq 1 ]; then
   draw_or_plain init
 fi
 
+# Whether the command pass left a test command in the conf. The conf was just copied from the
+# template, where every slot is commented out, so a set line with a value is the agent's work.
+# Only then does the first step point at what it found rather than at the slots to fill in.
+commands_filled=0
 if [ "$conf_written" -eq 1 ] && [ "$NO_COMMANDS" -eq 0 ]; then
   [ "$SHOW" -eq 1 ] || echo
-  bash "$FOREMAN_TOOL_DIR/foreman-commands.sh" "$BATCH_DIR"
+  if bash "$FOREMAN_TOOL_DIR/foreman-commands.sh" "$BATCH_DIR" &&
+     grep -qE "^[[:space:]]*(export[[:space:]]+)?FOREMAN_TEST_CMD=(\"[^\"]|'[^']|[^\"'[:space:]#])" "$BATCH_DIR/foreman.conf"; then
+    commands_filled=1
+  fi
 fi
 
 # What the ordering printed, held back in the show, which tells it from the facts instead.
@@ -312,7 +319,11 @@ plain_tail() {
   echo
   if [ "$wrote_any" -eq 1 ]; then
     echo "Next:"
-    echo "  1. review $BATCH_DIR/foreman.conf   — at minimum FOREMAN_CHECK_CMD and FOREMAN_TEST_CMD"
+    if [ "$commands_filled" -eq 1 ]; then
+      echo "  1. review $BATCH_DIR/foreman.conf   — the commands the agent found"
+    else
+      echo "  1. review $BATCH_DIR/foreman.conf   — at minimum FOREMAN_CHECK_CMD and FOREMAN_TEST_CMD"
+    fi
     echo "  2. review $FOREMAN_INVOKE order picked in $BATCH_DIR/order.md — it is a first pass, not a guarantee"
     echo "  3. $FOREMAN_INVOKE dry-run $BATCH_DIR   (free; prints the exact prompt)"
     echo "  4. $FOREMAN_INVOKE run $BATCH_DIR       (one iteration, then look)"
@@ -325,6 +336,7 @@ if [ "$SHOW" -eq 1 ]; then
   fact batch "$BATCH_DIR"
   fact invoke "$FOREMAN_INVOKE"
   fact wrote "$wrote_any"
+  [ "$commands_filled" -eq 0 ] || fact commands filled
   if [ "$order_written" -eq 1 ] && [ "$NO_ORDER" -eq 0 ]; then
     if [ -n "$order_facts" ] && [ -s "$order_facts" ]; then
       FACTS+="$(<"$order_facts")"$'\n'

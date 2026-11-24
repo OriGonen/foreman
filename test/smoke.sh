@@ -3571,6 +3571,8 @@ if case_is "init fills in the commands of a conf it writes, but not with --no-co
   assert_eq "$ST" 0 "init exits 0"
   assert_eq "$(cat "$log" 2>/dev/null)" "/foreman-conf-commands batch" "init ran the skill on the new conf"
   assert_contains "$OUT" 'FOREMAN_TEST_CMD="make test"' "and printed what it set"
+  assert_contains "$OUT" "  1. review batch/foreman.conf   — the commands the agent found" "and step 1 is to review what it found"
+  assert_missing "$OUT" "at minimum FOREMAN_CHECK_CMD" "not to fill the slots in"
 
   rm -f "$log"
   CLAUDE_CONFIG_DIR="$config" PATH="$stub:$PATH" STUB_PROMPT_LOG="$log" run_foreman "$repo" init batch --no-order
@@ -3584,6 +3586,26 @@ if case_is "init fills in the commands of a conf it writes, but not with --no-co
   assert_eq "$ST" 0 "init --no-commands exits 0"
   [ -e "$log" ] && fail "--no-commands skips the agent" || pass
   assert_contains "$(cat "$repo/batch/foreman.conf")" '#FOREMAN_TEST_CMD=' "and the slots stay commented out"
+  assert_contains "$OUT" "  1. review batch/foreman.conf   — at minimum FOREMAN_CHECK_CMD and FOREMAN_TEST_CMD" "so step 1 is to fill them in"
+
+  # The agent ran but set only the check command: the test command is still the person's to fill in.
+  repo="$(make_repo 1 init-commands-checkonly-repo)"
+  rm -f "$repo/batch/foreman.conf"
+  CLAUDE_CONFIG_DIR="$config" PATH="$stub:$PATH" \
+    STUB_SCRIPT='sed -i "s|^#FOREMAN_CHECK_CMD=.*|FOREMAN_CHECK_CMD=\"make lint\"|" batch/foreman.conf' \
+    run_foreman "$repo" init batch --no-order
+  assert_eq "$ST" 0 "init with only a check command exits 0"
+  assert_contains "$OUT" 'FOREMAN_CHECK_CMD="make lint"' "the agent set the check command"
+  assert_contains "$OUT" "left empty  FOREMAN_TEST_CMD" "and left the test command empty"
+  assert_contains "$OUT" "  1. review batch/foreman.conf   — at minimum FOREMAN_CHECK_CMD and FOREMAN_TEST_CMD" "so step 1 is to fill it in"
+
+  # The agent call failed, even after an edit: nothing it did is to be trusted, so the same.
+  repo="$(make_repo 1 init-commands-failed-repo)"
+  rm -f "$repo/batch/foreman.conf"
+  CLAUDE_CONFIG_DIR="$config" PATH="$stub:$PATH" STUB_SCRIPT="$SET_TEST_CMD" STUB_EXIT=1 \
+    run_foreman "$repo" init batch --no-order
+  assert_contains "$OUT" "the agent call failed" "the command pass failed"
+  assert_contains "$OUT" "  1. review batch/foreman.conf   — at minimum FOREMAN_CHECK_CMD and FOREMAN_TEST_CMD" "so step 1 is to fill the slots in"
 fi
 
 # ---------------------------------------------------------------------------
@@ -4957,6 +4979,8 @@ if case_is "foreman-draw init-done writes the ordering result and NEXT as design
   assert_contains "$(printf 'batch\tb\nresult\tfailed\n' | node "$DRAW" init-done --tier 24 --cols 120)" "${ESC}[0;38;2;240;128;120m✗" "a failure is red"
   assert_eq "$(done_of '' | head -n 2)" "NEXT
   1  edit    b/foreman.conf   FOREMAN_CHECK_CMD and FOREMAN_TEST_CMD at least" "no ordering (--no-order) is no ordering line at all, NEXT is first"
+  assert_eq "$(done_of $'commands\tfilled' | head -n 2)" "NEXT
+  1  review  b/foreman.conf   the commands the agent found" "a test command the agent filled in is to be reviewed, not edited"
   assert_eq "$(printf 'batch\tb\ninvoke\t/x/foreman\nwrote\t1\n' | node "$DRAW" init-done --tier 24 --cols 120 | strip | tail -n 2)" \
     "  3  /x/foreman dry-run b   free  ·  prints the exact prompt
   4  /x/foreman run b       one iteration, then look" "the invoking name is the shell's"
@@ -5140,6 +5164,16 @@ if case_is "foreman init at a terminal still shows the agent's command pass, and
   assert_contains "$SHOWN" 'FOREMAN_TEST_CMD="make test"' "and what the command pass set"
   assert_contains "$SHOWN" "NEXT" "then the steps"
   case "${SHOWN%%NEXT*}" in *FOREMAN_TEST_CMD=*) pass ;; *) fail "the command pass comes before NEXT" ;; esac
+  assert_contains "$SHOWN" "  1  review  batch/foreman.conf   the commands the agent found" "and step 1 is to review what it found"
+  assert_missing "$SHOWN" "FOREMAN_CHECK_CMD and FOREMAN_TEST_CMD at least" "not to fill the slots in"
+
+  # The command pass ran but found no test command: step 1 is still to fill the slots in.
+  repo="$(make_repo 1 init-show-commands-empty-repo)"; rm -f "$repo/batch/foreman.conf"
+  PATH="$(make_commands_claude_stub):$PATH" CLAUDE_CONFIG_DIR="$(make_conf_skill_config)" \
+    init_show "$repo" batch --no-order
+  SHOWN="$(printf '%s\n' "$OUT" | strip)"
+  assert_contains "$SHOWN" "left empty  FOREMAN_TEST_CMD" "the command pass left the test command empty"
+  assert_contains "$SHOWN" "  1  edit    batch/foreman.conf   FOREMAN_CHECK_CMD and FOREMAN_TEST_CMD at least" "so step 1 is to fill it in"
 
   # Nowhere to leave the ordering's facts (mktemp fails): the header was drawn, the ordering speaks for itself.
   repo="$(make_repo 2 init-show-notmp-repo)"; rm -f "$repo/batch/foreman.conf"
