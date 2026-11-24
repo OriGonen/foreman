@@ -1,0 +1,82 @@
+SIGTERM during a turn ends the turn at once and pauses the run, footer and all |   FAIL  TERM ended the run in 20 s, not at once
+foreman convert --dry-run draws the unpainted sign with would throughout, and changes nothing |   FAIL  the same project, in 'would', and the last line says nothing was changed
+foreman convert draws the repainted sign and what changed when the show is forced |   FAIL  86 columns is enough for the picture, when the paths fit
+foreman convert draws the repainted sign and what changed when the show is forced |   FAIL  the whole of it, for the ralph fixture
+foreman convert is the text when the picture cannot be made |   FAIL  and the text is printed alone, no half a picture before it
+foreman convert is the text when the picture cannot be made |   FAIL  nor one that is not there
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  --dry-run (FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=85)
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  --dry-run (FOREMAN_SHOW=never FOREMAN_COLOR=truecolor COLUMNS=120)
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  --dry-run (in a pipe)
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  FOREMAN_COLOR=never
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  FOREMAN_SHOW=never
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  a narrow screen
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  colour alone is not the show
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  foreman-convert.cjs alone, with no variables, is the text
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  in a pipe
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  in words, with no picture
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  nothing to convert (FOREMAN_SHOW=always FOREMAN_COLOR=never COLUMNS=120)
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  nothing to convert (FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=85)
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  nothing to convert (FOREMAN_SHOW=never FOREMAN_COLOR=truecolor COLUMNS=120)
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  nothing to convert (in a pipe)
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  one column short of the picture
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  the variables are the dispatcher's to set, not the environment's
+foreman convert with nothing to convert draws the short form |   FAIL  the sign already says FOREMAN; what is kept and left for you is still said, and no closing line
+foreman doctor forced to show draws the same box in colour, and lists the checks when it cannot draw |   FAIL  a batch with its progress on one line
+foreman doctor forced to show draws the same box in colour, and lists the checks when it cannot draw |   FAIL  and the closing words
+foreman doctor forced to show draws the same box in colour, and lists the checks when it cannot draw |   FAIL  and the rest are listed
+foreman doctor forced to show draws the same box in colour, and lists the checks when it cannot draw |   FAIL  no node
+foreman doctor forced to show draws the same box in colour, and lists the checks when it cannot draw |   FAIL  no node
+foreman doctor forced to show draws the same box in colour, and lists the checks when it cannot draw |   FAIL  under their headings
+foreman doctor warns when the installed skill copy is stale, and is silent otherwise |   FAIL  and says to re-run install.sh
+foreman order piped is the text it always was, down to the byte |   FAIL  the header is there
+foreman order's result facts say when the call failed, when the login expired, and when there is no agent |   FAIL  but it is said to have been skipped
+foreman order's result facts say when the call failed, when the login expired, and when there is no agent |   FAIL  no agent is not a failure
+foreman report is the text when the picture cannot be made |   FAIL  a wide table is under the picture, not instead of it
+foreman report is the text when the picture cannot be made |   FAIL  and the text is printed alone, no half a picture before it
+foreman report is the text when the picture cannot be made |   FAIL  nor one that is not there
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-run
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-run
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-run
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-run
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-run
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-run
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-run
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-run
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-ticket
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-ticket
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-ticket
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-ticket
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-ticket
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-ticket
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-ticket
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-ticket
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  failures
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  failures
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  failures
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  failures
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  failures
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  failures
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  failures
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  failures
+foreman-draw dryrun is the 11a design: the low sun, WOULD RUN, SETTINGS, the numbered prompt and the closing rule |   FAIL  SETTINGS in two columns, in the design's colours
+foreman-draw dryrun is the 11a design: the low sun, WOULD RUN, SETTINGS, the numbered prompt and the closing rule |   FAIL  and the count beside the sun
+foreman-draw dryrun is the 11a design: the low sun, WOULD RUN, SETTINGS, the numbered prompt and the closing rule |   FAIL  so is the header, in its colours
+foreman-draw dryrun is the 11a design: the low sun, WOULD RUN, SETTINGS, the numbered prompt and the closing rule |   FAIL  the rule and the three tickets that would run
+foreman-draw init writes the design's header and files, and its other pieces say what they are given |   FAIL  and no wider than the terminal
+foreman-draw init writes the design's header and files, and its other pieces say what they are given |   FAIL  the rule is 96 wide on a wide terminal
+foreman-draw next is the 9b design: the stake row with the next one tall, the list, and the count of driven, yours and to go |   FAIL  so are the list and the line under it
+foreman-draw next is the 9b design: the stake row with the next one tall, the list, and the count of driven, yours and to go |   FAIL  the stake row, the ground and the labels are the design's, every cell of them, in its colours
+foreman-draw next-count is the one line of the 9b design |   FAIL  the line is the design's, in its colours
+foreman-draw order-head and order are the 8b design: the header, the result line, the numbered stake lines and the footer |   FAIL  so are the ten stake lines, every cell of them
+foreman-draw order-head and order are the 8b design: the header, the result line, the numbered stake lines and the footer |   FAIL  the header is the design's, in its colours, between its blank rows
+foreman-draw order-head and order are the 8b design: the header, the result line, the numbered stake lines and the footer |   FAIL  the result line is the design's
+foreman-draw reads the palette from foreman-ui.sh and keeps no copy |   FAIL  a file without the table is an error that names it
+foreman-draw status is the 4a design at 6 of 10: the dome, the words beside it, the list and the closing |   FAIL  and so are the next ticket and the three after it
+foreman-draw status is the 4a design at 6 of 10: the dome, the words beside it, the list and the closing |   FAIL  and so are the words beside it, in the colours of the .ans
+foreman-draw status is the 4a design at 6 of 10: the dome, the words beside it, the list and the closing |   FAIL  in the design's colours
+foreman-draw version is the design's mark beside the build, and tilde shortens only what is under home |   FAIL  a home of / is not worth a ~
+foreman-draw version is the design's mark beside the build, and tilde shortens only what is under home |   FAIL  a path that only starts with home's letters is not under it
+foreman-draw version is the design's mark beside the build, and tilde shortens only what is under home |   FAIL  and so are the words beside it, in the colours of the .ans
+foreman-draw version is the design's mark beside the build, and tilde shortens only what is under home |   FAIL  elsewhere
+foreman-draw version is the design's mark beside the build, and tilde shortens only what is under home |   FAIL  no home
+foreman-keys.sh --text draws the design's foot when the loop left one: elapsed, iteration, spend, live and the keys |   FAIL  the tool in lower case, padded, after a spinner

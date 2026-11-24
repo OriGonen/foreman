@@ -1,0 +1,1264 @@
+
+[1/285] status and dry-run spend nothing and need no runner
+  (19.2s)
+
+[2/285] dry-run proceeds on a dirty tree and notes that run would refuse
+  (30.6s)
+
+[3/285] a second, conflicting mode flag is an error naming both modes
+  (12.7s)
+
+[4/285] one iteration is the default, and it lands one ticket
+  (26.5s)
+
+[5/285] + during a run adds an iteration
+  (39.6s)
+
+[6/285] - during a run removes an iteration, never below the one running
+  (66.1s)
+
+[7/285] - on an unlimited run stops it after the iteration running
+  (27.9s)
+
+[8/285] foreman-keys.sh --apply: the floor and unlimited
+  (5.0s)
+
+[9/285] foreman-stream.cjs --live-file draws only while the file says on
+  (2.1s)
+
+[10/285] foreman-stream.cjs --activity-file writes down, never draws
+  (0.7s)
+
+[11/285] foreman-keys.sh --text: the live view's line never wraps
+  (0.9s)
+
+[12/285] --unlimited runs the batch to completion
+  (50.1s)
+
+[13/285] resuming picks up at the first ticket that has not landed
+  (63.2s)
+
+[14/285] a ticket that does not land stops the run for a human
+  (22.6s)
+
+[15/285] a transient failure is retried within the run
+  (47.9s)
+
+[16/285] attempts are capped per ticket
+  (41.6s)
+
+[17/285] a crash with no signal at all is not retried
+  (22.4s)
+
+[18/285] running out of context is retried even when no JSON came back
+  (48.2s)
+
+[19/285] a ticket too big for one context is diagnosed, not just failed
+  (31.8s)
+
+[20/285] a real context payload is not mistaken for a transient one
+  (22.7s)
+
+[21/285] an expired agent login stops the run at once, named, with no retry
+  (22.7s)
+
+[22/285] a dirty tree stops the run and is never auto-committed
+  (28.0s)
+
+[23/285] a stall checkpoint interrupted by a stop file pauses, with the marker, not a needs-a-human stop
+  (30.9s)
+
+[24/285] a stall checkpoint that hits the usage limit pauses, with the marker, not a needs-a-human stop
+  (32.5s)
+
+[25/285] a stall is salvaged by a checkpoint turn and the ticket continues
+  (62.3s)
+
+[26/285] a stall discovered after the cost budget was reached still gets salvaged, loudly
+  (32.5s)
+
+[27/285] a checkpoint turn that discards the diff is not mistaken for one that left it alone
+  (30.1s)
+
+[28/285] a turn that commits part of its work and then stalls is salvaged too
+  (63.8s)
+
+[29/285] a checkpoint that discards a partly committed stall is not mistaken for a salvage
+  (31.6s)
+
+[30/285] a partly committed stall the checkpoint cannot commit leaves a marker the rerun trusts
+  (84.9s)
+
+[31/285] the verify step gives the command time limit and forbids backgrounding
+  (39.4s)
+
+[32/285] both real adapters lift the agent's Bash time limit to the setting
+  (1.5s)
+
+[33/285] the dirty-tree recovery note matches the mode actually in force
+  (1.6s)
+
+[34/285] the credentials reader finds a name in the file, and an environment variable beats it
+  (7.4s)
+
+[35/285] a sandbox that already exists is reused, and only a failed create is an error
+  (5.6s)
+
+[36/285] the clone's dirty check honours the .gitignore of the commit it is about to sync to
+  (22.7s)
+
+[37/285] a rescue in a sandbox lands its wip on a host that has moved on, and stops on a conflict
+  (136.3s)
+
+[38/285] a sandbox commit that could not be collected is never reset over, even when the turn hit the limit
+  (134.5s)
+
+[39/285] a host commit during a turn leaves the work at refs/foreman/incoming, and a rerun refuses to reset
+  (69.5s)
+
+[40/285] a stale refs/foreman/incoming does not break the next collection
+  (71.3s)
+
+[41/285] the sandbox adapters sign in to Docker with a token, only when asked to
+  (10.5s)
+
+[42/285] syncing refuses over a dirty tree rather than resetting it
+  (73.5s)
+
+[43/285] a rerun salvages the stalled work its own previous run left behind
+  (81.8s)
+
+[44/285] a rerun with no stall marker refuses rather than rescuing, and deleting the marker is safe
+  (53.8s)
+
+[45/285] a review salvage counts against the continuation cap like a stall salvage does
+  (51.8s)
+
+[46/285] a marker that does not match the dirty tree is never trusted
+  (132.1s)
+
+[47/285] a rerun whose rescue fails stops for a human and keeps the marker
+  (102.7s)
+
+[48/285] a marker is removed once the tree is clean, and a salvaged stall leaves none
+  (126.0s)
+
+[49/285] a run paused by a usage limit mid-turn is reviewed and continued by the next run
+  (75.1s)
+
+[50/285] a pause that leaves a dirty tree no marker vouches for says the rerun will refuse it
+  (69.8s)
+
+[51/285] a run interrupted mid-turn is reviewed and continued by the next run
+  (75.8s)
+
+[52/285] a review checkpoint gets a higher turn limit than a stall checkpoint
+  (126.6s)
+
+[53/285] a turn that ends cleanly, or pauses with a clean tree, leaves no marker
+  (47.7s)
+
+[54/285] a review turn that refuses the leftover work stops for a human and leaves it alone
+  (60.1s)
+
+[55/285] --adopt-dirty reviews and commits a dirty tree no marker vouches for
+  (101.2s)
+
+[56/285] --live draws what the agent is doing, and only that
+  (47.7s)
+
+[57/285] a --live run that produces no result object still says what it saw
+  (22.7s)
+
+[58/285] --live changes nothing about the verdict or the recorded usage
+  (78.9s)
+
+[59/285] a ticket that hands off part-finished is continued, not failed
+  (50.5s)
+
+[60/285] a ticket that never stops chunking is called mis-sized
+  (44.0s)
+
+[61/285] a ticket that never stops stalling hits the same cap, broken down as stalls
+  (42.6s)
+
+[62/285] a progressed iteration does not consume a ticket's attempts
+  (32.5s)
+
+[63/285] a stalled iteration does not consume a ticket's attempts
+  (37.6s)
+
+[64/285] a checkpoint turn is recorded as its own row and its cost is in the run total
+  (55.0s)
+
+[65/285] the prompt tells the agent how to hand a ticket off
+  (10.7s)
+
+[66/285] a run refuses to start in a repo that does not ignore foreman's run state
+  (43.2s)
+
+[67/285] a turn that prints two result objects is recorded as one, not as a failure
+  (26.4s)
+
+[68/285] a denied tool call names permissions, not the dirty tree it caused
+  (22.8s)
+
+[69/285] a denied call that is not git is named in the permission stop, without the git allowlist line
+  (22.9s)
+
+[70/285] the permission mode defaults to what the execution mode needs
+  (40.0s)
+
+[71/285] the model defaults to a pinned full id, and foreman.conf and the environment still override it
+  (29.5s)
+
+[72/285] an empty environment variable is ignored, so foreman.conf and the defaults still win (B21)
+  (20.4s)
+
+[73/285] FOREMAN_CLAUDE_ARGS, a list, is refused from the environment and read from foreman.conf (B21)
+  (47.1s)
+
+[74/285] legacy ralph run files: read-only commands read them in place and leave them, run renames them (R4)
+  (79.0s)
+
+[75/285] doctor flags a local batch whose agent could never commit
+  (22.6s)
+
+[76/285] a usage limit pauses the run
+  (24.0s)
+
+[77/285] a session limit pauses the run and says when it resets
+  (25.2s)
+
+[78/285] the cost budget stops the run before spending over it
+  (45.9s)
+
+[79/285] the run is recorded for foreman report
+  (48.2s)
+
+[80/285] the prompt carries the ticket, the order file and the progress tail
+  (31.5s)
+
+[81/285] an unknown exec mode is rejected before anything runs
+  (8.1s)
+
+[82/285] a leading-zero FOREMAN_MAX_MINUTES is refused at preflight and the batch keeps its name
+  (33.7s)
+
+[83/285] a bad FOREMAN_TURN_TIMEOUT_MINUTES knob is refused at preflight (turn timeout)
+  (47.1s)
+
+[84/285] a malformed FOREMAN_MAX_COST_USD is refused at preflight instead of meaning unlimited
+  (92.3s)
+
+[85/285] doctor asks the adapter what this repo needs
+  FAIL  a fake batch needs no runner on PATH: expected '0', got '1'
+  (14.5s)
+
+[86/285] init scaffolds a batch from its own ticket list
+  (10.3s)
+
+[87/285] init and --unordered honour FOREMAN_ISSUES_DIRS
+  (15.2s)
+
+[88/285] --unordered ignores an existing order.md
+  (14.0s)
+
+[89/285] a && in a check command survives into the prompt
+  (11.0s)
+
+[90/285] FOREMAN_ISSUES_DIRS='.' means the batch directory, not the repo root
+  (6.7s)
+
+[91/285] a batch whose tickets are not where FOREMAN_ISSUES_DIRS looks says where it looked
+  (6.6s)
+
+[92/285] --unordered is quiet about an empty batch, the other modes are not
+  (14.6s)
+
+[93/285] a landed ticket with every box ticked is renamed DONE_
+  (58.6s)
+
+[94/285] a ticket with an unticked box, or not yet done, keeps its name
+  (62.5s)
+
+[95/285] an order.md written before the rename still finds the renamed ticket
+  (40.2s)
+
+[96/285] renamed tickets keep their place in filename order
+  (8.7s)
+
+[97/285] FOREMAN_DONE_PREFIX empty leaves ticket files alone
+  (25.7s)
+
+[98/285] a finished batch directory is renamed with the done prefix
+  (50.6s)
+
+[99/285] commands with no batch argument skip finished batches
+  (46.1s)
+
+[100/285] FOREMAN_DONE_PREFIX empty leaves the batch directory alone
+  (25.7s)
+
+[101/285] a batch with a tracked modification keeps its name
+  (10.1s)
+
+[102/285] a batch finished by hand is renamed on the next run
+  (13.8s)
+
+[103/285] the usage line shows minutes beside seconds
+  (28.2s)
+
+[104/285] a ticket marked done counts as done, like an implemented one
+  (15.3s)
+
+[105/285] a human ticket at the head of the order stops the run before anything is spent
+  (13.6s)
+
+[106/285] a human ticket with no handoff file is named without one
+  (12.3s)
+
+[107/285] a run that reaches a human ticket mid-batch lands what is before it and stops
+  (43.5s)
+
+[108/285] the human gate is checked before the iteration budget
+  (29.3s)
+
+[109/285] rerunning a human ticket without finishing it stops again, for free
+  (53.9s)
+
+[110/285] setting a human ticket to done lets a rerun continue with the next ticket
+  (60.4s)
+
+[111/285] dry-run at a human ticket says it would stop there and prints no prompt
+  (11.3s)
+
+[112/285] the human word is configurable and can be switched off
+  (72.8s)
+
+[113/285] a done ticket is never a human ticket
+  (12.7s)
+
+[114/285] a followup ticket that sends its human ticket back ends the run at exit 30
+  (88.4s)
+
+[115/285] a human ticket is renamed only once its followup ticket has landed
+  (107.5s)
+
+[116/285] Checks: resolves whichever side carries the done prefix
+  (83.7s)
+
+[117/285] status marks human and followup tickets and says where the loop will stop
+  (23.7s)
+
+[118/285] a Checks: line reads the same bold or plain, with CRLF, and with trailing spaces
+  (11.3s)
+
+[119/285] a custom FOREMAN_DONE_PATTERN and FOREMAN_HUMAN_PATTERN are matched as grep patterns
+  (11.0s)
+
+[120/285] a status line holding . [ * ^ $ or a backslash matches itself only
+  (10.5s)
+
+[121/285] file names are cut the way basename and dirname cut them
+  (15.4s)
+
+[122/285] status names the human ticket when it is next, with its note
+  (10.0s)
+
+[123/285] warning: a human ticket with no followup ticket
+  (10.7s)
+
+[124/285] warning: a human ticket with no handoff file
+  (10.7s)
+
+[125/285] warning: a Handoff: line naming a file that does not exist
+  (11.5s)
+
+[126/285] warning: a followup ticket that is not immediately after the ticket it checks
+  (12.1s)
+
+[127/285] warning: a Checks: line naming no ticket in the batch
+  (9.4s)
+
+[128/285] with the human word off, only the followup-ticket warnings still apply
+  (9.7s)
+
+[129/285] dry-run at a human ticket still shows the marked listing and warnings
+  (12.3s)
+
+[130/285] the start-of-run sweep renames a finished ticket and leaves a dirty tree alone
+  (115.4s)
+
+[131/285] foreman order runs with a stub claude, spending no money and needing no model
+  (14.3s)
+
+[132/285] the ordering prompt names human tickets and followup tickets
+  (17.4s)
+
+[133/285] with neither kind of ticket, the ordering prompt has no human or followup sections
+  (14.2s)
+
+[134/285] foreman order asks through the executor: the fake answers, and its reply becomes order.md
+  (42.9s)
+
+[135/285] foreman order under the local executor runs claude with the same arguments as before
+  (14.0s)
+
+[136/285] foreman order skips without failing when the executor cannot be used
+  (38.0s)
+
+[137/285] foreman order says why the agent call failed, and points at /login when the login expired
+  (12.2s)
+
+[138/285] foreman order treats is_error as a failure even when claude exits 0
+  (10.9s)
+
+[139/285] foreman order shows non-JSON output from a failed call
+  (11.2s)
+
+[140/285] foreman order still reports the cost of a successful call
+  (12.5s)
+
+[141/285] foreman order warns about a human ticket with no followup ticket, and still exits 0
+  (15.8s)
+
+[142/285] foreman commands runs the skill headless and prints each slot as the conf now has it
+  (14.7s)
+
+[143/285] foreman commands skips, changing nothing, when the skill is not installed
+  (11.4s)
+
+[144/285] foreman commands leaves a conf alone once every slot is set, even to empty
+  (10.4s)
+
+[145/285] foreman commands fails, and says what claude said, when the agent call fails
+  (10.1s)
+
+[146/285] foreman commands catches an edit that leaves foreman.conf unparseable
+  (10.9s)
+
+[147/285] foreman order leaves its result as facts when asked: what moved, who is human, what it cost
+  (38.4s)
+
+[148/285] foreman order's result facts say when the call failed, when the login expired, and when there is no agent
+  FAIL  no agent is not a failure: expected '0', got '127'
+cat: /tmp/foreman-smoke-0gZ1OM/order-facts-fail.txt: No such file or directory
+  FAIL  but it is said to have been skipped: expected 'result	skipped
+said	'claude' is not on PATH', got ''
+  (62.8s)
+
+[149/285] init fills in the commands of a conf it writes, but not with --no-commands or for a kept conf
+  (88.7s)
+
+[150/285] install.sh installs the shims and a marked copy of the skill
+  (4.6s)
+
+[151/285] re-running install.sh after the checkout's SKILL.md changes replaces the copy, no --force needed
+  (9.7s)
+
+[152/285] a skill directory without the marker refuses and writes nothing; --force overwrites it
+  (6.8s)
+
+[153/285] --uninstall removes a marked copy and leaves an unmarked one alone
+  (11.3s)
+
+[154/285] --no-skill installs only the shims
+  (4.4s)
+
+[155/285] install.sh warns under WSL, names the WSL home and the Git Bash command, and installs the same
+  (14.6s)
+
+[156/285] foreman doctor warns when the installed skill copy is stale, and is silent otherwise
+  (27.3s)
+
+[157/285] foreman finds its toolkit when bash is handed a Windows path, as foreman.cmd does, from any directory
+  (1.3s)
+
+[158/285] ui_color_tier decides none, 16, 256 or 24 per stream from the environment
+  (no usable script(1): the terminal rows of the tier table are not run)
+  (9.5s)
+
+[159/285] ui_paint paints at the stream's tier: the palette at 24 and 256, the old codes at 16
+  (5.0s)
+
+[160/285] the palette is defined once, with a hex, a 256 index and a 16 code per name
+  (1.3s)
+
+[161/285] FOREMAN_COLOR takes 16, 256 and truecolor beside auto, always and never
+  (76.1s)
+
+[162/285] colour is off when output is not a terminal, and the log never carries it
+  (146.8s)
+
+[163/285] FOREMAN_COLOR=always colours the glyph or prefix only, and the words stay the same
+  (175.3s)
+
+[164/285] FOREMAN_COLOR is read from foreman.conf, the environment beats it, and a bad value is refused
+  (99.7s)
+
+[165/285] a preflight failure is prefixed in colour only when asked to be
+  (22.8s)
+
+[166/285] a key echo is plain text unless colour is asked for, and always takes over the line
+  (1.2s)
+
+[167/285] --live draws its clock dim only when colour is on, and the line is otherwise the same
+  (62.6s)
+
+[168/285] status colours its labels when asked to, and prints the same words either way
+  (18.5s)
+
+[169/285] convert moves a ralph project to foreman, and keeps the credit and the project's own names
+  (14.2s)
+
+[170/285] convert --dry-run changes nothing, and a dirty tree or the toolkit itself is refused
+  (4.6s)
+
+[171/285] convert refuses to rewrite an untracked file, and says how to go on
+  (6.0s)
+
+[172/285] ui_show: a stream that is not a terminal never gets the show unless FOREMAN_SHOW=always
+  (5.7s)
+
+[173/285] ui_show: a terminal with colour on gets the show, unless CI, NO_COLOR, a dumb TERM or FOREMAN_SHOW=never says no
+  (skipped: no `script` to give a terminal)
+  (0.0s)
+
+[174/285] ui_cols: COLUMNS, else the terminal's own width, else 80
+  (skipped: no `script` to give a terminal)
+  (2.6s)
+
+[175/285] ui_rows: LINES, else the terminal's own height, else 24
+  (skipped: no `script` to give a terminal)
+  (2.4s)
+
+[176/285] foreman-draw reads the palette from foreman-ui.sh and keeps no copy
+  FAIL  a file without the table is an error that names it: expected 'threw: no _UI_PALETTE in /c/Projects/foreman/README.md', got 'threw: no _UI_PALETTE in C:/Projects/foreman/README.md'
+  (1.4s)
+
+[177/285] foreman-draw's encoder writes 24-bit, 256 and 16-colour SGR, half-blocks, and resets every line
+  (8.8s)
+
+[178/285] foreman-draw parses the facts a shell pipes in
+  (3.0s)
+
+[179/285] foreman-draw help draws the D1 sunrise at the tier it is given, and refuses a narrow screen
+  (12.1s)
+
+[180/285] foreman help is the header comment on a pipe, and the sunrise above it when the show is forced
+  (skipped: no `script` to give a terminal)
+  (12.4s)
+
+[181/285] foreman-draw intro draws a frame at a time, and holds the design's key rows
+  (20.9s)
+
+[182/285] foreman-draw's player hides the cursor, plays in place, skips on a key and puts everything back
+  (8.0s)
+
+[183/285] foreman-draw intro --play will not play unless stdin and stdout are terminals
+  (skipped: no `script` to give a terminal)
+  (0.7s)
+
+[184/285] foreman help plays the intro on a terminal, once, and then prints the help; any key skips it
+  (skipped: no `script` to give a terminal)
+  (3.4s)
+
+[185/285] FOREMAN_SHOW takes auto, always and never, and a batch's foreman.conf may set it
+  (43.9s)
+
+[186/285] foreman-draw's mark is the design's, cell for cell, and shrinks to 256 and 16 colours
+  (4.9s)
+
+[187/285] foreman-draw init writes the design's header and files, and its other pieces say what they are given
+  FAIL  the rule is 96 wide on a wide terminal: expected '96', got '288'
+  FAIL  and no wider than the terminal: expected '80', got '240'
+  (10.7s)
+
+[188/285] foreman-draw init-done writes the ordering result and NEXT as designed, and says when ordering did not happen
+  (11.3s)
+
+[189/285] foreman-draw knows how many tickets moved and what a ticket is called
+  (7.2s)
+
+[190/285] foreman init at a terminal breaks ground: the mark, the files with a +, the ordering, four steps
+  (35.9s)
+
+[191/285] foreman init at a terminal without --no-order drops the ordering line, and says so when ordering failed
+  FAIL  with a blank line before it: expected '', got '  + .gitignore      adds **/.foreman-run/, so the app can steer a run'
+  (60.8s)
+
+[192/285] foreman init at a terminal lists what --force replaced and what it kept
+  (75.6s)
+
+[193/285] foreman init at a terminal still shows the agent's command pass, and falls back to today's text if it cannot draw
+  FAIL  falls back to the plain text: expected 'Batch: batch
+   created  batch/foreman.conf
+   created  batch/order.md (2 ticket(s) — re-order it before running)
+   created  batch/progress.txt
+
+
+Next:
+  1. review batch/foreman.conf   — at minimum FOREMAN_CHECK_CMD and FOREMAN_TEST_CMD
+  2. review foreman order picked in batch/order.md — it is a first pass, not a guarantee
+  3. foreman dry-run batch   (free; prints the exact prompt)
+  4. foreman run batch       (one iteration, then look)', got 'Batch: batch
+   created  batch/foreman.conf
+   created  batch/order.md (2 ticket(s) — re-order it before running)
+   created  batch/progress.txt
+   updated  .gitignore (+ **/.foreman-run/, so the app can steer a run)
+
+
+Next:
+  1. review batch/foreman.conf   — at minimum FOREMAN_CHECK_CMD and FOREMAN_TEST_CMD
+  2. review foreman order picked in batch/order.md — it is a first pass, not a guarantee
+  3. foreman dry-run batch   (free; prints the exact prompt)
+  4. foreman run batch       (one iteration, then look)'
+  (96.9s)
+
+[194/285] plain foreman init is byte for byte what it was
+  FAIL  a fresh batch: expected 'Batch: batch
+   created  batch/foreman.conf
+   created  batch/order.md (3 ticket(s) — re-order it before running)
+   created  batch/progress.txt
+
+
+Next:
+  1. review batch/foreman.conf   — at minimum FOREMAN_CHECK_CMD and FOREMAN_TEST_CMD
+  2. review foreman order picked in batch/order.md — it is a first pass, not a guarantee
+  3. foreman dry-run batch   (free; prints the exact prompt)
+  4. foreman run batch       (one iteration, then look)', got 'Batch: batch
+   created  batch/foreman.conf
+   created  batch/order.md (3 ticket(s) — re-order it before running)
+   created  batch/progress.txt
+   updated  .gitignore (+ **/.foreman-run/, so the app can steer a run)
+
+
+Next:
+  1. review batch/foreman.conf   — at minimum FOREMAN_CHECK_CMD and FOREMAN_TEST_CMD
+  2. review foreman order picked in batch/order.md — it is a first pass, not a guarantee
+  3. foreman dry-run batch   (free; prints the exact prompt)
+  4. foreman run batch       (one iteration, then look)'
+  FAIL  with the ordering: expected 'Batch: batch
+   created  batch/foreman.conf
+   created  batch/order.md (2 ticket(s) — re-order it before running)
+   created  batch/progress.txt
+
+
+foreman order: reading 2 ticket(s) in batch ...
+foreman order: wrote batch/order.md (cost $0.0800)
+             review it — this is a first pass, not a guarantee.
+
+Next:
+  1. review batch/foreman.conf   — at minimum FOREMAN_CHECK_CMD and FOREMAN_TEST_CMD
+  2. review foreman order picked in batch/order.md — it is a first pass, not a guarantee
+  3. foreman dry-run batch   (free; prints the exact prompt)
+  4. foreman run batch       (one iteration, then look)', got 'Batch: batch
+   created  batch/foreman.conf
+   created  batch/order.md (2 ticket(s) — re-order it before running)
+   created  batch/progress.txt
+   updated  .gitignore (+ **/.foreman-run/, so the app can steer a run)
+
+
+foreman order: reading 2 ticket(s) in batch ...
+foreman order: wrote batch/order.md (cost $0.0800)
+             review it — this is a first pass, not a guarantee.
+
+Next:
+  1. review batch/foreman.conf   — at minimum FOREMAN_CHECK_CMD and FOREMAN_TEST_CMD
+  2. review foreman order picked in batch/order.md — it is a first pass, not a guarantee
+  3. foreman dry-run batch   (free; prints the exact prompt)
+  4. foreman run batch       (one iteration, then look)'
+  (110.5s)
+
+[195/285] foreman init --force keeps the old foreman.conf and progress.txt as .bak copies
+  (50.7s)
+
+[196/285] foreman init on a real terminal shows without being forced, and clears the line it waits on
+  (skipped: no `script` to give a terminal)
+  (0.0s)
+
+[197/285] foreman-draw version is the design's mark beside the build, and tilde shortens only what is under home
+  FAIL  a path that only starts with home's letters is not under it: expected '/home/you2/.foreman', got 'C:/Program Files/Git/home/you2/.foreman'
+  FAIL  elsewhere: expected '/opt/foreman', got 'C:/Program Files/Git/opt/foreman'
+  FAIL  no home: expected '/opt/foreman', got 'C:/Program Files/Git/opt/foreman'
+  FAIL  a home of / is not worth a ~: expected '/opt/foreman', got '~/opt/foreman'
+  (17.5s)
+
+[198/285] foreman version is today's two lines in a pipe and the mark beside the build when the show is forced; --version is the same
+  (26.2s)
+
+[199/285] foreman version on a real terminal shows without being forced, and not in CI
+  (skipped: no `script` to give a terminal)
+  (0.1s)
+
+[200/285] foreman-draw status is the 4a design at 6 of 10: the dome, the words beside it, the list and the closing
+  (27.9s)
+
+[201/285] foreman-draw dome rises with the tickets done, from nothing to the whole sun
+  (2.9s)
+
+[202/285] foreman status draws the dome when the show is on, with none, some and all of the tickets done
+  (288.7s)
+
+[203/285] foreman status is today's text, byte for byte, wherever the show is not wanted
+  (199.6s)
+
+[204/285] foreman status on a real terminal shows without being forced, and not in CI
+  (skipped: no `script` to give a terminal)
+  (0.0s)
+
+[205/285] foreman-draw dryrun is the 11a design: the low sun, WOULD RUN, SETTINGS, the numbered prompt and the closing rule
+  (12.1s)
+
+[206/285] foreman-draw dryrun: the prompt is exactly what was sent, numbered, and folded to the screen
+  (11.4s)
+
+[207/285] foreman-draw dryrun: settings, tags, warnings, the human ticket and the width
+  (20.8s)
+
+[208/285] foreman dry-run draws the walk round when the show is on: the list, each setting, the prompt and the closing rule
+  (159.1s)
+
+[209/285] foreman dry-run draws a human ticket next as a stop, with its warning, and no prompt
+  (55.0s)
+
+[210/285] foreman dry-run folds a prompt longer than the screen, keeping the first lines and the last
+  (71.7s)
+
+[211/285] foreman dry-run piped is the text it always was, down to the byte
+  (262.0s)
+
+[212/285] foreman dry-run on a real terminal shows without being forced, and not in CI
+  (skipped: no `script` to give a terminal)
+  (0.0s)
+
+[213/285] foreman-draw run is the 3a design: the figure, the dome, the facts beside them and the rule
+  (40.8s)
+
+[214/285] foreman-draw runDome: the sun climbs with the tickets done, as the 3a design has it
+  (4.2s)
+
+[215/285] foreman-keys.sh --text draws the design's foot when the loop left one: elapsed, iteration, spend, live and the keys
+  FAIL  the tool in lower case, padded, after a spinner: got ' 01:20  write  skills/followup/SKILL.md'
+  FAIL  without the foot the ticker is the old one: expected to find '   01:1'
+  (6.8s)
+
+[216/285] foreman-stream.cjs --show prints a tool call as │ mm:ss verb path, and plain --live is what it was
+  (13.8s)
+
+[217/285] foreman run at a terminal draws the header, then again a step higher after each landed ticket
+  (109.5s)
+
+[218/285] foreman run's header is drawn once for each landing and for nothing else: not for progress, a retry or a failure
+  (301.0s)
+
+[219/285] foreman run's header costs one node a time, and no event line starts any
+  (224.5s)
+
+[220/285] foreman run is the text it always was, and writes the logs it always wrote, wherever the show is not wanted
+  FAIL  foreman-runs.log is the same: expected '
+#############################################################################
+# run RUNID started TIME
+# batch=batch exec=fake model=claude-sonnet-5-5 effort=high
+# budgets: cost=unlimited time=unlimited iterations=2
+# head at start: SHA
+#############################################################################
+
+==============================================================================
+iteration 1  ·  batch/issues/01-ticket.md
+run RUNID  ·  started TIME  ·  finished TIME
+commit SHA -> SHA
+exit 0  ·  subtype success  ·  turns 3  ·  Ns (0.0m) wall, Ns (0.0m) api
+tokens  in 1,000  out 200  cache-read 5,000  cache-write 300  (billed 1,200)
+cost    $0.0100
+------------------------------------------------------------------------------
+    landed batch/issues/01-ticket.md
+
+==============================================================================
+iteration 2  ·  batch/issues/02-ticket.md
+run RUNID  ·  started TIME  ·  finished TIME
+commit SHA -> SHA
+exit 0  ·  subtype success  ·  turns 3  ·  Ns (0.0m) wall, Ns (0.0m) api
+tokens  in 1,000  out 200  cache-read 5,000  cache-write 300  (billed 1,200)
+cost    $0.0100
+------------------------------------------------------------------------------
+    landed batch/issues/02-ticket.md
+
+# ---- run RUNID finished TIME ----
+# iterations run:        2
+# tickets landed:        2
+# elapsed:               0m
+# input tokens (billed): 2000
+# output tokens:         400
+# cache read tokens:     10000
+# cache write tokens:    600
+# billed tokens total:   2400
+# cost (USD, reported):  $0.020000
+# paused: iteration budget reached (2)
+# next up: batch/issues/03-ticket.md
+#############################################################################', got '
+#############################################################################
+# run RUNID started TIME
+# batch=batch exec=fake model=claude-sonnet-5-5 effort=high
+# budgets: cost=unlimited time=unlimited iterations=2
+# head at start: SHA
+#############################################################################
+
+==============================================================================
+iteration 1  ·  batch/issues/01-ticket.md
+run RUNID  ·  started TIME  ·  finished TIME
+commit SHA -> SHA
+exit 0  ·  subtype success  ·  turns 3  ·  Ns (0.0m) wall, Ns (0.0m) api
+tokens  in 1,000  out 200  cache-read 5,000  cache-write 300  (billed 1,200)
+cost    $0.0100
+------------------------------------------------------------------------------
+    landed batch/issues/01-ticket.md
+
+==============================================================================
+iteration 2  ·  batch/issues/02-ticket.md
+run RUNID  ·  started TIME  ·  finished TIME
+commit SHA -> SHA
+exit 0  ·  subtype success  ·  turns 3  ·  Ns (0.0m) wall, Ns (0.0m) api
+tokens  in 1,000  out 200  cache-read 5,000  cache-write 300  (billed 1,200)
+cost    $0.0100
+------------------------------------------------------------------------------
+    landed batch/issues/02-ticket.md
+
+# ---- run RUNID finished TIME ----
+# iterations run:        2
+# tickets landed:        2
+# elapsed:               1m
+# input tokens (billed): 2000
+# output tokens:         400
+# cache read tokens:     10000
+# cache write tokens:    600
+# billed tokens total:   2400
+# cost (USD, reported):  $0.020000
+# paused: iteration budget reached (2)
+# next up: batch/issues/03-ticket.md
+#############################################################################'
+  (388.6s)
+
+[221/285] foreman run --live prints tool calls as │ mm:ss verb path when the show is on, and as it did when it is not
+  (107.4s)
+
+[222/285] foreman run on a real terminal shows without being forced, with the foot as the bar, and not in CI
+  (skipped: no `script` to give a terminal)
+  (0.1s)
+
+[223/285] movedTickets marks the tickets that changed place, and only those
+  (8.2s)
+
+[224/285] foreman-draw order-head and order are the 8b design: the header, the result line, the numbered stake lines and the footer
+  (13.6s)
+
+[225/285] foreman-draw order: tags, a single ticket, nothing moved, long names, and what is not an ordering
+  (12.5s)
+
+[226/285] foreman order draws the stake line when the show is on: the header, the result, moved, the tags, the warnings and the next step
+  (140.6s)
+
+[227/285] foreman order piped is the text it always was, down to the byte
+  FAIL  the header is there: expected to find '▄█▄'
+  (200.2s)
+
+[228/285] foreman order in the show: a failed call ends in today's words, and the shell and the renderer agree on the width
+  (25.9s)
+
+[229/285] foreman order on a real terminal shows without being forced, redraws one spinner line while it waits, and clears it
+  (skipped: no `script` to give a terminal)
+  (0.0s)
+
+[230/285] foreman order puts what the executor says on stderr on its own line, above the spinner
+  (64.4s)
+
+[231/285] foreman-draw next is the 9b design: the stake row with the next one tall, the list, and the count of driven, yours and to go
+  (13.1s)
+
+[232/285] foreman-draw next wraps the stake row to the width, and cuts names that do not fit
+  (8.1s)
+
+[233/285] foreman-draw next-count is the one line of the 9b design
+  (4.6s)
+
+[234/285] foreman next --all and --count draw the stake row when the show is on
+  (92.8s)
+
+[235/285] foreman-draw doctor is the 5b box, cell for cell, in both verdicts
+  (5.6s)
+
+[236/285] foreman-draw doctor --t draws the inspector's track as the design does, tick by tick, in both verdicts
+  (105.7s)
+
+[237/285] foreman-draw doctor's box lays the checks out in eighty columns, plain or painted
+  (18.7s)
+
+[238/285] foreman-draw doctor's inspector runs as far as the checks have got
+  (9.2s)
+
+[239/285] foreman-draw's live doctor plays as the checks arrive, and puts the terminal back however it ends
+  (12.9s)
+
+[240/285] foreman doctor, piped, is the box on a ready repo and on one that is not, with the exit code it always had
+  FAIL  ready: exit 0: expected '0', got '1'
+  FAIL  ready: the sign: expected to find '│    PASSED     │'
+  FAIL  and what to do: expected to find 'next: foreman run batch'
+  FAIL  ready: and the closing word comes after the box: expected 'Ready.', got '  foreman doctor --fix'
+  FAIL  ready: every line of the box is eighty columns: expected '80 ', got '57 80 '
+  FAIL  and how many --fix can do: expected to find '│  4 to fix     │'
+  FAIL  fixable: the closing advice, after the box: expected to find '4 thing(s) to fix. The repo files can be written for you:'
+  FAIL  --fix: says what it wrote: expected to find '  wrote  .gitignore  (+4 pattern(s))'
+  FAIL  blocked: and the closing words say it is not for --fix: expected to find '1 thing(s) still need fixing by hand.'
+  FAIL  blocked: no advice to run --fix: did not expect 'fix:  foreman doctor --fix'
+  (120.0s)
+
+[241/285] foreman doctor forced to show draws the same box in colour, and lists the checks when it cannot draw
+  FAIL  no node: exit 1: expected '1', got '127'
+  FAIL  no node: it is a MISS, in the old lines: expected to find '  MISS  node is not on PATH'
+  FAIL  and the rest are listed: expected to find '  ok    git'
+  FAIL  a batch with its progress on one line: expected to find '  ok    batch  0 of 2 done'
+  FAIL  under their headings: expected to find 'Machine'
+  FAIL  and the closing words: expected to find 'thing(s)'
+  (119.9s)
+
+[242/285] foreman doctor on a terminal: the inspector runs while the checks do, the box stays, and Ctrl-C leaves the cursor
+  (skipped: no `script` to give a terminal)
+  (0.0s)
+
+[243/285] foreman doctor still reads a batch's progress as numbers when the show is forced
+  (22.9s)
+
+[244/285] foreman next prints bare paths on every stream, the show or not
+  (139.8s)
+
+[245/285] foreman next --all and --count are today's text, byte for byte, wherever the show is not wanted
+  (189.3s)
+
+[246/285] foreman next --all on a real terminal shows without being forced, and not in CI
+  (skipped: no `script` to give a terminal)
+  (0.0s)
+
+[247/285] foreman-draw report is the 10a design, cell for cell, in its colours and in its words
+  (3.4s)
+
+[248/285] foreman-draw report: the bars, the figures, the legend and the other views
+  (49.6s)
+
+[249/285] foreman report is today's text, byte for byte, wherever the show is not drawn
+  FAIL  by-run: in a pipe, the same bytes as before the show
+  FAIL  by-run: colour alone is not the show: this is a pipe
+  FAIL  by-run: FOREMAN_SHOW=never
+  FAIL  by-run: FOREMAN_COLOR=never
+  FAIL  by-run: one column short of the picture
+  FAIL  by-run: a narrow screen
+  FAIL  by-run: foreman-report.cjs alone
+  FAIL  by-run: the variables are the dispatcher's to set, not the environment's
+  FAIL  by-ticket: in a pipe, the same bytes as before the show
+  FAIL  by-ticket: colour alone is not the show: this is a pipe
+  FAIL  by-ticket: FOREMAN_SHOW=never
+  FAIL  by-ticket: FOREMAN_COLOR=never
+  FAIL  by-ticket: one column short of the picture
+  FAIL  by-ticket: a narrow screen
+  FAIL  by-ticket: foreman-report.cjs alone
+  FAIL  by-ticket: the variables are the dispatcher's to set, not the environment's
+  FAIL  failures: in a pipe, the same bytes as before the show
+  FAIL  failures: colour alone is not the show: this is a pipe
+  FAIL  failures: FOREMAN_SHOW=never
+  FAIL  failures: FOREMAN_COLOR=never
+  FAIL  failures: one column short of the picture
+  FAIL  failures: a narrow screen
+  FAIL  failures: foreman-report.cjs alone
+  FAIL  failures: the variables are the dispatcher's to set, not the environment's
+  (35.0s)
+
+[250/285] foreman report draws the bill and the ledger when the show is forced
+  (27.6s)
+
+[251/285] foreman report with nothing to report says so under the header, and still fails as it did
+  (9.7s)
+
+[252/285] foreman report is the text when the picture cannot be made
+  FAIL  and the text is printed alone, no half a picture before it
+  FAIL  nor one that is not there
+  FAIL  a wide table is under the picture, not instead of it: expected to find 'FOREMAN  what it cost'
+  (11.4s)
+
+[253/285] foreman report on a real terminal shows without being forced, and not in CI
+  (skipped: no `script` to give a terminal)
+  (0.0s)
+
+[254/285] foreman-draw convert is the 12a design, cell for cell, in its colours and in its words
+  (7.2s)
+
+[255/285] foreman-draw convert: the strike-through is only a strike, the sign reads without it, and at each tier
+  (8.1s)
+
+[256/285] foreman-draw convert: the counts, the lists, what is kept and what is left for the person
+  (49.1s)
+
+[257/285] foreman-draw convert --dry-run says would throughout and the sign is not repainted
+  (2.5s)
+
+[258/285] foreman-draw convert with nothing to convert is a short 'nothing to repaint'
+  (2.8s)
+
+[259/285] foreman convert is today's text, byte for byte, wherever the show is not drawn
+  FAIL  in a pipe: the same bytes as before the show
+  FAIL  colour alone is not the show: this is a pipe: the same bytes as before the show
+  FAIL  FOREMAN_SHOW=never: the same bytes as before the show
+  FAIL  FOREMAN_COLOR=never: the same bytes as before the show
+  FAIL  one column short of the picture: the same bytes as before the show
+  FAIL  a narrow screen: the same bytes as before the show
+  FAIL  the variables are the dispatcher's to set, not the environment's: the same bytes as before the show
+  FAIL  foreman-convert.cjs alone, with no variables, is the text
+  FAIL  --dry-run (in a pipe): the same bytes
+  FAIL  --dry-run (FOREMAN_SHOW=never FOREMAN_COLOR=truecolor COLUMNS=120): the same bytes
+  FAIL  --dry-run (FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=85): the same bytes
+  FAIL  nothing to convert (in a pipe): the same bytes
+  FAIL  nothing to convert (FOREMAN_SHOW=never FOREMAN_COLOR=truecolor COLUMNS=120): the same bytes
+  FAIL  nothing to convert (FOREMAN_SHOW=always FOREMAN_COLOR=never COLUMNS=120): the same bytes
+  FAIL  nothing to convert (FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=85): the same bytes
+  FAIL  in words, with no picture: expected 'foreman convert: /tmp/foreman-smoke-0gZ1OM/not-a-directory is not a directory', got 'foreman convert: C:/Users/user/AppData/Local/Temp/foreman-smoke-0gZ1OM/not-a-directory is not a directory'
+  (80.0s)
+
+[260/285] foreman convert draws the repainted sign and what changed when the show is forced
+  FAIL  the whole of it, for the ralph fixture: the busiest file first, and the rest as the text had it: expected '
+▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+ RALPH   FOREMAN       FOREMAN  repaints the sign  /tmp/foreman-smoke-0gZ1OM/convert-show
+▀▀▀▀▄▀▀▀▀▀▀▀▀▀▀▀▀▄▀▀▀▀   ralph → foreman, in this repository and on this machine
+    █            █   2 renamed  ·  3 files rewritten  ·  1 deleted  ·  2 for you
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+
+RENAMED   batch/ralph-runs.jsonl → foreman-runs.jsonl
+          batch/ralph.conf → foreman.conf
+REWROTE   batch/ralph.conf 5  ·  .gitignore 2  ·  docs/guide.md 2
+DELETED   batch/.ralph-iter.bundle  rebuilt on the next iteration
+
+KEPT      credit to the technique, and your own files named ralph:
+          docs/ralph-notes.md  ·  rename with git mv if you want to
+          1 mention of the Ralph loop
+          mentions to look over:
+          docs/guide.md:3  See docs/ralph-notes.md.
+
+THIS MACHINE
+  ✓ ~/.config/ralph/env → ~/.config/foreman/env  (the old one stays)
+  ▲ RALPH_MODEL is set in your shell — rename it to FOREMAN_MODEL
+  ▲ the old sandbox ralph-convert-show may be left — sbx rm ralph-convert-show
+
+nothing is committed.  git diff, then commit.', got '
+▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+ RALPH   FOREMAN       FOREMAN  repaints the sign  C:/Users/user/AppData/Local/Temp/foreman-smoke-0gZ1OM/convert-show
+▀▀▀▀▄▀▀▀▀▀▀▀▀▀▀▀▀▄▀▀▀▀   ralph → foreman, in this repository and on this machine
+    █            █   2 renamed  ·  3 files rewritten  ·  1 deleted  ·  2 for you
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+
+RENAMED   batch/ralph-runs.jsonl → foreman-runs.jsonl
+          batch/ralph.conf → foreman.conf
+REWROTE   batch/ralph.conf 5  ·  .gitignore 2  ·  docs/guide.md 2
+DELETED   batch/.ralph-iter.bundle  rebuilt on the next iteration
+
+KEPT      credit to the technique, and your own files named ralph:
+          docs/ralph-notes.md  ·  rename with git mv if you want to
+          1 mention of the Ralph loop
+          mentions to look over:
+          docs/guide.md:3  See docs/ralph-notes.md.
+
+THIS MACHINE
+  ✓ ~/.config/ralph/env → ~/.config/foreman/env  (the old one stays)
+  ▲ RALPH_MODEL is set in your environment
+    setx FOREMAN_MODEL "<its value>", then reg delete HKCU\Environment /v RALPH_MODEL /f
+  ▲ the old sandbox ralph-convert-show may be left — sbx rm ralph-convert-show
+
+nothing is committed.  git diff, then commit.'
+  FAIL  86 columns is enough for the picture, when the paths fit: expected to find 'ralph → foreman, in this repository and on this machine'
+  (29.2s)
+
+[261/285] foreman convert --dry-run draws the unpainted sign with would throughout, and changes nothing
+  FAIL  the same project, in 'would', and the last line says nothing was changed: expected '
+▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+ RALPH                 FOREMAN  would repaint the sign  /tmp/foreman-smoke-0gZ1OM/convert-show-dry
+▀▀▀▀▄▀▀▀▀▀▀▀▀▀▀▀▀▄▀▀▀▀   ralph → foreman, in this repository and on this machine
+    █            █   2 to rename  ·  3 files to rewrite  ·  1 to delete  ·  2 for you
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+
+WOULD RENAME   batch/ralph-runs.jsonl → foreman-runs.jsonl
+               batch/ralph.conf → foreman.conf
+WOULD REWRITE  batch/ralph.conf 5  ·  .gitignore 2  ·  docs/guide.md 2
+WOULD DELETE   batch/.ralph-iter.bundle  rebuilt on the next iteration
+
+WOULD KEEP     credit to the technique, and your own files named ralph:
+               docs/ralph-notes.md  ·  rename with git mv if you want to
+               1 mention of the Ralph loop
+               mentions to look over:
+               docs/guide.md:3  See docs/ralph-notes.md.
+
+THIS MACHINE
+  ✓ would copy ~/.config/ralph/env → ~/.config/foreman/env  (the old one stays)
+  ▲ RALPH_MODEL is set in your shell — rename it to FOREMAN_MODEL
+  ▲ the old sandbox ralph-convert-show-dry may be left — sbx rm ralph-convert-show-dry
+
+nothing was changed.  run it without --dry-run to make these changes.', got '
+▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+ RALPH                 FOREMAN  would repaint the sign  …s/user/AppData/Local/Temp/foreman-smoke-0gZ1OM/convert-show-dry
+▀▀▀▀▄▀▀▀▀▀▀▀▀▀▀▀▀▄▀▀▀▀   ralph → foreman, in this repository and on this machine
+    █            █   2 to rename  ·  3 files to rewrite  ·  1 to delete  ·  2 for you
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+
+WOULD RENAME   batch/ralph-runs.jsonl → foreman-runs.jsonl
+               batch/ralph.conf → foreman.conf
+WOULD REWRITE  batch/ralph.conf 5  ·  .gitignore 2  ·  docs/guide.md 2
+WOULD DELETE   batch/.ralph-iter.bundle  rebuilt on the next iteration
+
+WOULD KEEP     credit to the technique, and your own files named ralph:
+               docs/ralph-notes.md  ·  rename with git mv if you want to
+               1 mention of the Ralph loop
+               mentions to look over:
+               docs/guide.md:3  See docs/ralph-notes.md.
+
+THIS MACHINE
+  ✓ would copy ~/.config/ralph/env → ~/.config/foreman/env  (the old one stays)
+  ▲ RALPH_MODEL is set in your environment
+    setx FOREMAN_MODEL "<its value>", then reg delete HKCU\Environment /v RALPH_MODEL /f
+  ▲ the old sandbox ralph-convert-show-dry may be left — sbx rm ralph-convert-show-dry
+
+nothing was changed.  run it without --dry-run to make these changes.'
+  (6.8s)
+
+[262/285] foreman convert with nothing to convert draws the short form
+  FAIL  the sign already says FOREMAN; what is kept and left for you is still said, and no closing line: expected '
+▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+ FOREMAN               FOREMAN  nothing to repaint  /tmp/foreman-smoke-0gZ1OM/convert-show-nothing
+▀▀▀▀▄▀▀▀▀▀▀▀▀▀▀▀▀▄▀▀▀▀   the project already speaks foreman
+    █            █   2 for you
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+
+KEPT      credit to the technique, and your own files named ralph:
+          docs/ralph-notes.md  ·  rename with git mv if you want to
+          1 mention of the Ralph loop
+          mentions to look over:
+          docs/guide.md:3  See docs/ralph-notes.md.
+
+THIS MACHINE
+  ▲ ~/.config/ralph/env is no longer read (~/.config/foreman/env is)
+    delete it once nothing in it is missing from the new one
+  ▲ RALPH_MODEL is set in your shell — rename it to FOREMAN_MODEL', got '
+▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄
+ FOREMAN               FOREMAN  nothing to repaint  …s/user/AppData/Local/Temp/foreman-smoke-0gZ1OM/convert-show-nothing
+▀▀▀▀▄▀▀▀▀▀▀▀▀▀▀▀▀▄▀▀▀▀   the project already speaks foreman
+    █            █   2 for you
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+
+▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+
+KEPT      credit to the technique, and your own files named ralph:
+          docs/ralph-notes.md  ·  rename with git mv if you want to
+          1 mention of the Ralph loop
+          mentions to look over:
+          docs/guide.md:3  See docs/ralph-notes.md.
+
+THIS MACHINE
+  ▲ ~/.config/ralph/env is no longer read (~/.config/foreman/env is)
+    delete it once nothing in it is missing from the new one
+  ▲ RALPH_MODEL is set in your environment
+    setx FOREMAN_MODEL "<its value>", then reg delete HKCU\Environment /v RALPH_MODEL /f'
+  (15.4s)
+
+[263/285] foreman convert is the text when the picture cannot be made
+  FAIL  and the text is printed alone, no half a picture before it
+  FAIL  nor one that is not there
+  (31.9s)
+
+[264/285] foreman convert that fails half way prints what it had done, picture or not
+  (16.7s)
+
+[265/285] foreman convert on a real terminal shows without being forced, and not in CI
+  (skipped: no `script` to give a terminal)
+  (0.0s)
+
+[266/285] the renderer's header names every scene, the facts it takes and the design it came from
+  (20.1s)
+
+[267/285] the README has a Terminal output section that covers the show, plain, the tiers and every variable
+  (18.1s)
+
+[268/285] CONTEXT.md defines the show and plain output as terms
+  (0.2s)
+
+[269/285] test/demo.sh shows draws each command's show once, under a caption
+  (254.8s)
+
+[270/285] a second run on a batch with a run in flight is refused, changes nothing, and the first finishes
+  (95.8s)
+
+[271/285] a pid file whose run is gone does not block a start
+  (52.0s)
+
+[272/285] a pid file naming a live program that is not the run is no run: stop and keys leave it alone
+  (81.3s)
+
+[273/285] a second run on a batch that does not ignore .foreman-run/ is refused: its control directory is under .git
+  (95.2s)
+
+[274/285] foreman stop reaches a run in flight on a batch that does not ignore .foreman-run/
+  (73.6s)
+
+[275/285] foreman status --json shows the run in flight on a batch that does not ignore .foreman-run/
+  (97.6s)
+
+[276/285] SIGTERM during a turn ends the turn at once and pauses the run, footer and all
+  FAIL  TERM ended the run in 22 s, not at once
+  (62.0s)
+
+[277/285] turn timeout: a turn that runs past FOREMAN_TURN_TIMEOUT_MINUTES is ended and the run pauses
+  (89.6s)
+
+[278/285] turn timeout: a timed-out turn's uncommitted work is checkpointed, then the run pauses
+  (90.9s)
+
+[279/285] turn timeout: what a native Windows agent started is ended with it, not left running (Windows only)
+  FAIL  the turn was ended at its timeout (the run took 65 s of the hang's 735)
+  (100.1s)
+
+[280/285] turn timeout: turns that end in time are untouched, and no watchdog outlives the run
+  (95.7s)
+
+[281/285] turn timeout: FOREMAN_TURN_TIMEOUT_MINUTES=0 turns the watchdog off
+  (50.8s)
+
+[282/285] a signal during the footer does not stop the bookkeeping: the batch is renamed and committed, the run exits as decided
+  (79.4s)
+
+[283/285] a batch path is read from the caller's directory first, and a root-level batch is found
+  (82.7s)
+
+[284/285] doctor reads a conf the way the run does: export, comments, quotes, last assignment, the environment, DONE_ batches
+  (136.3s)
+
+[285/285] a finished batch's order.md, written repo-relative, still resolves after the batch is renamed
+  (127.2s)
+
+Slowest cases:
+   388.6 s  foreman run is the text it always was, and writes the logs it always wrote, wherever the show is not wanted
+   301.0 s  foreman run's header is drawn once for each landing and for nothing else: not for progress, a retry or a failure
+   288.7 s  foreman status draws the dome when the show is on, with none, some and all of the tickets done
+   262.0 s  foreman dry-run piped is the text it always was, down to the byte
+   254.8 s  test/demo.sh shows draws each command's show once, under a caption
+   224.5 s  foreman run's header costs one node a time, and no event line starts any
+   200.2 s  foreman order piped is the text it always was, down to the byte
+   199.6 s  foreman status is today's text, byte for byte, wherever the show is not wanted
+   189.3 s  foreman next --all and --count are today's text, byte for byte, wherever the show is not wanted
+   175.3 s  FOREMAN_COLOR=always colours the glyph or prefix only, and the words stay the same
+
+2904 passed, 85 failed
+2904 passed in 28m 14s

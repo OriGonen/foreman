@@ -1,0 +1,85 @@
+SIGTERM during a turn ends the turn at once and pauses the run, footer and all |   FAIL  TERM ended the run in 22 s, not at once
+doctor asks the adapter what this repo needs |   FAIL  a fake batch needs no runner on PATH
+foreman convert --dry-run draws the unpainted sign with would throughout, and changes nothing |   FAIL  the same project, in 'would', and the last line says nothing was changed
+foreman convert draws the repainted sign and what changed when the show is forced |   FAIL  86 columns is enough for the picture, when the paths fit
+foreman convert draws the repainted sign and what changed when the show is forced |   FAIL  the whole of it, for the ralph fixture
+foreman convert is the text when the picture cannot be made |   FAIL  and the text is printed alone, no half a picture before it
+foreman convert is the text when the picture cannot be made |   FAIL  nor one that is not there
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  --dry-run (FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=85)
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  --dry-run (FOREMAN_SHOW=never FOREMAN_COLOR=truecolor COLUMNS=120)
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  --dry-run (in a pipe)
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  FOREMAN_COLOR=never
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  FOREMAN_SHOW=never
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  a narrow screen
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  colour alone is not the show
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  foreman-convert.cjs alone, with no variables, is the text
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  in a pipe
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  in words, with no picture
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  nothing to convert (FOREMAN_SHOW=always FOREMAN_COLOR=never COLUMNS=120)
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  nothing to convert (FOREMAN_SHOW=always FOREMAN_COLOR=truecolor COLUMNS=85)
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  nothing to convert (FOREMAN_SHOW=never FOREMAN_COLOR=truecolor COLUMNS=120)
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  nothing to convert (in a pipe)
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  one column short of the picture
+foreman convert is today's text, byte for byte, wherever the show is not drawn |   FAIL  the variables are the dispatcher's to set, not the environment's
+foreman convert with nothing to convert draws the short form |   FAIL  the sign already says FOREMAN; what is kept and left for you is still said, and no closing line
+foreman doctor forced to show draws the same box in colour, and lists the checks when it cannot draw |   FAIL  a batch with its progress on one line
+foreman doctor forced to show draws the same box in colour, and lists the checks when it cannot draw |   FAIL  and the closing words
+foreman doctor forced to show draws the same box in colour, and lists the checks when it cannot draw |   FAIL  and the rest are listed
+foreman doctor forced to show draws the same box in colour, and lists the checks when it cannot draw |   FAIL  no node
+foreman doctor forced to show draws the same box in colour, and lists the checks when it cannot draw |   FAIL  no node
+foreman doctor forced to show draws the same box in colour, and lists the checks when it cannot draw |   FAIL  under their headings
+foreman doctor, piped, is the box on a ready repo and on one that is not, with the exit code it always had |   FAIL  --fix
+foreman doctor, piped, is the box on a ready repo and on one that is not, with the exit code it always had |   FAIL  and how many --fix can do
+foreman doctor, piped, is the box on a ready repo and on one that is not, with the exit code it always had |   FAIL  and what to do
+foreman doctor, piped, is the box on a ready repo and on one that is not, with the exit code it always had |   FAIL  blocked
+foreman doctor, piped, is the box on a ready repo and on one that is not, with the exit code it always had |   FAIL  blocked
+foreman doctor, piped, is the box on a ready repo and on one that is not, with the exit code it always had |   FAIL  fixable
+foreman doctor, piped, is the box on a ready repo and on one that is not, with the exit code it always had |   FAIL  ready
+foreman doctor, piped, is the box on a ready repo and on one that is not, with the exit code it always had |   FAIL  ready
+foreman doctor, piped, is the box on a ready repo and on one that is not, with the exit code it always had |   FAIL  ready
+foreman doctor, piped, is the box on a ready repo and on one that is not, with the exit code it always had |   FAIL  ready
+foreman init at a terminal still shows the agent's command pass, and falls back to today's text if it cannot draw |   FAIL  falls back to the plain text
+foreman init at a terminal without --no-order drops the ordering line, and says so when ordering failed |   FAIL  with a blank line before it
+foreman order piped is the text it always was, down to the byte |   FAIL  the header is there
+foreman order's result facts say when the call failed, when the login expired, and when there is no agent |   FAIL  but it is said to have been skipped
+foreman order's result facts say when the call failed, when the login expired, and when there is no agent |   FAIL  no agent is not a failure
+foreman report is the text when the picture cannot be made |   FAIL  a wide table is under the picture, not instead of it
+foreman report is the text when the picture cannot be made |   FAIL  and the text is printed alone, no half a picture before it
+foreman report is the text when the picture cannot be made |   FAIL  nor one that is not there
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-run
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-run
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-run
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-run
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-run
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-run
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-run
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-run
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-ticket
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-ticket
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-ticket
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-ticket
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-ticket
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-ticket
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-ticket
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  by-ticket
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  failures
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  failures
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  failures
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  failures
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  failures
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  failures
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  failures
+foreman report is today's text, byte for byte, wherever the show is not drawn |   FAIL  failures
+foreman run is the text it always was, and writes the logs it always wrote, wherever the show is not wanted |   FAIL  foreman-runs.log is the same
+foreman-draw init writes the design's header and files, and its other pieces say what they are given |   FAIL  and no wider than the terminal
+foreman-draw init writes the design's header and files, and its other pieces say what they are given |   FAIL  the rule is 96 wide on a wide terminal
+foreman-draw reads the palette from foreman-ui.sh and keeps no copy |   FAIL  a file without the table is an error that names it
+foreman-draw version is the design's mark beside the build, and tilde shortens only what is under home |   FAIL  a home of / is not worth a ~
+foreman-draw version is the design's mark beside the build, and tilde shortens only what is under home |   FAIL  a path that only starts with home's letters is not under it
+foreman-draw version is the design's mark beside the build, and tilde shortens only what is under home |   FAIL  elsewhere
+foreman-draw version is the design's mark beside the build, and tilde shortens only what is under home |   FAIL  no home
+foreman-keys.sh --text draws the design's foot when the loop left one: elapsed, iteration, spend, live and the keys |   FAIL  the tool in lower case, padded, after a spinner
+foreman-keys.sh --text draws the design's foot when the loop left one: elapsed, iteration, spend, live and the keys |   FAIL  without the foot the ticker is the old one
+plain foreman init is byte for byte what it was |   FAIL  a fresh batch
+plain foreman init is byte for byte what it was |   FAIL  with the ordering
+turn timeout: what a native Windows agent started is ended with it, not left running (Windows only) |   FAIL  the turn was ended at its timeout (the run took 65 s of the hang's 735)
